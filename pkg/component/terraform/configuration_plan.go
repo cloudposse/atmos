@@ -359,6 +359,9 @@ func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Config
 	stored := *execCtx.preparedConfiguration
 	stored.Inputs, stored.Backend = nil, nil
 	stored.Files = withoutSensitiveContent(stored.Files)
+	if err := snapshot.restorePublicFiles(stored.Files); err != nil {
+		return nil, err
+	}
 	return &configurationPlan{WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: snapshot.rebuildDigest, LockDigest: snapshot.lockDigest, Modules: snapshot.modules, SensitiveDigest: snapshot.sensitiveDigest, Prepared: &stored}, nil
 }
 

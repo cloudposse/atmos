@@ -1,0 +1,37 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: request-atmos-service
+  title: Request a service with an S3 bucket
+  description: Open a local Gitea PR for an Atmos stack and Git-backed service catalog entry.
+spec:
+  owner: platform-team
+  type: service
+  parameters:
+    - title: Service details
+      required: [name]
+      properties:
+        name:
+          title: Service name
+          type: string
+          minLength: 3
+          maxLength: 30
+          pattern: '^[a-z][a-z0-9-]*[a-z0-9]$'
+          description: A unique lowercase name, for example orders.
+  steps:
+    - id: request
+      name: Open infrastructure pull request
+      action: atmos:request-service
+      input:
+        name: ${{ parameters.name }}
+  output:
+    links:
+      - title: Review and merge the Gitea pull request
+        url: ${{ steps.request.output.pullRequestUrl }}
+    text:
+      - title: Provision after review
+        content: |
+          Log into Gitea with the local demo account `atmos` / `atmos`.
+          Wait for the plan check, review the changes, then merge the PR.
+          Gitea Actions provisions the local bucket and registers the service automatically.
+          Follow the deploy job at http://localhost:3001/atmos/deployments/actions.

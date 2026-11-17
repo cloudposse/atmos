@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/spf13/afero"
@@ -18,6 +19,8 @@ import (
 
 // lockFileName is the provider lock file Terragrunt keeps beside a unit.
 const lockFileName = ".terraform.lock.hcl"
+
+const hclExtension = ".hcl"
 
 // fileScan is the evaluation scope of one HCL file being inspected.
 type fileScan struct {
@@ -45,7 +48,7 @@ type watchTracker struct {
 	result  *model.Resolution
 	files   map[string]struct{}
 	folders map[string]struct{}
-	visited map[string]struct{}
+	visited map[[2]string]struct{}
 	queue   []queuedFile
 }
 
@@ -67,11 +70,11 @@ func trackInputSources(fs afero.Fs, root string, result *model.Resolution) error
 
 func newWatchTracker(fs afero.Fs, root string, result *model.Resolution) *watchTracker {
 	tracker := &watchTracker{
-		watchEvaluator: watchEvaluator{fs: fs, root: root, unit: unitDirectory(result)},
+		watchEvaluator: watchEvaluator{fs: fs, root: root, unit: unitDirectory(result), original: unitDirectory(result)},
 		result:         result,
 		files:          map[string]struct{}{},
 		folders:        map[string]struct{}{},
-		visited:        map[string]struct{}{},
+		visited:        map[[2]string]struct{}{},
 	}
 	if contents, err := afero.ReadFile(fs, tracker.unitFile()); err == nil {
 		if file, diagnostics := hclsyntax.ParseConfig(contents, tracker.unitFile(), hcl.InitialPos); !diagnostics.HasErrors() {
@@ -87,7 +90,7 @@ func unitDirectory(result *model.Resolution) string {
 		return filepath.Dir(result.Path)
 	}
 	for _, path := range result.Files {
-		if strings.HasSuffix(path, ".hcl") {
+		if strings.HasSuffix(path, hclExtension) {
 			return filepath.Dir(path)
 		}
 	}
@@ -104,17 +107,22 @@ func (t *watchTracker) unitFile() string {
 func (t *watchTracker) scan() error {
 	for _, path := range t.result.Files {
 		// Lock files are watched, never inspected: they hold no expressions.
-		if strings.HasSuffix(path, ".hcl") && filepath.Base(path) != lockFileName {
+		if strings.HasSuffix(path, hclExtension) && filepath.Base(path) != lockFileName {
 			t.queue = append(t.queue, queuedFile{path: path, required: true})
 		}
 	}
 	for len(t.queue) > 0 {
 		next := t.queue[0]
 		t.queue = t.queue[1:]
-		if _, seen := t.visited[next.path]; seen {
+		scope := t.unit
+		if !next.required {
+			scope = cmp.Or(next.unit, filepath.Dir(next.path))
+		}
+		key := [2]string{next.path, scope}
+		if _, seen := t.visited[key]; seen {
 			continue
 		}
-		t.visited[next.path] = struct{}{}
+		t.visited[key] = struct{}{}
 		if err := t.scanFile(next); err != nil {
 			return err
 		}
@@ -230,7 +238,7 @@ func (t *watchTracker) trackFile(scan fileScan, call *hclsyntax.FunctionCallExpr
 		return
 	}
 	switch {
-	case strings.HasSuffix(path, ".hcl"):
+	case strings.HasSuffix(path, hclExtension):
 		t.queue = append(t.queue, queuedFile{path: path})
 	case strings.HasSuffix(path, ".json"):
 		// A JSON configuration holds its expressions in strings the HCL syntax walk cannot
@@ -247,7 +255,19 @@ func (t *watchTracker) followConfigurationDirectory(path string) bool {
 		return false
 	}
 	t.add(t.folders, path)
-	t.queue = append(t.queue, queuedFile{path: filepath.Join(path, "terragrunt.hcl")})
+	// Match Terragrunt's lookup order, including JSON precedence when both exist.
+	for _, name := range config.DefaultTerragruntConfigPaths {
+		selected := filepath.Join(path, name)
+		if exists, _ := afero.Exists(t.fs, selected); !exists {
+			continue
+		}
+		if strings.HasSuffix(selected, ".json") {
+			t.fallback()
+		} else {
+			t.queue = append(t.queue, queuedFile{path: selected})
+		}
+		break
+	}
 	return true
 }
 
@@ -268,7 +288,7 @@ func (t *watchTracker) followInclude(scan fileScan, block *hclsyntax.Block) {
 	path := localPath(scan.unit, value)
 	t.add(t.files, path)
 	switch {
-	case strings.HasSuffix(path, ".hcl"):
+	case strings.HasSuffix(path, hclExtension):
 		t.queue = append(t.queue, queuedFile{path: path, unit: scan.unit})
 	case strings.HasSuffix(path, ".json"):
 		t.fallback()
@@ -470,7 +490,7 @@ func (t *watchTracker) addStaticWatches() {
 
 // gitFileRepository returns the local repository a `git::file://` source clones. When it lies in
 // the project it is watched whole, so the module and the relative var files copied with it select
-// the unit. add drops a repository outside the project, whose changes the project cannot contain.
+// the unit. The add method drops a repository outside the project, whose changes the project cannot contain.
 func gitFileRepository(source string) (string, bool) {
 	rest, found := strings.CutPrefix(source, "git::file://")
 	if !found {
@@ -480,7 +500,7 @@ func gitFileRepository(source string) (string, bool) {
 	if index := strings.Index(rest, "//"); index > 0 {
 		rest = rest[:index]
 	}
-	// file:///C:/repo names a Windows volume after the leading slash.
+	// A file URL can name a Windows volume after the leading slash.
 	if len(rest) > 2 && rest[0] == '/' && rest[2] == ':' {
 		rest = rest[1:]
 	}

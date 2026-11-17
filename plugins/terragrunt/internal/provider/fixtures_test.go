@@ -16,7 +16,7 @@ import (
 
 func fixture(t *testing.T, name string) string {
 	t.Helper()
-	source, err := filepath.Abs(filepath.Join("../../fixtures", name))
+	source, err := filepath.Abs(filepath.Join("..", "..", "fixtures", name))
 	require.NoError(t, err)
 	root := t.TempDir()
 	require.NoError(t, os.CopyFS(root, os.DirFS(source)))
@@ -43,7 +43,7 @@ func TestDiscoveryFixtures(t *testing.T) {
 			request := &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts, IncludePaths: []string{test.scope}, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "list"}, Invocation: &pluginv1.Invocation{Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "must-not-execute"}}}
 			response, err := p.Discover(t.Context(), request)
 			require.NoError(t, err)
-			expected := map[string]map[string]pluginv1.ComponentDependency_Kind{}
+			var expected map[string]map[string]pluginv1.ComponentDependency_Kind
 			if test.name == "advanced" {
 				expected = map[string]map[string]pluginv1.ComponentDependency_Kind{
 					"app":      {"network": pluginv1.ComponentDependency_ORDER, "database": pluginv1.ComponentDependency_OUTPUT, "cache": pluginv1.ComponentDependency_OUTPUT},
@@ -98,17 +98,17 @@ func TestExplicitStackStateAndPreparation(t *testing.T) {
 	request := &pluginv1.ComponentRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts, Address: network.Address, Source: network.Source, Configuration: network.Configuration, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "plan"}, Invocation: &pluginv1.Invocation{Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "must-not-execute"}}}
 	state, err := provider.Resolve(t.Context(), request)
 	require.NoError(t, err)
-	require.NoDirExists(t, filepath.Join(root, "live/.terragrunt-stack"))
+	require.NoDirExists(t, filepath.Join(root, "live", ".terragrunt-stack"))
 	request.Effects = &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true}
 	prepared, err := provider.Prepare(t.Context(), request)
 	require.NoError(t, err)
-	require.DirExists(t, filepath.Join(root, "live/.terragrunt-stack"))
+	require.DirExists(t, filepath.Join(root, "live", ".terragrunt-stack"))
 	require.Equal(t, state.State.WorkingDirectory, prepared.State.WorkingDirectory)
 	var before, after map[string]any
 	require.NoError(t, decode(state.State.Backend, &before))
 	require.NoError(t, decode(prepared.State.Backend, &after))
 	require.Equal(t, before, after)
-	require.Equal(t, filepath.Join(root, "state/dev/network.tfstate"), after["path"])
+	require.Equal(t, filepath.Join(root, "state", "dev", "network.tfstate"), after["path"])
 	require.True(t, prepared.BackendGenerated)
 	require.Len(t, prepared.Files, 3)
 	require.Equal(t, "backend.tf", prepared.Files[0].Path)
@@ -165,7 +165,7 @@ func TestRemoteModuleSourceIsNotAFileWatch(t *testing.T) {
 	remote := "git::https://example.com/modules.git//app?ref=v1.0.0"
 	unit := model.DiscoveredUnit{Config: model.Resolution{Path: path, Source: remote, Files: []string{path}}}
 	addresses := map[string]*pluginv1.ComponentAddress{path: {Stack: "live", Component: "app", ComponentType: "terraform"}}
-	instance, err := discoveredUnit(model.Request{BasePath: root}, unit, addresses)
+	instance, err := discoveredUnit(&model.Request{BasePath: root}, &unit, addresses)
 	require.NoError(t, err)
 	var configuration map[string]any
 	require.NoError(t, decode(instance.Configuration, &configuration))
@@ -181,7 +181,7 @@ func TestDiscoveredLocalModuleSubdirKeepsDelimiter(t *testing.T) {
 	repository := filepath.Join(root, "repository")
 	unit := model.DiscoveredUnit{Config: model.Resolution{Path: unitPath, Source: repository + "//modules/app", Folders: []string{repository}, Files: []string{unitPath}}}
 	addresses := map[string]*pluginv1.ComponentAddress{unitPath: {Stack: "live", Component: "app", ComponentType: "terraform"}}
-	instance, err := discoveredUnit(model.Request{BasePath: root}, unit, addresses)
+	instance, err := discoveredUnit(&model.Request{BasePath: root}, &unit, addresses)
 	require.NoError(t, err)
 	var configuration map[string]any
 	require.NoError(t, decode(instance.Configuration, &configuration))

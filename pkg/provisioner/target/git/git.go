@@ -9,6 +9,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -229,19 +230,20 @@ func readManagedTree(workdir, path string) (map[string][]byte, error) {
 // walkManagedDir reads every file under root into a map keyed by the
 // forward-slash path relative to root.
 func walkManagedDir(root string) (map[string][]byte, error) {
+	scoped, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, fmt.Errorf("%w: opening managed directory: %w", errUtils.ErrGitArtifactRead, err)
+	}
+	defer scoped.Close()
 	files := map[string][]byte{}
-	walkErr := filepath.WalkDir(root, func(p string, d os.DirEntry, walkErr error) error {
+	walkErr := fs.WalkDir(scoped.FS(), ".", func(rel string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if d.IsDir() {
 			return nil
 		}
-		rel, relErr := filepath.Rel(root, p)
-		if relErr != nil {
-			return relErr
-		}
-		data, readErr := os.ReadFile(p)
+		data, readErr := scoped.ReadFile(rel)
 		if readErr != nil {
 			return fmt.Errorf("%w: reading %q: %w", errUtils.ErrGitArtifactRead, rel, readErr)
 		}
@@ -312,6 +314,7 @@ func commitAndPushResult(ctx context.Context, s *repoSession, cfg *config, artif
 		return s.provider.Push(ctx, &atmosgit.PushOptions{
 			RepoContext: s.rc,
 			Retries:     s.resolved.PushRetries,
+			Retry:       s.resolved.PushRetry,
 		})
 	})
 	return result.SHA, atmosgit.WrapOperationError(

@@ -202,3 +202,15 @@ func TestComposeEnvironmentPropagatesError(t *testing.T) {
 	_, err := ComposeEnvironment(context.Background(), []string{}, "id", provider)
 	require.Error(t, err)
 }
+
+func TestResolvePushRetryPolicy(t *testing.T) {
+	policy := &schema.RetryConfig{MaxAttempts: new(4), RandomJitter: new(0.5)}
+	cfg := gitConfigFixture()
+	repo := cfg.Repositories["flux-deploy"]
+	repo.Push.Retry = policy
+	cfg.Repositories["flux-deploy"] = repo
+	resolved, err := ResolveRepository(cfg, "flux-deploy")
+	require.NoError(t, err)
+	assert.Same(t, policy, resolved.PushRetry)
+	assert.Equal(t, 5, resolved.PushRetries)
+}

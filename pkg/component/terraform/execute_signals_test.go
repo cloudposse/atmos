@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/execution"
+
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -83,4 +86,27 @@ func TestClearStaleSignalsToleratesAnUnfetchedSourceSubdirectory(t *testing.T) {
 
 	section["metadata"] = map[string]any{"source_subdir": "../escape"}
 	require.ErrorIs(t, clearStaleSignals(atmosConfig, info), errUtils.ErrWorkdirProvision, "an invalid subdirectory still fails")
+}
+
+func TestIgnoredPreparationRefreshesRetainedSignals(t *testing.T) {
+	for _, signals := range []map[string]any{nil, {"current": true}} {
+		t.Run(fmt.Sprint(signals), func(t *testing.T) {
+			root := t.TempDir()
+			cfg := &schema.AtmosConfiguration{TerraformDirAbsolutePath: root}
+			info := &schema.ConfigAndStacksInfo{FinalComponent: "app"}
+			dir := ConstructTerraformComponentWorkingDir(cfg, info)
+			require.NoError(t, os.MkdirAll(dir, 0o755))
+			path := filepath.Join(dir, execution.SignalsFileName)
+			require.NoError(t, os.WriteFile(path, []byte(`{"stale":true}`), 0o600))
+			prepared := &schema.PreparedComponentConfiguration{IgnoredRun: &schema.ComponentIgnoredRun{Policy: "registry"}, Execution: &schema.ComponentExecution{Errors: &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "registry", Signals: signals}}}}}
+			require.NoError(t, refreshIgnoredSignals(cfg, info, prepared))
+			if signals == nil {
+				require.NoFileExists(t, path)
+			} else {
+				data, err := os.ReadFile(path)
+				require.NoError(t, err)
+				require.JSONEq(t, `{"current":true}`, string(data))
+			}
+		})
+	}
 }

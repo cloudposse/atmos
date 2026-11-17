@@ -204,7 +204,7 @@ func TestProjectRootRelativeIsMadeAbsolute(t *testing.T) {
 
 func TestProjectRootShowsRelativePathsInTaskTracebacks(t *testing.T) {
 	t.Parallel()
-	source := "def boom():\n    fail(\"broken\")\nsteps.parallel(tasks = [steps.task(name = \"a\", function = boom)])\n"
+	source := "def boom():\n    {}[\"missing\"]\nsteps.parallel(tasks = [steps.task(name = \"a\", function = boom)])\n"
 	root, workDir := writeScriptTree(t, source)
 	mainPath := filepath.Join(root, "scripts", "main.star")
 
@@ -214,7 +214,7 @@ func TestProjectRootShowsRelativePathsInTaskTracebacks(t *testing.T) {
 	require.Error(t, runErr)
 	details := errorDetails(runErr)
 	assert.Contains(t, details, `Traceback for task "a"`)
-	assert.Contains(t, details, filepath.Join("scripts", "main.star")+":2:9: in boom")
+	assert.Contains(t, details, filepath.Join("scripts", "main.star")+":2:7: in boom")
 	assert.NotContains(t, details, root)
 	assert.NotContains(t, runErr.Error(), root)
 }

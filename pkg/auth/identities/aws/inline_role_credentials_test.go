@@ -5,7 +5,10 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +18,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -491,4 +495,77 @@ func TestBaseCredentialsFromAProfileCredentialSourceHonorTheIMDSv1Restriction(t 
 	_, _, err = resolveBase(t, invocation(unrestricted, "AWS_EC2_METADATA_V1_DISABLED=true")...)
 	require.Error(t, err, "the environment variable restricts a profile that does not")
 	assert.Equal(t, before, v1Reads.Load())
+}
+
+func TestInvocationWithoutHomeDoesNotReadProcessSharedFiles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".aws"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".aws", "credentials"), []byte("[default]\naws_access_key_id = process-key\naws_secret_access_key = process-secret\n"), 0o600))
+	profile, err := loadInvocationProfile(t.Context(), map[string]string{})
+	require.NoError(t, err)
+	require.Nil(t, profile)
+	profile, err = loadInvocationProfile(t.Context(), map[string]string{"AWS_SHARED_CREDENTIALS_FILE": filepath.Join(home, ".aws", "credentials")})
+	require.NoError(t, err)
+	require.Equal(t, "process-key", profile.Credentials.AccessKeyID)
+}
+
+func TestContainerClientClosesCompletedConnection(t *testing.T) {
+	closed := make(chan struct{}, 1)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) }))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateClosed {
+			closed <- struct{}{}
+		}
+	}
+	server.Start()
+	defer server.Close()
+	response, err := containerEndpointClient(time.Second).Get(server.URL)
+	require.NoError(t, err)
+	_, err = io.Copy(io.Discard, response.Body)
+	require.NoError(t, err)
+	require.NoError(t, response.Body.Close())
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("completed container connection retained")
+	}
+}
+
+func TestCredentialProcessErrorsDoNotExposeOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell command")
+	}
+	file := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(file, []byte("[default]\ncredential_process = printf secret-broker-output\n"), 0o600))
+	_, err := baseCredentials(t.Context(), map[string]string{"AWS_CONFIG_FILE": file})
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	require.Contains(t, err.Error(), "credential_process")
+	for current := err; current != nil; current = errors.Unwrap(current) {
+		require.NotContains(t, fmt.Sprintf("%+v", current), "secret-broker-output")
+	}
+}
+
+func TestEnvironmentCredentialAliasesOverrideProfile(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "credentials")
+	require.NoError(t, os.WriteFile(file, []byte("[default]\naws_access_key_id = profile-key\naws_secret_access_key = profile-secret\n"), 0o600))
+	env := map[string]string{"AWS_SHARED_CREDENTIALS_FILE": file, "AWS_ACCESS_KEY": "alias-key", "AWS_SECRET_KEY": "alias-secret"}
+	for _, canonical := range []bool{false, true} {
+		wantKey, wantSecret := "alias-key", "alias-secret"
+		if canonical {
+			env["AWS_ACCESS_KEY_ID"], env["AWS_SECRET_ACCESS_KEY"] = "canonical-key", "canonical-secret"
+			wantKey, wantSecret = "canonical-key", "canonical-secret"
+		}
+		result, err := baseCredentials(t.Context(), env)
+		require.NoError(t, err)
+		require.Equal(t, wantKey, result.AccessKeyID)
+		require.Equal(t, wantSecret, result.SecretAccessKey)
+		provider, err := namedSourceCredentials(env, credentialSourceEnvironment, nil)
+		require.NoError(t, err)
+		selected, err := provider.Retrieve(t.Context())
+		require.NoError(t, err)
+		require.Equal(t, wantKey, selected.AccessKeyID)
+		require.Equal(t, wantSecret, selected.SecretAccessKey)
+	}
 }

@@ -166,6 +166,12 @@ func (r *Recoverer) ignore(policy *schema.ComponentIgnorePolicy) {
 	if r.reporter != nil {
 		r.reporter.Ignored(policy.Name, policy.Message)
 	}
+	r.WriteSignals(policy)
+}
+
+// WriteSignals writes signals for an already selected policy, retaining non-fatal write handling.
+func (r *Recoverer) WriteSignals(policy *schema.ComponentIgnorePolicy) {
+	defer perf.Track(nil, "execution.Recoverer.WriteSignals")()
 	file := r.signalsFile
 	if r.signalsPath != nil {
 		file = r.signalsPath()

@@ -194,6 +194,9 @@ func (e *Executor) beginPreparedConfiguration(
 		return errUtils.ErrComponentExcluded
 	}
 	if prepared != nil && prepared.IgnoredRun != nil {
+		if err := refreshIgnoredSignals(atmosConfig, info, prepared); err != nil {
+			return err
+		}
 		return endIgnoredRun(info, prepared.IgnoredRun)
 	}
 	warnOverlappingRetry(info, prepared)

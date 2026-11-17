@@ -68,3 +68,47 @@ func existingSubpath(info *schema.ConfigAndStacksInfo, root string) (string, err
 	}
 	return moduleDir, nil
 }
+
+// refreshIgnoredSignals replaces stale signals in a retained module after preparation is ignored.
+func refreshIgnoredSignals(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) error {
+	if info.DryRun {
+		return nil
+	}
+	if err := clearStaleSignals(atmosConfig, info); err != nil {
+		return err
+	}
+	dir, err := signalModuleDirectory(atmosConfig, info)
+	if err != nil || dir == "" {
+		return err
+	}
+	if present, err := signalDirectoryExists(dir); err != nil || !present {
+		return err
+	}
+	writeIgnoredPolicySignals(info, prepared, dir)
+	return nil
+}
+
+// writeIgnoredPolicySignals preserves the signals of the policy selected during preparation.
+func writeIgnoredPolicySignals(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, dir string) {
+	if prepared.Execution == nil || prepared.Execution.Errors == nil {
+		return
+	}
+	for _, policy := range prepared.Execution.Errors.Ignore {
+		if policy.Name == prepared.IgnoredRun.Policy {
+			execution.NewRecoverer(nil, execution.WithReporter(&recoveryReporter{info: info}), execution.WithSignalsFile(filepath.Join(dir, execution.SignalsFileName))).WriteSignals(&policy)
+			return
+		}
+	}
+}
+
+// signalDirectoryExists avoids creating a module directory for an ignored preparation.
+func signalDirectoryExists(dir string) (bool, error) {
+	stat, err := os.Stat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return stat.IsDir(), nil
+}

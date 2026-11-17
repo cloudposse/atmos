@@ -902,9 +902,13 @@ func TestMainCommandLegacyRetryDetailedPlan(t *testing.T) {
 		env        []string
 		extra      schema.ComponentExtraArguments
 		processEnv []string
+		globalEnv  map[string]string
 		code       int
 		success    bool
 	}{
+		{name: "global plan environment", args: []string{"plan"}, globalEnv: map[string]string{"TF_CLI_ARGS_plan": "-detailed-exitcode"}, code: 2, success: true},
+		{name: "global environment overrides process", args: []string{"plan"}, processEnv: []string{"TF_CLI_ARGS=-detailed-exitcode=false"}, globalEnv: map[string]string{"TF_CLI_ARGS": "-detailed-exitcode"}, code: 2, success: true},
+		{name: "component overrides global", args: []string{"plan"}, globalEnv: map[string]string{"TF_CLI_ARGS": "-detailed-exitcode"}, env: []string{"TF_CLI_ARGS=-detailed-exitcode=false"}, code: 2},
 		{name: "command flag", args: []string{"plan", "-detailed-exitcode"}, code: 2, success: true},
 		{name: "extra arguments", args: []string{"plan"}, extra: schema.ComponentExtraArguments{Arguments: []string{"-detailed-exitcode"}}, code: 2, success: true},
 		{name: "extra environment", args: []string{"plan"}, extra: schema.ComponentExtraArguments{Environment: map[string]string{"TF_CLI_ARGS_plan": "-detailed-exitcode"}}, code: 2, success: true},
@@ -938,7 +942,7 @@ func TestMainCommandLegacyRetryDetailedPlan(t *testing.T) {
 			if test.processEnv != nil {
 				opts = append(opts, component.WithEnvironment(test.processEnv))
 			}
-			err := hookExecutor(shell).runMainShellCommand(&schema.AtmosConfiguration{}, info, test.args, t.TempDir(), opts)
+			err := hookExecutor(shell).runMainShellCommand(&schema.AtmosConfiguration{Env: test.globalEnv}, info, test.args, t.TempDir(), opts)
 			require.Equal(t, test.code, errUtils.GetExitCode(err))
 			if test.success {
 				require.Equal(t, 1, attempts)

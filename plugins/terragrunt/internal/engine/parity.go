@@ -27,7 +27,7 @@ import (
 // applyParity copies the settings that select how a unit runs from the evaluated configuration:
 // terraform_binary, the errors block, the exclude block, and feature flags. Everything it returns
 // is data; the host owns executable selection, retries, and unit exclusion.
-func applyParity(cfg *config.TerragruntConfig, request model.Request, path string, result *model.Resolution) error {
+func applyParity(cfg *config.TerragruntConfig, request *model.Request, path string, result *model.Resolution) error {
 	result.TerraformBinary = terraformBinary(cfg.TerraformBinary, path)
 	policies, err := errorsFromConfig(cfg.Errors, path)
 	if err != nil {
@@ -64,17 +64,7 @@ func errorsFromConfig(block *config.ErrorsConfig, path string) (*model.Errors, e
 		if retry == nil {
 			continue
 		}
-		key := fmt.Sprintf("errors.retry %q", retry.Label)
-		if retry.MaxAttempts < 1 {
-			return nil, errorsProblem(key, path, fmt.Sprintf("`max_attempts` is %d in %s", retry.MaxAttempts, key), "A retry policy must allow at least one attempt.", "Set `max_attempts` to 1 or more.")
-		}
-		if retry.SleepIntervalSec < 0 {
-			return nil, errorsProblem(key, path, fmt.Sprintf("`sleep_interval_sec` is %d in %s", retry.SleepIntervalSec, key), "The sleep between attempts cannot be negative.", "Set `sleep_interval_sec` to 0 or more.")
-		}
-		if int64(retry.MaxAttempts) > math.MaxUint32 || int64(retry.SleepIntervalSec) > math.MaxUint32 {
-			return nil, errorsProblem(key, path, fmt.Sprintf("A value is too large in %s", key), "`max_attempts` and `sleep_interval_sec` must fit in 32 bits.", fmt.Sprintf("Use values no larger than %d.", uint32(math.MaxUint32)))
-		}
-		if err := checkPatterns(key, path, retry.RetryableErrors); err != nil {
+		if err := validateRetryBlock(retry, path); err != nil {
 			return nil, err
 		}
 		result.Retry = append(result.Retry, model.RetryPolicy{
@@ -108,7 +98,7 @@ func checkPatterns(key, path string, patterns []string) error {
 }
 
 func errorsProblem(key, file, summary, detail, hint string) *model.Problem {
-	return setting(model.CodeEvaluationError, key, file, summary, detail, hint)
+	return evaluationSetting(key, file, summary, detail, hint)
 }
 
 // signalValues converts the cty values of an ignore block to plain JSON values.
@@ -152,6 +142,8 @@ func excludeFromConfig(block *config.ExcludeConfig) *model.Exclude {
 
 // ExcludeListsAction reports whether the actions name the command. "all" matches every command and
 // "all_except_output" every command but output; other entries match case-insensitively.
+//
+//nolint:lintroller // Standalone SDK-only plugin has no host perf runtime dependency.
 func ExcludeListsAction(actions []string, command string) bool {
 	command = strings.ToLower(command)
 	for _, action := range actions {
@@ -170,6 +162,8 @@ func ExcludeListsAction(actions []string, command string) bool {
 // PreventsRun reports whether the exclude block makes a direct run of the command a no-op. Without
 // no_run only an exact action match prevents the run; no_run = true also honors "all" and
 // "all_except_output"; no_run = false never prevents it.
+//
+//nolint:lintroller // Standalone SDK-only plugin has no host perf runtime dependency.
 func PreventsRun(exclude *model.Exclude, command string) bool {
 	if exclude == nil {
 		return false
@@ -186,6 +180,8 @@ func PreventsRun(exclude *model.Exclude, command string) bool {
 
 // OperationCommand is the command name Terragrunt matches exclude actions against: destroy for
 // `apply -destroy`, apply for deploy, otherwise the command itself.
+//
+//nolint:lintroller // Standalone SDK-only plugin has no host perf runtime dependency.
 func OperationCommand(command string, arguments []string) string {
 	if command == "deploy" {
 		command = "apply"
@@ -227,7 +223,7 @@ func featureFlagValues(flags []*config.FeatureFlag, overrides map[string]string,
 		case overridden:
 			if flag.Default != nil && flag.Default.Type() == cty.Bool {
 				if _, err := strconv.ParseBool(override); err != nil {
-					return nil, setting(model.CodeEvaluationError, "feature "+flag.Name, path,
+					return nil, evaluationSetting("feature "+flag.Name, path,
 						fmt.Sprintf("Invalid value for the `%s` feature", flag.Name),
 						fmt.Sprintf("The `%s` feature is a boolean, but its override is not `true` or `false`.", flag.Name),
 						"Set the override to `true` or `false`, in `components.terraform.terragrunt.features` or in `TG_FEATURE`.")
@@ -262,6 +258,8 @@ func ctyString(value cty.Value) string {
 
 // ParseFeatureEnvironment reads the comma-separated name=value list that Terragrunt accepts in
 // TG_FEATURE.
+//
+//nolint:lintroller // Standalone SDK-only plugin has no host perf runtime dependency.
 func ParseFeatureEnvironment(value string) (map[string]string, error) {
 	result := map[string]string{}
 	for _, entry := range strings.Split(value, ",") {
@@ -272,7 +270,7 @@ func ParseFeatureEnvironment(value string) (map[string]string, error) {
 		name, raw, found := strings.Cut(entry, "=")
 		name = strings.TrimSpace(name)
 		if !found || name == "" {
-			return nil, setting(model.CodeEvaluationError, "TG_FEATURE", "",
+			return nil, evaluationSetting("TG_FEATURE", "",
 				fmt.Sprintf("Invalid feature override %q in TG_FEATURE", name),
 				"Each entry of TG_FEATURE must look like `name=value`.",
 				"Set `TG_FEATURE=name=value[,name2=value2]`.")
@@ -350,7 +348,7 @@ func lifecycleWarnings(terraform *config.TerraformConfig, path string) []model.W
 // validateEngine checks that the executable a unit selected with terraform_binary answers
 // `version -json` the way Terraform and OpenTofu do, so a wrong path fails with the unit's name
 // instead of as an obscure error from the first command that runs.
-func validateEngine(ctx context.Context, request model.Request, binary, path string) error {
+func validateEngine(ctx context.Context, request *model.Request, binary, path string) error {
 	var version struct {
 		Version string `json:"terraform_version"`
 	}
@@ -369,7 +367,7 @@ func validateEngine(ctx context.Context, request model.Request, binary, path str
 	if err == nil && version.Version != "" {
 		return nil
 	}
-	return setting(model.CodeEvaluationError, "terraform_binary", path,
+	return evaluationSetting("terraform_binary", path,
 		"`terraform_binary` is not a Terraform or OpenTofu executable",
 		"The selected executable does not answer `version -json` the way Terraform and OpenTofu do.",
 		"Point `terraform_binary` at `tofu`, `terraform`, or a wrapper that forwards to one of them, or remove it to use `components.terraform.command`.")
@@ -394,7 +392,7 @@ func resolveOnInvocationPath(binary string, environment map[string]string) (stri
 	for _, directory := range filepath.SplitList(search) {
 		for _, extension := range extensions {
 			candidate := filepath.Join(cmp.Or(directory, "."), binary+extension)
-			if info, err := os.Stat(candidate); err == nil && !info.IsDir() && (runtime.GOOS == "windows" || info.Mode()&0o111 != 0) {
+			if isInvocationExecutable(candidate) {
 				return candidate, nil
 			}
 		}
@@ -430,207 +428,9 @@ func checkFeatureOverrides(path string, overrides map[string]string, declared fu
 	return err
 }
 
-// Names and limits of the built-in tflint hook. The executable is the hook program that Terragrunt
-// replaces with its own tflint integration.
-const (
-	tflintExecutable   = "tflint"
-	tflintExternalFlag = "--terragrunt-external-tflint"
-	tflintConfigName   = ".tflint.hcl"
-	// The host resolves this marker against the provisioned module directory when the hook runs.
-	tflintOptionalVarFilePrefix = "--atmos-optional-var-file="
-	// The host replaces this marker with one --var per input of the final prepared configuration, after it
-	// has merged the stack's variables, so that TFLint and Terraform see the same values.
-	tflintInputVariablesMarker = "--atmos-tflint-input-variables"
-	// The host searches for this config only when the selected hook executes.
-	tflintConfigSearchPrefix = "--atmos-tflint-config-search="
-	// tflintMaxParents bounds the search for .tflint.hcl, like Terragrunt's default folder limit.
-	tflintMaxParents = 100
-)
-
-// isLifecycleCommand reports whether a hook command names a Terragrunt stage that runs in the
-// unit's configuration directory instead of the module directory.
-func isLifecycleCommand(command string) bool {
-	return command == model.LifecycleReadConfig || command == model.LifecycleReadConfigAlias || command == model.LifecycleInitFromModule
-}
-
-// finalizeExecution prepares evaluated hooks for the host: lifecycle hooks default to the unit's
-// configuration directory, as in Terragrunt, and the built-in tflint hook becomes the two tflint
-// invocations Terragrunt runs. The unit directory is where terragrunt.hcl lives.
-func finalizeExecution(execution *model.Execution, path string) {
-	if execution == nil {
-		return
-	}
-	execution.BeforeHooks = finalizeHooks(execution.BeforeHooks, execution, path)
-	execution.AfterHooks = finalizeHooks(execution.AfterHooks, execution, path)
-	execution.ErrorHooks = finalizeHooks(execution.ErrorHooks, execution, path)
-}
-
-func finalizeHooks(hooks []model.Hook, execution *model.Execution, path string) []model.Hook {
-	var result []model.Hook
-	for i := range hooks {
-		for _, hook := range splitLifecycle(hooks[i], filepath.Dir(path)) {
-			if len(hook.Execute) > 0 && hook.Execute[0] == tflintExecutable {
-				result = append(result, expandTflint(&hook, execution, path)...)
-				continue
-			}
-			result = append(result, hook)
-		}
-	}
-	return result
-}
-
-// splitLifecycle gives lifecycle commands the unit directory as working directory. A hook that
-// lists both lifecycle and Terraform commands, with no working_dir of its own, becomes two hooks so
-// each command keeps its own default directory.
-func splitLifecycle(hook model.Hook, unitDir string) []model.Hook {
-	var lifecycle, other []string
-	for _, command := range hook.Commands {
-		if isLifecycleCommand(command) {
-			lifecycle = append(lifecycle, command)
-		} else {
-			other = append(other, command)
-		}
-	}
-	if len(lifecycle) == 0 || hook.WorkingDirectory != "" {
-		return []model.Hook{hook}
-	}
-	first := hook
-	first.Commands, first.WorkingDirectory = lifecycle, unitDir
-	if len(other) == 0 {
-		return []model.Hook{first}
-	}
-	second := hook
-	second.Commands = other
-	return []model.Hook{first, second}
-}
-
-// expandTflint replaces a hook that executes tflint with the two commands Terragrunt runs for it:
-// `tflint --init` and the lint itself. Both run in the module directory against the .tflint.hcl
-// that Terragrunt would find, with the unit's inputs and variable files passed as variables. A hook
-// that lists several commands expands once per command, so each lint sees only the extra
-// arguments of the command that is running.
-func expandTflint(hook *model.Hook, execution *model.Execution, path string) []model.Hook {
-	arguments := slices.DeleteFunc(slices.Clone(hook.Execute), func(arg string) bool { return arg == tflintExternalFlag })
-	configFile := tflintConfigSearchPrefix + filepath.Dir(path)
-	if explicit, found := explicitTflintConfig(arguments, filepath.Dir(path)); found {
-		configFile = explicit
-	}
-	passthrough := withoutConfigFlag(arguments[1:])
-	var result []model.Hook
-	for _, command := range hook.Commands {
-		variables := append([]string{tflintInputVariablesMarker}, tflintExtraVariables(command, execution)...)
-		initHook := *hook
-		initHook.Commands = []string{command}
-		initHook.Execute = []string{tflintExecutable, "--init", "--config", configFile, "--chdir", "."}
-		runHook := initHook
-		runHook.Execute = append(append([]string{tflintExecutable, "--config", configFile, "--chdir", "."}, variables...), passthrough...)
-		// The module directory is where tflint runs; a working_dir would only change the lock key upstream.
-		initHook.WorkingDirectory, runHook.WorkingDirectory = "", ""
-		result = append(result, initHook, runHook)
-	}
-	return result
-}
-
-// tflintConfig returns the configuration named by --config/-c, or the nearest .tflint.hcl.
-func tflintConfig(arguments []string, unitDir string) (string, error) {
-	if explicit, found := explicitTflintConfig(arguments, unitDir); found {
-		return explicit, nil
-	}
-	dir := unitDir
-	for range tflintMaxParents {
-		candidate := filepath.Join(dir, tflintConfigName)
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return "", os.ErrNotExist
-}
-
-func explicitTflintConfig(arguments []string, unitDir string) (string, bool) {
-	for i, arg := range arguments {
-		for _, flag := range []string{"--config", "-c"} {
-			if arg == flag && len(arguments) > i+1 {
-				return anchored(arguments[i+1], unitDir), true
-			}
-			if value, found := strings.CutPrefix(arg, flag+"="); found {
-				return anchored(value, unitDir), true
-			}
-		}
-	}
-	return "", false
-}
-
-func anchored(path, dir string) string {
-	if filepath.IsAbs(path) {
-		return path
-	}
-	return filepath.Join(dir, path)
-}
-
-// withoutConfigFlag drops the --config/-c pair that tflintConfig already consumed.
-func withoutConfigFlag(arguments []string) []string {
-	var result []string
-	for i := 0; i < len(arguments); i++ {
-		arg := arguments[i]
-		switch {
-		case arg == "--config" || arg == "-c":
-			i++
-		case strings.HasPrefix(arg, "--config=") || strings.HasPrefix(arg, "-c="):
-		default:
-			result = append(result, arg)
-		}
-	}
-	return result
-}
-
-// tflintExtraVariables mirrors the variables Terragrunt takes from extra_arguments that apply to
-// the command the hook runs for.
-func tflintExtraVariables(command string, execution *model.Execution) []string {
-	var variables []string
-	for i := range execution.ExtraArguments {
-		extra := &execution.ExtraArguments[i]
-		if slices.Contains(extra.Commands, command) {
-			variables = append(variables, extraArgumentVariables(extra)...)
-		}
-	}
-	return variables
-}
-
-// extraArgumentVariables lists the --var and --var-file flags one extra_arguments block implies.
-// Both `-var=x` and `-var x` forms are recognized, as Terraform accepts both.
-// TF_VAR_ entries of env_vars are not turned into --var flags, unlike Terragrunt: a flag would
-// override terraform.tfvars, while Terraform ranks the environment below it. The hook inherits the
-// phase environment, and TFLint reads TF_VAR_ variables with the same precedence as Terraform.
-func extraArgumentVariables(extra *model.ExtraArguments) []string {
-	var variables []string
-	for i := 0; i < len(extra.Arguments); i++ {
-		argument := extra.Arguments[i]
-		for _, flag := range []string{"var", "var-file"} {
-			if value, found := strings.CutPrefix(argument, "-"+flag+"="); found {
-				variables = append(variables, "--"+flag+"="+value)
-			} else if argument == "-"+flag && i+1 < len(extra.Arguments) {
-				i++
-				variables = append(variables, "--"+flag+"="+extra.Arguments[i])
-			}
-		}
-	}
-	for _, file := range extra.RequiredVarFiles {
-		variables = append(variables, "--var-file="+file)
-	}
-	for _, file := range extra.OptionalVarFiles {
-		variables = append(variables, tflintOptionalVarFilePrefix+file)
-	}
-	return variables
-}
-
 // applyUnitSettings applies the parity settings of a fully evaluated unit and checks the
 // executable it selected.
-func applyUnitSettings(ctx context.Context, cfg *config.TerragruntConfig, request model.Request, path string, result *model.Resolution) error {
+func applyUnitSettings(ctx context.Context, cfg *config.TerragruntConfig, request *model.Request, path string, result *model.Resolution) error {
 	if err := applyParity(cfg, request, path, result); err != nil {
 		return err
 	}
@@ -643,4 +443,29 @@ func applyUnitSettings(ctx context.Context, cfg *config.TerragruntConfig, reques
 		return nil
 	}
 	return validateEngine(ctx, request, result.TerraformBinary, path)
+}
+
+// executablePermissionBits selects any executable permission on POSIX.
+const executablePermissionBits = 0o111
+
+func isInvocationExecutable(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir() && (runtime.GOOS == "windows" || info.Mode()&executablePermissionBits != 0)
+}
+
+func validateRetryBlock(retry *config.RetryBlock, path string) error {
+	key := fmt.Sprintf("errors.retry %q", retry.Label)
+	if retry.MaxAttempts < 1 {
+		return errorsProblem(key, path, fmt.Sprintf("`max_attempts` is %d in %s", retry.MaxAttempts, key), "A retry policy must allow at least one attempt.", "Set `max_attempts` to 1 or more.")
+	}
+	if retry.SleepIntervalSec < 0 {
+		return errorsProblem(key, path, fmt.Sprintf("`sleep_interval_sec` is %d in %s", retry.SleepIntervalSec, key), "The sleep between attempts cannot be negative.", "Set `sleep_interval_sec` to 0 or more.")
+	}
+	if int64(retry.MaxAttempts) > math.MaxUint32 || int64(retry.SleepIntervalSec) > math.MaxUint32 {
+		return errorsProblem(key, path, fmt.Sprintf("A value is too large in %s", key), "`max_attempts` and `sleep_interval_sec` must fit in 32 bits.", fmt.Sprintf("Use values no larger than %d.", uint32(math.MaxUint32)))
+	}
+	if err := checkPatterns(key, path, retry.RetryableErrors); err != nil {
+		return err
+	}
+	return nil
 }

@@ -70,6 +70,9 @@ const awsConfigDirName = ".aws"
 // containerHosts are the ECS and EKS container credential hosts that plain HTTP may reach.
 var containerHosts = []net.IP{net.ParseIP("169.254.170.2"), net.ParseIP("169.254.170.23"), net.ParseIP("fd00:ec2::23")}
 
+// errCredentialProcess hides broker output from authentication errors.
+var errCredentialProcess = errors.New("credential_process failed to supply valid credentials")
+
 // errNoInvocationCredentials reports an invocation environment that selects a source with nothing in it.
 var errNoInvocationCredentials = errors.New("the invocation environment provides no credentials for the selected source")
 
@@ -95,7 +98,7 @@ func baseCredentials(ctx context.Context, env map[string]string) (*types.AWSCred
 // baseCredentialsProvider selects the first source of the SDK default chain that the invocation
 // environment configures. It also returns the region of the profile it read, if any.
 func baseCredentialsProvider(ctx context.Context, env map[string]string, region string) (aws.CredentialsProvider, string, error) {
-	if key, secret := env["AWS_ACCESS_KEY_ID"], env["AWS_SECRET_ACCESS_KEY"]; key != "" && secret != "" {
+	if key, secret := invocationEnvironmentKeys(env); key != "" && secret != "" {
 		return staticEnvCredentials(env), "", nil
 	}
 	if tokenFile := env["AWS_WEB_IDENTITY_TOKEN_FILE"]; tokenFile != "" {
@@ -121,7 +124,8 @@ func baseCredentialsProvider(ctx context.Context, env map[string]string, region 
 }
 
 func staticEnvCredentials(env map[string]string) aws.CredentialsProvider {
-	return credentials.NewStaticCredentialsProvider(env["AWS_ACCESS_KEY_ID"], env["AWS_SECRET_ACCESS_KEY"], env["AWS_SESSION_TOKEN"])
+	key, secret := invocationEnvironmentKeys(env)
+	return credentials.NewStaticCredentialsProvider(key, secret, env["AWS_SESSION_TOKEN"])
 }
 
 // envWebIdentityCredentials exchanges the web identity token file that the environment names.
@@ -162,13 +166,13 @@ func invocationSharedFiles(env map[string]string) (configFile, credentialsFile s
 	configFile, credentialsFile = env["AWS_CONFIG_FILE"], env["AWS_SHARED_CREDENTIALS_FILE"]
 	home := invocationHomeDir(env)
 	if configFile == "" {
-		configFile = config.DefaultSharedConfigFilename()
+		configFile = os.DevNull
 		if home != "" {
 			configFile = filepath.Join(home, awsConfigDirName, "config")
 		}
 	}
 	if credentialsFile == "" {
-		credentialsFile = config.DefaultSharedCredentialsFilename()
+		credentialsFile = os.DevNull
 		if home != "" {
 			credentialsFile = filepath.Join(home, awsConfigDirName, "credentials")
 		}
@@ -330,7 +334,7 @@ func profileSourceCredentials(env map[string]string, chain []*config.SharedConfi
 func namedSourceCredentials(env map[string]string, source string, selected *config.SharedConfig) (aws.CredentialsProvider, error) {
 	switch source {
 	case credentialSourceEnvironment:
-		if env["AWS_ACCESS_KEY_ID"] == "" || env["AWS_SECRET_ACCESS_KEY"] == "" {
+		if key, secret := invocationEnvironmentKeys(env); key == "" || secret == "" {
 			return nil, fmt.Errorf("%w: credential_source %s", errNoInvocationCredentials, credentialSourceEnvironment)
 		}
 		return staticEnvCredentials(env), nil
@@ -397,7 +401,19 @@ func processCredentials(env map[string]string, command string) aws.CredentialsPr
 		cmd.Env = environ
 		return cmd, nil
 	})
-	return aws.NewCredentialsCache(processcreds.NewProviderCommand(builder))
+	provider := processcreds.NewProviderCommand(builder)
+	return aws.NewCredentialsCache(aws.CredentialsProviderFunc(func(ctx context.Context) (aws.Credentials, error) {
+		value, err := provider.Retrieve(ctx)
+		if err != nil {
+			// SDK parse errors embed broker stdout, which can contain unregistered secrets.
+			// Never retain that error in the wrapping chain.
+			if ctx.Err() != nil {
+				return aws.Credentials{}, ctx.Err()
+			}
+			return aws.Credentials{}, errCredentialProcess
+		}
+		return value, nil
+	}))
 }
 
 // containerCredentials returns the container credential endpoint that the environment names, if any. Like
@@ -440,6 +456,7 @@ func containerEndpointClient(timeout time.Duration) *http.Client {
 		Timeout: timeout,
 		Transport: &http.Transport{
 			Proxy:                 nil,
+			DisableKeepAlives:     true, // Providers are short-lived; retain no idle connections.
 			DialContext:           validatedContainerDialer(net.DefaultResolver.LookupHost, dialer.DialContext),
 			TLSHandshakeTimeout:   containerCredentialDialTimeout,
 			ResponseHeaderTimeout: timeout,
@@ -571,4 +588,9 @@ func applyInvocationSTSEndpoint(env map[string]string, options *sts.Options) {
 // invocationSTSEndpoint returns the STS endpoint that the invocation environment names, or "".
 func invocationSTSEndpoint(env map[string]string) string {
 	return cmp.Or(env["AWS_ENDPOINT_URL_STS"], env["AWS_ENDPOINT_URL"])
+}
+
+// invocationEnvironmentKeys applies SDK alias precedence without changing the invocation map.
+func invocationEnvironmentKeys(env map[string]string) (string, string) {
+	return cmp.Or(env["AWS_ACCESS_KEY_ID"], env["AWS_ACCESS_KEY"]), cmp.Or(env["AWS_SECRET_ACCESS_KEY"], env["AWS_SECRET_KEY"])
 }

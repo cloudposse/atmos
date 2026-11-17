@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,6 +46,25 @@ func TestPushRetriesOnRejectionThenSucceeds(t *testing.T) {
 	}, calls)
 }
 
+func TestPushRetriesOnConcurrentRemoteRefUpdate(t *testing.T) {
+	runner := newFakeRunner()
+	rejected := atmosgit.RunResult{ExitCode: 1, StderrTail: "remote: error: cannot lock ref 'refs/heads/main': is at 1111111111111111111111111111111111111111 but expected 2222222222222222222222222222222222222222\n! [remote rejected] main -> main (failed to update ref)"}
+	runner.on("push origin main", rejected, exitErr(1))
+	runner.on("push origin main", atmosgit.RunResult{}, nil)
+	provider := New(WithRunner(runner))
+
+	err := provider.Push(context.Background(), &atmosgit.PushOptions{
+		RepoContext: atmosgit.RepoContext{Workdir: "/w", Remote: "origin", Branch: "main"},
+		Retries:     3,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		"push origin main",
+		"pull --rebase origin main",
+		"push origin main",
+	}, runner.joinedCalls())
+}
+
 func TestPushExhaustsRetries(t *testing.T) {
 	runner := newFakeRunner()
 	rejected := atmosgit.RunResult{ExitCode: 1, StderrTail: "non-fast-forward"}
@@ -57,7 +77,7 @@ func TestPushExhaustsRetries(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrGitPushRejected))
-	assert.Contains(t, err.Error(), "origin/main")
+	assert.Contains(t, err.Error(), "3 attempt(s)")
 	assert.Contains(t, err.Error(), "2 retries")
 
 	// 3 push attempts (initial + 2 retries), 2 rebases between them.
@@ -102,6 +122,8 @@ func TestPushNonRejectionErrorNotRetried(t *testing.T) {
 func TestClassifyPatterns(t *testing.T) {
 	assert.True(t, isRejectedPush(atmosgit.RunResult{StderrTail: "hint: Updates were rejected... non-fast-forward"}))
 	assert.True(t, isRejectedPush(atmosgit.RunResult{StderrTail: "! [rejected]"}))
+	assert.True(t, isRejectedPush(atmosgit.RunResult{StderrTail: "cannot lock ref 'refs/heads/main': is at 1111111111111111111111111111111111111111 but expected 2222222222222222222222222222222222222222"}))
+	assert.False(t, isRejectedPush(atmosgit.RunResult{StderrTail: "cannot lock ref 'refs/heads/main': Unable to create lock file"}))
 	assert.False(t, isRejectedPush(atmosgit.RunResult{StderrTail: "fatal: repository not found"}))
 
 	base := exitErr(128)
@@ -113,4 +135,22 @@ func TestClassifyPatterns(t *testing.T) {
 	assert.True(t, errors.Is(plain, errUtils.ErrGitCommandExited))
 
 	assert.NoError(t, classify(nil, atmosgit.RunResult{}, "noop"))
+}
+
+func TestPushInvalidRetries(t *testing.T) {
+	for _, retries := range []int{-1, math.MaxInt} {
+		runner := newFakeRunner()
+		err := New(WithRunner(runner)).Push(context.Background(), &atmosgit.PushOptions{Retries: retries})
+		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		require.Empty(t, runner.calls)
+	}
+}
+
+func TestPushAlreadyCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	runner := newFakeRunner()
+	err := New(WithRunner(runner)).Push(ctx, &atmosgit.PushOptions{Retries: 3})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Empty(t, runner.calls)
 }
