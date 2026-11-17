@@ -90,14 +90,8 @@ func staticallyNonBackendGeneration(body hcl.Body) bool {
 	if diagnostics.HasErrors() {
 		return false
 	}
-	if attr, ok := content.Attributes["disable"]; ok {
-		value, diags := attr.Expr.Value(nil)
-		if diags.HasErrors() || !value.IsKnown() || value.IsNull() || value.Type() != cty.Bool {
-			return false
-		}
-		if value.True() {
-			return true
-		}
+	if disabled, known := literalGenerateDisabled(content.Attributes["disable"]); !known || disabled {
+		return known && disabled
 	}
 	path, ok := literalGenerateString(content.Attributes["path"])
 	if !ok || !filepath.IsLocal(path) || path == "." {
@@ -120,4 +114,15 @@ func literalGenerateString(attr *hcl.Attribute) (string, bool) {
 		return "", false
 	}
 	return value.AsString(), true
+}
+
+func literalGenerateDisabled(attr *hcl.Attribute) (bool, bool) {
+	if attr == nil {
+		return false, true
+	}
+	value, diags := attr.Expr.Value(nil)
+	if diags.HasErrors() || !value.IsKnown() || value.IsNull() || value.Type() != cty.Bool {
+		return false, false
+	}
+	return value.True(), true
 }

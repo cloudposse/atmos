@@ -45,7 +45,7 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 // dispatches to the stack, inventory, or unit evaluation.
 func resolveRequest(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
 	if request.Phase == "inventory" {
-		return discoverProject(ctx, request)
+		return discoverProject(ctx, &request)
 	}
 	filesystem, err := backendGenerationOverlay(ctx, request, filesystem)
 	if err != nil {
@@ -65,11 +65,12 @@ func resolveRequest(ctx context.Context, request model.Request, filesystem afero
 		return nil, err
 	}
 	pctx := requestParsingContext(request, path)
+	reader := &inventoryReader{ctx: ctx, logger: logger, environment: environment}
 	if filepath.Base(path) == stackFile {
-		return resolveStack(ctx, logger, environment, pctx, request, path)
+		return reader.resolveStack(pctx, &request, path)
 	}
 	if discovering(request) {
-		return resolveUnitInventory(ctx, logger, environment, pctx, request, path)
+		return reader.resolveUnitInventory(pctx, &request, path)
 	}
 	return resolveUnit(ctx, logger, environment, pctx, request, path)
 }
@@ -295,7 +296,7 @@ func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbri
 	reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
 		return config.ParseConfigFile(ctx, logger, environment, apply, path, nil)
 	}
-	return applyTimeExecution(request, path, execution, environment.FS, pctx.FilesRead.Paths(), reparse)
+	return applyTimeExecution(&request, path, execution, executionReads{filesystem: environment.FS, paths: pctx.FilesRead.Paths()}, reparse)
 }
 
 func parseUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*config.TerragruntConfig, error) {
