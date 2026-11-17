@@ -1,11 +1,11 @@
-package cmd
+package docs
 
 import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
-	"github.com/cloudposse/atmos/pkg/docs"
+	pkgdocs "github.com/cloudposse/atmos/pkg/docs"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
@@ -58,7 +58,7 @@ Supports native terraform-docs injection.`,
 		if err := applySkipHooksEnv(cmd); err != nil {
 			return err
 		}
-		return docs.ExecuteGenerate(cmd, args)
+		return pkgdocs.ExecuteGenerate(cmd, args)
 	},
 }
 

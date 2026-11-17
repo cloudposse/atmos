@@ -1,4 +1,4 @@
-package cmd
+package docs
 
 import (
 	"net/http"
@@ -11,7 +11,24 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
+
+	// Link the hook engine, as the full binary does, so docs generate hooks can run.
+	_ "github.com/cloudposse/atmos/pkg/hooks"
 )
+
+// ensureGlobalFlags defines the persistent root flags that ExecuteGenerate reads. In production
+// the root command supplies them; this package has no access to RootCmd, so tests stand them in.
+func ensureGlobalFlags(t *testing.T) {
+	t.Helper()
+	fs := docsGenerateCmd.Flags()
+	if fs.Lookup("base-path") != nil {
+		return
+	}
+	fs.String("base-path", "", "")
+	fs.StringSlice("config", nil, "")
+	fs.StringSlice("config-path", nil, "")
+	fs.StringSlice("profile", nil, "")
+}
 
 func TestDocsGenerateCmd_Error(t *testing.T) {
 	err := docsGenerateCmd.RunE(docsGenerateCmd, []string{})
@@ -20,7 +37,7 @@ func TestDocsGenerateCmd_Error(t *testing.T) {
 
 // TestDocsGenerateCmd_AbsoluteBase verifies the command preserves an absolute module directory.
 func TestDocsGenerateCmd_AbsoluteBase(t *testing.T) {
-	_ = NewTestKit(t)
+	ensureGlobalFlags(t)
 	workingDir, moduleDir := t.TempDir(), t.TempDir()
 	t.Chdir(workingDir)
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workingDir)
@@ -80,7 +97,7 @@ func TestDocsGenerateCmd_SkipHooks(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_ = NewTestKit(t)
+			ensureGlobalFlags(t)
 			var mu sync.Mutex
 			var seen []string
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
