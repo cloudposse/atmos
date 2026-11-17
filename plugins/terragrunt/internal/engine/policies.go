@@ -21,6 +21,8 @@ import (
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
+const currentDirectory = "."
+
 // ErrVersionRejected reports a terraform or terragrunt version that violates a
 // declared version constraint.
 var ErrVersionRejected = errors.New("version constraint rejected")
@@ -66,14 +68,14 @@ func safeModuleSubdir(subdir string) bool {
 		return false
 	}
 	for _, part := range strings.Split(filepath.ToSlash(subdir), "/") {
-		if part == "" || part == ".." || part == "." {
+		if part == "" || part == ".." || part == currentDirectory {
 			return false
 		}
 	}
 	return true
 }
 
-func checkVersions(ctx context.Context, request model.Request, terraform, terragrunt string) error {
+func checkVersions(ctx context.Context, request *model.Request, terraform, terragrunt string) error {
 	check := func(name, constraint, actual string) error {
 		if constraint == "" {
 			return nil
@@ -97,7 +99,8 @@ func checkVersions(ctx context.Context, request model.Request, terraform, terrag
 	if terraform == "" {
 		return nil
 	}
-	cmd := exec.CommandContext(ctx, request.Tofu, "version", "-json") //nolint:gosec // G204: the invocation explicitly selects its Terraform executable; arguments are fixed and no shell is used.
+	// The configured Terraform executable is selected deliberately; arguments are fixed and no shell is used.
+	cmd := exec.CommandContext(ctx, request.Tofu, "version", "-json") //nolint:gosec // G204: query the explicitly selected engine version.
 	cmd.Env = make([]string, 0, len(request.Environment))
 	for key, value := range request.Environment {
 		cmd.Env = append(cmd.Env, key+"="+value)
@@ -119,11 +122,11 @@ func checkVersions(ctx context.Context, request model.Request, terraform, terrag
 // represent faithfully. Backend reads skip the version probe, which may execute
 // the selected binary.
 func checkUnitPolicies(ctx context.Context, request *model.Request, cfg *config.TerragruntConfig, path string) error {
-	if cfg.Terraform == nil || cfg.Terraform.Source == nil {
+	if missingTerraformSource(cfg) {
 		return missingSourceProblem(path)
 	}
 	if request.Phase != "backend" {
-		if err := checkVersions(ctx, *request, cfg.TerraformVersionConstraint, cfg.TerragruntVersionConstraint); err != nil {
+		if err := checkVersions(ctx, request, cfg.TerraformVersionConstraint, cfg.TerragruntVersionConstraint); err != nil {
 			return err
 		}
 	}
@@ -159,7 +162,7 @@ func localSubdirSource(source string) bool {
 	if _, ok := copiedSourceRoot("", source); !ok {
 		return false
 	}
-	return filepath.IsAbs(source) || strings.HasPrefix(source, ".")
+	return filepath.IsAbs(source) || strings.HasPrefix(source, currentDirectory)
 }
 
 // validateRemoteSource preserves the getter URI for Atmos's source provisioner. A `tfr://` registry
@@ -283,4 +286,14 @@ func effectivePolicyArguments(request *model.Request, cfg *config.TerragruntConf
 	}
 	args = append(injected, args...)
 	return append(args, request.Arguments...), nil
+}
+
+// unsupportedDependencyWorkspace preserves the existing output-dependency workspace guard.
+func unsupportedDependencyWorkspace(request *model.Request, cfg *config.TerragruntConfig) bool {
+	workspace := request.Environment["TF_WORKSPACE"]
+	return workspace != "" && workspace != "default" && len(cfg.TerragruntDependencies) > 0 && cfg.Dependencies != nil && len(cfg.Dependencies.Paths) > 0
+}
+
+func missingTerraformSource(cfg *config.TerragruntConfig) bool {
+	return cfg.Terraform == nil || cfg.Terraform.Source == nil
 }

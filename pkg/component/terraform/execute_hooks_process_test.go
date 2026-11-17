@@ -345,7 +345,7 @@ func TestErrorHookCaptureUsesTemporaryFiles(t *testing.T) {
 		t.Setenv(name, temp)
 	}
 	capturedDuringCommand := 0
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		switch call.command {
 		case "terraform":
 			_, _ = call.options.StderrCapture.Write([]byte("Error: Throttled"))
@@ -358,7 +358,7 @@ func TestErrorHookCaptureUsesTemporaryFiles(t *testing.T) {
 			return errUtils.ExitCodeError{Code: 2}
 		}
 		return nil
-	}}
+	})
 	after := execHook("after", "apply")
 	after.RunOnError = true
 	info := hookInfo("apply", &schema.ComponentExecution{
@@ -533,13 +533,13 @@ func TestLifecycleCapturesBeforeHookOutputForErrorHooks(t *testing.T) {
 			for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
 				t.Setenv(name, temp)
 			}
-			shell := &fakeShell{run: func(call *shellCall) error {
+			shell := newShellFixture(t, func(call *shellCall) error {
 				if call.command == "hook-before" {
 					_, _ = call.options.StdoutCapture.Write([]byte("BeforeNeedle"))
 					return errUtils.ExitCodeError{Code: 2}
 				}
 				return nil
-			}}
+			})
 			config := &schema.ComponentExecution{
 				BeforeHooks: []schema.ComponentHook{execHook("before", "init")},
 				ErrorHooks:  []schema.ComponentHook{{Name: "recover", Commands: []string{"init"}, Execute: []string{"hook-recover"}, OnErrors: []string{test.pattern}}},

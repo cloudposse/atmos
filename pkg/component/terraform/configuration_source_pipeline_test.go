@@ -84,9 +84,9 @@ func TestConfigurationSourceSymlinkRejectedBeforeInitAndMain(t *testing.T) {
 			require.NoError(t, err)
 			project.config.ComponentConfigurations = session
 			info := project.info(t, "validate")
-			shell := &fakeShell{}
+			shell := newShellFixture(t, nil)
 			executor := testExecutor(t)
-			executor.services.ExecuteShellCommand = shell.execute
+			executor.services.ExecuteShellCommand = shell.mock.Execute
 			// Use the same preparation and command phases as Executor.execute, keeping
 			// implicit init enabled so the passing case proves both phases are reachable.
 			execution, err := executor.prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, info, false)

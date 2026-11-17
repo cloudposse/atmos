@@ -65,6 +65,12 @@ func TestPreparedConfigurationRetainedBackend(t *testing.T) {
 		{"non backend", "provider.tf", `locals { enabled = true }`, `locals { enabled = false }`, "skip", false},
 		{"auxiliary", "data.json", `{"value":true}`, `{"value":false}`, "skip", false},
 		{"overwrite", "remote.tf", expected, `locals { enabled = true }`, "overwrite", false},
+		{"OpenTofu missing backend", "remote.tofu", expected, `locals { enabled = true }`, "skip", true},
+		{"OpenTofu json backend", "remote.tofu.json", `{"terraform":{"backend":{"local":{"path":"expected"}}}}`, `{"terraform":{"backend":{"local":{"path":"other"}}}}`, "skip", true},
+		{"OpenTofu invalid retained", "remote.tofu", expected, `terraform {`, "skip", true},
+		{"OpenTofu non backend", "provider.tofu", `locals { enabled = true }`, `locals { enabled = false }`, "skip", false},
+		{"OpenTofu json non backend", "provider.tofu.json", `{"locals":{"enabled":true}}`, `{"locals":{"enabled":false}}`, "skip", false},
+		{"OpenTofu overwrite", "remote.tofu", expected, `locals { enabled = true }`, "overwrite", false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			directory := t.TempDir()
@@ -102,19 +108,28 @@ func TestPreparedConfigurationRetainedBackendKeepsEncryption(t *testing.T) {
   }
  }
 }`
+	const generatedJSON = `{"terraform":{"backend":{"local":{"path":"expected.tfstate"}},` +
+		`"encryption":{"key_provider":{"pbkdf2":{"default":{"passphrase":"correct-horse-battery-staple"}}}}}}`
+	const unencrypted = "terraform {\n backend \"local\" {\n  path = \"expected.tfstate\"\n }\n}"
 	for _, test := range []struct {
-		name, retained string
-		blocked        bool
+		name, path, generated, retained string
+		blocked                         bool
 	}{
-		{"same backend without encryption", "terraform {\n backend \"local\" {\n  path = \"expected.tfstate\"\n }\n}", true},
-		{"no backend and no encryption", "locals { enabled = true }", true},
-		{"identical encrypted backend", generated, false},
+		{"same backend without encryption", "backend.tf", generated, unencrypted, true},
+		{"no backend and no encryption", "backend.tf", generated, "locals { enabled = true }", true},
+		{"identical encrypted backend", "backend.tf", generated, generated, false},
+		{"OpenTofu same backend without encryption", "backend.tofu", generated, unencrypted, true},
+		{"OpenTofu no backend and no encryption", "backend.tofu", generated, "locals { enabled = true }", true},
+		{"OpenTofu identical encrypted backend", "backend.tofu", generated, generated, false},
+		{"OpenTofu json same backend without encryption", "backend.tofu.json", generatedJSON, `{"terraform":{"backend":{"local":{"path":"expected.tfstate"}}}}`, true},
+		{"OpenTofu json no backend and no encryption", "backend.tofu.json", generatedJSON, `{"locals":{"enabled":true}}`, true},
+		{"OpenTofu json identical encrypted backend", "backend.tofu.json", generatedJSON, generatedJSON, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			directory := t.TempDir()
-			path := filepath.Join(directory, "backend.tf")
+			path := filepath.Join(directory, test.path)
 			require.NoError(t, os.WriteFile(path, []byte(test.retained), 0o600))
-			prepared := &schema.PreparedComponentConfiguration{BackendGenerated: true, Files: []schema.ComponentConfigurationFile{{Path: "backend.tf", Content: []byte(generated), IfExists: "skip"}}}
+			prepared := &schema.PreparedComponentConfiguration{BackendGenerated: true, Files: []schema.ComponentConfigurationFile{{Path: test.path, Content: []byte(test.generated), IfExists: "skip"}}}
 			err := writePreparedConfiguration(directory, prepared)
 			if !test.blocked {
 				require.NoError(t, err)

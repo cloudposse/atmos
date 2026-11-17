@@ -226,6 +226,10 @@ func profileSourceUsesSTSOnly(root *config.SharedConfig) bool {
 // files, region, and SSO token cache are explicit, so the SDK does not consult the process environment to
 // choose them. The root is the profile that holds the source of the chain.
 func sdkProfileCredentials(ctx context.Context, env map[string]string, profile, region string, root *config.SharedConfig) (aws.CredentialsProvider, error) {
+	// Keys and web identity need no token cache; the remaining SDK-managed source is SSO.
+	if !root.Credentials.HasKeys() && root.WebIdentityTokenFile == "" && invocationHomeDir(env) == "" {
+		return nil, fmt.Errorf("%w: SSO token cache requires an invocation home directory", errUtils.ErrInvalidAuthConfig)
+	}
 	configFile, credentialsFile := invocationSharedFiles(env)
 	options := []func(*config.LoadOptions) error{
 		config.WithSharedConfigProfile(profile),
@@ -359,6 +363,9 @@ func loginSessionCredentials(env map[string]string, root *config.SharedConfig, r
 	dir := env["AWS_LOGIN_CACHE_DIRECTORY"]
 	if home := invocationHomeDir(env); dir == "" && home != "" {
 		dir = filepath.Join(home, awsConfigDirName, "login", "cache")
+	}
+	if dir == "" {
+		return nil, fmt.Errorf("%w: login_session requires an invocation home or AWS_LOGIN_CACHE_DIRECTORY", errUtils.ErrInvalidAuthConfig)
 	}
 	path, err := logincreds.StandardCachedTokenFilepath(root.LoginSession, dir)
 	if err != nil {
@@ -588,9 +595,4 @@ func applyInvocationSTSEndpoint(env map[string]string, options *sts.Options) {
 // invocationSTSEndpoint returns the STS endpoint that the invocation environment names, or "".
 func invocationSTSEndpoint(env map[string]string) string {
 	return cmp.Or(env["AWS_ENDPOINT_URL_STS"], env["AWS_ENDPOINT_URL"])
-}
-
-// invocationEnvironmentKeys applies SDK alias precedence without changing the invocation map.
-func invocationEnvironmentKeys(env map[string]string) (string, string) {
-	return cmp.Or(env["AWS_ACCESS_KEY_ID"], env["AWS_ACCESS_KEY"]), cmp.Or(env["AWS_SECRET_ACCESS_KEY"], env["AWS_SECRET_KEY"])
 }
