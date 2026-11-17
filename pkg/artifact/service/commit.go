@@ -48,6 +48,10 @@ func newIncoming(prepared *artifact.PreparedArtifact) (*incoming, error) {
 			in.size += prepared.Blobs[index].Descriptor.Size
 		}
 	}
+	in.inspection = &artifact.Inspection{
+		Record:         in.record,
+		Representation: artifact.Representation{Packaging: prepared.Packaging, Payload: in.payload},
+	}
 	return in, nil
 }
 

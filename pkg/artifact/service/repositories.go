@@ -130,10 +130,13 @@ type Candidate struct {
 	// Repository is the repository alias involved.
 	Repository string
 
-	// Inspection is the metadata view, set for stored artifacts and for copy sources.
+	// Inspection is the metadata view for every candidate, including prepared publications
+	// and native copies. Policies must classify through this view; Record may be nil for
+	// foreign graphs. Pinned is unset until a prepared publication is stored.
 	Inspection *artifact.Inspection
 
-	// Prepared is the artifact about to be published, when one was prepared.
+	// Prepared optionally provides staged content. It is nil for native copies and stored
+	// artifacts, so policies must not rely on it to classify an incoming release.
 	Prepared *artifact.PreparedArtifact
 }
 

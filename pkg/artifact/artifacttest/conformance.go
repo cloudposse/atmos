@@ -132,6 +132,15 @@ func (c *conformance) requireWritable(t *testing.T, repo artifact.Repository) {
 	}
 }
 
+func (c *conformance) requireReadable(t *testing.T, repo artifact.Repository) {
+	t.Helper()
+	if !repo.Capabilities().Read {
+		_, err := repo.Resolve(context.Background(), artifact.Ref{Name: appName, Version: firstVersion})
+		require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
+		t.Skipf("successful reads require the read capability; unsupported Resolve was checked")
+	}
+}
+
 func (c *conformance) capabilities(t *testing.T) {
 	repo := c.h.New(t)
 	first, second := repo.Capabilities(), repo.Capabilities()
@@ -142,6 +151,7 @@ func (c *conformance) capabilities(t *testing.T) {
 func (c *conformance) multipleNamesAndVersions(t *testing.T) {
 	repo := c.h.New(t)
 	c.requireWritable(t, repo)
+	c.requireReadable(t, repo)
 	items := []struct{ name, version string }{{appName, "1.0.0"}, {appName, "2.0.0"}, {"other/tool", "1.0.0"}}
 	var all []published
 	for _, item := range items {
@@ -164,6 +174,7 @@ func (c *conformance) multipleNamesAndVersions(t *testing.T) {
 func (c *conformance) roundTrip(t *testing.T) {
 	repo := c.h.New(t)
 	c.requireWritable(t, repo)
+	c.requireReadable(t, repo)
 	item := c.publish(t, repo, spec{name: appName, version: firstVersion, content: "round trip"}, artifact.PublishOptions{})
 	pinned, err := repo.Resolve(context.Background(), item.ref)
 	require.NoError(t, err)
@@ -182,6 +193,7 @@ func (c *conformance) roundTrip(t *testing.T) {
 func (c *conformance) metadataAndDocuments(t *testing.T) {
 	repo := c.h.New(t)
 	c.requireWritable(t, repo)
+	c.requireReadable(t, repo)
 	item := c.publish(t, repo, spec{name: appName, version: firstVersion, content: "docs"}, artifact.PublishOptions{})
 	pinned, err := repo.Resolve(context.Background(), item.ref)
 	require.NoError(t, err)
@@ -201,6 +213,7 @@ func (c *conformance) metadataAndDocuments(t *testing.T) {
 func (c *conformance) digestReferences(t *testing.T) {
 	repo := c.h.New(t)
 	c.requireWritable(t, repo)
+	c.requireReadable(t, repo)
 	item := c.publish(t, repo, spec{name: appName, version: firstVersion, content: "digest"}, artifact.PublishOptions{})
 	byVersion, err := repo.Resolve(context.Background(), item.ref)
 	require.NoError(t, err)
@@ -260,6 +273,7 @@ func (c *conformance) enumeration(t *testing.T) {
 func (c *conformance) replacement(t *testing.T) {
 	repo := c.h.New(t)
 	c.requireWritable(t, repo)
+	c.requireReadable(t, repo)
 	first := c.publish(t, repo, spec{name: appName, version: firstVersion, content: "first"}, artifact.PublishOptions{})
 	oldPinned, err := repo.Resolve(context.Background(), first.ref)
 	require.NoError(t, err)
@@ -314,6 +328,7 @@ func (c *conformance) conditionalPublish(t *testing.T) {
 func (c *conformance) deletion(t *testing.T) {
 	repo := c.h.New(t)
 	c.requireWritable(t, repo)
+	c.requireReadable(t, repo)
 	keep := c.publish(t, repo, spec{name: appName, version: firstVersion, content: "keep"}, artifact.PublishOptions{})
 	drop := c.publish(t, repo, spec{name: appName, version: secondVersion, content: "drop"}, artifact.PublishOptions{})
 	pinned, err := repo.Resolve(context.Background(), drop.ref)
@@ -337,6 +352,7 @@ func (c *conformance) deletion(t *testing.T) {
 func (c *conformance) pin(t *testing.T) {
 	repo := c.h.New(t)
 	c.requireWritable(t, repo)
+	c.requireReadable(t, repo)
 	item := c.publish(t, repo, spec{name: appName, version: firstVersion, content: "pin"}, artifact.PublishOptions{})
 	resolved, err := repo.Resolve(context.Background(), item.ref)
 	require.NoError(t, err)
@@ -352,6 +368,7 @@ func (c *conformance) pin(t *testing.T) {
 func (c *conformance) signVerify(t *testing.T) {
 	repo := c.h.New(t)
 	c.requireWritable(t, repo)
+	c.requireReadable(t, repo)
 	item := c.publish(t, repo, spec{name: appName, version: firstVersion, content: "sign"}, artifact.PublishOptions{})
 	pinned, err := repo.Resolve(context.Background(), item.ref)
 	require.NoError(t, err)

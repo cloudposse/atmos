@@ -104,3 +104,13 @@ func TestConformance_LockAcquisitionsAreBounded(t *testing.T) {
 		assert.Zero(t, recorder.unbounded.Load(), "a competing acquisition must carry a deadline so a leaked claim cannot hang the suite")
 	}
 }
+
+func TestInMemoryRepositoryConformance_WriteWithoutRead(t *testing.T) {
+	caps := artifacttest.DefaultCapabilities()
+	caps.Read = false
+	artifacttest.RunRepositoryConformance(t, &artifacttest.Harness{
+		New: func(*testing.T) artifact.Repository {
+			return artifacttest.New(artifacttest.Options{Capabilities: &caps})
+		},
+	})
+}
