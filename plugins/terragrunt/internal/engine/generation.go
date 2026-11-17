@@ -15,7 +15,7 @@ import (
 func generatedFiles(ctx context.Context, logger log.Logger, cfg *config.TerragruntConfig, result *model.Resolution) error {
 	result.GeneratedPolicies = make(map[string]string)
 	result.UnitFileCopies = make(map[string]bool)
-	for _, generated := range cfg.GenerateConfigs {
+	for name, generated := range cfg.GenerateConfigs {
 		if generated.Disable && (generated.IfDisabledStr == "" || generated.IfDisabledStr == "skip") {
 			continue
 		}
@@ -32,23 +32,8 @@ func generatedFiles(ctx context.Context, logger log.Logger, cfg *config.Terragru
 				Hints: []string{"Give each `generate` block a distinct `path`."}, File: result.Path, Key: "generate", Safe: true, Err: ErrUnsupportedExecution,
 			}
 		}
-		policy := generated.IfExistsStr
-		if generated.Disable {
-			policy = generated.IfDisabledStr
-			result.Generated[path] = ""
-		} else {
-			content, err := atmosbridge.RenderGenerated(ctx, logger, generated)
-			if err != nil {
-				return err
-			}
-			result.Generated[path] = string(content)
-			// Any generate block can interpolate credentials, regardless of its target.
-			markSensitive(result, path)
-		}
-		result.GeneratedPolicies[path] = policy
-		if !generated.Disable && declaresBackend(path, result.Generated[path]) {
-			// Arbitrary Terraform text has no verified state-reader identity.
-			return unresolvedGeneratedBackend(result.Path)
+		if err := renderGeneratedFile(ctx, logger, cfg, result, name); err != nil {
+			return err
 		}
 	}
 	if err := unitLockFile(result); err != nil {
@@ -92,4 +77,29 @@ func markSensitive(result *model.Resolution, path string) {
 		result.SensitiveGenerated = map[string]bool{}
 	}
 	result.SensitiveGenerated[path] = true
+}
+
+// renderGeneratedFile applies a validated generation policy and rejects unverified backends.
+func renderGeneratedFile(ctx context.Context, logger log.Logger, cfg *config.TerragruntConfig, result *model.Resolution, name string) error {
+	generated := cfg.GenerateConfigs[name]
+	path := filepath.Clean(generated.Path)
+	policy := generated.IfExistsStr
+	if generated.Disable {
+		policy = generated.IfDisabledStr
+		result.Generated[path] = ""
+	} else {
+		content, err := atmosbridge.RenderGenerated(ctx, logger, generated)
+		if err != nil {
+			return err
+		}
+		result.Generated[path] = string(content)
+		// Any generate block can interpolate credentials, regardless of its target.
+		markSensitive(result, path)
+	}
+	result.GeneratedPolicies[path] = policy
+	if !generated.Disable && declaresBackend(path, result.Generated[path]) {
+		// Arbitrary Terraform text has no verified state-reader identity.
+		return unresolvedGeneratedBackend(result.Path)
+	}
+	return nil
 }

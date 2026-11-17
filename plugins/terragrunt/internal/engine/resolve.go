@@ -15,8 +15,6 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/gruntwork-io/terragrunt/pkg/log/format"
 	"github.com/gruntwork-io/terragrunt/pkg/options"
-	"github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
 
@@ -24,16 +22,18 @@ import (
 )
 
 // Resolve evaluates HCL using the pinned Terragrunt parser.
+//
+//nolint:gocritic,lintroller // The value-based evaluator API delegates internally; standalone plugins cannot import the host tracker.
 func Resolve(ctx context.Context, request model.Request) (*model.Resolution, error) {
-	return resolve(ctx, request, nil)
+	return resolve(ctx, &request, nil)
 }
 
 // ErrPreventDestroy rejects a destroy operation on a unit that sets prevent_destroy.
 var ErrPreventDestroy = errors.New("unit is protected by prevent_destroy")
 
 // resolve evaluates one request and describes any rejection as a model.Problem the user can act on.
-func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
-	result, err := resolveRequest(ctx, &request, filesystem)
+func resolve(ctx context.Context, request *model.Request, filesystem afero.Fs) (*model.Resolution, error) {
+	result, err := resolveRequest(ctx, request, filesystem)
 	if err != nil {
 		return nil, problemFor(err, request.Path)
 	}
@@ -46,7 +46,7 @@ func resolveRequest(ctx context.Context, request *model.Request, filesystem afer
 	if request.Phase == "inventory" {
 		return discoverProject(ctx, request)
 	}
-	filesystem, err := backendGenerationOverlay(ctx, *request, filesystem)
+	filesystem, err := backendGenerationOverlay(ctx, request, filesystem)
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +67,7 @@ func resolveRequest(ctx context.Context, request *model.Request, filesystem afer
 	if err != nil {
 		return nil, err
 	}
-	reader := &inventoryReader{ctx: ctx, logger: logger, environment: environment}
-	pctx := requestParsingContext(*request, path)
+	pctx := requestParsingContext(request, path)
 	scan := &sensitivityScan{}
 	defer func() {
 		files := append(append(pctx.FilesRead.Paths(), path), scan.applyFiles...)
@@ -76,6 +75,14 @@ func resolveRequest(ctx context.Context, request *model.Request, filesystem afer
 			sink.Withhold()
 		}
 	}()
+	unit := unitEvaluator{logger: logger, environment: environment, pctx: pctx, request: *request, path: path}
+	return unit.dispatch(ctx, scan)
+}
+
+// dispatch selects the requested evaluation while sharing the sensitivity scan.
+func (u *unitEvaluator) dispatch(ctx context.Context, scan *sensitivityScan) (*model.Resolution, error) {
+	request, pctx, path := &u.request, u.pctx, u.path
+	reader := &inventoryReader{ctx: ctx, logger: u.logger, environment: u.environment}
 	if request.Phase == "iam" {
 		return reader.resolveIAM(pctx, request, path)
 	}
@@ -85,11 +92,10 @@ func resolveRequest(ctx context.Context, request *model.Request, filesystem afer
 	if err := reader.checkRequestFeatureOverrides(pctx, request, path); err != nil {
 		return nil, err
 	}
-	if discovering(*request) {
+	if discovering(request) {
 		return reader.resolveUnitInventory(pctx, request, path)
 	}
-	unit := unitEvaluator{logger: logger, environment: environment, pctx: pctx, request: *request, path: path}
-	return unit.resolve(ctx, scan)
+	return u.resolve(ctx, scan)
 }
 
 // unitEvaluator carries the parser dependencies shared by unit resolution stages.
@@ -105,11 +111,11 @@ type unitEvaluator struct {
 // policies, and assembles the resolution with its execution data, backend, overlay,
 // and generated files.
 func (u *unitEvaluator) resolve(ctx context.Context, scan *sensitivityScan) (*model.Resolution, error) {
-	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, u.request, u.path
-	if err := checkDestroyGuard(ctx, logger, environment, pctx, request, path); err != nil {
+	environment, pctx, request, path := u.environment, u.pctx, &u.request, u.path
+	if err := u.checkDestroyGuard(ctx); err != nil {
 		return nil, err
 	}
-	cfg, err := parseUnit(ctx, logger, environment, pctx, request, path)
+	cfg, err := u.parseUnit(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +125,7 @@ func (u *unitEvaluator) resolve(ctx context.Context, scan *sensitivityScan) (*mo
 		redactLocals(logSinkFrom(ctx), environment.FS, path, cfg.Locals)
 		scan.registered = true
 	}
-	if err := checkUnitPolicies(ctx, &request, cfg, path); err != nil {
+	if err := checkUnitPolicies(ctx, request, cfg, path); err != nil {
 		return nil, err
 	}
 	return u.buildResolution(ctx, cfg, &unitSensitivity{inputs: sensitiveInputs, scan: scan})
@@ -129,7 +135,7 @@ func (u *unitEvaluator) resolve(ctx context.Context, scan *sensitivityScan) (*mo
 // set before the backend resolves so the backend step sees the final result.
 func (u *unitEvaluator) buildResolution(ctx context.Context, cfg *config.TerragruntConfig, sensitivity *unitSensitivity) (*model.Resolution, error) {
 	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, u.request, u.path
-	execution, applyFiles, err := unitExecution(ctx, logger, environment, pctx, request, cfg, path)
+	execution, applyFiles, err := u.unitExecution(ctx, cfg)
 	sensitivity.scan.applyFiles = applyFiles
 	if err != nil {
 		return nil, err
@@ -171,14 +177,14 @@ const (
 // copy-on-write overlay before a backend read or IAM probe of a stack-generated unit. The
 // host probes IAM before the provider generates the stack, so on a clean checkout the unit
 // exists only in this overlay. The returned filesystem is the one the unit is then parsed from.
-func backendGenerationOverlay(ctx context.Context, request model.Request, filesystem afero.Fs) (afero.Fs, error) {
+func backendGenerationOverlay(ctx context.Context, request *model.Request, filesystem afero.Fs) (afero.Fs, error) {
 	if (request.Phase != phaseBackend && request.Phase != "iam") || request.GenerationRoot == "" {
 		return filesystem, nil
 	}
 	filesystem = afero.NewCopyOnWriteFs(afero.NewReadOnlyFs(afero.NewOsFs()), afero.NewMemMapFs())
-	generation := request
+	generation := *request
 	generation.Path, generation.Phase, generation.Command = request.GenerationRoot, phaseDiscover, "generate"
-	if _, err := resolve(ctx, generation, filesystem); err != nil {
+	if _, err := resolve(ctx, &generation, filesystem); err != nil {
 		return nil, err
 	}
 	return filesystem, nil
@@ -212,11 +218,11 @@ func evaluationLogger(ctx context.Context, level string) (log.Logger, error) {
 	return logger, nil
 }
 
-func discovering(request model.Request) bool {
+func discovering(request *model.Request) bool {
 	return request.Phase == phaseDiscover || request.Command == phaseDiscover
 }
 
-func generating(request model.Request) bool {
+func generating(request *model.Request) bool {
 	return request.Command == "generate" && request.Phase != phaseBackend
 }
 
@@ -231,8 +237,8 @@ func evaluationEnvironment(ctx context.Context, request *model.Request, filesyst
 	if _, err := environment.FS.Stat(path); err != nil {
 		return nil, err
 	}
-	if discovering(*request) || request.Phase == phaseBackend || generating(*request) {
-		environment = atmosbridge.Discovery(environment, generating(*request))
+	if discovering(request) || request.Phase == phaseBackend || generating(request) {
+		environment = atmosbridge.Discovery(environment, generating(request))
 	} else {
 		environment = atmosbridge.AWS(ctx, environment)
 	}
@@ -241,7 +247,7 @@ func evaluationEnvironment(ctx context.Context, request *model.Request, filesyst
 
 // requestParsingContext evaluates the unit at path as the request's command;
 // discovery and generation evaluate as plan.
-func requestParsingContext(request model.Request, path string) *config.ParsingContext {
+func requestParsingContext(request *model.Request, path string) *config.ParsingContext {
 	command := request.Command
 	if command == "" || command == phaseDiscover || command == "generate" {
 		command = "plan"
@@ -303,16 +309,17 @@ func parsingContext(path, tofu, command string, arguments []string) *config.Pars
 
 // checkDestroyGuard rejects destroy before a full parse can evaluate HCL functions
 // for a unit that sets prevent_destroy. Backend reads never destroy.
-func checkDestroyGuard(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) error {
+func (u *unitEvaluator) checkDestroyGuard(ctx context.Context) error {
+	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, &u.request, u.path
 	if request.Phase == phaseBackend || (request.Command != "plan" && request.Command != "apply" && request.Command != "destroy") {
 		return nil
 	}
 	guard, err := config.PartialParseConfigFile(ctx, logger, atmosbridge.Discovery(environment, false),
 		pctx.WithDecodeList(config.TerragruntFlags, config.TerraformExtraArgs), path, nil)
 	if err != nil {
-		return failedDestroyGuard(&request, environment.FS, path, err)
+		return failedDestroyGuard(request, environment.FS, path, err)
 	}
-	return checkPreventDestroy(&request, guard)
+	return checkPreventDestroy(request, guard)
 }
 
 // failedDestroyGuard preserves syntax-only decisions for known destroy requests.
@@ -336,13 +343,8 @@ func failedDestroyGuard(request *model.Request, fs afero.Fs, path string, parseE
 // continues to the ordinary parse. Anything the syntax cannot settle (an expression, an include, an
 // unreadable or invalid file) keeps the original error, so the guard still fails closed.
 func staticDestroyGuard(fs afero.Fs, path string, parseErr error) error {
-	data, err := afero.ReadFile(fs, path)
-	if err != nil {
-		return parseErr
-	}
-	file, diagnostics := hclsyntax.ParseConfig(data, path, hcl.InitialPos)
-	body, ok := file.Body.(*hclsyntax.Body)
-	if diagnostics.HasErrors() || !ok {
+	body, ok := parseBody(fs, path)
+	if !ok {
 		return parseErr
 	}
 	for _, block := range body.Blocks {
@@ -367,7 +369,8 @@ func staticDestroyGuard(fs afero.Fs, path string, parseErr error) error {
 // unitExecution returns hooks and extra arguments as data for the host to run;
 // evaluation never executes them. Backend identity is read from a partial parse
 // that does not decode them.
-func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*model.Execution, []string, error) {
+func (u *unitEvaluator) unitExecution(ctx context.Context, cfg *config.TerragruntConfig) (*model.Execution, []string, error) {
+	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, &u.request, u.path
 	if request.Phase == phaseBackend {
 		return nil, nil, nil
 	}
@@ -393,10 +396,11 @@ func unitExecution(ctx context.Context, logger log.Logger, environment *atmosbri
 		redactLocals(sink, environment.FS, path, parsed.Locals)
 		return parsed, nil
 	}
-	return applyTimeExecution(&request, path, execution, executionReads{filesystem: environment.FS, paths: pctx.FilesRead.Paths()}, reparse)
+	return applyTimeExecution(request, path, execution, executionReads{filesystem: environment.FS, paths: pctx.FilesRead.Paths()}, reparse)
 }
 
-func parseUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*config.TerragruntConfig, error) {
+func (u *unitEvaluator) parseUnit(ctx context.Context) (*config.TerragruntConfig, error) {
+	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, &u.request, u.path
 	if request.Phase == phaseBackend {
 		environment = environment.WithFS(withoutInputsFS{Fs: environment.FS, inputs: newInputReferences(path)})
 		cfg, err := config.PartialParseConfigFile(ctx, logger, environment, pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), path, nil)
@@ -455,11 +459,15 @@ type withoutInputsFS struct {
 }
 
 // Open reads through OpenFile so every read path strips inputs.
+//
+//nolint:lintroller // Delegates to OpenFile at the standalone plugin boundary.
 func (f withoutInputsFS) Open(name string) (afero.File, error) {
 	return f.OpenFile(name, os.O_RDONLY, 0)
 }
 
 // OpenFile returns the stripped content for read-only opens of HCL files.
+//
+//nolint:lintroller // Plugin code cannot import the host performance tracker.
 func (f withoutInputsFS) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
 	file, err := f.Fs.OpenFile(name, flag, perm)
 	if err != nil || flag != os.O_RDONLY || !strings.HasSuffix(name, ".hcl") {

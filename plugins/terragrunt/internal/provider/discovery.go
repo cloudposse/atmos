@@ -227,7 +227,7 @@ func importPaths(request *pluginv1.DiscoverComponentsRequest) ([]string, error) 
 // project-relative unit paths discovery compares against.
 func directoryPattern(path string) string {
 	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
-	if clean == "." {
+	if clean == currentDirectory {
 		return "**"
 	}
 	return clean + "/**"
@@ -241,11 +241,14 @@ func derivedAddress(base, path string) (*pluginv1.ComponentAddress, error) {
 		return nil, err
 	}
 	stack, name := "default", "root"
-	if dir != "." {
+	if dir != currentDirectory {
 		name = filepath.Base(dir)
-		if parent := filepath.ToSlash(filepath.Dir(dir)); parent != "." {
+		if parent := filepath.ToSlash(filepath.Dir(dir)); parent != currentDirectory {
 			stack = parent
 		}
 	}
 	return &pluginv1.ComponentAddress{Stack: stack, Component: name, ComponentType: "terraform"}, nil
 }
+
+// currentDirectory is the project-relative identity of its root.
+const currentDirectory = "."

@@ -73,7 +73,7 @@ func applyTimeExecution(request *model.Request, path string, planned *model.Exec
 	// matches the plan-time evaluation. requestParsingContext also carries the feature flags.
 	applyRequest := *request
 	applyRequest.Command, applyRequest.Arguments = "apply", nil
-	apply := requestParsingContext(applyRequest, path)
+	apply := requestParsingContext(&applyRequest, path)
 	// Dependency mock eligibility belongs to the plan being prepared; hook expressions see apply.
 	apply.OriginalTerraformCommand = request.Command
 	cfg, err := parse(apply)

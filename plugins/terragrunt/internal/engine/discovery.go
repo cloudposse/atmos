@@ -56,7 +56,7 @@ func within(path, directory string) bool {
 }
 
 // discoveryResolver evaluates one configuration file in the discovery overlay.
-type discoveryResolver func(context.Context, model.Request, afero.Fs) (*model.Resolution, error)
+type discoveryResolver func(context.Context, *model.Request, afero.Fs) (*model.Resolution, error)
 
 // projectDiscovery holds one inventory pass. Its overlay is invocation-local:
 // generated HCL retains its original virtual path and no source files or state
@@ -153,7 +153,7 @@ func (d *projectDiscovery) parse(path string, generate bool) (*model.Resolution,
 	if err := d.ctx.Err(); err != nil {
 		return nil, err
 	}
-	resolved, err := d.evaluate(d.ctx, req, d.overlay)
+	resolved, err := d.evaluate(d.ctx, &req, d.overlay)
 	if contextErr := d.ctx.Err(); contextErr != nil {
 		return nil, contextErr
 	}
@@ -329,7 +329,7 @@ func checkIdentityCollisions(root string, inventory []model.DiscoveredUnit) erro
 // generation, only this file and the nested stacks it declares are generated;
 // other stack files under the same directory are never listed or generated.
 func (r *inventoryReader) resolveStack(pctx *config.ParsingContext, request *model.Request, path string) (*model.Resolution, error) {
-	if generating(*request) {
+	if generating(request) {
 		if err := r.generateStack(request, path, 0); err != nil {
 			return nil, err
 		}
@@ -358,7 +358,7 @@ func (r *inventoryReader) generateStack(request *model.Request, path string, dep
 	if err := atmosbridge.GenerateStack(r.ctx, r.logger, r.environment, path, request.Tofu); err != nil {
 		return err
 	}
-	stack, err := readStack(r.ctx, r.logger, r.environment, requestParsingContext(*request, path), path)
+	stack, err := readStack(r.ctx, r.logger, r.environment, requestParsingContext(request, path), path)
 	if err != nil {
 		return err
 	}
@@ -481,12 +481,19 @@ func (r *inventoryReader) resolveUnitInventory(pctx *config.ParsingContext, requ
 	if err != nil {
 		return nil, err
 	}
-	for _, dependency := range append(slices.Clone(result.OutputDependencies), order...) {
-		if !slices.Contains(result.Dependencies, dependency) {
-			result.Dependencies = append(result.Dependencies, dependency)
+	result.Dependencies = mergedDependencies(result.OutputDependencies, order)
+	return result, nil
+}
+
+// mergedDependencies preserves output-read order followed by unique scheduling-only dependencies.
+func mergedDependencies(outputs, order []string) []string {
+	var result []string
+	for _, dependency := range append(slices.Clone(outputs), order...) {
+		if !slices.Contains(result, dependency) {
+			result = append(result, dependency)
 		}
 	}
-	return result, nil
+	return result
 }
 
 func outputDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string) ([]string, error) {

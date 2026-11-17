@@ -55,7 +55,7 @@ func localModuleSubdir(source string, existingRoot func(root string) bool) (root
 	}
 	root, subdir = volume+rest[:index], rest[index+2:]
 	first := strings.SplitN(strings.TrimPrefix(root, "./"), "/", 2)[0]
-	if strings.Contains(first, ".") && !strings.HasPrefix(root, ".") && !filepath.IsAbs(root) && (existingRoot == nil || !existingRoot(root)) {
+	if strings.ContainsRune(first, '.') && !strings.HasPrefix(root, ".") && !filepath.IsAbs(root) && (existingRoot == nil || !existingRoot(root)) {
 		return "", "", false
 	}
 	return root, subdir, true
@@ -73,7 +73,7 @@ func safeModuleSubdir(subdir string) bool {
 	return true
 }
 
-func checkVersions(ctx context.Context, request model.Request, terraform, terragrunt string) error {
+func checkVersions(ctx context.Context, request *model.Request, terraform, terragrunt string) error {
 	check := func(name, constraint, actual string) error {
 		if constraint == "" {
 			return nil
@@ -123,7 +123,7 @@ func checkUnitPolicies(ctx context.Context, request *model.Request, cfg *config.
 		return missingSourceProblem(path)
 	}
 	if request.Phase != "backend" {
-		if err := checkVersions(ctx, *request, cfg.TerraformVersionConstraint, cfg.TerragruntVersionConstraint); err != nil {
+		if err := checkVersions(ctx, request, cfg.TerraformVersionConstraint, cfg.TerragruntVersionConstraint); err != nil {
 			return err
 		}
 	}

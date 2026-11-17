@@ -130,7 +130,7 @@ func TestVersionConstraintsUseSelectedExecutable(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := model.Request{Tofu: executable, Environment: map[string]string{"ATMOS_TERRAGRUNT_VERSION_CHILD": test.actual}}
-			err := checkVersions(t.Context(), request, test.constraint, "")
+			err := checkVersions(t.Context(), &request, test.constraint, "")
 			if test.want == "" {
 				require.NoError(t, err)
 			} else {

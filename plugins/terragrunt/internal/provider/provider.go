@@ -198,7 +198,7 @@ func optionProblem(name, hint string) *model.Problem {
 }
 
 func operation(root, name string, op *pluginv1.ComponentOperation, invocation *pluginv1.Invocation) (model.Request, error) {
-	if name != "terragrunt" || !filepath.IsAbs(root) || op == nil || (op.Mode != ModeNative && op.Mode != ModeExecutable && op.Mode != "iam-probe") {
+	if name != "terragrunt" || !filepath.IsAbs(root) || op == nil || !supportedOperationMode(op.Mode) {
 		return model.Request{}, ErrUnsupported
 	}
 	env := maps.Clone(invocation.GetEnvironment())
@@ -282,4 +282,9 @@ func validate(ctx context.Context, request *pluginv1.ComponentRequest) error {
 		return err
 	}
 	return settings(request.GetProviderConfiguration())
+}
+
+// supportedOperationMode accepts execution modes represented by the native evaluator.
+func supportedOperationMode(mode string) bool {
+	return mode == ModeNative || mode == ModeExecutable || mode == "iam-probe"
 }
