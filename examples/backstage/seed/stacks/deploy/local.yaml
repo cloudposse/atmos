@@ -1,0 +1,13 @@
+vars:
+  stage: local
+components:
+  emulator:
+    backstage-aws:
+      driver: floci/aws
+      region: us-east-1
+      ephemeral: true
+      container:
+        image: mirror.gcr.io/floci/floci@sha256:c88ec20bf221630dd195d38a14eeb0ac52ddfa72c37ebb3c8aa17f63ae27c5f2
+        ports:
+          - host: "127.0.0.1:4567"
+            container: 4566

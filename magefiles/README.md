@@ -64,6 +64,7 @@ GitHub Actions variables continue to work normally.
 | `COVERAGE_DIR`, `COVERAGE_DATA_OUT`, `COVERAGE_OUT`, `COVERAGE_SHARDS_DIR`, `GO_TEST_TIMEOUT` | `coverage:*` | Override coverage input, intermediate, output, and timeout paths. |
 | `TEST_SHARD_COUNT` | `coverage:mergeshards`, `ci:checkshardresults` | Set the expected acceptance-shard count. |
 | `ATMOS_BUILD_NO_CACHE` | `build:binary` | Set to `true` to force package recompilation without deleting the shared Go cache. |
+| `ATMOS_BUILD_OUTPUT` | `build:binary` | Write the binary to this path instead of `build/atmos`. A relative path resolves against the repository root. |
 | `GITHUB_OUTPUT`, `GITHUB_STEP_SUMMARY` | `ci:*`, `test:racematrix` | Write structured workflow outputs and summaries. |
 | `ATMOS_CI_STUCK_GAP` | `ci:classifyinfrafailures` | Override the infrastructure-zombie detection interval with a positive Go duration such as `300s`. |
 | `GITHUB_TOKEN` | `ci:*`, `release:summarizenotes` | Authenticate GitHub API requests. |

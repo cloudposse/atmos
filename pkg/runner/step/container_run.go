@@ -53,14 +53,8 @@ func (h *ContainerHandler) executeRun(ctx context.Context, step *schema.Workflow
 	}
 	applyRuntimeEnv(runtime, vars)
 
-	stack, err := resolveContainerStepStack(step, vars)
-	if err != nil {
-		return nil, fmt.Errorf("%w: step %q: %w", errUtils.ErrContainerStepResolveStack, step.Name, err)
-	}
-	// An explicit --network in run_args (e.g. host networking) is the user's
-	// choice; attaching the shared network too would conflict with it.
-	if stack != "" && !container.HasExplicitNetworkOverride(config.RunArgs) {
-		container.AttachSharedNetwork(ctx, runtime, &config.Networks, stack, containerStepIdentity(step.Name))
+	if err := attachRunNetwork(ctx, runtime, config, step, vars); err != nil {
+		return nil, err
 	}
 
 	result, err := container.RunEphemeralContainer(ctx, runtime, config)
@@ -382,4 +376,16 @@ func credentialFileMounts(env []string) []container.Mount {
 		})
 	}
 	return mounts
+}
+
+// attachRunNetwork preserves an explicit network override when adding the stack network.
+func attachRunNetwork(ctx context.Context, runtime container.Runtime, config *container.EphemeralConfig, step *schema.WorkflowStep, vars *Variables) error {
+	stack, err := resolveContainerStepStack(step, vars)
+	if err != nil {
+		return fmt.Errorf("%w: step %q: %w", errUtils.ErrContainerStepResolveStack, step.Name, err)
+	}
+	if stack != "" && !container.HasExplicitNetworkOverride(config.RunArgs) {
+		container.AttachSharedNetwork(ctx, runtime, &config.Networks, stack, containerStepIdentity(step.Name))
+	}
+	return nil
 }

@@ -13,10 +13,9 @@ import (
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 )
 
-type plumbingRunner func(context.Context, string, []string, atmosgit.RunOptions) (atmosgit.RunResult, error)
+type plumbingRunner func(context.Context, string, []string, *atmosgit.RunOptions) (atmosgit.RunResult, error)
 
-//nolint:gocritic // Match the Runner interface's value parameter.
-func (f plumbingRunner) Run(ctx context.Context, command string, args []string, opts atmosgit.RunOptions) (atmosgit.RunResult, error) {
+func (f plumbingRunner) Run(ctx context.Context, command string, args []string, opts *atmosgit.RunOptions) (atmosgit.RunResult, error) {
 	return f(ctx, command, args, opts)
 }
 
@@ -40,7 +39,7 @@ func TestOpenPropagatesGitFailuresAndRemovesCheckout(t *testing.T) {
 			index := git(t, root, "ls-files", "--stage")
 			failure := errors.New("git plumbing failed")
 			var checkout string
-			runner := plumbingRunner(func(ctx context.Context, executable string, args []string, opts atmosgit.RunOptions) (atmosgit.RunResult, error) {
+			runner := plumbingRunner(func(ctx context.Context, executable string, args []string, opts *atmosgit.RunOptions) (atmosgit.RunResult, error) {
 				if args[0] == "init" {
 					checkout = opts.Dir
 				}
@@ -80,7 +79,7 @@ func TestOpenPRSelectionAndResolvedBase(t *testing.T) {
 
 	failure := errors.New("base disappeared")
 	reads := 0
-	runner := plumbingRunner(func(ctx context.Context, executable string, args []string, opts atmosgit.RunOptions) (atmosgit.RunResult, error) {
+	runner := plumbingRunner(func(ctx context.Context, executable string, args []string, opts *atmosgit.RunOptions) (atmosgit.RunResult, error) {
 		if strings.Join(args, " ") == "rev-parse --verify "+base+"^{commit}" {
 			reads++
 			if reads == 2 {
@@ -111,7 +110,7 @@ func TestOpenRejectsUnsafeSelectionsAndBaselines(t *testing.T) {
 			mustWrite(t, filepath.Join(root, "parent", "file"), "contents\n")
 			git(t, root, "add", ".")
 			var checkout string
-			runner := plumbingRunner(func(ctx context.Context, executable string, args []string, opts atmosgit.RunOptions) (atmosgit.RunResult, error) {
+			runner := plumbingRunner(func(ctx context.Context, executable string, args []string, opts *atmosgit.RunOptions) (atmosgit.RunResult, error) {
 				if args[0] == "init" {
 					checkout = opts.Dir
 				}

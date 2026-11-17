@@ -319,32 +319,40 @@ func resolveUpgradeChartRef(client *action.Upgrade, spec *chartSpec) string {
 
 // getDeployedManifest returns the manifest of the currently deployed release so
 // it can serve as the baseline for a live diff. A release that does not exist
-// yet yields an empty manifest (every object is reported as added) rather than an
-// error. This is the only diff path that requires cluster access.
+// yet yields an empty manifest rather than an error. Release-based plans also
+// use release existence to distinguish install-only CRDs from managed resources.
 func getDeployedManifest(releaseName, namespace string, runners ...*recovery.Runner) (string, error) {
-	defer perf.Track(nil, "helm.getDeployedManifest")()
+	deployed, err := getDeployedRelease(releaseName, namespace, runners...)
+	if err != nil || deployed == nil {
+		return "", err
+	}
+	return renderReleaseManifest(deployed), nil
+}
 
+// getDeployedRelease preserves release existence even for CRD-only charts whose
+// stored manifest is empty. Only ErrReleaseNotFound denotes a new installation.
+func getDeployedRelease(releaseName, namespace string, runners ...*recovery.Runner) (*release.Release, error) {
+	defer perf.Track(nil, "helm.getDeployedRelease")()
 	var runner *recovery.Runner
 	if len(runners) > 0 {
 		runner = runners[0]
 	}
 	actx, err := newRecoveryActionContext(namespace, runner)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-
 	rel, err := action.NewGet(actx.cfg).Run(releaseName)
 	if err != nil {
 		if errors.Is(err, driver.ErrReleaseNotFound) {
-			return "", nil
+			return nil, nil
 		}
-		return "", fmt.Errorf("failed to get deployed Helm release %q: %w", releaseName, err)
+		return nil, fmt.Errorf("failed to get deployed Helm release %q: %w", releaseName, err)
 	}
 	deployed, ok := rel.(*release.Release)
 	if !ok {
-		return "", fmt.Errorf("%w: unexpected release type %T", errUtils.ErrHelmRenderFailed, rel)
+		return nil, fmt.Errorf("%w: unexpected release type %T", errUtils.ErrHelmRenderFailed, rel)
 	}
-	return renderReleaseManifest(deployed), nil
+	return deployed, nil
 }
 
 // deleteRelease uninstalls the release.

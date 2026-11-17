@@ -764,8 +764,6 @@ func isKnownPodmanRuntimeMismatch(err error) bool {
 // (Create, Start, Stop, Remove) for Podman runtime. Tests are intentionally duplicated
 // to verify both Docker and Podman implementations independently, ensuring consistency
 // across runtimes and allowing runtime-specific test evolution if needed.
-//
-//nolint:dupl // Docker and Podman implement identical Runtime interface with same lifecycle behavior.
 func TestPodmanRuntime_ContainerLifecycle_Integration(t *testing.T) {
 	// Integration test - tests Create, Start, Stop, Remove lifecycle.
 	runtime := NewPodmanRuntime()
