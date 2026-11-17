@@ -41,31 +41,45 @@ type shellCall struct {
 
 type hookContextKey struct{}
 
-// fakeShell records every process the executor starts and lets a test script the outcome.
-type fakeShell struct {
-	mu    sync.Mutex
-	calls []shellCall
-	// run decides the result and may write to the option writers like a real process would.
-	run func(call *shellCall) error
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_shell_test.go -package=$GOPACKAGE -mock_names=shellCommandExecutor=MockShellCommandExecutor
+
+// shellCommandExecutor is the test contract for Services.ExecuteShellCommand.
+type shellCommandExecutor interface {
+	Execute(schema.AtmosConfiguration, string, []string, string, []string, bool, string, ...component.ExecutionOption) error
 }
 
-//nolint:gocritic // The signature is fixed by Services.ExecuteShellCommand.
-func (f *fakeShell) execute(_ schema.AtmosConfiguration, command string, args []string, dir string, env []string, dryRun bool, _ string, opts ...component.ExecutionOption) error {
-	call := shellCall{command: command, args: append([]string(nil), args...), dir: dir, env: append([]string(nil), env...), dryRun: dryRun}
-	for _, opt := range opts {
-		opt(&call.options)
-	}
-	f.mu.Lock()
-	f.calls = append(f.calls, call)
-	f.mu.Unlock()
-	if f.run == nil {
-		return nil
-	}
-	return f.run(&call)
+var _ shellCommandExecutor = (*MockShellCommandExecutor)(nil)
+
+// shellFixture captures calls made through the generated process mock.
+type shellFixture struct {
+	mock  *MockShellCommandExecutor
+	mu    sync.Mutex
+	calls []shellCall
+}
+
+func newShellFixture(t *testing.T, run func(*shellCall) error) *shellFixture {
+	t.Helper()
+	fixture := &shellFixture{mock: NewMockShellCommandExecutor(gomock.NewController(t))}
+	fixture.mock.EXPECT().Execute(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ schema.AtmosConfiguration, command string, args []string, dir string, env []string, dryRun bool, _ string, opts ...component.ExecutionOption) error {
+			call := shellCall{command: command, args: append([]string(nil), args...), dir: dir, env: append([]string(nil), env...), dryRun: dryRun}
+			for _, opt := range opts {
+				opt(&call.options)
+			}
+			fixture.mu.Lock()
+			fixture.calls = append(fixture.calls, call)
+			fixture.mu.Unlock()
+			if run == nil {
+				return nil
+			}
+			return run(&call)
+		},
+	).AnyTimes()
+	return fixture
 }
 
 // names lists "<command> <first argument>" per call, which is enough to read the timeline.
-func (f *fakeShell) names() []string {
+func (f *shellFixture) names() []string {
 	var names []string
 	for i := range f.calls {
 		call := &f.calls[i]
@@ -78,8 +92,8 @@ func (f *fakeShell) names() []string {
 	return names
 }
 
-func hookExecutor(shell *fakeShell) *Executor {
-	return NewExecutor(Services{OperationServices: nil, ExecuteShellCommand: shell.execute})
+func hookExecutor(shell *shellFixture) *Executor {
+	return NewExecutor(Services{OperationServices: nil, ExecuteShellCommand: shell.mock.Execute})
 }
 
 func hookInfo(subCommand string, execution *schema.ComponentExecution) *schema.ConfigAndStacksInfo {
@@ -114,7 +128,7 @@ func TestExtraArgumentsPosition(t *testing.T) {
 }
 
 func TestRunExecutionPhaseWithoutExecutionIsUnchanged(t *testing.T) {
-	shell := &fakeShell{}
+	shell := newShellFixture(t, nil)
 	e := hookExecutor(shell)
 	info := hookInfo("plan", nil)
 	called := 0
@@ -133,7 +147,7 @@ func TestRunExecutionPhaseWithoutExecutionIsUnchanged(t *testing.T) {
 func TestMainCommandAppliesExtraArgumentsAndEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "required.tfvars"), nil, 0o600))
-	shell := &fakeShell{}
+	shell := newShellFixture(t, nil)
 	e := hookExecutor(shell)
 	info := hookInfo("plan", &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{
 		{Commands: []string{"plan"}, Arguments: []string{"-lock-timeout=1m"}, RequiredVarFiles: []string{"required.tfvars"}, Environment: map[string]string{"TF_LOG": "INFO"}},
@@ -150,7 +164,7 @@ func TestMainCommandAppliesExtraArgumentsAndEnvironment(t *testing.T) {
 }
 
 func TestMainCommandMissingRequiredVarFileFailsBeforeAnyProcess(t *testing.T) {
-	shell := &fakeShell{}
+	shell := newShellFixture(t, nil)
 	info := hookInfo("plan", &schema.ComponentExecution{
 		ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, RequiredVarFiles: []string{"missing.tfvars"}}},
 		BeforeHooks:    []schema.ComponentHook{execHook("before", "plan")},
@@ -164,7 +178,7 @@ func TestHooksRunWithTheInvocationEnvironmentAndDirectory(t *testing.T) {
 	dir := t.TempDir()
 	absolute := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "sub"), 0o755))
-	shell := &fakeShell{}
+	shell := newShellFixture(t, nil)
 	e := hookExecutor(shell)
 	ctx := context.WithValue(t.Context(), hookContextKey{}, "marker")
 	info := hookInfo("plan", &schema.ComponentExecution{
@@ -195,13 +209,13 @@ func TestHooksRunWithTheInvocationEnvironmentAndDirectory(t *testing.T) {
 func TestHookOutputGoesToTheUIStreamNotTheDataStream(t *testing.T) {
 	var data, ui strings.Builder
 	streams := process.Streams{Stdout: &data, Stderr: &ui}
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if call.command == "hook-loud" || call.command == "hook-quiet" {
 			_, _ = io.WriteString(call.options.StdoutOverride, call.command+" says hi\n")
 			_, _ = io.WriteString(call.options.StdoutCapture, call.command+" says hi\n")
 		}
 		return nil
-	}}
+	})
 	info := hookInfo("plan", &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{
 		{Name: "loud", Commands: []string{"plan"}, Execute: []string{"hook-loud"}}, {Name: "quiet", Commands: []string{"plan"}, Execute: []string{"hook-quiet"}, SuppressStdout: true},
 	}})
@@ -216,12 +230,12 @@ func TestHookOutputGoesToTheUIStreamNotTheDataStream(t *testing.T) {
 }
 
 func TestFailingBeforeHookAbortsTheCommandAndSurfacesItsExitCode(t *testing.T) {
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if call.command == "hook-b1" {
 			return errUtils.ExitCodeError{Code: 23}
 		}
 		return nil
-	}}
+	})
 	info := hookInfo("apply", &schema.ComponentExecution{
 		BeforeHooks: []schema.ComponentHook{execHook("b1", "apply"), execHook("b2", "apply")},
 		AfterHooks:  []schema.ComponentHook{execHook("a1", "apply")},
@@ -233,12 +247,12 @@ func TestFailingBeforeHookAbortsTheCommandAndSurfacesItsExitCode(t *testing.T) {
 }
 
 func TestAfterHooksFollowRunOnErrorWhenTheCommandFails(t *testing.T) {
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if call.command == "terraform" {
 			return errUtils.ExitCodeError{Code: 1}
 		}
 		return nil
-	}}
+	})
 	always := execHook("always", "plan")
 	always.RunOnError = true
 	info := hookInfo("plan", &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{execHook("skipped", "plan"), always}})
@@ -259,12 +273,12 @@ func TestDetailedPlanChangesRunAfterHooksNotErrorHooks(t *testing.T) {
 		{"exit 2 without -detailed-exitcode is a failure", []string{"plan"}, 2, []string{"terraform plan", "hook-failed arg"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			shell := &fakeShell{run: func(call *shellCall) error {
+			shell := newShellFixture(t, func(call *shellCall) error {
 				if call.command == "terraform" {
 					return errUtils.ExitCodeError{Code: test.code}
 				}
 				return nil
-			}}
+			})
 			info := hookInfo("plan", &schema.ComponentExecution{
 				AfterHooks: []schema.ComponentHook{execHook("after", "plan")},
 				ErrorHooks: []schema.ComponentHook{{Name: "failed", Commands: []string{"plan"}, Execute: []string{"hook-failed", "arg"}, OnErrors: []string{".*"}}},
@@ -287,13 +301,13 @@ func TestErrorHookMatchesTheFailedCommandOutput(t *testing.T) {
 		{"non matching output does not", []string{"AccessDenied"}, "Error: other", []string{"terraform apply"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			shell := &fakeShell{run: func(call *shellCall) error {
+			shell := newShellFixture(t, func(call *shellCall) error {
 				if call.command != "terraform" {
 					return nil
 				}
 				_, _ = io.WriteString(call.options.StderrCapture, test.stderr)
 				return errUtils.ExitCodeError{Code: 1}
-			}}
+			})
 			info := hookInfo("apply", &schema.ComponentExecution{ErrorHooks: []schema.ComponentHook{
 				{Name: "recover", Commands: []string{"apply"}, Execute: []string{"hook-recover", "arg"}, OnErrors: test.patterns},
 			}})
@@ -307,7 +321,7 @@ func TestErrorHookMatchesTheFailedCommandOutput(t *testing.T) {
 }
 
 func TestDryRunAppliesArgumentsButNeverRunsHooks(t *testing.T) {
-	shell := &fakeShell{}
+	shell := newShellFixture(t, nil)
 	info := hookInfo("plan", &schema.ComponentExecution{
 		ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, Arguments: []string{"-lock=false"}}},
 		BeforeHooks:    []schema.ComponentHook{execHook("b", "plan")},
@@ -323,13 +337,13 @@ func TestDryRunAppliesArgumentsButNeverRunsHooks(t *testing.T) {
 
 func TestCancellationStopsRemainingHooksAndTheCommand(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if call.command == "hook-b1" {
 			cancel()
 			return context.Canceled
 		}
 		return nil
-	}}
+	})
 	always := execHook("always", "plan")
 	always.RunOnError = true
 	info := hookInfo("plan", &schema.ComponentExecution{
@@ -342,7 +356,7 @@ func TestCancellationStopsRemainingHooksAndTheCommand(t *testing.T) {
 }
 
 func TestDestroyCommandNameMatchesApplyDestroy(t *testing.T) {
-	shell := &fakeShell{}
+	shell := newShellFixture(t, nil)
 	info := hookInfo("apply", &schema.ComponentExecution{
 		BeforeHooks:    []schema.ComponentHook{execHook("for-apply", "apply"), execHook("for-destroy", "destroy")},
 		ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"destroy"}, Arguments: []string{"-parallelism=1"}}},
@@ -353,7 +367,7 @@ func TestDestroyCommandNameMatchesApplyDestroy(t *testing.T) {
 }
 
 func TestSavedPlanApplyDropsVariableArguments(t *testing.T) {
-	shell := &fakeShell{}
+	shell := newShellFixture(t, nil)
 	info := hookInfo("apply", &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{
 		{Commands: []string{"apply"}, Arguments: []string{"-var=a=b", "-parallelism=1"}, RequiredVarFiles: []string{"never-needed.tfvars"}},
 	}})
@@ -365,7 +379,7 @@ func TestSavedPlanApplyDropsVariableArguments(t *testing.T) {
 // Hooks and extra arguments are matched per phase. The implicit init is "init" even when the
 // user asked for plan, so plan hooks must not fire for it, and init hooks must not fire for plan.
 func TestImplicitInitMatchesInitNotTheRequestedCommand(t *testing.T) {
-	shell := &fakeShell{}
+	shell := newShellFixture(t, nil)
 	e := hookExecutor(shell)
 	execution := &schema.ComponentExecution{
 		ExtraArguments: []schema.ComponentExtraArguments{
@@ -398,12 +412,12 @@ func TestImplicitInitMatchesInitNotTheRequestedCommand(t *testing.T) {
 }
 
 func TestHooksListedOnlyForOtherCommandsNeverFire(t *testing.T) {
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if call.command == "terraform" {
 			return errUtils.ExitCodeError{Code: 1}
 		}
 		return nil
-	}}
+	})
 	e := hookExecutor(shell)
 	always := execHook("always", "apply")
 	always.RunOnError = true
@@ -423,7 +437,7 @@ func TestHooksListedOnlyForOtherCommandsNeverFire(t *testing.T) {
 }
 
 func TestWorkspaceSelectionNeverRunsHooksOrExtraArguments(t *testing.T) {
-	shell := &fakeShell{run: func(*shellCall) error { return nil }}
+	shell := newShellFixture(t, func(*shellCall) error { return nil })
 	e := hookExecutor(shell)
 	info := hookInfo("plan", &schema.ComponentExecution{
 		ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan", "init", "workspace"}, Arguments: []string{"-never"}, Environment: map[string]string{"NEVER": "1"}}},
@@ -438,12 +452,12 @@ func TestWorkspaceSelectionNeverRunsHooksOrExtraArguments(t *testing.T) {
 }
 
 func TestUnknownHookFailureIsNotMistakenForSuccess(t *testing.T) {
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if call.command == "hook-b" {
 			return errors.New("executable file not found")
 		}
 		return nil
-	}}
+	})
 	info := hookInfo("plan", &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{{Name: "b", Commands: []string{"plan"}, Execute: []string{"hook-b"}}}})
 	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"plan"}, t.TempDir())
 	require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
@@ -490,7 +504,7 @@ func TestSavedPlanBindingKeepsExecution(t *testing.T) {
 }
 
 func TestImplicitInitMissingRequiredVarFileFailsBeforeAnyProcess(t *testing.T) {
-	shell := &fakeShell{}
+	shell := newShellFixture(t, nil)
 	info := hookInfo("plan", &schema.ComponentExecution{
 		ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, RequiredVarFiles: []string{"missing.tfvars"}}},
 		BeforeHooks:    []schema.ComponentHook{execHook("init-hook", "init"), execHook("plan-hook", "plan")},
@@ -528,12 +542,12 @@ func detailedExitCodeInfo() *schema.ConfigAndStacksInfo {
 // Exit status 2 of plan -detailed-exitcode means "changes present": hooks must see success,
 // and the caller must still receive status 2.
 func TestDetailedExitCodeChangesAreNotAHookFailure(t *testing.T) {
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if call.command == "terraform" {
 			return exitCodeError(2)
 		}
 		return nil
-	}}
+	})
 	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, detailedExitCodeInfo(), []string{"plan", "-detailed-exitcode"}, t.TempDir())
 
 	require.Error(t, err)
@@ -553,12 +567,12 @@ func TestDetailedExitCodeIsOnlyToleratedWhereTerraformDefinesIt(t *testing.T) {
 		{"explicit true value", []string{"plan", "-detailed-exitcode=true"}, 2},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			shell := &fakeShell{run: func(call *shellCall) error {
+			shell := newShellFixture(t, func(call *shellCall) error {
 				if call.command == "terraform" {
 					return exitCodeError(test.code)
 				}
 				return nil
-			}}
+			})
 			err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, detailedExitCodeInfo(), test.args, t.TempDir())
 			require.Equal(t, test.code, errUtils.GetExitCode(err))
 			tolerated := test.code == 2 && len(test.args) > 1
@@ -582,7 +596,7 @@ func TestHookWorkingDirectoryErrorsNameTheDirectory(t *testing.T) {
 		"relative": {"scripts", []string{filepath.Join(dir, "scripts"), "get_terragrunt_dir()"}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			shell := &fakeShell{}
+			shell := newShellFixture(t, nil)
 			info := hookInfo("plan", &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{
 				{Name: "bad", Commands: []string{"plan"}, Execute: []string{"hook-bad"}, WorkingDirectory: test.directory},
 			}})
@@ -604,7 +618,7 @@ func TestHookUnitLabel(t *testing.T) {
 
 // A hook listing "state" matches every state subcommand, as in Terragrunt.
 func TestHooksMatchTheTerraformCommandNotItsSubcommand(t *testing.T) {
-	shell := &fakeShell{}
+	shell := newShellFixture(t, nil)
 	info := hookInfo("state list", &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{execHook("state-hook", "state")}})
 	require.NoError(t, hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"state", "list"}, t.TempDir()))
 	require.Equal(t, []string{"hook-state-hook arg", "terraform state"}, shell.names())
@@ -635,7 +649,7 @@ func errorsInfo(subCommand string, policy *schema.ComponentErrors, hooks ...sche
 
 func TestErrorsPolicyRetriesTheWholeHookedCommand(t *testing.T) {
 	failure := errUtils.ExitCodeError{Code: 1}
-	shell := &fakeShell{run: scriptedFailures([]string{"Error: connection timeout", "Error: connection timeout", ""}, failure, failure)}
+	shell := newShellFixture(t, scriptedFailures([]string{"Error: connection timeout", "Error: connection timeout", ""}, failure, failure))
 	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3}}}
 	info := errorsInfo("apply", policy, execHook("lint", "apply"))
 	var callerCapture strings.Builder
@@ -648,7 +662,7 @@ func TestErrorsPolicyRetriesTheWholeHookedCommand(t *testing.T) {
 
 func TestErrorsPolicyStopsAtMaxAttemptsAndKeepsTheExitCode(t *testing.T) {
 	failure := errUtils.ExitCodeError{Code: 3}
-	shell := &fakeShell{run: scriptedFailures([]string{"timeout", "timeout"}, failure, failure, failure)}
+	shell := newShellFixture(t, scriptedFailures([]string{"timeout", "timeout"}, failure, failure, failure))
 	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 2}}}
 	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, errorsInfo("plan", policy), []string{"plan"}, t.TempDir())
 	require.ErrorIs(t, err, errUtils.ErrComponentMaxAttempts)
@@ -657,7 +671,7 @@ func TestErrorsPolicyStopsAtMaxAttemptsAndKeepsTheExitCode(t *testing.T) {
 }
 
 func TestErrorsPolicyMatchesStandardErrorOnly(t *testing.T) {
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if call.command != "terraform" {
 			return nil
 		}
@@ -665,7 +679,7 @@ func TestErrorsPolicyMatchesStandardErrorOnly(t *testing.T) {
 		_, _ = io.WriteString(call.options.StdoutCapture, "resource with timeout = 5")
 		_, _ = io.WriteString(call.options.StderrCapture, "Error: invalid argument")
 		return errUtils.ExitCodeError{Code: 1}
-	}}
+	})
 	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3}}}
 	info := errorsInfo("plan", policy)
 	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"plan"}, t.TempDir(),
@@ -676,7 +690,7 @@ func TestErrorsPolicyMatchesStandardErrorOnly(t *testing.T) {
 
 func TestErrorsPolicyMatchesHookStderrWithoutCapturingItAsCommandOutput(t *testing.T) {
 	attempts := 0
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if call.command != "hook-lint" {
 			return nil
 		}
@@ -686,7 +700,7 @@ func TestErrorsPolicyMatchesHookStderrWithoutCapturingItAsCommandOutput(t *testi
 			return errors.New("hook failed")
 		}
 		return nil
-	}}
+	})
 	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 2}}}
 	info := errorsInfo("plan", policy, execHook("lint", "plan"))
 	var callerCapture strings.Builder
@@ -697,13 +711,13 @@ func TestErrorsPolicyMatchesHookStderrWithoutCapturingItAsCommandOutput(t *testi
 }
 
 func TestErrorsPolicyDoesNotMatchHookStdout(t *testing.T) {
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if call.command != "hook-lint" {
 			return nil
 		}
 		_, _ = io.WriteString(call.options.StdoutCapture, "connection timeout")
 		return errors.New("hook failed")
-	}}
+	})
 	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 2}}}
 	info := errorsInfo("plan", policy, execHook("lint", "plan"))
 	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"plan"}, t.TempDir())
@@ -713,7 +727,7 @@ func TestErrorsPolicyDoesNotMatchHookStdout(t *testing.T) {
 
 func TestErrorsPolicyIgnoresAFailureAndWritesSignals(t *testing.T) {
 	dir := t.TempDir()
-	shell := &fakeShell{run: scriptedFailures([]string{"Error: already exists"}, errUtils.ExitCodeError{Code: 1})}
+	shell := newShellFixture(t, scriptedFailures([]string{"Error: already exists"}, errUtils.ExitCodeError{Code: 1}))
 	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "exists", Patterns: []string{"already exists"}, Message: "reuse it", Signals: map[string]any{"alert": true}}}}
 	require.NoError(t, hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, errorsInfo("apply", policy), []string{"apply"}, dir))
 	data, err := os.ReadFile(filepath.Join(dir, "error-signals.json"))
@@ -722,7 +736,7 @@ func TestErrorsPolicyIgnoresAFailureAndWritesSignals(t *testing.T) {
 }
 
 func TestErrorsPolicyIgnoreInAPreparatoryStepEndsTheRun(t *testing.T) {
-	shell := &fakeShell{run: scriptedFailures([]string{"Error: already exists"}, errUtils.ExitCodeError{Code: 1})}
+	shell := newShellFixture(t, scriptedFailures([]string{"Error: already exists"}, errUtils.ExitCodeError{Code: 1}))
 	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "exists", Patterns: []string{"already exists"}}}}
 	e := hookExecutor(shell)
 	info := errorsInfo("plan", policy)
@@ -734,7 +748,7 @@ func TestErrorsPolicyIgnoreInAPreparatoryStepEndsTheRun(t *testing.T) {
 }
 
 func TestErrorsPolicyDoesNotChangeDetailedExitCodeResults(t *testing.T) {
-	shell := &fakeShell{run: scriptedFailures(nil, errUtils.ExitCodeError{Code: 2})}
+	shell := newShellFixture(t, scriptedFailures(nil, errUtils.ExitCodeError{Code: 2}))
 	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "all", Patterns: []string{".*"}}}}
 	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, errorsInfo("plan", policy), []string{"plan", "-detailed-exitcode"}, t.TempDir())
 	require.Equal(t, 2, resolveExitCode(err), "exit status 2 is a plan result and not a failure to recover from")
@@ -795,8 +809,8 @@ func TestPrepareComponentExecutionEndsAnIgnoredRunWithoutExecuting(t *testing.T)
 		Files:      []schema.ComponentConfigurationFile{{Path: "generated.tf", Content: []byte("# generated"), IfExists: "overwrite"}},
 		IgnoredRun: &schema.ComponentIgnoredRun{Policy: "registry_down", Message: "registry is down"},
 	}, nil)
-	shell := &fakeShell{}
-	executor := NewExecutor(Services{ExecuteShellCommand: shell.execute})
+	shell := newShellFixture(t, nil)
+	executor := NewExecutor(Services{ExecuteShellCommand: shell.mock.Execute})
 
 	_, err = executor.prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, config, info, false)
 
@@ -929,7 +943,7 @@ func TestMainCommandLegacyRetryDetailedPlan(t *testing.T) {
 			info.ComponentExecution.ErrorHooks[0].Commands = []string{info.SubCommand}
 			info.ComponentRetrySection = &schema.RetryConfig{MaxAttempts: intPtr(2), Conditions: []string{"/.*/"}}
 			attempts := 0
-			shell := &fakeShell{run: func(call *shellCall) error {
+			shell := newShellFixture(t, func(call *shellCall) error {
 				if call.command == "terraform" {
 					attempts++
 					_, writeErr := io.WriteString(call.options.StdoutCapture, "plan output\n")
@@ -937,7 +951,7 @@ func TestMainCommandLegacyRetryDetailedPlan(t *testing.T) {
 					return exitCodeError(test.code)
 				}
 				return nil
-			}}
+			})
 			var opts []component.ExecutionOption
 			if test.processEnv != nil {
 				opts = append(opts, component.WithEnvironment(test.processEnv))
@@ -964,7 +978,7 @@ func TestReadConfigHooksRunOncePerPrepareInTheUnitDirectory(t *testing.T) {
 		AfterHooks:  []schema.ComponentHook{hook("alias", "read-config"), hook("canonical", "terragrunt-read-config"), hook("plain", "plan")},
 		BeforeHooks: []schema.ComponentHook{hook("before", "terragrunt-read-config")},
 	}}
-	shell := &fakeShell{}
+	shell := newShellFixture(t, nil)
 	info := hookInfo("plan", nil)
 	require.NoError(t, hookExecutor(shell).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, info, prepared))
 	require.Equal(t, []string{"hook-alias", "hook-canonical"}, shell.names(), "only after hooks run, and only those listing the lifecycle")
@@ -974,13 +988,13 @@ func TestReadConfigHooksRunOncePerPrepareInTheUnitDirectory(t *testing.T) {
 	// A dry run, a unit without hooks, and a failing hook.
 	dry := hookInfo("plan", nil)
 	dry.DryRun = true
-	quiet := &fakeShell{}
+	quiet := newShellFixture(t, nil)
 	require.NoError(t, hookExecutor(quiet).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, dry, prepared))
 	require.NoError(t, hookExecutor(quiet).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, info, nil))
 	require.NoError(t, hookExecutor(quiet).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, info, &schema.PreparedComponentConfiguration{Execution: &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{hook("plain", "plan")}}}))
 	require.Empty(t, quiet.calls)
 
-	failing := &fakeShell{run: func(*shellCall) error { return errors.New("boom") }}
+	failing := newShellFixture(t, func(*shellCall) error { return errors.New("boom") })
 	err := hookExecutor(failing).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, info, prepared)
 	require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
 }
@@ -992,7 +1006,7 @@ func TestInitFromModuleHooksWrapTheSourceFetch(t *testing.T) {
 		AfterHooks:  []schema.ComponentHook{{Name: "after", Commands: []string{"init-from-module", "plan"}, Execute: []string{"hook-after"}, WorkingDirectory: unit}},
 		ErrorHooks:  []schema.ComponentHook{{Name: "report", Commands: []string{"init-from-module"}, Execute: []string{"hook-report"}, OnErrors: []string{"download failed"}}},
 	}
-	shell := &fakeShell{}
+	shell := newShellFixture(t, nil)
 	e := hookExecutor(shell)
 	info := hookInfo("plan", execution)
 
@@ -1025,7 +1039,7 @@ func TestSourceFetchFollowsTheErrorsPolicyInsideTheHooks(t *testing.T) {
 		Retry:  []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"flaky download"}, MaxAttempts: 3}},
 		Ignore: []schema.ComponentIgnorePolicy{{Name: "gone", Patterns: []string{"permanently gone"}}},
 	}
-	shell := &fakeShell{}
+	shell := newShellFixture(t, nil)
 	e := hookExecutor(shell)
 	info := hookInfo("plan", &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{hook}, Errors: policy})
 
@@ -1060,7 +1074,7 @@ func TestIgnoredSourceRefreshWritesSignalsInModuleDirectory(t *testing.T) {
 	}}}
 	info := hookInfo("plan", &schema.ComponentExecution{Errors: policy})
 	info.BaseComponentPath = "module"
-	wrapper := hookExecutor(&fakeShell{}).initFromModuleWrapper(&schema.AtmosConfiguration{}, info)
+	wrapper := hookExecutor(newShellFixture(t, nil)).initFromModuleWrapper(&schema.AtmosConfiguration{}, info)
 	err := wrapper(t.Context(), &source.Target{Dir: workdir, IsWorkdir: true},
 		func(context.Context) error { return errors.New("download failed") })
 	require.ErrorIs(t, err, errUtils.ErrComponentRunIgnored)
@@ -1077,7 +1091,7 @@ func TestSourceFetchResolvesAnExplicitSubdirectoryAfterProvisioning(t *testing.T
 	}}}
 	info := hookInfo("plan", &schema.ComponentExecution{Errors: policy})
 	info.ComponentSection = map[string]any{"metadata": map[string]any{"source_subdir": "modules/app"}}
-	wrapper := hookExecutor(&fakeShell{}).initFromModuleWrapper(&schema.AtmosConfiguration{}, info)
+	wrapper := hookExecutor(newShellFixture(t, nil)).initFromModuleWrapper(&schema.AtmosConfiguration{}, info)
 	target := &source.Target{Dir: workdir, IsWorkdir: true}
 
 	// The module directory is created by the fetch, so it does not exist when the fetch starts.
@@ -1130,11 +1144,11 @@ func TestPolicyPlanUsesProviderOutputArguments(t *testing.T) {
 				original = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, Arguments: test.provider, Environment: map[string]string{"PROVIDER_ENV": "set"}}}}
 				info.ComponentExecution = original
 			}
-			shell := &fakeShell{run: func(call *shellCall) error {
+			shell := newShellFixture(t, func(call *shellCall) error {
 				return os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("reviewed"), 0o600)
-			}}
+			})
 			executor := testExecutor(t)
-			executor.services.ExecuteShellCommand = shell.execute
+			executor.services.ExecuteShellCommand = shell.mock.Execute
 			err := executor.runMainCommandPhase(config, info, execCtx, test.args, execCtx.componentPath, false)
 			require.Same(t, original, info.ComponentExecution, "the component execution must be restored")
 			if test.conflict {
@@ -1167,7 +1181,7 @@ func TestPolicyPlanUsesProviderOutputArguments(t *testing.T) {
 // attempts, and the forced init runs between them.
 func TestInitRecoveryRetriesInsideOneHookLifecycle(t *testing.T) {
 	attempts := 0
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if call.command != "terraform" {
 			return nil
 		}
@@ -1178,9 +1192,9 @@ func TestInitRecoveryRetriesInsideOneHookLifecycle(t *testing.T) {
 		}
 		_, _ = io.WriteString(call.options.ExecMetadataStdoutCapture, "Apply complete!")
 		return nil
-	}}
+	})
 	executor := testExecutor(t)
-	executor.services.ExecuteShellCommand = shell.execute
+	executor.services.ExecuteShellCommand = shell.mock.Execute
 	var timeline []string
 	executor.executeTerraformInitForcedFn = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _, _ string, reconfigure, _ bool, _ ...ShellCommandOption) error {
 		require.True(t, reconfigure)
@@ -1207,16 +1221,16 @@ func TestInitRecoveryRetriesInsideOneHookLifecycle(t *testing.T) {
 // hooks keeps the existing recovery path and retries the main command exactly once.
 func TestInitRecoveryWithoutHooksStillRetriesOnce(t *testing.T) {
 	attempts := 0
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		attempts++
 		if attempts == 1 {
 			_, _ = io.WriteString(call.options.ExecMetadataStderrCapture, "Error: Backend configuration changed")
 			return errUtils.ExitCodeError{Code: 1}
 		}
 		return nil
-	}}
+	})
 	executor := testExecutor(t)
-	executor.services.ExecuteShellCommand = shell.execute
+	executor.services.ExecuteShellCommand = shell.mock.Execute
 	forced := 0
 	executor.executeTerraformInitForcedFn = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string, bool, bool, ...ShellCommandOption) error {
 		forced++
@@ -1235,15 +1249,15 @@ func TestInitRecoveryWithoutHooksStillRetriesOnce(t *testing.T) {
 // TestInitRecoveryInsideLifecycleRunsOnlyWhenDiagnosed verifies that a hooked command failing
 // for another reason is not retried and still reaches its after hooks once.
 func TestInitRecoveryInsideLifecycleRunsOnlyWhenDiagnosed(t *testing.T) {
-	shell := &fakeShell{run: func(call *shellCall) error {
+	shell := newShellFixture(t, func(call *shellCall) error {
 		if call.command == "terraform" {
 			_, _ = io.WriteString(call.options.ExecMetadataStderrCapture, "Error: unrelated validation failure")
 			return errUtils.ExitCodeError{Code: 1}
 		}
 		return nil
-	}}
+	})
 	executor := testExecutor(t)
-	executor.services.ExecuteShellCommand = shell.execute
+	executor.services.ExecuteShellCommand = shell.mock.Execute
 	executor.executeTerraformInitForcedFn = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string, bool, bool, ...ShellCommandOption) error {
 		t.Fatal("forced init must not run without an init-required diagnosis")
 		return nil

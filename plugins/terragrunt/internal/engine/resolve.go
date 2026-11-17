@@ -27,7 +27,9 @@ import (
 
 // Resolve evaluates HCL using the pinned Terragrunt parser.
 //
-//nolint:gocritic,lintroller // The value-based evaluator API delegates internally; standalone plugins cannot import the host tracker.
+// The public value API isolates invocation fields; this SDK-only plugin has no host tracker dependency.
+//
+//nolint:gocritic,lintroller // Preserve the public value API and standalone plugin boundary.
 func Resolve(ctx context.Context, request model.Request) (*model.Resolution, error) {
 	return resolve(ctx, &request, nil)
 }
@@ -35,7 +37,7 @@ func Resolve(ctx context.Context, request model.Request) (*model.Resolution, err
 // ErrPreventDestroy rejects a destroy operation on a unit that sets prevent_destroy.
 var ErrPreventDestroy = errors.New("unit is protected by prevent_destroy")
 
-// resolve evaluates one request and describes any rejection as a model.Problem the user can act on.
+// resolve preserves the structured L6 error boundary around invocation-local evaluation.
 func resolve(ctx context.Context, request *model.Request, filesystem afero.Fs) (*model.Resolution, error) {
 	result, err := resolveRequest(ctx, request, filesystem)
 	if err != nil {
@@ -44,8 +46,7 @@ func resolve(ctx context.Context, request *model.Request, filesystem afero.Fs) (
 	return result, nil
 }
 
-// resolveRequest evaluates one request: it generates any owning stack, parses the path, and
-// dispatches to the stack, inventory, or unit evaluation.
+// resolveRequest prepares the invocation-local evaluator and emits only safe early progress.
 func resolveRequest(ctx context.Context, request *model.Request, filesystem afero.Fs) (*model.Resolution, error) {
 	if request.Phase == "inventory" {
 		return discoverProject(ctx, request)
@@ -73,44 +74,39 @@ func resolveRequest(ctx context.Context, request *model.Request, filesystem afer
 	if err != nil {
 		return nil, err
 	}
-	pctx := requestParsingContext(request, path)
-	scan := &sensitivityScan{}
-	defer func() {
-		files := append(append(pctx.FilesRead.Paths(), path), scan.applyFiles...)
-		if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(environment.FS, files, path, scan.registered) {
-			sink.Withhold()
-		}
-	}()
-	unit := unitEvaluator{logger: logger, environment: environment, pctx: pctx, request: *request, path: path}
-	return unit.dispatch(ctx, scan)
+	evaluator := unitEvaluator{logger: logger, environment: environment, pctx: requestParsingContext(request, path), request: request, path: path}
+	return evaluator.resolve(ctx, &sensitivityScan{})
 }
 
-// dispatch selects the requested evaluation while sharing the sensitivity scan.
-func (u *unitEvaluator) dispatch(ctx context.Context, scan *sensitivityScan) (*model.Resolution, error) {
-	request, pctx, path := &u.request, u.pctx, u.path
-	reader := &inventoryReader{ctx: ctx, logger: u.logger, environment: u.environment}
-	if request.Phase == "iam" {
-		return reader.resolveIAM(pctx, request, path)
-	}
-	if filepath.Base(path) == stackFile {
-		return reader.resolveStack(pctx, request, path)
-	}
-	if err := reader.checkRequestFeatureOverrides(pctx, request, path); err != nil {
-		return nil, err
-	}
-	if discovering(request) {
-		return reader.resolveUnitInventory(pctx, request, path)
-	}
-	return u.resolve(ctx, scan)
-}
-
-// unitEvaluator carries the parser dependencies shared by unit resolution stages.
+// unitEvaluator groups the invocation-local parser dependencies without changing request fields.
 type unitEvaluator struct {
 	logger      log.Logger
 	environment *atmosbridge.Venv
 	pctx        *config.ParsingContext
-	request     model.Request
+	request     *model.Request
 	path        string
+}
+
+func (e *unitEvaluator) resolve(ctx context.Context, scan *sensitivityScan) (*model.Resolution, error) {
+	defer func() {
+		files := append(append(e.pctx.FilesRead.Paths(), e.path), scan.applyFiles...)
+		if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(e.environment.FS, files, e.path, scan.registered) {
+			sink.Withhold()
+		}
+	}()
+	if e.request.Phase == "iam" {
+		return e.resolveIAM(ctx)
+	}
+	if filepath.Base(e.path) == stackFile {
+		return e.resolveStack(ctx)
+	}
+	if err := e.checkRequestFeatureOverrides(ctx); err != nil {
+		return nil, err
+	}
+	if discovering(e.request) {
+		return e.resolveUnitInventory(ctx)
+	}
+	return e.resolveUnit(ctx, scan)
 }
 
 const (
@@ -228,17 +224,16 @@ func parsingContext(path, tofu, command string, arguments []string) *config.Pars
 
 // checkDestroyGuard rejects destroy before a full parse can evaluate HCL functions
 // for a unit that sets prevent_destroy. Backend reads never destroy.
-func (u *unitEvaluator) checkDestroyGuard(ctx context.Context) error {
-	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, &u.request, u.path
-	if request.Phase == phaseBackend || (request.Command != "plan" && request.Command != "apply" && request.Command != "destroy") {
+func (e *unitEvaluator) checkDestroyGuard(ctx context.Context) error {
+	if e.request.Phase == phaseBackend || (e.request.Command != "plan" && e.request.Command != "apply" && e.request.Command != "destroy") {
 		return nil
 	}
-	guard, err := config.PartialParseConfigFile(ctx, logger, atmosbridge.Discovery(environment, false),
-		pctx.WithDecodeList(config.TerragruntFlags, config.TerraformExtraArgs), path, nil)
+	guard, err := config.PartialParseConfigFile(ctx, e.logger, atmosbridge.Discovery(e.environment, false),
+		e.pctx.WithDecodeList(config.TerragruntFlags, config.TerraformExtraArgs), e.path, nil)
 	if err != nil {
-		return failedDestroyGuard(request, environment.FS, path, err)
+		return failedDestroyGuard(e.request, e.environment.FS, e.path, err)
 	}
-	return checkPreventDestroy(request, guard)
+	return checkPreventDestroy(e.request, guard)
 }
 
 // failedDestroyGuard preserves syntax-only decisions for known destroy requests.
@@ -271,6 +266,11 @@ func staticDestroyGuard(fs afero.Fs, path string, parseErr error) error {
 			return parseErr
 		}
 	}
+	return literalPreventDestroy(body, parseErr)
+}
+
+// literalPreventDestroy fails closed when the attribute cannot be decided without evaluation.
+func literalPreventDestroy(body *hclsyntax.Body, parseErr error) error {
 	attribute, found := body.Attributes["prevent_destroy"]
 	if !found {
 		return nil
@@ -288,54 +288,53 @@ func staticDestroyGuard(fs afero.Fs, path string, parseErr error) error {
 // unitExecution returns hooks and extra arguments as data for the host to run;
 // evaluation never executes them. Backend identity is read from a partial parse
 // that does not decode them.
-func (u *unitEvaluator) unitExecution(ctx context.Context, cfg *config.TerragruntConfig) (*model.Execution, []string, error) {
-	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, &u.request, u.path
-	if request.Phase == phaseBackend {
+func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.TerragruntConfig) (*model.Execution, []string, error) {
+	if e.request.Phase == phaseBackend {
 		return nil, nil, nil
 	}
 	execution, err := executionFromConfig(cfg.Terraform)
 	if err != nil {
 		return nil, nil, err
 	}
-	finalizeExecution(execution, path)
+	finalizeExecution(execution, e.path)
 	reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
-		parsed, err := config.ParseConfigFile(ctx, logger, environment, apply, path, nil)
+		parsed, err := config.ParseConfigFile(ctx, e.logger, e.environment, apply, e.path, nil)
 		if err != nil {
 			// The apply-time values are unknown, and the unit's own inputs and locals no longer count as
 			// registered: whatever Terragrunt logged before failing may carry them.
-			files := append(append(apply.FilesRead.Paths(), pctx.FilesRead.Paths()...), path)
-			if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(environment.FS, files, path, false) {
+			files := append(append(apply.FilesRead.Paths(), e.pctx.FilesRead.Paths()...), e.path)
+			if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(e.environment.FS, files, e.path, false) {
 				sink.Withhold()
 			}
 			return nil, err
 		}
 		// Apply-time values can differ from the ones planned, so register them before any event is returned.
 		sink := logSinkFrom(ctx)
-		redactUnitInputs(sink, environment.FS, append(apply.FilesRead.Paths(), path), path, parsed.Inputs)
-		redactLocals(sink, environment.FS, path, parsed.Locals)
+		redactUnitInputs(sink, e.environment.FS, append(apply.FilesRead.Paths(), e.path), e.path, parsed.Inputs)
+		redactLocals(sink, e.environment.FS, e.path, parsed.Locals)
 		return parsed, nil
 	}
-	return applyTimeExecution(request, path, execution, executionReads{filesystem: environment.FS, paths: pctx.FilesRead.Paths()}, reparse)
+	return e.applyTimeExecution(execution, reparse)
 }
 
-func (u *unitEvaluator) parseUnit(ctx context.Context) (*config.TerragruntConfig, error) {
-	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, &u.request, u.path
-	if request.Phase == phaseBackend {
-		environment = environment.WithFS(withoutInputsFS{Fs: environment.FS, inputs: newInputReferences(path)})
-		cfg, err := config.PartialParseConfigFile(ctx, logger, environment, pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), path, nil)
+func (e *unitEvaluator) parseUnit(ctx context.Context) (*config.TerragruntConfig, error) {
+	environment := e.environment
+	if e.request.Phase == phaseBackend {
+		environment = environment.WithFS(withoutInputsFS{Fs: environment.FS, inputs: newInputReferences(e.path)})
+		cfg, err := config.PartialParseConfigFile(ctx, e.logger, environment, e.pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), e.path, nil)
 		if err != nil {
 			return nil, err
 		}
 		// Reject unverifiable backend generation before the full download_dir probe.
-		if err := checkBackendGeneration(environment.FS, append(pctx.FilesRead.Paths(), path)); err != nil {
+		if err := checkBackendGeneration(environment.FS, append(e.pctx.FilesRead.Paths(), e.path)); err != nil {
 			return nil, err
 		}
-		if request.Environment[downloadDirEnv] == "" && mentionsDownloadDir(environment.FS, append(pctx.FilesRead.Paths(), path)) {
-			cfg.DownloadDir, err = downloadDir(ctx, logger, environment, pctx)
+		if e.request.Environment[downloadDirEnv] == "" && mentionsDownloadDir(environment.FS, append(e.pctx.FilesRead.Paths(), e.path)) {
+			cfg.DownloadDir, err = downloadDir(ctx, e.logger, environment, e.pctx)
 		}
 		return cfg, err
 	}
-	return config.ParseConfigFile(ctx, logger, environment, pctx, path, nil)
+	return config.ParseConfigFile(ctx, e.logger, environment, e.pctx, e.path, nil)
 }
 
 // downloadDir restores download_dir on a partially parsed unit. Partial
@@ -379,14 +378,14 @@ type withoutInputsFS struct {
 
 // Open reads through OpenFile so every read path strips inputs.
 //
-//nolint:lintroller // Delegates to OpenFile at the standalone plugin boundary.
+//nolint:lintroller // Pure afero delegation in a standalone plugin; no host tracker dependency.
 func (f withoutInputsFS) Open(name string) (afero.File, error) {
 	return f.OpenFile(name, os.O_RDONLY, 0)
 }
 
 // OpenFile returns the stripped content for read-only opens of HCL files.
 //
-//nolint:lintroller // Plugin code cannot import the host performance tracker.
+//nolint:lintroller // Standalone plugin code cannot import the host performance tracker.
 func (f withoutInputsFS) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
 	file, err := f.Fs.OpenFile(name, flag, perm)
 	if err != nil || flag != os.O_RDONLY || !strings.HasSuffix(name, ".hcl") {
@@ -570,38 +569,38 @@ func traversalName(step hcl.Traverser) (string, bool) {
 
 // unitResolution converts the parsed unit into its module identity. Local sources
 // must be existing directories; remote sources keep the identity they were written with.
-func (r *inventoryReader) unitResolution(pctx *config.ParsingContext, request *model.Request, cfg *config.TerragruntConfig, path string) (*model.Resolution, error) {
-	result := &model.Resolution{Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
-	if err := unitSettings(r.ctx, cfg, request, path, result); err != nil {
+func (e *unitEvaluator) unitResolution(ctx context.Context, cfg *config.TerragruntConfig) (*model.Resolution, error) {
+	result := &model.Resolution{Path: e.path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(e.pctx.FilesRead.Paths(), e.path)}
+	if err := unitSettings(ctx, cfg, e.request, e.path, result); err != nil {
 		return nil, err
 	}
 	// A remote source keeps the identity it was written with, exactly as Terragrunt names its working
 	// copy; resolving a registry source below only changes where the module is fetched from.
 	identity := result.Source
-	if local, problem := resolveLocalModuleSource(r.environment.FS, path, result.Source); problem != nil {
+	if local, problem := resolveLocalModuleSource(e.environment.FS, e.path, result.Source); problem != nil {
 		return nil, problem
 	} else if local != nil {
 		result.Source = local.source
 		identity, result.Folders = result.Source, []string{local.root}
-	} else if !PreventsRun(result.Exclude, OperationCommand(request.Command, request.Arguments)) {
+	} else if !PreventsRun(result.Exclude, OperationCommand(e.request.Command, e.request.Arguments)) {
 		// An operation the exclude block prevents never runs, so its registry source is not resolved.
-		if err := prepareRemoteSource(r.ctx, r.logger, request, cfg, result); err != nil {
+		if err := prepareRemoteSource(ctx, e.logger, e.request, cfg, result); err != nil {
 			return nil, err
 		}
 	}
-	download := pctx.DownloadDir
-	if cfg.DownloadDir != "" && request.Environment[downloadDirEnv] == "" {
-		download = localPath(filepath.Dir(path), cfg.DownloadDir)
+	download := e.pctx.DownloadDir
+	if cfg.DownloadDir != "" && e.request.Environment[downloadDirEnv] == "" {
+		download = localPath(filepath.Dir(e.path), cfg.DownloadDir)
 	}
-	if configured := request.Environment[downloadDirEnv]; configured != "" {
-		download = localPath(filepath.Dir(path), configured)
+	if configured := e.request.Environment[downloadDirEnv]; configured != "" {
+		download = localPath(filepath.Dir(e.path), configured)
 	}
-	workingDir, err := atmosbridge.WorkingDir(r.logger, r.environment, identity, download, filepath.Dir(path))
+	workingDir, err := atmosbridge.WorkingDir(e.logger, e.environment, identity, download, filepath.Dir(e.path))
 	if err != nil {
 		return nil, err
 	}
 	result.WorkingDir = workingDir
-	result.Files = append(result.Files, request.OriginFiles...)
-	result.Folders = append(result.Folders, request.OriginFolders...)
+	result.Files = append(result.Files, e.request.OriginFiles...)
+	result.Folders = append(result.Folders, e.request.OriginFolders...)
 	return result, nil
 }

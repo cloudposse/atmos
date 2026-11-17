@@ -11,6 +11,9 @@ import (
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
 
+// currentDirectory is the project-relative identity of its root.
+const currentDirectory = "."
+
 // Discover expands local stacks in an isolated overlay without preparing units.
 //
 //nolint:lintroller // Plugin code cannot import the host performance tracker.
@@ -249,6 +252,3 @@ func derivedAddress(base, path string) (*pluginv1.ComponentAddress, error) {
 	}
 	return &pluginv1.ComponentAddress{Stack: stack, Component: name, ComponentType: "terraform"}, nil
 }
-
-// currentDirectory is the project-relative identity of its root.
-const currentDirectory = "."

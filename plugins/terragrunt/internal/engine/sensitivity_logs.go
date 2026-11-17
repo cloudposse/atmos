@@ -286,11 +286,11 @@ func callsSensitive(node hclsyntax.Node) bool {
 	return found
 }
 
-// resolve evaluates one unit: it guards destroy, parses the unit, applies
+// resolveUnit evaluates one unit: it guards destroy, parses the unit, applies
 // policies, and assembles the resolution with its execution data, backend, overlay,
 // and generated files.
-func (u *unitEvaluator) resolve(ctx context.Context, scan *sensitivityScan) (*model.Resolution, error) {
-	environment, pctx, request, path := u.environment, u.pctx, &u.request, u.path
+func (u *unitEvaluator) resolveUnit(ctx context.Context, scan *sensitivityScan) (*model.Resolution, error) {
+	environment, pctx, request, path := u.environment, u.pctx, u.request, u.path
 	if err := u.checkDestroyGuard(ctx); err != nil {
 		return nil, err
 	}
@@ -313,20 +313,20 @@ func (u *unitEvaluator) resolve(ctx context.Context, scan *sensitivityScan) (*mo
 // buildResolution assembles the resolution of a parsed unit. The execution is
 // set before the backend resolves so the backend step sees the final result.
 func (u *unitEvaluator) buildResolution(ctx context.Context, cfg *config.TerragruntConfig, sensitivity *unitSensitivity) (*model.Resolution, error) {
-	logger, environment, pctx, request, path := u.logger, u.environment, u.pctx, u.request, u.path
+	logger, environment, request, path := u.logger, u.environment, u.request, u.path
 	execution, applyFiles, err := u.unitExecution(ctx, cfg)
 	sensitivity.scan.applyFiles = applyFiles
 	if err != nil {
 		return nil, err
 	}
-	result, err := (&inventoryReader{ctx: ctx, logger: logger, environment: environment}).unitResolution(pctx, &request, cfg, path)
+	result, err := u.unitResolution(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 	result.Execution = execution
 	result.SensitiveInputs = sensitivity.inputs
 	result.Files = append(result.Files, applyFiles...)
-	if err := resolveBackend(cfg, result, &request); err != nil {
+	if err := resolveBackend(cfg, result, request); err != nil {
 		return nil, err
 	}
 	if request.Phase != phaseBackend {

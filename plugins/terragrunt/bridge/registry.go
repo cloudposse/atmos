@@ -26,10 +26,10 @@ var (
 	// ErrMalformedRegistryVersion identifies an invalid exact version query.
 	ErrMalformedRegistryVersion = errors.New("malformed Terraform registry version")
 	// ErrRegistryVersionConstraint identifies a constraint in an exact-version query.
-	ErrRegistryVersionConstraint = errors.New("Terraform registry version constraint requires the terraform block")
+	ErrRegistryVersionConstraint = errors.New("terraform registry version constraint requires the terraform block")
 	// ErrRegistryLookup identifies a failure of the registry protocol: service discovery, version
 	// lookup, the X-Terraform-Get header, or the download URL it names. The upstream error is kept.
-	ErrRegistryLookup = errors.New("Terraform registry lookup failed")
+	ErrRegistryLookup = errors.New("terraform registry lookup failed")
 )
 
 // RegistryRequest describes one `tfr://` module source to resolve.
@@ -49,6 +49,8 @@ type RegistryRequest struct {
 // ResolveRegistrySource turns a `tfr://` source into the getter URL the registry's download endpoint names, using
 // Terragrunt's own implementation of the Terraform module registry protocol: service discovery, version
 // selection, and the X-Terraform-Get header. A `//subdir` on the module path is appended to the result.
+//
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func ResolveRegistrySource(ctx context.Context, logger log.Logger, request RegistryRequest) (string, error) {
 	resolution, err := ResolveRegistrySourceWithAuth(ctx, logger, request)
 	return resolution.Source, err
@@ -64,13 +66,33 @@ type RegistryResolution struct {
 
 // ResolveRegistrySourceWithAuth also returns the registry authorization needed by a
 // same-origin archive. It never embeds credentials in the getter URL.
+//
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func ResolveRegistrySourceWithAuth(ctx context.Context, logger log.Logger, request RegistryRequest) (RegistryResolution, error) {
+	lookup, err := newRegistryLookup(request)
+	if err != nil {
+		return RegistryResolution{}, err
+	}
+	return lookup.resolve(ctx, logger)
+}
+
+// registryLookup holds one request's registry transport and authentication scope.
+type registryLookup struct {
+	client   *http.Client
+	auth     getter.RegistryAuth
+	request  RegistryRequest
+	source   *url.URL
+	domain   string
+	captured *registryAuthCapture
+}
+
+func newRegistryLookup(request RegistryRequest) (*registryLookup, error) {
 	source, err := url.Parse(request.Source)
 	if err != nil {
-		return RegistryResolution{}, fmt.Errorf("%w %q: %w", ErrInvalidRegistrySource, request.Source, err)
+		return nil, fmt.Errorf("%w %q: %w", ErrInvalidRegistrySource, request.Source, err)
 	}
 	if source.Scheme != getter.SchemeTFR {
-		return RegistryResolution{}, fmt.Errorf("%w: %q is not a tfr:// source", ErrInvalidRegistrySource, request.Source)
+		return nil, fmt.Errorf("%w: %q is not a tfr:// source", ErrInvalidRegistrySource, request.Source)
 	}
 	implementation := tfimpl.Terraform
 	if request.OpenTofu {
@@ -93,20 +115,24 @@ func ResolveRegistrySourceWithAuth(ctx context.Context, logger log.Logger, reque
 	if domain == "" {
 		domain = tfimpl.DefaultRegistryDomain(request.Environment, implementation)
 	}
-	base, err := getter.GetModuleRegistryURLBasePath(ctx, logger, client, auth, domain)
+	return &registryLookup{client: client, auth: auth, request: request, source: source, domain: domain, captured: captured}, nil
+}
+
+func (r *registryLookup) resolve(ctx context.Context, logger log.Logger) (RegistryResolution, error) {
+	base, err := getter.GetModuleRegistryURLBasePath(ctx, logger, r.client, r.auth, r.domain)
 	if err != nil {
-		return RegistryResolution{}, fmt.Errorf("%w: service discovery for %s: %w", ErrRegistryLookup, domain, err)
+		return RegistryResolution{}, fmt.Errorf("%w: service discovery for %s: %w", ErrRegistryLookup, r.domain, err)
 	}
-	modulePath, moduleSubdir := getter.SourceDirSubdir(source.Path)
-	version, err := registryVersion(ctx, logger, client, auth, request, source, domain, base, modulePath)
+	modulePath, moduleSubdir := getter.SourceDirSubdir(r.source.Path)
+	version, err := r.version(ctx, logger, base, modulePath)
 	if err != nil {
 		return RegistryResolution{}, err
 	}
-	moduleURL, err := getter.BuildRequestURL(domain, base, modulePath, version)
+	moduleURL, err := getter.BuildRequestURL(r.domain, base, modulePath, version)
 	if err != nil {
 		return RegistryResolution{}, fmt.Errorf("%w: module URL for %s: %w", ErrRegistryLookup, modulePath, err)
 	}
-	header, err := getter.GetTerraformGetHeader(ctx, logger, client, auth, moduleURL)
+	header, err := getter.GetTerraformGetHeader(ctx, logger, r.client, r.auth, moduleURL)
 	if err != nil {
 		return RegistryResolution{}, fmt.Errorf("%w: download header for %s: %w", ErrRegistryLookup, modulePath, err)
 	}
@@ -114,17 +140,24 @@ func ResolveRegistrySourceWithAuth(ctx context.Context, logger log.Logger, reque
 	if err != nil {
 		return RegistryResolution{}, fmt.Errorf("%w: download URL for %s: %w", ErrRegistryLookup, modulePath, err)
 	}
+	return r.resolution(download, moduleSubdir, moduleURL), nil
+}
+
+// resolution forwards authorization only to archives on the registry's exact origin.
+func (r *registryLookup) resolution(download, moduleSubdir string, moduleURL *url.URL) RegistryResolution {
 	archive, subdir := getter.SourceDirSubdir(download)
+	// Getter subdirectories are URL paths, with slash separators on every OS.
+	//nolint:forbidigo // filepath.Join would corrupt the getter URL on Windows.
 	resolution := RegistryResolution{Source: withSubdir(archive, path.Join(subdir, moduleSubdir))}
 	archiveURL, archiveErr := url.Parse(archive)
 	if archiveErr == nil && (archiveURL.Scheme == "https" || archiveURL.Scheme == "http") &&
 		archiveURL.Scheme == moduleURL.Scheme && strings.EqualFold(archiveURL.Host, moduleURL.Host) {
-		resolution.Authorization = captured.authorization(moduleURL)
+		resolution.Authorization = r.captured.authorization(moduleURL)
 		if resolution.Authorization != "" {
 			resolution.AuthOrigin = moduleURL.Scheme + "://" + moduleURL.Host
 		}
 	}
-	return resolution, nil
+	return resolution
 }
 
 type registryAuthCapture struct {
@@ -133,6 +166,7 @@ type registryAuthCapture struct {
 	byOrigin map[string]string
 }
 
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func (c *registryAuthCapture) RoundTrip(request *http.Request) (*http.Response, error) {
 	if value := request.Header.Get("Authorization"); value != "" {
 		c.mu.Lock()
@@ -155,25 +189,25 @@ func (c *registryAuthCapture) authorization(registry *url.URL) string {
 	return c.byOrigin[registry.Scheme+"://"+registry.Host]
 }
 
-// registryVersion applies Terragrunt's precedence: an exact `?version=`, else the terraform block's constraint,
+// version applies Terragrunt's precedence: an exact `?version=`, else the terraform block's constraint,
 // else the latest stable release.
-func registryVersion(ctx context.Context, logger log.Logger, client *http.Client, auth getter.RegistryAuth, request RegistryRequest, source *url.URL, domain, base, modulePath string) (string, error) {
-	versions, present := source.Query()["version"]
+func (r *registryLookup) version(ctx context.Context, logger log.Logger, base, modulePath string) (string, error) {
+	versions, present := r.source.Query()["version"]
 	if present {
 		if len(versions) != 1 || versions[0] == "" {
 			return "", fmt.Errorf("%w: the version query must appear once and not be empty", ErrMalformedRegistryVersion)
 		}
-		if getter.SourceHasVersionConstraint(request.Source) {
-			return "", fmt.Errorf("%w: the source %q sets a version constraint in its ?version= query, which accepts an exact version only; express a constraint with the terraform block's version attribute instead", ErrRegistryVersionConstraint, request.Source)
+		if getter.SourceHasVersionConstraint(r.request.Source) {
+			return "", fmt.Errorf("%w: the source %q sets a version constraint in its ?version= query, which accepts an exact version only; express a constraint with the terraform block's version attribute instead", ErrRegistryVersionConstraint, r.request.Source)
 		}
 		return versions[0], nil
 	}
 	var version string
 	var err error
-	if request.Constraint != "" {
-		version, err = getter.GetMatchingModuleVersion(ctx, logger, client, auth, domain, base, modulePath, request.Constraint)
+	if r.request.Constraint != "" {
+		version, err = getter.GetMatchingModuleVersion(ctx, logger, r.client, r.auth, r.domain, base, modulePath, r.request.Constraint)
 	} else {
-		version, err = getter.GetLatestModuleVersion(ctx, logger, client, auth, domain, base, modulePath)
+		version, err = getter.GetLatestModuleVersion(ctx, logger, r.client, r.auth, r.domain, base, modulePath)
 	}
 	if err != nil {
 		return "", fmt.Errorf("%w: version of %s: %w", ErrRegistryLookup, modulePath, err)

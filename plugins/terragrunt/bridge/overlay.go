@@ -22,6 +22,8 @@ var ErrUnsupportedOverlay = errors.New("unit file cannot be exported through the
 // owner-only or otherwise unreadable-by-others files, such as copied keys, stay
 // private. The host ignores modes on Windows, so the exported modes only take
 // effect on platforms with POSIX permission bits.
+//
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.TerraformConfig) (map[string][]byte, map[string]uint32, error) {
 	memory := afero.NewMemMapFs()
 	// Upstream joins the copy source with each include and exclude pattern and expands the result as
@@ -43,6 +45,11 @@ func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.Te
 		util.WithIncludeInCopy(include...), util.WithExcludeFromCopy(exclude...)); err != nil {
 		return nil, nil, err
 	}
+	return collectOverlayFiles(memory, fsys, unit, destination)
+}
+
+// collectOverlayFiles exports the copied bytes and conservative permission bits.
+func collectOverlayFiles(memory, fsys afero.Fs, unit, destination string) (map[string][]byte, map[string]uint32, error) {
 	files := map[string][]byte{}
 	modes := map[string]uint32{}
 	err := afero.Walk(memory, destination, func(path string, info os.FileInfo, err error) error {
@@ -130,6 +137,7 @@ func under(root, path string) bool {
 	return err == nil && filepath.IsLocal(rel)
 }
 
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func (r rebaseFs) Open(name string) (afero.File, error) {
 	target, err := r.resolve("open", name)
 	if err != nil {
@@ -138,6 +146,7 @@ func (r rebaseFs) Open(name string) (afero.File, error) {
 	return r.Fs.Open(target)
 }
 
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func (r rebaseFs) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
 	target, err := r.resolve("open", name)
 	if err != nil {
@@ -146,6 +155,7 @@ func (r rebaseFs) OpenFile(name string, flag int, perm os.FileMode) (afero.File,
 	return r.Fs.OpenFile(target, flag, perm)
 }
 
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func (r rebaseFs) Stat(name string) (os.FileInfo, error) {
 	target, err := r.resolve("stat", name)
 	if err != nil {
@@ -155,6 +165,8 @@ func (r rebaseFs) Stat(name string) (os.FileInfo, error) {
 }
 
 // LstatIfPossible lets the copy tell a symlink from the file it points to.
+//
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func (r rebaseFs) LstatIfPossible(name string) (os.FileInfo, bool, error) {
 	target, err := r.resolve("lstat", name)
 	if err != nil {
@@ -168,6 +180,8 @@ func (r rebaseFs) LstatIfPossible(name string) (os.FileInfo, bool, error) {
 }
 
 // ReadlinkIfPossible reports a link's target, which stays a real path.
+//
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func (r rebaseFs) ReadlinkIfPossible(name string) (string, error) {
 	target, err := r.resolve("readlink", name)
 	if err != nil {
@@ -187,14 +201,20 @@ func (r rebaseFs) ReadlinkIfPossible(name string) (string, error) {
 // access to the file. The unit directory itself is not considered because the
 // host owns the working directory's mode.
 func restrictByDirectories(fsys afero.Fs, unit, dir string, perm os.FileMode) os.FileMode {
+	const (
+		groupExecute = 0o010
+		groupAccess  = 0o070
+		otherExecute = 0o001
+		otherAccess  = 0o007
+	)
 	for dir != "." && dir != string(filepath.Separator) && dir != "" {
 		if info, err := fsys.Stat(filepath.Join(unit, dir)); err == nil {
 			mode := info.Mode().Perm()
-			if mode&0o010 == 0 {
-				perm &^= 0o070
+			if mode&groupExecute == 0 {
+				perm &^= groupAccess
 			}
-			if mode&0o001 == 0 {
-				perm &^= 0o007
+			if mode&otherExecute == 0 {
+				perm &^= otherAccess
 			}
 		}
 		dir = filepath.Dir(dir)
@@ -206,8 +226,11 @@ func restrictByDirectories(fsys afero.Fs, unit, dir string, perm os.FileMode) os
 // default the host applies to files without a mode (0644): it is executable, or
 // group or other lacks read access.
 func exportsMode(perm os.FileMode) bool {
-	const groupAndOtherRead = 0o044
-	return perm&0o111 != 0 || perm&groupAndOtherRead != groupAndOtherRead
+	const (
+		groupAndOtherRead = 0o044
+		executeBits       = 0o111
+	)
+	return perm&executeBits != 0 || perm&groupAndOtherRead != groupAndOtherRead
 }
 
 // checkOverlayFile rejects a committed provider lock file. Atmos manages the

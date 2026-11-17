@@ -423,7 +423,11 @@ func TestBaseCredentialsFromAnSSOProfileReadTheInvocationTokenCache(t *testing.T
 			home := homeWithProfiles(t, "", form.config)
 			invocation := append(invocationHome(home), "AWS_PROFILE=sso")
 
-			_, _, err := resolveBase(t, invocation...)
+			_, _, err := resolveBase(t, "AWS_PROFILE=sso", "AWS_CONFIG_FILE="+filepath.Join(home, ".aws", "config"))
+			require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig, "an explicit profile without an invocation home cannot select the process cache")
+			assert.Empty(t, *tokens, "the process login is never sent when the invocation home is absent")
+
+			_, _, err = resolveBase(t, invocation...)
 			require.Error(t, err, "an invocation without a cached login fails instead of using the process login")
 			assert.Empty(t, *tokens, "the process login is never sent")
 

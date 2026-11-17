@@ -15,31 +15,59 @@ import (
 func generatedFiles(ctx context.Context, logger log.Logger, cfg *config.TerragruntConfig, result *model.Resolution) error {
 	result.GeneratedPolicies = make(map[string]string)
 	result.UnitFileCopies = make(map[string]bool)
-	for name, generated := range cfg.GenerateConfigs {
-		if generated.Disable && (generated.IfDisabledStr == "" || generated.IfDisabledStr == "skip") {
+	for _, generated := range cfg.GenerateConfigs {
+		if skipDisabledGeneration(generated.Disable, generated.IfDisabledStr) {
 			continue
 		}
-		if !filepath.IsLocal(generated.Path) || generated.Path == "." {
-			return &model.Problem{
-				Code: model.CodeInvalidGenerate, Summary: "A `generate` block writes outside the unit's working directory", Detail: fmt.Sprintf("The `generate` path %q is absolute or escapes the working directory.", generated.Path),
-				Hints: []string{"Use a relative `path` without `..`, for example `path = \"provider.tf\"`."}, File: result.Path, Key: "generate", Safe: true, Err: ErrUnsupportedExecution,
-			}
+		if err := validateGeneratedPath(generated.Path, result); err != nil {
+			return err
 		}
 		path := filepath.Clean(generated.Path)
-		if _, exists := result.GeneratedPolicies[path]; exists {
-			return &model.Problem{
-				Code: model.CodeInvalidGenerate, Summary: "Two `generate` blocks write the same file", Detail: fmt.Sprintf("More than one `generate` block writes %q.", generated.Path),
-				Hints: []string{"Give each `generate` block a distinct `path`."}, File: result.Path, Key: "generate", Safe: true, Err: ErrUnsupportedExecution,
+		policy := generated.IfExistsStr
+		if generated.Disable {
+			policy = generated.IfDisabledStr
+			result.Generated[path] = ""
+		} else {
+			content, err := atmosbridge.RenderGenerated(ctx, logger, generated)
+			if err != nil {
+				return err
 			}
+			result.Generated[path] = string(content)
+			// Any generate block can interpolate credentials, regardless of its target.
+			markSensitive(result, path)
 		}
-		if err := renderGeneratedFile(ctx, logger, cfg, result, name); err != nil {
-			return err
+		result.GeneratedPolicies[path] = policy
+		if !generated.Disable && declaresBackend(path, result.Generated[path]) {
+			// Arbitrary Terraform text has no verified state-reader identity.
+			return unresolvedGeneratedBackend(result.Path)
 		}
 	}
 	if err := unitLockFile(result); err != nil {
 		return err
 	}
 	return generatedBackend(ctx, logger, cfg, result)
+}
+
+// skipDisabledGeneration omits declarations whose disabled policy leaves the file untouched.
+func skipDisabledGeneration(disabled bool, policy string) bool {
+	return disabled && (policy == "" || policy == "skip")
+}
+
+// validateGeneratedPath rejects escaping and duplicate targets before rendering their bytes.
+func validateGeneratedPath(path string, result *model.Resolution) error {
+	if !filepath.IsLocal(path) || path == "." {
+		return &model.Problem{
+			Code: model.CodeInvalidGenerate, Summary: "A `generate` block writes outside the unit's working directory", Detail: fmt.Sprintf("The `generate` path %q is absolute or escapes the working directory.", path),
+			Hints: []string{"Use a relative `path` without `..`, for example `path = \"provider.tf\"`."}, File: result.Path, Key: "generate", Safe: true, Err: ErrUnsupportedExecution,
+		}
+	}
+	if _, exists := result.GeneratedPolicies[filepath.Clean(path)]; exists {
+		return &model.Problem{
+			Code: model.CodeInvalidGenerate, Summary: "Two `generate` blocks write the same file", Detail: fmt.Sprintf("More than one `generate` block writes %q.", path),
+			Hints: []string{"Give each `generate` block a distinct `path`."}, File: result.Path, Key: "generate", Safe: true, Err: ErrUnsupportedExecution,
+		}
+	}
+	return nil
 }
 
 func generatedBackend(ctx context.Context, logger log.Logger, cfg *config.TerragruntConfig, result *model.Resolution) error {
@@ -77,29 +105,4 @@ func markSensitive(result *model.Resolution, path string) {
 		result.SensitiveGenerated = map[string]bool{}
 	}
 	result.SensitiveGenerated[path] = true
-}
-
-// renderGeneratedFile applies a validated generation policy and rejects unverified backends.
-func renderGeneratedFile(ctx context.Context, logger log.Logger, cfg *config.TerragruntConfig, result *model.Resolution, name string) error {
-	generated := cfg.GenerateConfigs[name]
-	path := filepath.Clean(generated.Path)
-	policy := generated.IfExistsStr
-	if generated.Disable {
-		policy = generated.IfDisabledStr
-		result.Generated[path] = ""
-	} else {
-		content, err := atmosbridge.RenderGenerated(ctx, logger, generated)
-		if err != nil {
-			return err
-		}
-		result.Generated[path] = string(content)
-		// Any generate block can interpolate credentials, regardless of its target.
-		markSensitive(result, path)
-	}
-	result.GeneratedPolicies[path] = policy
-	if !generated.Disable && declaresBackend(path, result.Generated[path]) {
-		// Arbitrary Terraform text has no verified state-reader identity.
-		return unresolvedGeneratedBackend(result.Path)
-	}
-	return nil
 }

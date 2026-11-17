@@ -29,18 +29,27 @@ import (
 type Venv = venv.Venv
 
 // Environment isolates invocation environments and output writers.
+//
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func Environment(env map[string]string, stdout, stderr io.Writer) *venv.Venv {
 	// Invocation environments must not replace the plugin's process-wide environment.
 	return venv.OSVenv().WithExec(scopedExec{Exec: vexec.NewOSExec(), environment: env}).WithEnv(env).WithReplaceEnviron(func(map[string]string) error { return nil }).WithWriter(stdout).WithErrWriter(stderr)
 }
 
+var (
+	errDiscoveryExecution  = errors.New("read-only discovery cannot execute")
+	errDiscoveryDecryption = errors.New("read-only discovery cannot decrypt")
+)
+
 // Discovery denies process execution, network access, and decryption. Only an
 // explicit stack generation phase may write its generated files.
+//
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func Discovery(v *venv.Venv, generate bool) *venv.Venv {
 	v = v.WithHandler(func(_ context.Context, inv vexec.Invocation) vexec.Result {
-		return vexec.Result{Err: fmt.Errorf("read-only discovery cannot execute %s", inv.Name)}
+		return vexec.Result{Err: fmt.Errorf("%w %s", errDiscoveryExecution, inv.Name)}
 	}).WithHTTP(vhttp.NewNoNetworkClient()).WithSops(vsops.NewMemDecrypter(func(_ map[string]string, path, _ string) ([]byte, error) {
-		return nil, fmt.Errorf("read-only discovery cannot decrypt %s", path)
+		return nil, fmt.Errorf("%w %s", errDiscoveryDecryption, path)
 	}))
 	if !generate {
 		v = v.WithFS(afero.NewReadOnlyFs(v.FS))
@@ -49,6 +58,8 @@ func Discovery(v *venv.Venv, generate bool) *venv.Venv {
 }
 
 // WorkingDir uses upstream cache identity without downloading or changing state.
+//
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func WorkingDir(logger log.Logger, env *venv.Venv, source, download, directory string) (string, error) {
 	resolved, err := tf.NewSource(logger, env.FS, source, download, directory, false)
 	if err != nil {
@@ -62,6 +73,8 @@ func WorkingDir(logger log.Logger, env *venv.Venv, source, download, directory s
 // generation, it never lists or generates other stack files under the same
 // directory; callers recurse into the nested stacks the file declares. It does
 // not execute the Terragrunt CLI or apply infrastructure.
+//
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func GenerateStack(ctx context.Context, logger log.Logger, env *venv.Venv, path, tofu string) error {
 	opts := options.NewTerragruntOptions(env.Exec)
 	opts.WorkingDir = filepath.Dir(path)
@@ -81,6 +94,8 @@ func GenerateStack(ctx context.Context, logger log.Logger, env *venv.Venv, path,
 }
 
 // IsDestroyOperation uses upstream boolean flag parsing, including last-value precedence.
+//
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func IsDestroyOperation(command string, arguments []string) bool {
 	return command == "destroy" || iacargs.HasDestroyFlag(arguments)
 }

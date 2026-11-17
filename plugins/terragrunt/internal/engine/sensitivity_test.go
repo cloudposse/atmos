@@ -60,7 +60,7 @@ func TestApplyTimeReparseWithholdsTransformedSensitiveInput(t *testing.T) {
 	environment, err := evaluationEnvironment(ctx, &request, nil, request.Path)
 	require.NoError(t, err)
 	pctx := requestParsingContext(&request, request.Path)
-	unit := unitEvaluator{logger: l, environment: environment, pctx: pctx, request: request, path: request.Path}
+	unit := unitEvaluator{logger: l, environment: environment, pctx: pctx, request: &request, path: request.Path}
 	cfg, err := unit.parseUnit(ctx)
 	require.NoError(t, err)
 	body, err := os.ReadFile(request.Path)

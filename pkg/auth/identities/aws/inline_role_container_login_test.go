@@ -178,3 +178,43 @@ func TestContainerEndpointClientBoundsRequests(t *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	})
 }
+
+func TestLoginSessionWithoutInvocationHomeDoesNotReadProcessCache(t *testing.T) {
+	const session = "arn:aws:iam::123456789012:user/example"
+	processHome := t.TempDir()
+	processCache := filepath.Join(processHome, ".aws", "login", "cache")
+	writeLoginToken(t, session, processCache, "AKIAPROCESSCACHE")
+	t.Setenv("HOME", processHome)
+	t.Setenv("USERPROFILE", processHome)
+	t.Setenv("AWS_LOGIN_CACHE_DIRECTORY", processCache)
+	home := homeWithProfiles(t, "", "[default]\nlogin_session = "+session+"\nregion = us-east-1\n")
+	env := map[string]string{"AWS_CONFIG_FILE": filepath.Join(home, ".aws", "config")}
+
+	value, err := baseCredentials(t.Context(), env)
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+	require.Nil(t, value, "credentials from the process cache must never escape")
+
+	// An explicit invocation cache remains sufficient even without an invocation home.
+	invocationCache := t.TempDir()
+	writeLoginToken(t, session, invocationCache, "AKIAINVOCATION")
+	env["AWS_LOGIN_CACHE_DIRECTORY"] = invocationCache
+	value, err = baseCredentials(t.Context(), env)
+	require.NoError(t, err)
+	require.Equal(t, "AKIAINVOCATION", value.AccessKeyID)
+	require.Equal(t, processHome, os.Getenv("HOME"))
+	require.Equal(t, processHome, os.Getenv("USERPROFILE"))
+	require.Equal(t, processCache, os.Getenv("AWS_LOGIN_CACHE_DIRECTORY"))
+}
+
+func TestExplicitStaticProfileDoesNotRequireInvocationHome(t *testing.T) {
+	poisoned := poisonProcessEnvironment(t)
+	home := homeWithProfiles(t, "[default]\naws_access_key_id = invocation-key\naws_secret_access_key = invocation-secret\n", "")
+	value, err := baseCredentials(t.Context(), map[string]string{
+		"AWS_SHARED_CREDENTIALS_FILE": filepath.Join(home, ".aws", "credentials"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "invocation-key", value.AccessKeyID)
+	require.Equal(t, "invocation-secret", value.SecretAccessKey)
+	assertProcessEnvironmentUnchanged(t, poisoned)
+}

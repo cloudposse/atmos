@@ -17,6 +17,7 @@ type scopedExec struct {
 	environment map[string]string
 }
 
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func (e scopedExec) LookPath(file string) (string, error) {
 	if filepath.IsAbs(file) || strings.ContainsAny(file, `/\`) {
 		return e.Exec.LookPath(file)
@@ -44,6 +45,7 @@ func (e scopedExec) LookPath(file string) (string, error) {
 	return "", &exec.Error{Name: file, Err: exec.ErrNotFound}
 }
 
+//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func (e scopedExec) Command(ctx context.Context, name string, args ...string) vexec.Cmd {
 	// Explicit relative commands belong to the unit's directory, which upstream
 	// assigns with SetDir after constructing the command. Let os/exec resolve
