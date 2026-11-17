@@ -6107,6 +6107,20 @@
     },
     "GitPushConfig": {
       "properties": {
+        "retry": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RetryConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Retry uses the shared retry policy; when set it takes precedence over Retries."
+        },
         "retries": {
           "anyOf": [
             {
@@ -8816,16 +8830,6 @@
             }
           ]
         },
-        "key_pattern": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "stores": {
           "anyOf": [
             {
@@ -8879,7 +8883,7 @@
         }
       },
       "type": "object",
-      "description": "PlanfilesConfig contains configuration for planfile storage backends."
+      "description": "PlanfilesConfig contains configuration for planfile storage backends.\n\nThe storage key layout is intentionally not configurable: stored plans are always keyed\n`{stack}/{component}/{sha}.tfplan.tar`. Listing (S3 prefix queries), source-tree\nreferences (`tree-` keys), and the `atmos terraform planfile` commands all rely on that shape."
     },
     "PluginDiscoveryConfig": {
       "properties": {

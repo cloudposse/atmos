@@ -32,8 +32,8 @@ func ExecuteDown(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	return spinner.ExecWithSpinner(
-		fmt.Sprintf("Stopping %s", r.component),
-		fmt.Sprintf("%s is down", r.component),
+		fmt.Sprintf("Stopping `%s`", r.component),
+		fmt.Sprintf("`%s` is down", r.component),
 		func() error { return ctr.Down(ctx, runtime, r.stack, cfg.ContainerComponentType, r.component) },
 	)
 }
@@ -102,8 +102,8 @@ func ExecuteRestart(ctx context.Context, info *schema.ConfigAndStacksInfo) error
 	}
 	id := containerRef(d.in)
 	return spinner.ExecWithSpinner(
-		fmt.Sprintf("Restarting %s", d.r.component),
-		fmt.Sprintf("%s restarted", d.r.component),
+		fmt.Sprintf("Restarting `%s`", d.r.component),
+		fmt.Sprintf("`%s` restarted", d.r.component),
 		func() error {
 			if ctr.IsContainerRunning(d.in.Status) {
 				if err := d.runtime.Stop(ctx, id, defaultStopTimeout); err != nil {
@@ -129,12 +129,12 @@ func ExecuteStart(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	if ctr.IsContainerRunning(d.in.Status) {
-		ui.Infof("%s is already running", d.r.component)
+		ui.Infof("`%s` is already running", d.r.component)
 		return nil
 	}
 	if err := spinner.ExecWithSpinner(
-		fmt.Sprintf("Starting %s", d.r.component),
-		fmt.Sprintf("%s started", d.r.component),
+		fmt.Sprintf("Starting `%s`", d.r.component),
+		fmt.Sprintf("`%s` started", d.r.component),
 		func() error { return d.runtime.Start(ctx, containerRef(d.in)) },
 	); err != nil {
 		return fmt.Errorf("%w: start %q: %w", errUtils.ErrComponentExecutionFailed, d.r.component, err)
@@ -151,8 +151,8 @@ func ExecuteStop(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	if err := spinner.ExecWithSpinner(
-		fmt.Sprintf("Stopping %s", d.r.component),
-		fmt.Sprintf("%s stopped", d.r.component),
+		fmt.Sprintf("Stopping `%s`", d.r.component),
+		fmt.Sprintf("`%s` stopped", d.r.component),
 		func() error { return d.runtime.Stop(ctx, containerRef(d.in), defaultStopTimeout) },
 	); err != nil {
 		return fmt.Errorf("%w: stop %q: %w", errUtils.ErrComponentExecutionFailed, d.r.component, err)
@@ -169,8 +169,8 @@ func ExecuteRm(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	if err := spinner.ExecWithSpinner(
-		fmt.Sprintf("Removing %s", d.r.component),
-		fmt.Sprintf("%s removed", d.r.component),
+		fmt.Sprintf("Removing `%s`", d.r.component),
+		fmt.Sprintf("`%s` removed", d.r.component),
 		func() error { return d.runtime.Remove(ctx, containerRef(d.in), true) },
 	); err != nil {
 		return fmt.Errorf("%w: remove %q: %w", errUtils.ErrComponentExecutionFailed, d.r.component, err)

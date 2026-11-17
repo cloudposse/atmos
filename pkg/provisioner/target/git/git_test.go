@@ -520,7 +520,7 @@ func isolatedGitEnv(t *testing.T) {
 
 func gitCmd(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	result, err := atmosgit.NewExecRunner().Run(context.Background(), "git", args, atmosgit.RunOptions{Dir: dir, Env: os.Environ()})
+	result, err := atmosgit.NewExecRunner().Run(context.Background(), "git", args, &atmosgit.RunOptions{Dir: dir, Env: os.Environ()})
 	require.NoError(t, err, "git %v: %s", args, result.StderrTail)
 	return result.Stdout
 }
@@ -740,4 +740,44 @@ func TestDeliverIntegrationPublishesToRepo(t *testing.T) {
 	gitCmd(t, verify, "pull", "--ff-only")
 	commitsAfter := gitCmd(t, verify, "rev-list", "--count", "HEAD")
 	assert.Equal(t, commitsBefore, commitsAfter, "re-delivering identical artifact must be a no-op")
+}
+
+// Managed reads must not follow symlinks outside the publishing directory.
+func TestWalkManagedDirConfinesReads(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "inside"), []byte("managed"), 0o600))
+	files, err := walkManagedDir(root)
+	require.NoError(t, err)
+	assert.Equal(t, map[string][]byte{"inside": []byte("managed")}, files)
+	outside := filepath.Join(t.TempDir(), "secret")
+	require.NoError(t, os.WriteFile(outside, []byte("private"), 0o600))
+	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink creation requires privileges: %v", err)
+		}
+		require.NoError(t, err)
+	}
+	files, err = walkManagedDir(root)
+	require.ErrorIs(t, err, errUtils.ErrGitArtifactRead)
+	assert.Nil(t, files)
+}
+
+// An unopenable managed root must fail loudly rather than look like an empty tree.
+func TestWalkManagedDirRejectsUnopenableRoot(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "not-a-dir")
+	require.NoError(t, os.WriteFile(file, []byte("data"), 0o600))
+	tests := []struct {
+		name string
+		root string
+	}{
+		{name: "missing directory", root: filepath.Join(t.TempDir(), "absent")},
+		{name: "regular file", root: file},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			files, err := walkManagedDir(tt.root)
+			require.ErrorIs(t, err, errUtils.ErrGitArtifactRead)
+			assert.Nil(t, files)
+		})
+	}
 }

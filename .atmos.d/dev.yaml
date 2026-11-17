@@ -91,6 +91,8 @@ commands:
           - type: script
             interpreter: starlark
             script: |
+              if os.getenv("ATMOS_DEV_SHELL") == "1":
+                  fail("Already in an Atmos development shell. Run `exit` to leave it before starting another.")
               ui.info("Entering the **development shell**, with `build/` first on `PATH`.\nRun `exit` to return.")
           - type: exec
             command: |

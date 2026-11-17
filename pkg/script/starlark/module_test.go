@@ -202,7 +202,8 @@ _private = []
 def change():
     _private.append(1)
 `,
-		"bad.star": "def broken():\n    fail(\"broken library\")\nbroken()",
+		"bad.star":     "def broken():\n    fail(\"broken library\")\nbroken()",
+		"runtime.star": "def broken():\n    return 1 // 0\nbroken()",
 	})
 	for _, tc := range []struct{ source, want string }{
 		{`module.load()`, "missing"},
@@ -224,11 +225,17 @@ def change():
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
-	t.Run("traceback", func(t *testing.T) {
+	t.Run("intentional failure", func(t *testing.T) {
 		t.Parallel()
 		_, err := New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: `module.load("bad.star")`})
 		require.ErrorContains(t, err, "broken library")
-		assert.Contains(t, errorDetails(err), filepath.Join(dir, "bad.star")+":2")
+		assert.NotContains(t, errorDetails(err), "Traceback")
+	})
+	t.Run("traceback", func(t *testing.T) {
+		t.Parallel()
+		_, err := New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: `module.load("runtime.star")`})
+		require.ErrorContains(t, err, "division by zero")
+		assert.Contains(t, errorDetails(err), filepath.Join(dir, "runtime.star")+":2")
 	})
 }
 

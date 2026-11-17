@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/signals"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -53,7 +54,7 @@ func (b *viewportTail) snapshot() string {
 }
 
 type (
-	viewportRefreshMsg  struct{}
+	viewportRefreshMsg  struct{ at time.Time }
 	viewportFinishedMsg struct{}
 )
 
@@ -64,6 +65,9 @@ type outputViewportModel struct {
 	maxWidth, maxHeight int
 	padding             int
 	spinner             spinner.Model
+	startedAt           time.Time
+	elapsed             time.Duration
+	color               bool
 	done                bool
 }
 
@@ -76,7 +80,7 @@ func (m *outputViewportModel) Init() tea.Cmd {
 
 // refresh schedules the next viewport redraw while the subprocess runs.
 func (m *outputViewportModel) refresh() tea.Cmd {
-	return tea.Tick(viewportRefresh, func(time.Time) tea.Msg { return viewportRefreshMsg{} })
+	return tea.Tick(viewportRefresh, func(at time.Time) tea.Msg { return viewportRefreshMsg{at: at} })
 }
 
 // Update handles terminal resizing, animation, and clearing the completed viewport.
@@ -95,6 +99,9 @@ func (m *outputViewportModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.done = true
 		return m, tea.Quit
 	case viewportRefreshMsg:
+		if !m.startedAt.IsZero() {
+			m.elapsed = max(0, msg.at.Sub(m.startedAt))
+		}
 		return m, m.refresh()
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -124,23 +131,33 @@ func (m *outputViewportModel) View() string {
 	inset := strings.Repeat(" ", padding)
 	contentWidth := width - 2*padding
 	rows := max(0, height-1)
-	text := strings.ReplaceAll(ansi.Strip(m.tail.snapshot()), "\r\n", "\n")
-	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	lines := viewportLines(m.tail.snapshot(), m.color)
 	if len(lines) > rows {
 		lines = lines[len(lines)-rows:]
 	}
 	var view strings.Builder
 	for _, line := range lines {
-		// Treat carriage-return progress messages as updates to the same row.
-		if index := strings.LastIndex(line, "\r"); index >= 0 {
-			line = line[index+1:]
-		}
-		line = strings.ReplaceAll(line, "\t", "    ")
 		view.WriteString(terminal.EscResetLine + inset + ansi.Truncate(line, contentWidth, "…") + inset)
 		view.WriteByte('\n')
 	}
-	view.WriteString(terminal.EscResetLine + inset + ansi.Truncate(m.spinner.View()+" "+m.title, contentWidth, "…") + inset)
+	view.WriteString(terminal.EscResetLine + inset + m.statusLine(contentWidth) + inset)
 	return view.String()
+}
+
+// statusLine reserves the right edge for elapsed time, truncating the command first.
+func (m *outputViewportModel) statusLine(width int) string {
+	elapsed := m.elapsed.Truncate(time.Second).String()
+	elapsed = ansi.Truncate(elapsed, width, "")
+	elapsedWidth := ansi.StringWidth(elapsed)
+	if m.color {
+		elapsed = theme.GetCurrentStyles().Muted.Render(elapsed)
+	}
+	if width <= elapsedWidth {
+		return elapsed
+	}
+	label := ansi.Truncate(m.spinner.View()+" "+m.title, width-elapsedWidth-1, "…")
+	gap := strings.Repeat(" ", width-ansi.StringWidth(label)-elapsedWidth)
+	return label + gap + elapsed
 }
 
 // executeViewportWithIO captures masked streams, shows their live tail, and reveals full logs on failure.
@@ -165,7 +182,8 @@ func (w *OutputModeWriter) executeViewportWithIO(runner func(stdout, stderr io.W
 	}
 	model := &outputViewportModel{
 		tail: tail, title: title, width: width, height: height,
-		spinner: ui.NewSpinner(),
+		startedAt: time.Now(),
+		spinner:   ui.NewSpinner(), color: term.ColorProfileFor(terminal.Stderr) != terminal.ColorNone,
 	}
 	if w.viewport != nil {
 		model.maxWidth, model.maxHeight = w.viewport.Width, w.viewport.Height

@@ -59,6 +59,8 @@ type EnvSetter interface {
 
 // BuildConfig represents container image build configuration.
 type BuildConfig struct {
+	// Output receives live build diagnostics; nil keeps capture-only behavior.
+	Output     io.Writer
 	Dockerfile string
 	Context    string
 	Engine     string

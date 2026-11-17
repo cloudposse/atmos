@@ -52,14 +52,14 @@ func WithInvokingCommand(cmd *cobra.Command) ShellCommandOption {
 }
 
 // WithExecMetadataParser supplies the parser for command-specific execution results.
-func WithExecMetadataParser(fn func(string, int, string) any) ShellCommandOption {
+func WithExecMetadataParser(fn func(string, string, int, string) any) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithExecMetadataParser")()
 
 	return component.WithExecMetadataParser(fn)
 }
 
 // execMetadataParserFromOpts returns the command-result parser, or nil when none was supplied.
-func execMetadataParserFromOpts(opts ...ShellCommandOption) func(string, int, string) any {
+func execMetadataParserFromOpts(opts ...ShellCommandOption) func(string, string, int, string) any {
 	return component.MetadataParserFromOptions(opts...)
 }
 

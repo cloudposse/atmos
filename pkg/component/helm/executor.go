@@ -415,12 +415,11 @@ func runDiff(
 	ctx, cancel := context.WithTimeout(callerCtx, renderTimeout)
 	defer cancel()
 
-	desired, err := renderChartManifest(ctx, spec)
+	baseline, renderSpec, err := prepareDiff(ctx, atmosConfig, info, flags, spec)
 	if err != nil {
 		return "", err
 	}
-
-	baseline, err := resolveDiffBaseline(callerCtx, atmosConfig, info, flags, spec)
+	desired, err := renderChartManifest(ctx, renderSpec)
 	if err != nil {
 		return "", err
 	}

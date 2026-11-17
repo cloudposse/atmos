@@ -1,0 +1,39 @@
+base_path: .
+components:
+  terraform:
+    base_path: components/terraform
+    auto_generate_backend_file: false
+    deploy_run_init: true
+    # Persist CI plan previews across ephemeral job checkouts. Apply deliberately
+    # replans the merged commit; this store is not an approval handoff.
+    planfiles:
+      default: local
+      stores:
+        local:
+          type: local/dir
+          options:
+            path: /state/planfiles
+            # Native CI uses <stack>/<component>/<commit>.tfplan.tar keys.
+stacks:
+  base_path: stacks
+  included_paths: [deploy/**/*]
+  name_template: "{{ .vars.stage }}"
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: local/backstage-aws
+
+# Gitea Actions is detected by Atmos. File-based reporting needs no API token.
+ci:
+  enabled: true
+  summary:
+    enabled: true
+  output:
+    enabled: true
+  # Enable these only after provisioning a repository-scoped Gitea API token.
+  checks:
+    enabled: false
+  comments:
+    enabled: false
+    behavior: upsert

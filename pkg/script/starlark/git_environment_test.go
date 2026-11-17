@@ -18,10 +18,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/script/starlark/internal/threadcontext"
 )
 
-type sandboxGitRunner func(context.Context, string, []string, atmosgit.RunOptions) (atmosgit.RunResult, error)
+type sandboxGitRunner func(context.Context, string, []string, *atmosgit.RunOptions) (atmosgit.RunResult, error)
 
-//nolint:gocritic // Match the Runner interface's value parameter.
-func (f sandboxGitRunner) Run(ctx context.Context, command string, args []string, opts atmosgit.RunOptions) (atmosgit.RunResult, error) {
+func (f sandboxGitRunner) Run(ctx context.Context, command string, args []string, opts *atmosgit.RunOptions) (atmosgit.RunResult, error) {
 	return f(ctx, command, args, opts)
 }
 
@@ -72,7 +71,7 @@ git.sandbox(run=check, env={"SANDBOX_TEST": "child"}, path_prepend=["tools"], fi
 func TestGitSandboxInvalidEnvironmentCleansCheckout(t *testing.T) {
 	root := sandboxRepo(t)
 	var checkout string
-	runner := sandboxGitRunner(func(ctx context.Context, command string, args []string, opts atmosgit.RunOptions) (atmosgit.RunResult, error) {
+	runner := sandboxGitRunner(func(ctx context.Context, command string, args []string, opts *atmosgit.RunOptions) (atmosgit.RunResult, error) {
 		if args[0] == "init" {
 			checkout = opts.Dir
 		}

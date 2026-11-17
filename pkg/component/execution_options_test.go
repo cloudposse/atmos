@@ -17,7 +17,9 @@ func TestExecutionOptionsPreserveStreamsAndReporting(t *testing.T) {
 	var stdout, stderr, override, metadataOut, metadataErr bytes.Buffer
 	command := &cobra.Command{Use: "plan"}
 	var metrics *metricsprocess.ProcessMetrics
-	parser := func(command string, code int, output string) any { return []any{command, code, output} }
+	parser := func(command, component string, code int, output string) any {
+		return []any{command, component, code, output}
+	}
 	options := []ExecutionOption{
 		WithInvokingCommand(command), WithExecMetadataParser(parser),
 		WithMetricsCallback(func(value *metricsprocess.ProcessMetrics) { metrics = value }),
@@ -38,7 +40,7 @@ func TestExecutionOptionsPreserveStreamsAndReporting(t *testing.T) {
 	require.NotNil(t, resolved.Streams.Stdin)
 	assert.Equal(t, []string{"TOKEN=component"}, resolved.ProcessEnv)
 	require.Same(t, command, InvokingCommandFromOptions(options...))
-	assert.Equal(t, []any{"plan", 2, "changes"}, MetadataParserFromOptions(options...)("plan", 2, "changes"))
+	assert.Equal(t, []any{"plan", "cdn", 2, "changes"}, MetadataParserFromOptions(options...)("plan", "cdn", 2, "changes"))
 	out, errOut := MetadataOutputCaptureFromOptions(options...)
 	require.Same(t, &metadataOut, out)
 	require.Same(t, &metadataErr, errOut)

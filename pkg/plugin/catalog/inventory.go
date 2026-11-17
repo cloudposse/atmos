@@ -62,7 +62,7 @@ func ReadInventory(ctx context.Context, options ...InventoryOption) ([]ReleaseSe
 	if o.runner == nil || !inventory.SafePath(o.file) || o.head == "" {
 		return nil, fmt.Errorf("%w: catalog inventory requires a repository-relative path and a committed revision", errUtils.ErrPluginInvalidConfig)
 	}
-	result, err := o.runner.Run(ctx, "git", []string{"rev-parse", "--verify", "--end-of-options", o.head + "^{commit}"}, pkgit.RunOptions{})
+	result, err := o.runner.Run(ctx, "git", []string{"rev-parse", "--verify", "--end-of-options", o.head + "^{commit}"}, &pkgit.RunOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("%w: resolve catalog inventory revision: %w", errUtils.ErrPluginInvalidConfig, err)
 	}
@@ -82,7 +82,7 @@ func ReadInventory(ctx context.Context, options ...InventoryOption) ([]ReleaseSe
 }
 
 func (o *inventoryOptions) read(ctx context.Context, filename string) ([]byte, error) {
-	result, err := o.runner.Run(ctx, "git", []string{"show", o.head + ":" + filename}, pkgit.RunOptions{})
+	result, err := o.runner.Run(ctx, "git", []string{"show", o.head + ":" + filename}, &pkgit.RunOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("%w: read catalog inventory file %s: %w", errUtils.ErrPluginInvalidConfig, filename, err)
 	}
