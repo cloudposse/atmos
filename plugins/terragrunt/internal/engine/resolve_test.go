@@ -9,6 +9,9 @@ import (
 	"testing"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
@@ -347,4 +350,98 @@ func TestOverlayRejectsLockFilesAndCarriesModes(t *testing.T) {
 		require.Equal(t, uint32(0o640), result.OverlayModes["group/credential.pem"], "a 0750 directory hides the file from other")
 		require.NotContains(t, result.OverlayModes, "shared/credential.pem", "a traversable directory keeps the default mode")
 	})
+}
+
+func TestBackendDownloadDirectoryFromReadConfigInputs(t *testing.T) {
+	for name, expression := range map[string]string{
+		"direct": `download_dir = try(read_terragrunt_config("settings.hcl").inputs.cache, "fallback-cache")`,
+		"local": `locals { settings = read_terragrunt_config("settings.hcl") }
+download_dir = try(local.settings.inputs.cache, "fallback-cache")`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := nativeUnit(t, expression+`
+remote_state {
+ backend = "local"
+ config = { path = "state.tfstate" }
+}
+`)
+			settings := filepath.Join(filepath.Dir(request.Path), "settings.hcl")
+			require.NoError(t, os.WriteFile(settings, []byte(`inputs = { cache = "configured-cache" }`), 0o644))
+			full, err := Resolve(t.Context(), request)
+			require.NoError(t, err)
+			require.Contains(t, full.WorkingDir, "configured-cache")
+			request.Phase = "backend"
+			backend, err := Resolve(t.Context(), request)
+			require.NoError(t, err)
+			require.Equal(t, full.WorkingDir, backend.WorkingDir)
+			require.Equal(t, full.Backend["path"], backend.Backend["path"])
+			require.NoError(t, os.WriteFile(settings, []byte(`inputs = {
+ cache = "configured-cache"
+ unrelated = run_cmd("atmos-missing-command-that-must-not-run")
+}`), 0o644))
+			root, err := os.ReadFile(request.Path)
+			require.NoError(t, err)
+			root = append(root, []byte(`
+inputs = { cache = run_cmd("atmos-missing-command-that-must-not-run") }
+`)...)
+			require.NoError(t, os.WriteFile(request.Path, root, 0o644))
+			backend, err = Resolve(t.Context(), request)
+			require.NoError(t, err, "unreferenced settings inputs must not execute")
+			require.Equal(t, full.WorkingDir, backend.WorkingDir)
+		})
+	}
+}
+
+func TestInputProjection(t *testing.T) {
+	for _, test := range []struct {
+		name, reference, inputs string
+		present, absent         []string
+	}{
+		{"unrelated", `download_dir = "cache"`, `inputs = { unrelated = run_cmd("must-not-run") }`, nil, []string{"inputs", "run_cmd"}},
+		{"attribute", `download_dir = read_terragrunt_config("settings.hcl").inputs.cache`, `inputs = { cache = "configured", unrelated = run_cmd("must-not-run") }`, []string{"configured"}, []string{"run_cmd"}},
+		{"index", `download_dir = read_terragrunt_config("settings.hcl")["inputs"]["cache"]`, `inputs = { cache = "configured", unrelated = run_cmd("must-not-run") }`, []string{"configured"}, []string{"run_cmd"}},
+		{"transitive", `download_dir = read_terragrunt_config("settings.hcl").inputs.cache`, `inputs = { base = "configured", cache = read_terragrunt_config("other.hcl").inputs.base, unrelated = run_cmd("must-not-run") }`, []string{"configured", "other.hcl"}, []string{"run_cmd"}},
+		{"whole map", `download_dir = lookup(read_terragrunt_config("settings.hcl").inputs, "cache", "fallback")`, `inputs = { cache = "configured" }`, []string{"configured"}, nil},
+		{"computed map", `download_dir = read_terragrunt_config("settings.hcl").inputs.cache`, `inputs = merge({cache = "configured"}, {})`, []string{"configured", "merge"}, nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			references := newInputReferences("terragrunt.hcl")
+			references.project("terragrunt.hcl", []byte(test.reference))
+			projected := references.project("settings.hcl", []byte(test.inputs))
+			_, diagnostics := hclsyntax.ParseConfig(projected, "settings.hcl", hcl.InitialPos)
+			require.False(t, diagnostics.HasErrors(), diagnostics.Error())
+			for _, want := range test.present {
+				require.Contains(t, string(projected), want)
+			}
+			for _, unwanted := range test.absent {
+				require.NotContains(t, string(projected), unwanted)
+			}
+		})
+	}
+	t.Run("invalid syntax", func(t *testing.T) {
+		data := []byte("inputs = {")
+		require.Equal(t, data, newInputReferences("terragrunt.hcl").project("invalid.hcl", data))
+	})
+}
+
+func TestBackendProbePropagatesStatFailure(t *testing.T) {
+	file, err := os.CreateTemp(t.TempDir(), "closed-*.hcl")
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+	probe := withoutInputsFS{Fs: afero.NewOsFs(), inputs: newInputReferences(file.Name())}
+	result, err := probe.projectFile(file, file.Name())
+	require.ErrorIs(t, err, os.ErrClosed)
+	require.Nil(t, result)
+}
+
+func TestBackendProbePreservesDirectoryHandle(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "directory.hcl")
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	probe := withoutInputsFS{Fs: afero.NewOsFs(), inputs: newInputReferences("terragrunt.hcl")}
+	file, err := probe.Open(dir)
+	require.NoError(t, err)
+	defer file.Close()
+	info, err := file.Stat()
+	require.NoError(t, err)
+	require.True(t, info.IsDir())
 }

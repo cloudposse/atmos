@@ -14,8 +14,6 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/gruntwork-io/terragrunt/pkg/log/format"
 	"github.com/gruntwork-io/terragrunt/pkg/options"
-	"github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
 
@@ -69,7 +67,7 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	if err := resolveBackend(result, cfg); err != nil {
 		return nil, err
 	}
-	if request.Phase != "backend" {
+	if request.Phase != phaseBackend {
 		result.Overlay, result.OverlayModes, err = atmosbridge.UnitOverlay(logger, environment, filepath.Dir(path), cfg.Terraform)
 		if err != nil {
 			return nil, err
@@ -82,8 +80,12 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 }
 
 const (
-	stackFile = "terragrunt.stack.hcl"
-	unitFile  = "terragrunt.hcl"
+	downloadDirEnv = "TG_DOWNLOAD_DIR"
+	phaseBackend   = "backend"
+	phaseDiscover  = "discover"
+	probeFileMode  = 0o644
+	stackFile      = "terragrunt.stack.hcl"
+	unitFile       = "terragrunt.hcl"
 	// Nested-stack recursion for generation and discovery stops at maxStackDepth.
 	maxStackDepth = 32
 )
@@ -92,12 +94,12 @@ const (
 // copy-on-write overlay before a backend read of a stack-generated unit. The
 // returned filesystem is the one the unit is then parsed from.
 func backendGenerationOverlay(ctx context.Context, request model.Request, filesystem afero.Fs) (afero.Fs, error) {
-	if request.Phase != "backend" || request.GenerationRoot == "" {
+	if request.Phase != phaseBackend || request.GenerationRoot == "" {
 		return filesystem, nil
 	}
 	filesystem = afero.NewCopyOnWriteFs(afero.NewReadOnlyFs(afero.NewOsFs()), afero.NewMemMapFs())
 	generation := request
-	generation.Path, generation.Phase, generation.Command = request.GenerationRoot, "discover", "generate"
+	generation.Path, generation.Phase, generation.Command = request.GenerationRoot, phaseDiscover, "generate"
 	if _, err := resolve(ctx, generation, filesystem); err != nil {
 		return nil, err
 	}
@@ -127,11 +129,11 @@ func evaluationLogger(level string) (log.Logger, error) {
 }
 
 func discovering(request model.Request) bool {
-	return request.Phase == "discover" || request.Command == "discover"
+	return request.Phase == phaseDiscover || request.Command == phaseDiscover
 }
 
 func generating(request model.Request) bool {
-	return request.Command == "generate" && request.Phase != "backend"
+	return request.Command == "generate" && request.Phase != phaseBackend
 }
 
 // evaluationEnvironment uses the local maintained facade, which exposes the
@@ -145,7 +147,7 @@ func evaluationEnvironment(request model.Request, filesystem afero.Fs, path stri
 	if _, err := environment.FS.Stat(path); err != nil {
 		return nil, err
 	}
-	if discovering(request) || request.Phase == "backend" || generating(request) {
+	if discovering(request) || request.Phase == phaseBackend || generating(request) {
 		environment = atmosbridge.Discovery(environment, generating(request))
 	}
 	return environment, nil
@@ -153,7 +155,7 @@ func evaluationEnvironment(request model.Request, filesystem afero.Fs, path stri
 
 func parsingContext(request model.Request, path string) *config.ParsingContext {
 	command := request.Command
-	if command == "" || command == "discover" || command == "generate" {
+	if command == "" || command == phaseDiscover || command == "generate" {
 		command = "plan"
 	}
 	pctx := config.NewParsingContext().WithFileReadTracking()
@@ -163,7 +165,7 @@ func parsingContext(request model.Request, path string) *config.ParsingContext {
 	pctx.OriginalTerraformCommand = command
 	pctx.TerraformCliArgs.SetCommand(command).AppendArgument(request.Arguments...)
 	pctx.DownloadDir = filepath.Join(filepath.Dir(path), ".terragrunt-cache")
-	if configured := request.Environment["TG_DOWNLOAD_DIR"]; configured != "" {
+	if configured := request.Environment[downloadDirEnv]; configured != "" {
 		pctx.DownloadDir = localPath(filepath.Dir(path), configured)
 	}
 	pctx.AutoInit = true
@@ -172,44 +174,45 @@ func parsingContext(request model.Request, path string) *config.ParsingContext {
 }
 
 func parseUnit(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) (*config.TerragruntConfig, error) {
-	if request.Phase == "backend" {
+	if request.Phase == phaseBackend {
+		environment = environment.WithFS(withoutInputsFS{Fs: environment.FS, inputs: newInputReferences(path)})
 		cfg, err := config.PartialParseConfigFile(ctx, logger, environment, pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), path, nil)
 		if err != nil {
 			return nil, err
 		}
-		return withDownloadDir(ctx, logger, environment, pctx, request, cfg, path)
+		if request.Environment[downloadDirEnv] == "" {
+			cfg.DownloadDir, err = downloadDir(ctx, logger, environment, pctx)
+		}
+		return cfg, err
 	}
 	return config.ParseConfigFile(ctx, logger, environment, pctx, path, nil)
 }
 
-// withDownloadDir restores download_dir on a partially parsed unit. Partial
+// downloadDir restores download_dir on a partially parsed unit. Partial
 // decoding has no section for that attribute, but the working directory (and so
 // every relative local-state path) depends on it. The extra parse skips
 // dependency output resolution (an unknown placeholder replaces every
 // dependency), so backend reads still never read outputs, and it reads every
-// configuration file without its top-level inputs attribute so unrelated input
+// configuration file with only the referenced inputs so unrelated input
 // expressions, such as command calls, are never evaluated.
-func withDownloadDir(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, cfg *config.TerragruntConfig, path string) (*config.TerragruntConfig, error) {
-	if request.Environment["TG_DOWNLOAD_DIR"] != "" {
-		return cfg, nil
-	}
+func downloadDir(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext) (string, error) {
 	placeholder := cty.DynamicVal
 	probe := pctx.WithSkipOutputsResolution()
 	probe.DecodedDependencies = &placeholder
 	// Fresh caches keep the stripped files apart from the partial parse's cached ones.
-	full, err := config.ParseConfigFile(config.WithCaches(ctx), logger, environment.WithFS(withoutInputsFS{Fs: environment.FS}), probe, path, nil)
+	full, err := config.ParseConfigFile(config.WithCaches(ctx), logger, environment, probe, pctx.TerragruntConfigPath, nil)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	cfg.DownloadDir = full.DownloadDir
-	return cfg, nil
+	return full.DownloadDir, nil
 }
 
-// withoutInputsFS serves HCL configuration files without their top-level inputs
-// attribute. Reading download_dir needs the locals, includes and functions that
-// attribute might use, but never the inputs themselves.
+// withoutInputsFS projects inputs to the keys referenced by the configuration.
+// References are shared across reads so read_terragrunt_config can supply inputs
+// needed by download_dir without evaluating unrelated input expressions.
 type withoutInputsFS struct {
 	afero.Fs
+	inputs *inputReferences
 }
 
 // Open reads through OpenFile so every read path strips inputs.
@@ -223,7 +226,17 @@ func (f withoutInputsFS) OpenFile(name string, flag int, perm os.FileMode) (afer
 	if err != nil || flag != os.O_RDONLY || !strings.HasSuffix(name, ".hcl") {
 		return file, err
 	}
-	if info, err := file.Stat(); err != nil || info.IsDir() {
+	return f.projectFile(file, name)
+}
+
+// projectFile closes failed reads and preserves directory handles for callers.
+func (f withoutInputsFS) projectFile(file afero.File, name string) (afero.File, error) {
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	if info.IsDir() {
 		return file, nil
 	}
 	data, err := io.ReadAll(file)
@@ -232,21 +245,10 @@ func (f withoutInputsFS) OpenFile(name string, flag int, perm os.FileMode) (afer
 		return nil, err
 	}
 	memory := afero.NewMemMapFs()
-	if err := afero.WriteFile(memory, name, withoutInputs(name, data), 0o644); err != nil {
+	if err := afero.WriteFile(memory, name, f.inputs.project(name, data), probeFileMode); err != nil {
 		return nil, err
 	}
 	return memory.Open(name)
-}
-
-// withoutInputs removes the top-level inputs attribute. Content that does not
-// parse is returned unchanged so upstream reports its own syntax errors.
-func withoutInputs(name string, data []byte) []byte {
-	file, diags := hclwrite.ParseConfig(data, name, hcl.InitialPos)
-	if diags.HasErrors() {
-		return data
-	}
-	file.Body().RemoveAttribute("inputs")
-	return file.Bytes()
 }
 
 // unitResolution converts the parsed unit into its local module identity.
@@ -262,10 +264,10 @@ func unitResolution(logger log.Logger, environment *atmosbridge.Venv, pctx *conf
 		return nil, fmt.Errorf("native adapter source must be an existing local directory: %s", result.Source)
 	}
 	download := pctx.DownloadDir
-	if cfg.DownloadDir != "" && request.Environment["TG_DOWNLOAD_DIR"] == "" {
+	if cfg.DownloadDir != "" && request.Environment[downloadDirEnv] == "" {
 		download = localPath(filepath.Dir(path), cfg.DownloadDir)
 	}
-	if configured := request.Environment["TG_DOWNLOAD_DIR"]; configured != "" {
+	if configured := request.Environment[downloadDirEnv]; configured != "" {
 		download = localPath(filepath.Dir(path), configured)
 	}
 	workingDir, err := atmosbridge.WorkingDir(logger, environment, result.Source, download, filepath.Dir(path))
