@@ -2,9 +2,11 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -185,6 +187,44 @@ func TestLiveDeliveryWithholdsUnknownSensitiveValues(t *testing.T) {
 			assert.NotContains(t, value, "secret-live-2718")
 		}
 	}
-	assert.Contains(t, messagesOf(delivered), "Evaluating unit")
+	assert.NotContains(t, messagesOf(delivered), "Evaluating unit", "the unit path is withheld when sensitivity is unknown")
 	assert.NotEmpty(t, delivered)
+}
+
+func TestLiveDeliveryProtectsSensitiveUnitPaths(t *testing.T) {
+	for _, broken := range []bool{false, true} {
+		t.Run(fmt.Sprint("broken=", broken), func(t *testing.T) {
+			request := brokenUnit(t)
+			const secret = "private-unit-2718"
+			unit := filepath.Join(request.RootDirectory, "live", secret, "app")
+			require.NoError(t, os.MkdirAll(filepath.Join(unit, "module"), 0o755))
+			configuration := "terraform { source = \"./module\" }\nlocals { token = sensitive(\"" + secret + "\") }\ninputs = { token = local.token }\n"
+			if broken {
+				configuration = strings.Replace(configuration, "token = local.token }", "token = local.token, broken = local.absent }", 1)
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(unit, "terragrunt.hcl"), []byte(configuration), 0o644))
+			request.Source = filepath.Join("live", secret, "app", "terragrunt.hcl")
+			receiver := &logReceiver{}
+			_, err := New(nil, WithAPI(apiClient(t, receiver))).Prepare(t.Context(), request)
+			if broken {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			delivered, _, _ := receiver.snapshot()
+			require.NotEmpty(t, delivered)
+			var units []string
+			for _, entry := range delivered {
+				assert.NotContains(t, entry.String(), secret)
+				if entry.GetMessage() == "Evaluating unit" {
+					units = append(units, entry.GetUnit())
+				}
+			}
+			if broken {
+				assert.Empty(t, units)
+			} else {
+				assert.Contains(t, units, "live/<MASKED>/app")
+			}
+		})
+	}
 }

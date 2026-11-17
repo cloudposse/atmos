@@ -172,7 +172,7 @@ func TestLogSinkForwardsSafeProgressAndBuffersTerragruntEvents(t *testing.T) {
 	assert.Equal(t, "second", entries[1].Message)
 }
 
-func TestLogSinkForwardingKeepsOrderAcrossConcurrentUnits(t *testing.T) {
+func TestLogSinkBufferingKeepsOrderAcrossConcurrentUnits(t *testing.T) {
 	sink := NewLogSink("debug", "")
 	forwarded := make(map[string][]string)
 	var total int
@@ -189,8 +189,12 @@ func TestLogSinkForwardingKeepsOrderAcrossConcurrentUnits(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	// The deliverer is never called concurrently, so it needs no lock of its own.
-	assert.Equal(t, 400, total)
+	assert.Zero(t, total, "unit paths must not be forwarded before secrets are known")
+	entries := sink.Entries()
+	require.Len(t, entries, 400)
+	for _, entry := range entries {
+		forwarded[entry.Unit] = append(forwarded[entry.Unit], entry.Message)
+	}
 	for unit := range 8 {
 		var want []string
 		for sequence := range 50 {
@@ -505,4 +509,24 @@ func TestUnredactedSensitivityCountsOnlyUnknownValues(t *testing.T) {
 	assert.True(t, unredactedSensitivity(fsys, []string{unit, root}, unit, true), "an included file's locals are unknown")
 	assert.True(t, unredactedSensitivity(fsys, []string{backend}, backend, true), "other blocks are unknown")
 	assert.True(t, unredactedSensitivity(fsys, []string{broken}, unit, true), "an unparseable file fails closed")
+}
+
+func TestLogSinkBuffersUnitPathsUntilSensitiveValuesAreRegistered(t *testing.T) {
+	root := t.TempDir()
+	sink := NewLogSink("debug", root)
+	var forwarded []*model.LogEntry
+	sink.Forward(func(entry *model.LogEntry) { forwarded = append(forwarded, entry) })
+	sink.Event(log.InfoLevel, "Evaluating unit", filepath.Join(root, "live", "private-unit", "app"))
+	require.Empty(t, forwarded)
+	sink.RedactValue("private-unit")
+	entries := sink.Entries()
+	require.Len(t, entries, 1)
+	assert.Equal(t, "live/<MASKED>/app", entries[0].Unit)
+	assert.Equal(t, "Evaluating unit", entries[0].Message)
+	assert.Equal(t, "info", entries[0].Level)
+	sink.Withhold()
+	entries = sink.Entries()
+	require.Len(t, entries, 1)
+	assert.Empty(t, entries[0].Unit)
+	assert.Contains(t, entries[0].Message, "withheld")
 }

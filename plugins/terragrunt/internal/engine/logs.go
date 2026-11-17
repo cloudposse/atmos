@@ -45,8 +45,8 @@ type LogSink struct {
 	off     bool
 	// Withheld is set when the call may have logged a sensitive value the sink cannot redact.
 	withheld bool
-	// progress receives fixed plugin progress events immediately. Terragrunt events stay buffered until
-	// sensitive values discovered during evaluation have been registered.
+	// progress receives fixed plugin progress events without unit paths immediately. Unit paths and
+	// Terragrunt events stay buffered until sensitive values discovered during evaluation are registered.
 	progress func(*model.LogEntry)
 }
 
@@ -83,8 +83,8 @@ func NewLogSink(level, root string) *LogSink {
 //nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
 func (s *LogSink) Enabled() bool { return !s.off }
 
-// Forward hands fixed plugin progress events to deliver as they happen. Terragrunt events remain collected
-// until the call has finished and all discovered sensitive values can be redacted.
+// Forward hands fixed plugin progress events without unit paths to deliver as they happen. Events with
+// unit paths and Terragrunt events remain collected until discovered sensitive values can be redacted.
 //
 //nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
 func (s *LogSink) Forward(deliver func(*model.LogEntry)) {
@@ -104,7 +104,9 @@ func (s *LogSink) Event(level log.Level, message, unit string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	event := &model.LogEntry{Time: time.Now(), Level: level.String(), Message: message, Unit: s.relative(unit)}
-	if s.progress != nil {
+	// Unit paths can contain secrets discovered later during evaluation. Keep them
+	// buffered so Entries can redact them or withhold them if evaluation fails.
+	if s.progress != nil && unit == "" {
 		s.progress(event)
 		return
 	}
@@ -294,7 +296,7 @@ func (s *LogSink) add(level log.Level, entry *logrus.Entry) {
 	s.entries = append(s.entries, record)
 }
 
-// keep collects a plugin progress event when there is no live progress channel. The caller holds the lock.
+// keep collects a plugin progress event until it can be safely delivered. The caller holds the lock.
 func (s *LogSink) keep(entry *model.LogEntry) {
 	if len(s.entries) >= maxLogEntries || s.size >= maxLogBytes {
 		s.dropped++
