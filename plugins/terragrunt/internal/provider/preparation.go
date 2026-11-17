@@ -59,7 +59,7 @@ func (p *Provider) Prepare(ctx context.Context, request *pluginv1.ComponentReque
 	}
 	// All provider processes generating the same stack must retain the lock
 	// until the subsequent unit parse has finished.
-	unlock, err := p.generateLocked(ctx, req)
+	unlock, err := p.generateLocked(ctx, &req)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -68,7 +68,7 @@ func (p *Provider) Prepare(ctx context.Context, request *pluginv1.ComponentReque
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	response, err := preparedResponse(req, result)
+	response, err := preparedResponse(&req, result)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -81,7 +81,7 @@ func preparationEffects(effects *pluginv1.ComponentEffects) bool {
 
 // generateLocked generates the owning stack under a cross-process lock and
 // returns the function that releases it. Units outside a stack need no lock.
-func (p *Provider) generateLocked(ctx context.Context, req model.Request) (func(), error) {
+func (p *Provider) generateLocked(ctx context.Context, req *model.Request) (func(), error) {
 	if req.GenerationRoot == "" {
 		return func() {}, nil
 	}
@@ -89,7 +89,7 @@ func (p *Provider) generateLocked(ctx context.Context, req model.Request) (func(
 	if err != nil {
 		return nil, err
 	}
-	generation := req
+	generation := *req
 	generation.Path, generation.Phase, generation.Command = req.GenerationRoot, "discover", "generate"
 	if _, err := p.evaluate(ctx, generation); err != nil {
 		_ = lock.Unlock()
@@ -100,7 +100,7 @@ func (p *Provider) generateLocked(ctx context.Context, req model.Request) (func(
 
 // generationLock keys the lock by the physical generation root, so processes
 // that spell the project root differently still serialize.
-func generationLock(ctx context.Context, req model.Request) (*flock.Flock, error) {
+func generationLock(ctx context.Context, req *model.Request) (*flock.Flock, error) {
 	root, err := filepath.EvalSymlinks(req.BasePath)
 	if err != nil {
 		return nil, err
@@ -125,7 +125,7 @@ func generationLock(ctx context.Context, req model.Request) (*flock.Flock, error
 	return lock, nil
 }
 
-func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.PrepareComponentResponse, error) {
+func preparedResponse(req *model.Request, result *model.Resolution) (*pluginv1.PrepareComponentResponse, error) {
 	values := result.Inputs
 	if values == nil {
 		values = map[string]any{}
@@ -143,6 +143,14 @@ func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.Pr
 		return nil, err
 	}
 	response := &pluginv1.PrepareComponentResponse{Engine: engineName(req.Tofu), ModuleSource: result.Source, WorkingDirectory: result.WorkingDir, Inputs: inputs, State: state, Sources: watched, BackendGenerated: result.BackendGenerated, Execution: executionResponse(result.Execution)}
+	response.Files = preparedFiles(result)
+
+	return response, nil
+}
+
+// preparedFiles merges generated files over the overlay and preserves stable ordering.
+func preparedFiles(result *model.Resolution) []*pluginv1.ComponentGeneratedFile {
+	var filesOut []*pluginv1.ComponentGeneratedFile
 	files := maps.Clone(result.Overlay)
 	if files == nil {
 		files = map[string][]byte{}
@@ -160,12 +168,12 @@ func preparedResponse(req model.Request, result *model.Resolution) (*pluginv1.Pr
 		if _, generated := result.Generated[name]; generated {
 			mode = 0
 		}
-		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: files[name], IfExists: policy, Mode: mode})
+		filesOut = append(filesOut, &pluginv1.ComponentGeneratedFile{Path: name, Content: files[name], IfExists: policy, Mode: mode})
 	}
-	return response, nil
+	return filesOut
 }
 
-func stateIdentity(req model.Request, result *model.Resolution) (*pluginv1.ComponentStateIdentity, error) {
+func stateIdentity(req *model.Request, result *model.Resolution) (*pluginv1.ComponentStateIdentity, error) {
 	backend := result.Backend
 	if backend == nil {
 		backend = map[string]any{}
@@ -196,7 +204,7 @@ func (p *Provider) Resolve(ctx context.Context, request *pluginv1.ComponentReque
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	state, err := stateIdentity(req, result)
+	state, err := stateIdentity(&req, result)
 	if err != nil {
 		return nil, rpcError(err)
 	}
