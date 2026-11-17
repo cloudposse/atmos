@@ -239,6 +239,8 @@ func TestShouldUseColor(t *testing.T) {
 
 func TestShouldUseColorInCI(t *testing.T) {
 	t.Setenv("CI", "true")
+	// Automatic CI color requires a capable terminal, independent of the test runner.
+	t.Setenv("TERM", "xterm-256color")
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("CLICOLOR", "")
 	t.Setenv("CLICOLOR_FORCE", "")
