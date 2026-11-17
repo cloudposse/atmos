@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/go-version"
+	"github.com/mattn/go-shellwords"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
@@ -80,12 +82,12 @@ func checkVersions(ctx context.Context, request model.Request, terraform, terrag
 // checkUnitPolicies rejects Terragrunt semantics that the native adapter cannot
 // represent faithfully. Backend reads skip the version probe, which may execute
 // the selected binary.
-func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.TerragruntConfig) error {
+func checkUnitPolicies(ctx context.Context, request *model.Request, cfg *config.TerragruntConfig) error {
 	if cfg.Terraform == nil || cfg.Terraform.Source == nil {
 		return fmt.Errorf("native adapter requires terraform.source")
 	}
 	if request.Phase != "backend" {
-		if err := checkVersions(ctx, request, cfg.TerraformVersionConstraint, cfg.TerragruntVersionConstraint); err != nil {
+		if err := checkVersions(ctx, *request, cfg.TerraformVersionConstraint, cfg.TerragruntVersionConstraint); err != nil {
 			return err
 		}
 	}
@@ -93,10 +95,25 @@ func checkUnitPolicies(ctx context.Context, request model.Request, cfg *config.T
 		return fmt.Errorf("native adaptation of terraform_binary is not implemented")
 	}
 	// Hooks and extra arguments are adapted as execution data by unitExecution.
-	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, effectivePolicyArguments(request, cfg)) {
-		return ErrPreventDestroy
+	if err := checkPreventDestroy(request, cfg); err != nil {
+		return err
 	}
 	return checkUnsupportedSettings(cfg)
+}
+
+// checkPreventDestroy evaluates the same effective arguments as the engine.
+func checkPreventDestroy(request *model.Request, cfg *config.TerragruntConfig) error {
+	if request.Phase == "backend" || cfg.PreventDestroy == nil || !*cfg.PreventDestroy {
+		return nil
+	}
+	args, err := effectivePolicyArguments(request, cfg)
+	if err != nil {
+		return err
+	}
+	if atmosbridge.IsDestroyOperation(request.Command, args) {
+		return ErrPreventDestroy
+	}
+	return nil
 }
 
 // checkUnsupportedSettings rejects error handling, exclusion, feature flag and
@@ -120,13 +137,37 @@ func validateRemoteSource(source string) error {
 	return fmt.Errorf("native adapter does not support this module source transport")
 }
 
-// effectivePolicyArguments follows host ordering: extra arguments precede user arguments.
-func effectivePolicyArguments(request model.Request, cfg *config.TerragruntConfig) []string {
+// effectivePolicyArguments matches engine insertion order: command environment,
+// global environment, extra arguments, then explicit arguments. Matching extra
+// argument blocks override environment values in declaration order.
+func effectivePolicyArguments(request *model.Request, cfg *config.TerragruntConfig) ([]string, error) {
+	environment := map[string]string{}
+	maps.Copy(environment, request.Environment)
 	var args []string
-	for _, extra := range cfg.Terraform.ExtraArgs {
-		if slices.Contains(extra.Commands, request.Command) && extra.Arguments != nil {
-			args = append(args, (*extra.Arguments)...)
+	if cfg.Terraform != nil {
+		for _, extra := range cfg.Terraform.ExtraArgs {
+			if !slices.Contains(extra.Commands, request.Command) {
+				continue
+			}
+			if extra.Arguments != nil {
+				args = append(args, (*extra.Arguments)...)
+			}
+			if extra.EnvVars != nil {
+				maps.Copy(environment, *extra.EnvVars)
+			}
 		}
 	}
-	return append(args, request.Arguments...)
+	var injected []string
+	suffix := strings.NewReplacer("-", "_", " ", "_").Replace(request.Command)
+	for _, name := range []string{"TF_CLI_ARGS_" + suffix, "TF_CLI_ARGS"} {
+		parser := shellwords.NewParser()
+		parser.ParseEnv, parser.ParseBacktick = false, false
+		tokens, err := parser.Parse(environment[name])
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s arguments: %w", name, err)
+		}
+		injected = append(injected, tokens...)
+	}
+	args = append(injected, args...)
+	return append(args, request.Arguments...), nil
 }

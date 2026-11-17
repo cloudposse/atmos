@@ -74,7 +74,7 @@ func resolveUnit(ctx context.Context, logger log.Logger, environment *atmosbridg
 	if err != nil {
 		return nil, err
 	}
-	if err := checkUnitPolicies(ctx, request, cfg); err != nil {
+	if err := checkUnitPolicies(ctx, &request, cfg); err != nil {
 		return nil, err
 	}
 	return buildUnitResolution(ctx, logger, environment, pctx, request, cfg, path)
@@ -209,17 +209,28 @@ func parsingContext(path, tofu, command string, arguments []string) *config.Pars
 // checkDestroyGuard rejects destroy before a full parse can evaluate HCL functions
 // for a unit that sets prevent_destroy. Backend reads never destroy.
 func checkDestroyGuard(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, request model.Request, path string) error {
-	if request.Phase == "backend" || !atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
+	if request.Phase == "backend" || (request.Command != "plan" && request.Command != "apply" && request.Command != "destroy") {
 		return nil
 	}
 	guard, err := config.PartialParseConfigFile(ctx, logger, atmosbridge.Discovery(environment, false),
-		pctx.WithDecodeList(config.TerragruntFlags), path, nil)
+		pctx.WithDecodeList(config.TerragruntFlags, config.TerraformExtraArgs), path, nil)
 	if err != nil {
-		return staticDestroyGuard(environment.FS, path, err)
+		return failedDestroyGuard(&request, environment.FS, path, err)
 	}
-	if guard.PreventDestroy != nil && *guard.PreventDestroy {
-		return ErrPreventDestroy
+	return checkPreventDestroy(&request, guard)
+}
+
+// failedDestroyGuard preserves syntax-only decisions for known destroy requests.
+func failedDestroyGuard(request *model.Request, fs afero.Fs, path string, parseErr error) error {
+	args, err := effectivePolicyArguments(request, &config.TerragruntConfig{})
+	if err != nil {
+		return err
 	}
+	if atmosbridge.IsDestroyOperation(request.Command, args) {
+		return staticDestroyGuard(fs, path, parseErr)
+	}
+	// A full parse may evaluate locals unavailable to the read-only guard.
+	// Its policy check still inspects every expanded argument and environment.
 	return nil
 }
 
