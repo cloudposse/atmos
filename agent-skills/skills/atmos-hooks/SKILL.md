@@ -248,11 +248,11 @@ docs:
 - Publishing to a wiki or portal is a generic `http` step, or a `kind: command` hook that reads
   `ATMOS_DOCS_OUTPUT_PATH`. Atmos has no wiki-specific integration.
 - `events:` omitted means the hook fires on both events. Hooks run in name order, in the process working directory where `atmos docs generate` starts (or the `--chdir` target), not `base-dir`.
-- A `before.docs.generate` hook whose failure propagates (`on_failure: fail`, the default, or a policy
-  denial) aborts before any file is written; with `on_failure: warn` or `ignore` generation continues. `after.docs.generate`
-  hooks run on success and on failure, filtered by `when:` (default is success only; use
-  `failure` or `always` to react to failures). A failing after-hook fails the command unless it
-  sets `on_failure: warn` or `ignore`.
+- A `before.docs.generate` hook with `on_failure: fail`, or a policy denial, aborts before any file
+  is written. With the default `on_failure: warn`, or with `ignore`, generation continues, so set
+  `on_failure: fail` on any hook that must block generation. `after.docs.generate` hooks run on
+  success and on failure, filtered by `when:` (default is success only; use `failure` or `always`
+  to react to failures). A failing after-hook fails the command only with `on_failure: fail`.
 - Hook context: env vars `ATMOS_DOCS_TYPE`, `ATMOS_DOCS_OUTPUT_PATH`, `ATMOS_DOCS_BASE_DIR`, and
   template values `{{ .docs.type }}`, `{{ .docs.output_path }}`, `{{ .docs.base_dir }}`. There is
   no infrastructure component or stack: the stack is empty, and `ATMOS_COMPONENT` holds the

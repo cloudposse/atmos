@@ -301,15 +301,16 @@ generated file's contents instead of fixed text, use a `kind: command` hook or a
 
 ### Ordering and failure
 
-1. `before.docs.generate` hooks run first. A before-hook whose failure propagates (`on_failure: fail`, the default,
-   or a policy denial) aborts the command before any file is written; with `on_failure: warn` or
-   `ignore`, generation continues.
+1. `before.docs.generate` hooks run first. A before-hook with `on_failure: fail`, or a policy
+   denial, aborts the command before any file is written. The default is `on_failure: warn`, and
+   with `warn` or `ignore` generation continues, so set `on_failure: fail` on any hook that must
+   block generation.
 2. The document is generated.
 3. `after.docs.generate` hooks run with the outcome. By default an after-hook runs only on success;
    set `when: failure` or `when: always` to run it on failure too. See
    [reacting to success or failure](/stacks/hooks#reacting-to-success-or-failure).
-4. If generation succeeded and an after-hook fails, the command fails unless that hook sets
-   `on_failure: warn` or `on_failure: ignore`.
+4. If generation succeeded and an after-hook fails, the command fails only when that hook sets
+   `on_failure: fail`. With the default `warn`, or with `ignore`, the command still succeeds.
 
 A hook with no `events` list runs on both events. Hooks belong to one generator: hooks under
 `readme` do not run for `release-notes`.

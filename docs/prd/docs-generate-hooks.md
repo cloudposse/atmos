@@ -94,13 +94,15 @@ behavior.
 
 ### Ordering and failure
 
-1. `before.docs.generate` hooks run first. If one fails with `on_failure: fail` (the default) or a policy denies it, generation is aborted and no output
-    file is written or modified.
+1. `before.docs.generate` hooks run first. If one fails with `on_failure: fail`, or a policy denies it,
+    generation is aborted and no output file is written or modified. The default is
+    `on_failure: warn`, so generation continues unless a hook opts in to `fail`.
 2. Generation runs.
 3. `after.docs.generate` hooks run with the outcome of generation. Each hook's `when:` decides
     whether it runs: `success` (the default), `failure`, or `always`.
 4. If generation succeeded and an after-hook fails, the command fails according to that hook's
-    `on_failure` setting (`fail` by default; `warn` and `ignore` keep the command successful).
+    `on_failure` setting (`warn` by default; only `fail` fails the command, and `warn` and `ignore`
+    keep it successful).
 5. If generation failed, the command reports the generation error. After-hooks selected by
     `when: failure` or `when: always` still run.
 
