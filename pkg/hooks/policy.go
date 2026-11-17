@@ -23,16 +23,9 @@ import (
 
 func getGovernedHooks(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hooks, error) {
 	// Resolve governing data before describing (potentially untrusted) component data.
-	var snapshot *policy.CISnapshot
-	bundle, err := admission.LoadBundle()
+	bundle, snapshot, err := loadPolicyGovernance()
 	if err != nil {
 		return nil, err
-	}
-	if bundle != nil {
-		snapshot, err = ci.CollectPolicySnapshot(context.Background())
-		if err != nil {
-			return nil, err
-		}
 	}
 	h, err := getComponentHooks(config, info)
 	if err != nil {
@@ -40,6 +33,23 @@ func getGovernedHooks(config *schema.AtmosConfiguration, info *schema.ConfigAndS
 	}
 	h.policyBundle, h.policyCI = bundle, snapshot
 	return h, nil
+}
+
+// loadPolicyGovernance loads the governing policy bundle and, when one exists, the CI snapshot
+// policy evaluation needs. A nil bundle means no policy governs the operation.
+func loadPolicyGovernance() (*policy.Bundle, *policy.CISnapshot, error) {
+	bundle, err := admission.LoadBundle()
+	if err != nil {
+		return nil, nil, err
+	}
+	if bundle == nil {
+		return nil, nil, nil
+	}
+	snapshot, err := ci.CollectPolicySnapshot(context.Background())
+	if err != nil {
+		return nil, nil, err
+	}
+	return bundle, snapshot, nil
 }
 
 func (h *Hooks) runPolicyHooks(run *hookRunContext) error {
