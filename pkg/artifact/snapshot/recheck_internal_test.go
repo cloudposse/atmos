@@ -151,3 +151,24 @@ func TestCheckLinkContainment_UsesTheCapturedLinkTargets(t *testing.T) {
 		})
 	}
 }
+
+func TestCapture_RejectsPathReplacementDuringTheFinalHash(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows denies replacement while the source descriptor is open")
+	}
+	src := t.TempDir()
+	file := filepath.Join(src, "data.txt")
+	require.NoError(t, os.WriteFile(file, []byte("original"), 0o644))
+	info, err := os.Stat(file)
+	require.NoError(t, err)
+	replacement := filepath.Join(t.TempDir(), "replacement")
+	require.NoError(t, os.WriteFile(replacement, []byte("original"), info.Mode()))
+	require.NoError(t, os.Chtimes(replacement, info.ModTime(), info.ModTime()))
+	hook := func(rel string) {
+		require.Equal(t, "data.txt", rel)
+		require.NoError(t, os.Rename(replacement, file))
+	}
+	snap, err := Capture(t.Context(), src, WithStagingRoot(t.TempDir()), withRehashHook(hook))
+	require.ErrorIs(t, err, errUtils.ErrArtifactSourceChanged)
+	assert.Nil(t, snap)
+}

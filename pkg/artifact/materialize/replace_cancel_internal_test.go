@@ -40,7 +40,7 @@ func TestInstallStaged_CancellationDuringTheReplaceGuardIsFinal(t *testing.T) {
 			stage, dest := stagedAndDestination(t)
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			guard := func(string) error {
+			guard := func(*os.Root) error {
 				if tc.cancelInGuard {
 					cancel()
 				}

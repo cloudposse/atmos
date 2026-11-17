@@ -125,6 +125,10 @@ func credentialFrom(authenticator authn.Authenticator) (auth.Credential, error) 
 		RefreshToken: config.IdentityToken,
 		AccessToken:  config.RegistryToken,
 	}
+	// A registry bearer token takes precedence over Basic credentials, even malformed Auth.
+	if credential.AccessToken != "" {
+		return credential, nil
+	}
 	// An encoded Auth fills whichever of the username and password is missing, the way the registry
 	// transport does; a username or password given explicitly keeps its value.
 	if config.Auth != "" && (credential.Username == "" || credential.Password == "") {

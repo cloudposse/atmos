@@ -194,6 +194,18 @@ func (c *capturer) recheckFile(record *sourceRecord, now os.FileInfo) error {
 	if !sameFileState(record.info, final) {
 		return changedError(record.rel, errSizeOrTimeChanged)
 	}
+	return recheckPath(record)
+}
+
+// recheckPath rejects a replacement of the pathname while its original descriptor was hashed.
+func recheckPath(record *sourceRecord) error {
+	current, err := os.Lstat(record.abs)
+	if err != nil {
+		return changedError(record.rel, err)
+	}
+	if !os.SameFile(record.info, current) || !sameFileState(record.info, current) {
+		return changedError(record.rel, errSizeOrTimeChanged)
+	}
 	return nil
 }
 

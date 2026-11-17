@@ -352,9 +352,10 @@ func (m *managedChecker) owns(name string, t *tree) bool {
 func (m *managedChecker) check(member *archiveMember) error {
 	name := member.name
 	if name == managedParent || name == managedDir {
-		if member.kind != memberDir {
-			return fmt.Errorf("%w: %q must be a directory", errUtils.ErrArtifactPackagingInvalid, name)
+		if member.kind != memberDir || m.seen[name] {
+			return fmt.Errorf("%w: %q must be a unique directory", errUtils.ErrArtifactPackagingInvalid, name)
 		}
+		m.seen[name] = true
 		return nil
 	}
 	want, ok := m.expected(name)

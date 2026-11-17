@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -615,12 +616,12 @@ func TestMaterialize_ReplaceGuard(t *testing.T) {
 	errRefused := errors.New("guard refused")
 	tests := []struct {
 		name      string
-		guard     func(dest string) error
+		guard     func(dest *os.Root) error
 		wantErr   error
 		wantStale bool
 	}{
-		{"guard accepts", func(string) error { return nil }, nil, false},
-		{"guard refuses", func(string) error { return errRefused }, errRefused, true},
+		{"guard accepts", func(*os.Root) error { return nil }, nil, false},
+		{"guard refuses", func(*os.Root) error { return errRefused }, errRefused, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -645,7 +646,7 @@ func TestMaterialize_ReplaceGuard(t *testing.T) {
 	t.Run("guard is not consulted for an absent destination", func(t *testing.T) {
 		called := false
 		out := dest(t)
-		err := materialize.Materialize(context.Background(), contentOf(t, p), out, materialize.WithReplaceGuard(func(string) error {
+		err := materialize.Materialize(context.Background(), contentOf(t, p), out, materialize.WithReplaceGuard(func(*os.Root) error {
 			called = true
 			return errRefused
 		}))
@@ -669,10 +670,10 @@ func TestMaterialize_DestinationSwappedForASymlinkNeverRedirectsRemoval(t *testi
 	fixtures.WriteFile(t, out, "stale.txt", "stale", 0o644)
 	fixtures.WriteFile(t, outside, "keep.txt", "keep", 0o644)
 
-	swap := materialize.WithReplaceGuard(func(dest string) error {
+	swap := materialize.WithReplaceGuard(func(dest *os.Root) error {
 		// Simulate an attacker replacing the checked destination right after it was inspected.
-		require.NoError(t, os.Rename(dest, filepath.Join(root, "moved-away")))
-		require.NoError(t, os.Symlink(outside, dest))
+		require.NoError(t, os.Rename(dest.Name(), filepath.Join(root, "moved-away")))
+		require.NoError(t, os.Symlink(outside, dest.Name()))
 		return nil
 	})
 	err := materialize.Materialize(context.Background(), contentOf(t, p), out, swap)
@@ -806,4 +807,55 @@ func TestInspectDestination_AllowsAnUnrecordedAncestorDirectory(t *testing.T) {
 	state, err = materialize.InspectDestination(unrelated, &record)
 	require.NoError(t, err)
 	assert.Equal(t, materialize.DestinationDiffers, state, "an unrelated extra directory is still a difference")
+}
+
+func TestMaterialize_RepeatedManagedDirectories(t *testing.T) {
+	for _, name := range []string{".atmos/", ".atmos/artifact/"} {
+		for _, populated := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/populated=%t", name, populated), func(t *testing.T) {
+				var inventory []artifact.Entry
+				var members []tarMember
+				if populated {
+					inventory = []artifact.Entry{fileEntry("payload.txt", "payload", 0o600)}
+					members = append(members, tarMember{header: tar.Header{Name: "payload.txt", Typeflag: tar.TypeReg, Mode: 0o600}, body: "payload"})
+				}
+				directory := tarMember{header: tar.Header{Name: name, Typeflag: tar.TypeDir, Mode: 0o755}}
+				members = append(members, directory, directory)
+				record := sealedRecord(t, inventory)
+				content := archiveContent(&record, artifact.PackagingTgz, tgzOf(t, members))
+				t.Cleanup(func() { _ = content.Close() })
+				require.ErrorIs(t, materialize.Materialize(t.Context(), content, dest(t)), errUtils.ErrArtifactPackagingInvalid)
+			})
+		}
+	}
+}
+
+func TestMaterialize_ReplaceGuardInspectsBoundDirectoryDuringPathSwap(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a directory with an open handle cannot be renamed on Windows")
+	}
+	src := t.TempDir()
+	fixtures.WriteFile(t, src, "new.txt", "new", 0o644)
+	p := prepared(t, src, artifact.PackagingTgz)
+	out := dest(t)
+	fixtures.WriteFile(t, out, "keep.txt", "unapproved", 0o644)
+	guard := materialize.WithReplaceGuard(func(root *os.Root) error {
+		moved := out + "-moved"
+		require.NoError(t, os.Rename(out, moved))
+		require.NoError(t, os.Mkdir(out, 0o755))
+		state, err := materialize.InspectBoundDestination(root, &p.Record)
+		require.NoError(t, err)
+		require.NoError(t, os.Remove(out))
+		require.NoError(t, os.Rename(moved, out))
+		assert.Equal(t, materialize.DestinationDiffers, state)
+		if state == materialize.DestinationDiffers {
+			return errUtils.ErrArtifactConflict
+		}
+		return nil
+	})
+	require.ErrorIs(t, materialize.Materialize(t.Context(), contentOf(t, p), out, guard), errUtils.ErrArtifactConflict)
+	data, err := os.ReadFile(filepath.Join(out, "keep.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "unapproved", string(data))
+	assertNoScratch(t, out)
 }

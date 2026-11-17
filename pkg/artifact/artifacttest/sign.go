@@ -167,6 +167,9 @@ func (r *Repository) authenticate(subject artifact.SignatureSubject, held *artif
 	if !r.caps.HasEvidenceFormat(held.Evidence.Format) {
 		return skip("unsupported-evidence", "evidence in an unsupported format was ignored")
 	}
+	if held.Evidence.Descriptor.Size != int64(len(held.Data)) || held.Evidence.Descriptor.Digest != digest.FromBytes(held.Data) {
+		return skip("evidence-integrity", "evidence whose bytes do not match its descriptor was ignored")
+	}
 	var parsed fakeEvidence
 	if err := json.Unmarshal(held.Data, &parsed); err != nil {
 		return skip("malformed-evidence", "malformed evidence was ignored")
