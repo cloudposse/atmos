@@ -428,9 +428,17 @@ func TestBackendProbePropagatesStatFailure(t *testing.T) {
 	file, err := os.CreateTemp(t.TempDir(), "closed-*.hcl")
 	require.NoError(t, err)
 	require.NoError(t, file.Close())
+	// Closed-file Stat errors differ by OS; preserve the actual failure unchanged.
+	_, statErr := file.Stat()
+	var expected *os.PathError
+	require.ErrorAs(t, statErr, &expected)
 	probe := withoutInputsFS{Fs: afero.NewOsFs(), inputs: newInputReferences(file.Name())}
 	result, err := probe.projectFile(file, file.Name())
-	require.ErrorIs(t, err, os.ErrClosed)
+	require.ErrorIs(t, err, expected.Err)
+	var actual *os.PathError
+	require.ErrorAs(t, err, &actual)
+	require.Equal(t, expected.Op, actual.Op)
+	require.Equal(t, expected.Path, actual.Path)
 	require.Nil(t, result)
 }
 
