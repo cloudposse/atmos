@@ -2280,9 +2280,10 @@ func TestTerraformOutputFinishNodeGroupedOutput(t *testing.T) {
 	}()
 
 	output := &terraformOutput{command: "plan", logOrder: terraformLogOrderGrouped}
+	token := "ghp_" + strings.Repeat("a", 36)
 	output.finishNode(&dependency.Node{Component: "app", Stack: "dev"}, TerraformExecutionResult{
-		Stdout: "stdout",
-		Stderr: "stderr",
+		Stdout: "stdout\n\n\x1b[32mlast stdout\x1b[0m\n" + token,
+		Stderr: "stderr\rprogress\r\nlast stderr\n" + token,
 	}, nil)
 
 	require.NoError(t, stdoutWriter.Close())
@@ -2292,10 +2293,11 @@ func TestTerraformOutputFinishNodeGroupedOutput(t *testing.T) {
 	stderrBytes, err := io.ReadAll(stderrReader)
 	require.NoError(t, err)
 
-	require.Contains(t, string(stdoutBytes), "stdout")
-	require.Contains(t, string(stderrBytes), "plan output succeeded")
-	require.Contains(t, string(stderrBytes), "stderr")
-	require.Contains(t, string(stderrBytes), "end plan output")
+	require.Equal(t, "[dev/app] stdout\n[dev/app] \n[dev/app] \x1b[32mlast stdout\x1b[0m\n"+
+		"[dev/app] <MASKED>\n", string(stdoutBytes))
+	require.Equal(t, "\n[dev/app] plan output succeeded\n"+
+		"[dev/app] stderr\n[dev/app] progress\n[dev/app] last stderr\n[dev/app] <MASKED>\n"+
+		"[dev/app] end plan output\n", string(stderrBytes))
 }
 
 func TestTerraformOutputFinishNodeSkipsNoChangesWhenHidden(t *testing.T) {
