@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/spf13/afero"
@@ -45,7 +46,7 @@ type watchTracker struct {
 	result  *model.Resolution
 	files   map[string]struct{}
 	folders map[string]struct{}
-	visited map[string]struct{}
+	visited map[[2]string]struct{}
 	queue   []queuedFile
 }
 
@@ -67,11 +68,11 @@ func trackInputSources(fs afero.Fs, root string, result *model.Resolution) error
 
 func newWatchTracker(fs afero.Fs, root string, result *model.Resolution) *watchTracker {
 	tracker := &watchTracker{
-		watchEvaluator: watchEvaluator{fs: fs, root: root, unit: unitDirectory(result)},
+		watchEvaluator: watchEvaluator{fs: fs, root: root, unit: unitDirectory(result), original: unitDirectory(result)},
 		result:         result,
 		files:          map[string]struct{}{},
 		folders:        map[string]struct{}{},
-		visited:        map[string]struct{}{},
+		visited:        map[[2]string]struct{}{},
 	}
 	if contents, err := afero.ReadFile(fs, tracker.unitFile()); err == nil {
 		if file, diagnostics := hclsyntax.ParseConfig(contents, tracker.unitFile(), hcl.InitialPos); !diagnostics.HasErrors() {
@@ -111,10 +112,15 @@ func (t *watchTracker) scan() error {
 	for len(t.queue) > 0 {
 		next := t.queue[0]
 		t.queue = t.queue[1:]
-		if _, seen := t.visited[next.path]; seen {
+		scope := t.unit
+		if !next.required {
+			scope = cmp.Or(next.unit, filepath.Dir(next.path))
+		}
+		key := [2]string{next.path, scope}
+		if _, seen := t.visited[key]; seen {
 			continue
 		}
-		t.visited[next.path] = struct{}{}
+		t.visited[key] = struct{}{}
 		if err := t.scanFile(next); err != nil {
 			return err
 		}
@@ -247,7 +253,19 @@ func (t *watchTracker) followConfigurationDirectory(path string) bool {
 		return false
 	}
 	t.add(t.folders, path)
-	t.queue = append(t.queue, queuedFile{path: filepath.Join(path, "terragrunt.hcl")})
+	// Match Terragrunt's lookup order, including JSON precedence when both exist.
+	for _, name := range config.DefaultTerragruntConfigPaths {
+		selected := filepath.Join(path, name)
+		if exists, _ := afero.Exists(t.fs, selected); !exists {
+			continue
+		}
+		if strings.HasSuffix(selected, ".json") {
+			t.fallback()
+		} else {
+			t.queue = append(t.queue, queuedFile{path: selected})
+		}
+		break
+	}
 	return true
 }
 

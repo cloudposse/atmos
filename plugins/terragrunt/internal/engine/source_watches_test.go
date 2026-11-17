@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -214,4 +215,65 @@ func TestInputWatchesFollowIncludesOfConfigurationReads(t *testing.T) {
 			require.Equal(t, []string{root}, result.Folders)
 		})
 	}
+}
+
+func TestInputWatchesDirectoryJSONDefault(t *testing.T) {
+	for _, withHCL := range []bool{false, true} {
+		t.Run(fmt.Sprint(withHCL), func(t *testing.T) {
+			root := t.TempDir()
+			fs := afero.NewMemMapFs()
+			shared := filepath.Join(root, "shared")
+			require.NoError(t, fs.MkdirAll(shared, 0o700))
+			unit := filepath.Join(root, "terragrunt.hcl")
+			require.NoError(t, afero.WriteFile(fs, unit, []byte(`inputs = { shared = read_terragrunt_config("shared") }`), 0o600))
+			require.NoError(t, afero.WriteFile(fs, filepath.Join(shared, "terragrunt.hcl.json"), []byte(`{"inputs":{"data":"${file(\"../data.json\")}"}}`), 0o600))
+			if withHCL {
+				require.NoError(t, afero.WriteFile(fs, filepath.Join(shared, "terragrunt.hcl"), []byte(`inputs = {}`), 0o600))
+			}
+			result := &model.Resolution{Files: []string{unit}}
+			require.NoError(t, trackInputSources(fs, root, result))
+			require.Contains(t, result.Folders, root)
+		})
+	}
+}
+
+func TestInputWatchesRepeatedIncludeScopes(t *testing.T) {
+	root := t.TempDir()
+	fs := afero.NewMemMapFs()
+	write := func(path, contents string) {
+		t.Helper()
+		path = filepath.Join(root, path)
+		require.NoError(t, fs.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, afero.WriteFile(fs, path, []byte(contents), 0o600))
+	}
+	write("terragrunt.hcl", `inputs = { a = read_terragrunt_config("a/env.hcl"), b = read_terragrunt_config("b/env.hcl") }`)
+	for _, dir := range []string{"a", "b"} {
+		write(dir+"/env.hcl", `include "base" { path = "../base.hcl" }`)
+	}
+	write("base.hcl", `
+include "cycle" { path = "../base.hcl" }
+inputs = { data = file("${get_terragrunt_dir()}/data.json") }
+`)
+	result := &model.Resolution{Files: []string{filepath.Join(root, "terragrunt.hcl")}}
+	require.NoError(t, trackInputSources(fs, root, result))
+	for _, dir := range []string{"a", "b"} {
+		require.Contains(t, result.Files, filepath.Join(root, dir, "data.json"))
+	}
+	require.Empty(t, result.Folders)
+}
+
+func TestInputWatchesOriginalCallerInNestedReads(t *testing.T) {
+	root := t.TempDir()
+	fs := afero.NewMemMapFs()
+	unit := filepath.Join(root, "app", "terragrunt.hcl")
+	require.NoError(t, fs.MkdirAll(filepath.Dir(unit), 0o700))
+	require.NoError(t, fs.MkdirAll(filepath.Join(root, "shared"), 0o700))
+	require.NoError(t, afero.WriteFile(fs, unit, []byte(`inputs = { common = read_terragrunt_config("../shared/common.hcl") }`), 0o600))
+	require.NoError(t, afero.WriteFile(fs, filepath.Join(root, "shared", "common.hcl"), []byte(`inputs = { original = file("${get_original_terragrunt_dir()}/data.json"), current = file("${get_terragrunt_dir()}/current.json") }`), 0o600))
+	result := &model.Resolution{Files: []string{unit}}
+	require.NoError(t, trackInputSources(fs, root, result))
+	require.Contains(t, result.Files, filepath.Join(root, "app", "data.json"))
+	require.Contains(t, result.Files, filepath.Join(root, "shared", "current.json"))
+	require.NotContains(t, result.Files, filepath.Join(root, "shared", "data.json"))
+	require.Empty(t, result.Folders)
 }

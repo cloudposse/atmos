@@ -1086,3 +1086,29 @@ func TestConfigurationWorkdirDigestResolvesRelativePaths(t *testing.T) {
 		require.NotEqual(t, absolute, digest)
 	})
 }
+
+func TestConfigurationPlanPreservesReviewedOverwriteBytes(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	execCtx.preparedConfiguration.Files = []schema.ComponentConfigurationFile{{Path: "generated.tf", Content: []byte("# original A"), IfExists: "overwrite"}}
+	generated := filepath.Join(execCtx.workingDir, "generated.tf")
+	reviewed := []byte("# reviewed B")
+	require.NoError(t, os.WriteFile(generated, reviewed, 0o600))
+	snapshot, err := takePlanSnapshot(t.Context(), config, info, execCtx, path)
+	require.NoError(t, err)
+	execCtx.planSnapshots = &planSnapshotter{result: snapshot}
+	// An after-hook must not change the bytes captured in the record.
+	require.NoError(t, os.WriteFile(generated, []byte("# after C"), 0o600))
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+	_, err = restoreConfigurationPlan(t.Context(), config, info)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.NoError(t, os.WriteFile(generated, reviewed, 0o600))
+	prepared, err := restoreConfigurationPlan(t.Context(), config, info)
+	require.NoError(t, err)
+	require.Equal(t, reviewed, prepared.Files[0].Content)
+	require.NoError(t, writePreparedConfiguration(execCtx.workingDir, prepared))
+	actual, err := os.ReadFile(generated)
+	require.NoError(t, err)
+	require.Equal(t, reviewed, actual)
+	require.Equal(t, []byte("# original A"), execCtx.preparedConfiguration.Files[0].Content)
+}
