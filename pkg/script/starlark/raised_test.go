@@ -1,13 +1,18 @@
 package starlark
 
 import (
+	"bytes"
+	"errors"
 	"strings"
 	"testing"
+
+	"go.starlark.net/starlark"
 
 	cockroach "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 func TestRaisedFailureMessage(t *testing.T) {
@@ -23,7 +28,7 @@ func TestRaisedFailureMessage(t *testing.T) {
 			_, err := runSource(t, tc.source)
 			require.ErrorIs(t, err, errUtils.ErrStarlark)
 			require.EqualError(t, err, tc.message)
-			require.Contains(t, strings.Join(cockroach.GetAllDetails(err), "\n"), "test.star")
+			require.NotContains(t, strings.Join(cockroach.GetAllDetails(err), "\n"), "Traceback")
 			if tc.name == "builder" {
 				require.Contains(t, cockroach.GetAllHints(err), "Fix credentials")
 			}
@@ -43,4 +48,20 @@ func TestRaisedFailureDoesNotHideInterpreterErrors(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrStarlark)
 		require.Contains(t, err.Error(), prefixText)
 	}
+}
+
+// Changing the global logger requires a non-parallel test.
+func TestRaisedFailureTracebackIsDebugOnly(t *testing.T) {
+	var output bytes.Buffer
+	previous := log.Default()
+	log.SetDefault(newTestLogger(&output, log.DebugLevel))
+	t.Cleanup(func() { log.SetDefault(previous) })
+	_, err := runSource(t, `fail("Already in a development shell")`)
+	require.EqualError(t, err, "Already in a development shell")
+	require.Empty(t, cockroach.GetAllDetails(err))
+	require.Contains(t, output.String(), "Starlark failure traceback")
+	require.Contains(t, output.String(), "test.star")
+	var eval *starlark.EvalError
+	require.True(t, errors.As(err, &eval), "retain the interpreter error for programmatic diagnostics")
+	require.Contains(t, eval.Backtrace(), "Already in a development shell")
 }

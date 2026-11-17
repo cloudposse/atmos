@@ -330,8 +330,8 @@ dependencies { paths = ["../network", "../network"] }`, []pluginv1.ComponentDepe
 				require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
 			}
 			config := "terraform { source = \"../../module\" }\n"
-			require.NoError(t, os.WriteFile(filepath.Join(root, "live/network/terragrunt.hcl"), []byte(config), 0o600))
-			require.NoError(t, os.WriteFile(filepath.Join(root, "live/app/terragrunt.hcl"), []byte(config+test.blocks+"\ninputs = { deferred = run_cmd(\"must-not-execute\") }\n"), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "live", "network", "terragrunt.hcl"), []byte(config), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "live", "app", "terragrunt.hcl"), []byte(config+test.blocks+"\ninputs = { deferred = run_cmd(\"must-not-execute\") }\n"), 0o600))
 			opts, err := encode(map[string]any{"enabled": true, "mode": "native", "discovery": map[string]any{"enabled": true}})
 			require.NoError(t, err)
 			var phases []string
@@ -358,7 +358,7 @@ dependencies { paths = ["../network", "../network"] }`, []pluginv1.ComponentDepe
 				require.Equal(t, network.Address, app.Dependencies[i].Target)
 			}
 			require.Empty(t, network.Dependencies)
-			require.NoDirExists(t, filepath.Join(root, "live/app/.terragrunt-cache"))
+			require.NoDirExists(t, filepath.Join(root, "live", "app", ".terragrunt-cache"))
 		})
 	}
 }

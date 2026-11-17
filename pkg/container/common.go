@@ -299,14 +299,8 @@ func buildBuildArgs(config *BuildConfig) []string {
 		if config.Driver != nil {
 			args = append(args, "--builder", effectiveDriverName(config.Driver))
 		}
-		if config.Cache != nil {
-			for _, entry := range config.Cache.From {
-				args = append(args, "--cache-from", joinAttrs(entry))
-			}
-			for _, entry := range config.Cache.To {
-				args = append(args, "--cache-to", joinAttrs(entry))
-			}
-		}
+		args = appendBuildCacheArgs(args, config.Cache, false)
+
 		if config.Load {
 			args = append(args, "--load")
 		}
@@ -346,14 +340,7 @@ func buildBakeArgs(config *BuildConfig) []string {
 	if config.Driver != nil {
 		args = append(args, "--builder", effectiveDriverName(config.Driver))
 	}
-	if config.Cache != nil {
-		for _, entry := range config.Cache.From {
-			args = append(args, "--set", "*.cache-from="+joinAttrs(entry))
-		}
-		for _, entry := range config.Cache.To {
-			args = append(args, "--set", "*.cache-to="+joinAttrs(entry))
-		}
-	}
+	args = appendBuildCacheArgs(args, config.Cache, true)
 
 	for _, file := range appendFile(config.Bake.File, config.Bake.Files) {
 		args = append(args, "--file", file)
@@ -677,4 +664,24 @@ func runCommand(cmd *exec.Cmd, runtimeName string) error {
 		return fmt.Errorf("%w: %s exec exited with code %d: %w", errUtils.ErrContainerRuntimeOperation, runtimeName, exitErr.ExitCode(), err)
 	}
 	return fmt.Errorf("%w: %s exec failed: %w", errUtils.ErrContainerRuntimeOperation, runtimeName, err)
+}
+
+// appendBuildCacheArgs adds cache imports and exports using build or bake syntax.
+func appendBuildCacheArgs(args []string, cache *CacheConfig, bake bool) []string {
+	if cache == nil {
+		return args
+	}
+	fromFlag, toFlag := "--cache-from", "--cache-to"
+	fromPrefix, toPrefix := "", ""
+	if bake {
+		fromFlag, toFlag = "--set", "--set"
+		fromPrefix, toPrefix = "*.cache-from=", "*.cache-to="
+	}
+	for _, entry := range cache.From {
+		args = append(args, fromFlag, fromPrefix+joinAttrs(entry))
+	}
+	for _, entry := range cache.To {
+		args = append(args, toFlag, toPrefix+joinAttrs(entry))
+	}
+	return args
 }

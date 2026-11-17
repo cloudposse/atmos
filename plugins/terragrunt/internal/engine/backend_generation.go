@@ -97,8 +97,7 @@ func staticallyNonBackendGeneration(body hcl.Body) bool {
 	if !ok || !filepath.IsLocal(path) || path == "." {
 		return false
 	}
-	lower := strings.ToLower(path)
-	if !strings.HasSuffix(lower, ".tf") && !strings.HasSuffix(lower, ".tf.json") {
+	if !terraformConfigurationFile(path) {
 		return true
 	}
 	text, ok := literalGenerateString(content.Attributes["contents"])
@@ -125,4 +124,10 @@ func literalGenerateDisabled(attr *hcl.Attribute) (bool, bool) {
 		return false, false
 	}
 	return value.True(), true
+}
+
+// terraformConfigurationFile identifies generated files Terraform can load.
+func terraformConfigurationFile(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.HasSuffix(lower, ".tf") || strings.HasSuffix(lower, ".tf.json")
 }

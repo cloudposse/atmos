@@ -83,7 +83,7 @@ func TestApplyFixDetectsChangesDuringMerge(t *testing.T) {
 			t.Setenv("TMP", recovery)
 			t.Setenv("TEMP", recovery)
 			merged := false
-			runner := plumbingRunner(func(ctx context.Context, command string, args []string, opts atmosgit.RunOptions) (atmosgit.RunResult, error) {
+			runner := plumbingRunner(func(ctx context.Context, command string, args []string, opts *atmosgit.RunOptions) (atmosgit.RunResult, error) {
 				result, err := atmosgit.NewExecRunner().Run(ctx, command, args, opts)
 				if args[0] == "merge-file" {
 					require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestRecoveryRetainsCopiesWhenDiffFails(t *testing.T) {
 	t.Setenv("TEMP", recovery)
 	failure := errors.New("diff unavailable")
 	s := services(t.Context())
-	s.runner = plumbingRunner(func(_ context.Context, _ string, args []string, opts atmosgit.RunOptions) (atmosgit.RunResult, error) {
+	s.runner = plumbingRunner(func(_ context.Context, _ string, args []string, opts *atmosgit.RunOptions) (atmosgit.RunResult, error) {
 		require.Equal(t, "diff", args[0])
 		return atmosgit.RunResult{}, failure
 	})

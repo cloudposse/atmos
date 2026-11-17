@@ -111,9 +111,9 @@ func parserDiagnostic(diagnostic *hcl.Diagnostic) bool {
 	return diagnostic.Expression == nil && diagnostic.EvalContext == nil && diagnostic.Subject != nil && diagnostic.Subject.Filename != ""
 }
 
-// setting builds a rejection that names a Terragrunt setting, with a custom summary and hint.
-func setting(code, key, file, summary, detail string, hints ...string) *model.Problem {
-	return &model.Problem{Code: code, Summary: summary, Detail: detail, Hints: hints, File: file, Key: key, Safe: true, Err: ErrUnsupportedExecution}
+// unsupportedHook names a rejected hook, with a custom summary and remedy.
+func unsupportedHook(key, summary, detail string, hints ...string) *model.Problem {
+	return &model.Problem{Code: model.CodeUnsupportedHook, Summary: summary, Detail: detail, Hints: hints, Key: key, Safe: true, Err: ErrUnsupportedExecution}
 }
 
 // rejectUnsupported fails a unit that uses a setting the native adaptation does not implement. It

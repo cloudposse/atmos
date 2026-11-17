@@ -170,7 +170,7 @@ func TestCaptureExecMetadataSync_CallsParserForSyncAllowlistedSingleComponent(t 
 	var calls atomic.Int32
 	var gotSubCommand string
 	var gotExitCode int
-	parser := func(subCommand string, exitCode int, output string) any {
+	parser := func(subCommand, component string, exitCode int, output string) any {
 		calls.Add(1)
 		gotSubCommand = subCommand
 		gotExitCode = exitCode
@@ -200,7 +200,7 @@ func TestCaptureExecMetadataSync_NeverCallsParserForNonSyncSubcommand(t *testing
 	info := &schema.ConfigAndStacksInfo{}
 
 	var calls atomic.Int32
-	parser := func(string, int, string) any {
+	parser := func(string, string, int, string) any {
 		calls.Add(1)
 		return "should never be reached"
 	}
@@ -221,7 +221,7 @@ func TestCaptureExecMetadataSync_NeverCallsParserWhenNodeHooksWired(t *testing.T
 	info := &schema.ConfigAndStacksInfo{NodeHooks: fakeNodeHooks{}}
 
 	var calls atomic.Int32
-	parser := func(string, int, string) any {
+	parser := func(string, string, int, string) any {
 		calls.Add(1)
 		return "should never be reached"
 	}
@@ -229,4 +229,54 @@ func TestCaptureExecMetadataSync_NeverCallsParserWhenNodeHooksWired(t *testing.T
 	captureExecMetadataSync(atmosConfig, "plan", info, execMetadataSyncParams{Parser: parser})
 
 	assert.Equal(t, int32(0), calls.Load())
+}
+
+// TestCaptureExecMetadataSync_ParserReceivesResolvedComponent verifies the
+// parser is handed info.ComponentFromArg, which holds the logical component
+// name once a path-style CLI argument has been resolved, rather than a name
+// captured from the raw argument before resolution.
+func TestCaptureExecMetadataSync_ParserReceivesResolvedComponent(t *testing.T) {
+	t.Setenv("CI", "")
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "vpc", Stack: "plat-use2-dev"}
+
+	var gotComponent string
+	parser := func(_, component string, _ int, _ string) any {
+		gotComponent = component
+		return nil
+	}
+
+	captureExecMetadataSync(atmosConfig, "plan", info, execMetadataSyncParams{Parser: parser})
+
+	assert.Equal(t, "vpc", gotComponent)
+}
+
+// TestCaptureExecMetadataSync_ParserReceivesInstanceNotDirectory verifies the
+// parser is handed the component instance name (the stack key) even when
+// metadata.component points that instance at a different physical directory.
+// Here the instance "network/primary" lives in components/terraform/vpc; the
+// metadata must report the instance, never the directory ("vpc") or its last
+// segment ("primary").
+func TestCaptureExecMetadataSync_ParserReceivesInstanceNotDirectory(t *testing.T) {
+	t.Setenv("CI", "")
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg:  "network/primary",
+		Component:         "primary",
+		FinalComponent:    "vpc",
+		BaseComponentPath: "vpc",
+		Stack:             "dev",
+	}
+
+	var gotComponent string
+	parser := func(_, component string, _ int, _ string) any {
+		gotComponent = component
+		return nil
+	}
+
+	captureExecMetadataSync(atmosConfig, "plan", info, execMetadataSyncParams{Parser: parser})
+
+	assert.Equal(t, "network/primary", gotComponent)
 }

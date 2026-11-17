@@ -1,0 +1,14 @@
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfvars.json
+**/*.planfile
+**/*.planfile.*
+**/*_providers.tf.json
+**/*_backend.tf.json
+**/.terraform.lock.hcl
+**/terraform.tfstate.d/
+**/*.providers.tf.json
+**/*.backend.tf.json
+**/providers_override.tf.json
+**/ci_backend_override.tf.json
