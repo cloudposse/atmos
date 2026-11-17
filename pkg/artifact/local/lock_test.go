@@ -374,27 +374,6 @@ func lockFile(repo *Repository, resource string) string {
 	return filepath.Join(repo.root, filepath.FromSlash(layout.LockPath(resource)))
 }
 
-func TestPublishRejectsLockForAnotherReference(t *testing.T) {
-	repo := newRepo(t, dirSpec())
-	held := holdLock(t, repo, lockRequest("other:1.0.0"))
-	_, err := repo.Publish(context.Background(), prepare(t, repo, &prepareSpec{}), artifact.PublishOptions{Lock: held})
-	require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
-}
-
-func TestWriteEvidenceHonorsReferenceLock(t *testing.T) {
-	repo := newRepo(t, dirSpec())
-	publish(t, repo, &prepareSpec{}, artifact.PublishOptions{})
-	pinned := resolve(t, repo, defaultRef())
-	held := holdLock(t, repo, lockRequest(testName+":"+testVersion))
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-	_, err := repo.WriteEvidence(ctx, &pinned, nil, nil)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	_, err = repo.WriteEvidence(context.Background(), &pinned, nil, held)
-	require.NoError(t, err)
-	require.NoError(t, held.Release(context.Background()))
-}
-
 func TestLockNamespaceResolvesSymlinkAliases(t *testing.T) {
 	root := t.TempDir()
 	alias := filepath.Join(t.TempDir(), "alias")
@@ -486,6 +465,27 @@ func TestPublishWithDelegatedLockAlsoTakesLocalReferenceLock(t *testing.T) {
 	defer cancel()
 	_, err = repo.Publish(ctx, prepare(t, repo, &prepareSpec{}), artifact.PublishOptions{Lock: delegatedTestLock{}})
 	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestPublishRejectsLockForAnotherReference(t *testing.T) {
+	repo := newRepo(t, dirSpec())
+	held := holdLock(t, repo, lockRequest("other:1.0.0"))
+	_, err := repo.Publish(context.Background(), prepare(t, repo, &prepareSpec{}), artifact.PublishOptions{Lock: held})
+	require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
+}
+
+func TestWriteEvidenceHonorsReferenceLock(t *testing.T) {
+	repo := newRepo(t, dirSpec())
+	publish(t, repo, &prepareSpec{}, artifact.PublishOptions{})
+	pinned := resolve(t, repo, defaultRef())
+	held := holdLock(t, repo, lockRequest(testName+":"+testVersion))
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err := repo.WriteEvidence(ctx, &pinned, nil, nil)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	_, err = repo.WriteEvidence(context.Background(), &pinned, nil, held)
+	require.NoError(t, err)
+	require.NoError(t, held.Release(context.Background()))
 }
 
 func TestDelegatedMutationsAlsoTakeLocalReferenceLock(t *testing.T) {

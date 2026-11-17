@@ -385,16 +385,5 @@ func (r *Repository) lockEvidenceReference(ctx context.Context, t *tree, recordD
 	if err != nil {
 		return nil, err
 	}
-	resource := record.Name + ":" + record.Version
-	if localLock, ok := lock.(*fileLock); ok {
-		if !r.coversReference(localLock, resource) {
-			return nil, fmt.Errorf("%w: supplied lock does not cover reference %s", errUtils.ErrArtifactConflict, resource)
-		}
-		// Reuse the handle only when it holds this repository's own lock file; a delegate's file
-		// does not exclude direct writers of this repository.
-		if r.holdsTargetLock(localLock, resource) {
-			return nil, nil
-		}
-	}
-	return r.acquire(ctx, resource, r.settings.owner, "")
+	return r.lockReference(ctx, record.Name+":"+record.Version, lock)
 }

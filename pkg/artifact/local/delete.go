@@ -37,18 +37,9 @@ func (r *Repository) Delete(ctx context.Context, pinned artifact.PinnedReference
 	if err != nil {
 		return nil, err
 	}
-	var held *fileLock
-	reference := record.Name + ":" + record.Version
-	localLock, isLocalLock := options.Lock.(*fileLock)
-	if isLocalLock && !r.coversReference(localLock, reference) {
-		return nil, fmt.Errorf("%w: supplied lock does not cover reference %s", errUtils.ErrArtifactConflict, reference)
-	}
-	// A delegated handle covers the reference but may hold another repository's lock file, so the
-	// target-local lock is still taken unless the handle already holds it.
-	if !isLocalLock || !r.holdsTargetLock(localLock, reference) {
-		if held, err = r.acquire(ctx, reference, r.settings.owner, ""); err != nil {
-			return nil, err
-		}
+	held, err := r.lockReference(ctx, record.Name+":"+record.Version, options.Lock)
+	if err != nil {
+		return nil, err
 	}
 	result, err := r.deleteLocked(ctx, t, &pinned, &options)
 	if held != nil {

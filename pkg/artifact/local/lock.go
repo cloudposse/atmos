@@ -120,6 +120,22 @@ func (r *Repository) holdsTargetLock(lock *fileLock, reference string) bool {
 	return os.SameFile(held, want)
 }
 
+// lockReference returns the lock a mutation of reference must hold. A caller handle that holds this
+// repository's own lock file is reused (nil is returned: nothing to release). A handle that covers
+// the reference but holds another repository's file, and a missing handle, make the repository
+// acquire its own lock, which the caller releases. A local handle for another reference is a conflict.
+func (r *Repository) lockReference(ctx context.Context, reference string, lock artifact.LockHandle) (*fileLock, error) {
+	if localLock, ok := lock.(*fileLock); ok {
+		if !r.coversReference(localLock, reference) {
+			return nil, fmt.Errorf("%w: supplied lock does not cover reference %s", errUtils.ErrArtifactConflict, reference)
+		}
+		if r.holdsTargetLock(localLock, reference) {
+			return nil, nil
+		}
+	}
+	return r.acquire(ctx, reference, r.settings.owner, "")
+}
+
 // referenceLockPath returns the lock file this repository uses for reference (name:version).
 func (r *Repository) referenceLockPath(reference string) string {
 	return filepath.Join(r.root, native(layout.LockPath(reference)))
