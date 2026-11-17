@@ -473,19 +473,34 @@ func TestLock_CanceledContenderMayCreateClaimAfterForeignRelease(t *testing.T) {
 	t.Cleanup(unblock)
 	spec.fake.Inject(s3test.Fault{Op: s3test.OpPutObject, KeyPrefix: layout.LockPath(lockResource), Action: s3test.Gate, Entered: entered, Release: release, Done: done})
 	attemptCtx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
 	result := make(chan error, 1)
 	go func() {
 		_, err := repo.Lock(attemptCtx, artifact.LockRequest{Resource: lockResource, Owner: "contender"})
 		result <- err
 	}()
-	<-entered
+	select {
+	case <-entered:
+	case err := <-result:
+		t.Fatalf("lock completed before entering gate: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for claim to enter gate")
+	}
 	cancel()
-	err = <-result
+	select {
+	case err = <-result:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for canceled claim")
+	}
 	require.ErrorIs(t, err, context.Canceled)
 	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationAmbiguous)
 	require.NoError(t, held.Release(ctx))
 	unblock()
-	<-done
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for gated request to finish")
+	}
 	keys := lockObjects(spec.fake)
 	require.Len(t, keys, 1, "the late request can create its claim after release")
 	object, ok := spec.fake.Object(keys[0])
