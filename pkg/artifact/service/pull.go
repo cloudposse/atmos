@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
@@ -67,7 +68,7 @@ func (s *Service) download(ctx context.Context, op *operation, request *artifact
 	if err := bindContent(content, source.inspection); err != nil {
 		return err
 	}
-	guard := materialize.WithReplaceGuard(func(dest string) error {
+	guard := materialize.WithReplaceGuard(func(dest *os.Root) error {
 		return recheckDestination(dest, request.Force, source.inspection.Record)
 	})
 	if err := materialize.Materialize(ctx, content, request.Destination, guard); err != nil {
@@ -109,13 +110,13 @@ func checkDestination(op *operation, request *artifact.PullRequest, record *arti
 // recheckDestination repeats the conflict decision right before the destination is replaced,
 // because files may have appeared in it while the artifact was downloading. An empty destination
 // and a destination that already matches are always replaceable; different content needs force.
-func recheckDestination(dest string, force bool, record *artifact.Record) error {
-	state, err := materialize.InspectDestination(dest, record)
+func recheckDestination(dest *os.Root, force bool, record *artifact.Record) error {
+	state, err := materialize.InspectBoundDestination(dest, record)
 	if err != nil {
 		return err
 	}
 	if state == materialize.DestinationDiffers && !force {
-		return fmt.Errorf("%w: destination %q changed during the download and now holds different content; use force to replace it", errUtils.ErrArtifactConflict, dest)
+		return fmt.Errorf("%w: destination %q changed during the download and now holds different content; use force to replace it", errUtils.ErrArtifactConflict, dest.Name())
 	}
 	return nil
 }

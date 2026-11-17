@@ -391,3 +391,39 @@ func TestRepository_SignClassifiesSignerFailures(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrArtifactSigningFailed)
 	assert.ErrorIs(t, err, cause)
 }
+
+func TestRepository_VerifyRejectsEvidenceIntegrityMismatch(t *testing.T) {
+	source := artifacttest.New(artifacttest.Options{})
+	pinned := publishOne(t, source)
+	signEvidence(t, source, &pinned)
+	valid, err := source.ReadEvidence(t.Context(), &pinned)
+	require.NoError(t, err)
+	require.Len(t, valid, 1)
+	signer := &artifacttest.FakeSigner{Identity: "release@example.com", Issuer: "https://issuer.example.com"}
+	for _, mismatch := range []string{"size", "digest"} {
+		t.Run(mismatch, func(t *testing.T) {
+			repo := artifacttest.New(artifacttest.Options{})
+			target := publishOne(t, repo)
+			corrupt := valid[0]
+			if mismatch == "size" {
+				corrupt.Evidence.Descriptor.Size++
+			} else {
+				corrupt.Evidence.Descriptor.Digest = digest.FromString("different bytes")
+			}
+			_, err := repo.WriteEvidence(t.Context(), &target, []artifact.EvidenceBlob{corrupt}, nil)
+			require.NoError(t, err)
+			result, err := repo.Verify(t.Context(), valid[0].Evidence.Subject, signer.TrustedPolicy())
+			require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed)
+			assert.Empty(t, result.Claims)
+			assert.Empty(t, result.EvidenceDigests)
+			require.NotEmpty(t, result.Diagnostics)
+			assert.Equal(t, "evidence-integrity", result.Diagnostics[0].Code)
+			_, err = repo.WriteEvidence(t.Context(), &target, valid, nil)
+			require.NoError(t, err)
+			result, err = repo.Verify(t.Context(), valid[0].Evidence.Subject, signer.TrustedPolicy())
+			require.NoError(t, err)
+			assert.Len(t, result.Claims, 1)
+			assert.Equal(t, []digest.Digest{valid[0].Evidence.Descriptor.Digest}, result.EvidenceDigests)
+		})
+	}
+}

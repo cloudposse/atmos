@@ -22,7 +22,7 @@ type options struct {
 	maxBytes int64
 
 	// replaceGuard runs immediately before an existing destination is replaced.
-	replaceGuard func(dest string) error
+	replaceGuard func(dest *os.Root) error
 
 	// ownerAccess keeps owner read and traversal access on the extracted tree.
 	ownerAccess bool
@@ -41,8 +41,9 @@ func WithOwnerAccess() Option {
 // WithReplaceGuard registers a check that runs right before an existing destination directory is
 // replaced, after extraction finished and the destination was bound. A caller uses it to re-check
 // the destination state it decided on earlier, because the destination may have changed during the
-// download. A non-nil error aborts the replacement and leaves the destination untouched.
-func WithReplaceGuard(guard func(dest string) error) Option {
+// download. The guard must inspect through the supplied root, never reopen its Name.
+// The caller must not close the root. A non-nil error aborts the replacement and leaves the destination untouched.
+func WithReplaceGuard(guard func(dest *os.Root) error) Option {
 	defer perf.Track(nil, "materialize.WithReplaceGuard")()
 
 	return func(o *options) { o.replaceGuard = guard }

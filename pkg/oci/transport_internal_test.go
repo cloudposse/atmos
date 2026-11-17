@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"oras.land/oras-go/v2/errdef"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/errcode"
 
@@ -409,4 +410,55 @@ func TestReadSubjectStillRejectsAWrongDigestWhenTheContextStaysActive(t *testing
 
 	require.ErrorIs(t, err, errUtils.ErrOCIIntegrity)
 	assert.Nil(t, got)
+}
+
+func TestReadOnlyLayoutClassifiesEveryReadError(t *testing.T) {
+	store := NewMockRepositoryStore(gomock.NewController(t))
+	store.EXPECT().Fetch(gomock.Any(), gomock.Any()).Return(nil, os.ErrPermission)
+	store.EXPECT().Exists(gomock.Any(), gomock.Any()).Return(false, os.ErrPermission)
+	store.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(ocispec.Descriptor{}, os.ErrPermission)
+	store.EXPECT().Predecessors(gomock.Any(), gomock.Any()).Return(nil, os.ErrPermission)
+	layout := &readOnlyLayout{store: store}
+	_, fetchErr := layout.Fetch(t.Context(), ocispec.Descriptor{})
+	_, existsErr := layout.Exists(t.Context(), ocispec.Descriptor{})
+	_, resolveErr := layout.Resolve(t.Context(), "missing")
+	_, predecessorsErr := layout.Predecessors(t.Context(), ocispec.Descriptor{})
+	for _, err := range []error{fetchErr, existsErr, resolveErr, predecessorsErr} {
+		require.ErrorIs(t, err, errUtils.ErrOCILayout)
+		assert.ErrorIs(t, err, os.ErrPermission)
+	}
+}
+
+func TestReadOnlyLayoutMissingReferenceIsNotRegistryFailure(t *testing.T) {
+	directory := t.TempDir()
+	_, err := OpenLayout(t.Context(), directory)
+	require.NoError(t, err)
+	source, err := OpenLayoutReadOnly(t.Context(), directory)
+	require.NoError(t, err)
+	destination, err := OpenLayout(t.Context(), t.TempDir())
+	require.NoError(t, err)
+	_, err = Copy(t.Context(), Source{Store: source, Reference: "missing"}, Destination{Store: destination, Reference: "copy"})
+	require.ErrorIs(t, err, errUtils.ErrOCILayout)
+	assert.ErrorIs(t, err, errdef.ErrNotFound)
+	assert.NotErrorIs(t, err, errUtils.ErrOCIRegistry)
+}
+
+func TestRepositoryRegistryTokenIgnoresMalformedBasicAuth(t *testing.T) {
+	repository := Repository{Registry: "registry.example.com", Path: "acme/plugin"}
+	resource, err := repository.legacy()
+	require.NoError(t, err)
+	resolver := NewMockAuthenticationResolver(gomock.NewController(t))
+	resolver.EXPECT().Resolve(gomock.Any(), resource).Return(authn.FromConfig(authn.AuthConfig{RegistryToken: "valid-token", Auth: "!"}), true, nil)
+	client := NewClient(nil, WithAuthenticationResolver(resolver))
+	opened, err := client.Repository(t.Context(), repository)
+	require.NoError(t, err)
+	store, ok := opened.(*registryStore)
+	require.True(t, ok)
+	authClient, ok := store.repo.Client.(*auth.Client)
+	require.True(t, ok)
+	credential, err := authClient.Credential(t.Context(), repository.Registry)
+	require.NoError(t, err)
+	assert.Equal(t, "valid-token", credential.AccessToken)
+	assert.Empty(t, credential.Username)
+	assert.Empty(t, credential.Password)
 }

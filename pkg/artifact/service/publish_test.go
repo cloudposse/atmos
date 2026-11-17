@@ -214,6 +214,8 @@ func TestPublish_ImmutabilityPolicyMockSeesBothSides(t *testing.T) {
 			assert.NotNil(t, c.Inspection)
 		} else {
 			sawIncoming = true
+			require.NotNil(t, c.Inspection)
+			assert.Equal(t, "changed", c.Inspection.Record.Metadata.Description)
 			assert.NotNil(t, c.Prepared)
 		}
 		return false, ""

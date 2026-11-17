@@ -69,18 +69,30 @@ func InspectDestination(dest string, record *artifact.Record) (DestinationState,
 	case !info.IsDir():
 		return DestinationDiffers, fmt.Errorf("%w: destination %q exists and is not a directory", errUtils.ErrArtifactConflict, dest)
 	}
-	children, err := os.ReadDir(dest)
+	bound, err := bindDestination(dest, info)
 	if err != nil {
-		return DestinationDiffers, fmt.Errorf("%w: destination %q: %w", errUtils.ErrArtifactPackagingInvalid, dest, err)
+		return DestinationDiffers, err
+	}
+	defer bound.root.Close()
+	return InspectBoundDestination(bound.root, record)
+}
+
+// InspectBoundDestination classifies the directory held by root without resolving its pathname.
+// The caller retains ownership of root and must keep it open throughout inspection.
+func InspectBoundDestination(root *os.Root, record *artifact.Record) (DestinationState, error) {
+	defer perf.Track(nil, "materialize.InspectBoundDestination")()
+
+	children, err := fs.ReadDir(root.FS(), rootDirName)
+	if err != nil {
+		return DestinationDiffers, fmt.Errorf("%w: destination %q: %w", errUtils.ErrArtifactPackagingInvalid, root.Name(), err)
 	}
 	if len(children) == 0 {
-		// An empty Record is satisfied by an empty directory, so a repeat pull of it is a match.
 		if len(record.Inventory) == 0 {
 			return DestinationMatches, nil
 		}
 		return DestinationEmpty, nil
 	}
-	if treeMatches(dest, record) {
+	if treeMatches(root, record) {
 		return DestinationMatches, nil
 	}
 	return DestinationDiffers, nil
@@ -89,25 +101,21 @@ func InspectDestination(dest string, record *artifact.Record) (DestinationState,
 // treeMatches reports whether dir holds exactly the Record inventory: the same paths, types, link
 // targets, file sizes and digests, and (off Windows) permission bits. Any unreadable entry counts
 // as a difference.
-func treeMatches(dir string, record *artifact.Record) bool {
+func treeMatches(root *os.Root, record *artifact.Record) bool {
 	want := make(map[string]artifact.Entry, len(record.Inventory))
 	for _, entry := range record.Inventory {
 		want[entry.Path] = entry
 	}
 	ancestors := requiredAncestors(want)
 	matched := 0
-	walkErr := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+	walkErr := fs.WalkDir(root.FS(), rootDirName, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if p == dir {
+		if p == rootDirName {
 			return nil
 		}
-		relative, err := filepath.Rel(dir, p)
-		if err != nil {
-			return err
-		}
-		key := filepath.ToSlash(relative)
+		key := p
 		entry, ok := want[key]
 		if !ok {
 			// A directory the inventory does not record is still required when an entry lives under it.
@@ -116,7 +124,7 @@ func treeMatches(dir string, record *artifact.Record) bool {
 			}
 			return errMismatch
 		}
-		if !entryMatches(p, d, &entry) {
+		if !entryMatches(root, p, d, &entry) {
 			return errMismatch
 		}
 		matched++
@@ -136,7 +144,7 @@ func requiredAncestors(want map[string]artifact.Entry) map[string]bool {
 	return ancestors
 }
 
-func entryMatches(p string, d fs.DirEntry, entry *artifact.Entry) bool {
+func entryMatches(root *os.Root, p string, d fs.DirEntry, entry *artifact.Entry) bool {
 	info, err := d.Info()
 	if err != nil {
 		return false
@@ -145,19 +153,19 @@ func entryMatches(p string, d fs.DirEntry, entry *artifact.Entry) bool {
 	case artifact.EntryDirectory:
 		return info.IsDir() && modeMatches(info, entry)
 	case artifact.EntrySymlink:
-		return linkMatches(p, info, entry)
+		return linkMatches(root, p, info, entry)
 	default:
-		return fileMatches(p, info, entry)
+		return fileMatches(root, p, info, entry)
 	}
 }
 
-func linkMatches(p string, info os.FileInfo, entry *artifact.Entry) bool {
-	target, err := os.Readlink(p)
+func linkMatches(root *os.Root, p string, info os.FileInfo, entry *artifact.Entry) bool {
+	target, err := root.Readlink(p)
 	return err == nil && info.Mode()&os.ModeSymlink != 0 && filepath.ToSlash(target) == entry.Target
 }
 
-func fileMatches(p string, info os.FileInfo, entry *artifact.Entry) bool {
-	return info.Mode().IsRegular() && info.Size() == entry.Size && modeMatches(info, entry) && fileDigest(p) == entry.Digest
+func fileMatches(root *os.Root, p string, info os.FileInfo, entry *artifact.Entry) bool {
+	return info.Mode().IsRegular() && info.Size() == entry.Size && modeMatches(info, entry) && fileDigest(root, p) == entry.Digest
 }
 
 func modeMatches(info os.FileInfo, entry *artifact.Entry) bool {
@@ -167,8 +175,8 @@ func modeMatches(info os.FileInfo, entry *artifact.Entry) bool {
 	return uint32(info.Mode().Perm()) == entry.Mode
 }
 
-func fileDigest(p string) digest.Digest {
-	file, err := os.Open(p)
+func fileDigest(root *os.Root, p string) digest.Digest {
+	file, err := root.Open(p)
 	if err != nil {
 		return ""
 	}
@@ -232,7 +240,7 @@ func Materialize(ctx context.Context, content *artifact.Content, dest string, op
 
 // installStaged moves the extracted tree into place. Cancellation is final: a canceled pull never
 // installs, even when extraction had just finished.
-func installStaged(ctx context.Context, stage, dest string, guard func(dest string) error) (bool, error) {
+func installStaged(ctx context.Context, stage, dest string, guard func(dest *os.Root) error) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -245,7 +253,7 @@ func installStaged(ctx context.Context, stage, dest string, guard func(dest stri
 // replaceDestination atomically exchanges the staged and existing trees. No children are
 // removed or installed through the destination path, and a failed exchange leaves both intact.
 // The boolean preserves scratch when a concurrent replacement cannot be safely rolled back.
-func replaceDestination(ctx context.Context, stage, dest string, guard func(dest string) error) (bool, error) {
+func replaceDestination(ctx context.Context, stage, dest string, guard func(dest *os.Root) error) (bool, error) {
 	info, err := os.Lstat(dest)
 	switch {
 	case os.IsNotExist(err):
@@ -263,7 +271,7 @@ func replaceDestination(ctx context.Context, stage, dest string, guard func(dest
 	}
 	defer bound.root.Close()
 	if guard != nil {
-		if err := guard(dest); err != nil {
+		if err := guard(bound.root); err != nil {
 			return false, err
 		}
 	}

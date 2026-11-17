@@ -44,7 +44,7 @@ type Layout struct {
 
 var (
 	_ GraphStore         = (*Layout)(nil)
-	_ ReadOnlyGraphStore = (*oci.ReadOnlyStore)(nil)
+	_ ReadOnlyGraphStore = (*readOnlyLayout)(nil)
 )
 
 // OpenLayout opens or creates a layout directory.
@@ -81,7 +81,32 @@ func OpenLayoutReadOnly(ctx context.Context, directory string) (ReadOnlyGraphSto
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrOCILayout, err)
 	}
-	return store, nil
+	return &readOnlyLayout{store: store}, nil
+}
+
+// readOnlyLayout preserves the layout error classification on every source operation.
+type readOnlyLayout struct {
+	store ReadOnlyGraphStore
+}
+
+func (l *readOnlyLayout) Fetch(ctx context.Context, target ocispec.Descriptor) (io.ReadCloser, error) {
+	reader, err := l.store.Fetch(ctx, target)
+	return reader, layoutError(err)
+}
+
+func (l *readOnlyLayout) Exists(ctx context.Context, target ocispec.Descriptor) (bool, error) {
+	exists, err := l.store.Exists(ctx, target)
+	return exists, layoutError(err)
+}
+
+func (l *readOnlyLayout) Resolve(ctx context.Context, reference string) (ocispec.Descriptor, error) {
+	desc, err := l.store.Resolve(ctx, reference)
+	return desc, layoutError(err)
+}
+
+func (l *readOnlyLayout) Predecessors(ctx context.Context, node ocispec.Descriptor) ([]ocispec.Descriptor, error) {
+	predecessors, err := l.store.Predecessors(ctx, node)
+	return predecessors, layoutError(err)
 }
 
 func (l *Layout) indexPath() string { return filepath.Join(l.root, ocispec.ImageIndexFile) }

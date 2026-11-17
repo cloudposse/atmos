@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -454,4 +455,34 @@ func TestCopy_StagingKeepsOwnerAccessWhileRepacking(t *testing.T) {
 	require.ErrorIs(t, err, errTransport)
 	require.True(t, repacked, "the copy must reach the repack")
 	e.assertStagingClean()
+}
+
+func TestCopy_InspectionPolicySeesIncomingReleaseOnBothPaths(t *testing.T) {
+	for _, native := range []bool{false, true} {
+		t.Run(fmt.Sprintf("native=%t", native), func(t *testing.T) {
+			var sawIncoming bool
+			policy := service.ImmutabilityFunc(func(c service.Candidate) (bool, string) {
+				require.NotNil(t, c.Inspection)
+				if c.Existing {
+					return false, ""
+				}
+				sawIncoming = true
+				assert.Equal(t, native, c.Prepared == nil)
+				return c.Inspection.Record.Metadata.Labels["format"] == "plugin", "incoming plugin"
+			})
+			e := copyEnv(t, artifact.PackagingNone, artifact.PackagingNone, service.WithImmutabilityPolicy(policy))
+			e.publish("dst", e.source("generic"))
+			request := e.publishRequest("src", e.source("plugin"))
+			request.Metadata.Labels = map[string]string{"format": "plugin"}
+			_, err := e.svc.Publish(t.Context(), request)
+			require.NoError(t, err)
+			if native {
+				e.static.Repositories["dst"] = newNativeRepository(t, e.repos["dst"])
+			}
+			_, err = e.svc.Copy(t.Context(), artifact.CopyRequest{Ref: exampleRef, From: "src", To: "dst", Force: true})
+			require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
+			assert.Contains(t, err.Error(), "incoming plugin")
+			assert.True(t, sawIncoming)
+		})
+	}
 }
