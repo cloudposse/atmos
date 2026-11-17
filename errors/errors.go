@@ -2131,6 +2131,10 @@ var (
 	// reconciled: the completed reference could not be proven to hold, or to lack, the expected content.
 	ErrArtifactPublicationAmbiguous = errors.New("artifact publication outcome is ambiguous")
 
+	// ErrArtifactEvidenceMalformed is returned when a subject's evidence directory holds more malformed
+	// entries than the repository is willing to read, so valid evidence may be hidden behind them.
+	ErrArtifactEvidenceMalformed = errors.New("too many malformed evidence files")
+
 	// ErrSymlinkLoop is returned when resolving a path follows more symlinks than the bound allows, which
 	// means the links form a loop.
 	ErrSymlinkLoop = errors.New("symlink loop")
@@ -2138,10 +2142,6 @@ var (
 	// ErrArtifactStreamFailed is returned when reading or closing an artifact stream fails. The
 	// underlying I/O error is wrapped alongside it for diagnostics.
 	ErrArtifactStreamFailed = errors.New("artifact stream failed")
-
-	// ErrArtifactEvidenceMalformed is returned when a subject's evidence directory holds more malformed
-	// entries than the repository is willing to read, so valid evidence may be hidden behind them.
-	ErrArtifactEvidenceMalformed = errors.New("too many malformed evidence files")
 )
 
 // Blob transport sentinels. They classify outcomes of the transport-only object I/O in
