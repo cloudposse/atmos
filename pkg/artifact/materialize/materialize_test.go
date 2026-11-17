@@ -366,6 +366,17 @@ func sealedRecord(t *testing.T, inventory []artifact.Entry) artifact.Record {
 	return record
 }
 
+// unsealedRecord builds a Record around an inventory without sealing it. The record layer rejects
+// inventories whose symlink targets escape the package, so such a record can never be sealed;
+// this helper lets a test prove Materialize still refuses one that arrives unsealed.
+func unsealedRecord(inventory []artifact.Entry) artifact.Record {
+	return artifact.Record{
+		SchemaVersion: artifact.SchemaVersion,
+		Name:          "pkg/crafted", Version: "1", Kind: artifact.KindFiles,
+		CreatedAt: artifact.NewTimestamp(fixedTime), Inventory: inventory,
+	}
+}
+
 func fileEntry(path, content string, mode uint32) artifact.Entry {
 	return artifact.Entry{Path: path, Type: artifact.EntryFile, Size: int64(len(content)), Mode: mode, Digest: digest.FromString(content)}
 }
@@ -475,11 +486,13 @@ func requireSymlinks(t *testing.T) {
 
 func TestMaterialize_ChainedSymlinkEscapeIsRejected(t *testing.T) {
 	requireSymlinks(t)
-	record := sealedRecord(t, []artifact.Entry{
+	record := unsealedRecord([]artifact.Entry{
 		{Path: "a", Type: artifact.EntryDirectory, Mode: 0o755},
 		{Path: "a/b", Type: artifact.EntrySymlink, Target: ".."},
 		{Path: "c", Type: artifact.EntrySymlink, Target: "a/b/../.."},
 	})
+	// The record layer rejects the escape before any content is written, so it cannot be sealed.
+	require.ErrorIs(t, record.Seal(), errUtils.ErrArtifactUnsafePath)
 	content := &artifact.Content{Record: &record, Representation: artifact.Representation{Packaging: artifact.PackagingNone}}
 	out := dest(t)
 	err := materialize.Materialize(context.Background(), content, out)
@@ -515,14 +528,18 @@ func TestMaterialize_DanglingChainedSymlinkEscapeIsRejected(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			record := sealedRecord(t, tt.inventory)
-			content := &artifact.Content{Record: &record, Representation: artifact.Representation{Packaging: artifact.PackagingNone}}
-			err := materialize.Materialize(context.Background(), content, dest(t))
 			if tt.wantErr {
-				require.ErrorIs(t, err, errUtils.ErrArtifactUnsafePath)
+				// The record layer rejects the escape, so the record cannot be sealed, and
+				// Materialize must still refuse it when it arrives unsealed.
+				record := unsealedRecord(tt.inventory)
+				require.ErrorIs(t, record.Seal(), errUtils.ErrArtifactUnsafePath)
+				content := &artifact.Content{Record: &record, Representation: artifact.Representation{Packaging: artifact.PackagingNone}}
+				require.ErrorIs(t, materialize.Materialize(context.Background(), content, dest(t)), errUtils.ErrArtifactUnsafePath)
 				return
 			}
-			require.NoError(t, err, "a dangling link that stays inside the tree is allowed")
+			record := sealedRecord(t, tt.inventory)
+			content := &artifact.Content{Record: &record, Representation: artifact.Representation{Packaging: artifact.PackagingNone}}
+			require.NoError(t, materialize.Materialize(context.Background(), content, dest(t)), "a dangling link that stays inside the tree is allowed")
 		})
 	}
 }
@@ -610,12 +627,13 @@ func TestMaterialize_ReplaceGuard(t *testing.T) {
 			out := dest(t)
 			fixtures.WriteFile(t, out, "stale.txt", "stale", 0o644)
 			err := materialize.Materialize(context.Background(), contentOf(t, p), out, materialize.WithReplaceGuard(tt.guard))
-			if tt.wantErr != nil {
+			switch {
+			case tt.wantErr != nil:
 				require.ErrorIs(t, err, tt.wantErr)
-			} else if runtime.GOOS == "windows" {
+			case runtime.GOOS == "windows":
 				require.ErrorIs(t, err, errUtils.ErrArtifactUnsupportedCapability)
 				tt.wantStale = true
-			} else {
+			default:
 				require.NoError(t, err)
 			}
 			_, staleErr := os.Stat(filepath.Join(out, "stale.txt"))

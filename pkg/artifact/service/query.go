@@ -86,16 +86,7 @@ func (s *Service) showDocument(ctx context.Context, op *operation, request *arti
 		return fmt.Errorf("open %s of %s in repository %q: %w", request.Role, request.Ref, request.Repository, err)
 	}
 	defer stream.Reader.Close()
-	matched := false
-	if inspection.Record != nil {
-		for _, document := range inspection.Record.Documents {
-			if document.Role == request.Role && document == stream.Document {
-				matched = true
-				break
-			}
-		}
-	}
-	if !matched {
+	if !documentMatchesRecord(inspection.Record, request.Role, stream.Document) {
 		return fmt.Errorf("%w: document does not match the pinned record", errUtils.ErrArtifactIntegrityFailed)
 	}
 	content, err := readDocument(stream)
@@ -106,6 +97,17 @@ func (s *Service) showDocument(ctx context.Context, op *operation, request *arti
 	op.result.Outcome = artifact.OutcomeRead
 	op.result.Size = int64(len(content))
 	return nil
+}
+
+func documentMatchesRecord(record *artifact.Record, role artifact.DocumentRole, document artifact.Document) bool {
+	if record != nil {
+		for _, expected := range record.Documents {
+			if expected.Role == role && expected == document {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func validateShow(request *artifact.ShowDocumentRequest) error {
