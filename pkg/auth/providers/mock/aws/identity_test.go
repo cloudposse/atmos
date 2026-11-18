@@ -33,23 +33,6 @@ func TestIdentity_GetCredentialsFilePath_SanitizesSlash(t *testing.T) {
 	assert.NotContains(t, path, "team/dev")
 }
 
-// Regression: identities in different realms (such as concurrent operation-scoped identities) shared one
-// credentials file and raced on deleting it, which fails on Windows while another operation holds it open.
-func TestIdentity_GetCredentialsFilePath_IsolatedByRealm(t *testing.T) {
-	t.Parallel()
-
-	first := NewIdentity("automation", &schema.Identity{Kind: "aws"})
-	first.SetRealm("operation-1")
-	second := NewIdentity("automation", &schema.Identity{Kind: "aws"})
-	second.SetRealm(`operation/2:x\y`)
-	noRealm := NewIdentity("automation", &schema.Identity{Kind: "aws"})
-
-	assert.Contains(t, first.getCredentialsFilePath(), "atmos-mock-operation-1-automation.json")
-	assert.Contains(t, second.getCredentialsFilePath(), "atmos-mock-operation-2-x-y-automation.json")
-	assert.NotEqual(t, first.getCredentialsFilePath(), second.getCredentialsFilePath())
-	assert.Contains(t, noRealm.getCredentialsFilePath(), "atmos-mock-automation.json")
-}
-
 func TestIdentity_GetProviderName(t *testing.T) {
 	t.Parallel()
 

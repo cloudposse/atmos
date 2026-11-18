@@ -56,17 +56,7 @@ func (i *Identity) getCredentialsFilePath() string {
 	tmpDir := os.TempDir()
 	// Sanitize identity name to be filesystem-safe (replace / with -).
 	safeName := strings.ReplaceAll(i.name, "/", "-")
-	// Include the credential realm, like real providers do, so concurrent operation-scoped identities
-	// (each in its own realm) never share, and race on deleting, one credentials file.
-	if i.realm != "" {
-		safeName = mockFileSafe(i.realm) + "-" + safeName
-	}
 	return filepath.Join(tmpDir, "atmos-mock-"+safeName+".json")
-}
-
-// mockFileSafe replaces path separators and other characters that are not valid in file names.
-func mockFileSafe(s string) string {
-	return strings.NewReplacer("/", "-", `\`, "-", ":", "-").Replace(s)
 }
 
 // Kind returns the identity kind.
