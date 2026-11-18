@@ -62,7 +62,7 @@ func TestDetectDeletedComponents_ComponentDeleted(t *testing.T) {
 // TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted guards against
 // helm/kubernetes deletions going undetected (both were previously omitted
 // from the hardcoded [terraform, helmfile, packer] search list). Registered custom
-// providers must remain excluded until the live affected path supports them.
+// providers are reported too, the same as in the added/modified path (#3208).
 //
 //nolint:paralleltest // registerFakeComponentTypes mutates the shared component registry (comp.Reset/comp.Register); must run serially.
 func TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted(t *testing.T) {
@@ -92,7 +92,7 @@ func TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted(t *testing.T)
 		},
 	}
 
-	// All three components are deleted in HEAD; only the supported types are reported.
+	// All three components are deleted in HEAD, and all three are reported.
 	currentStacks := map[string]any{
 		"dev-us-east-1": map[string]any{
 			"components": map[string]any{
@@ -104,7 +104,7 @@ func TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted(t *testing.T)
 
 	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
-	require.Len(t, deleted, 2)
+	require.Len(t, deleted, 3)
 
 	byComponent := make(map[string]schema.Affected, len(deleted))
 	for _, d := range deleted {
@@ -112,13 +112,15 @@ func TestDetectDeletedComponents_HelmAndKubernetesComponentDeleted(t *testing.T)
 	}
 	require.Contains(t, byComponent, "nginx-ingress")
 	require.Contains(t, byComponent, "cert-manager")
+	require.Contains(t, byComponent, "custom-widget")
 	assert.Equal(t, cfg.HelmComponentType, byComponent["nginx-ingress"].ComponentType)
 	assert.Equal(t, cfg.KubernetesComponentType, byComponent["cert-manager"].ComponentType)
+	assert.Equal(t, "test-provider", byComponent["custom-widget"].ComponentType)
 }
 
 // TestDetectDeletedComponents_HelmAndKubernetesEntireStackDeleted guards the
 // processAllComponentsAsDeleted path (entire-stack deletion) for canonical
-// component types while excluding unsupported registered custom providers.
+// component types and registered custom providers.
 // The sibling test above exercises processDeletedComponentsInStack (a component
 // removed from a stack that still exists); this exercises the other deletion loop.
 //
@@ -155,7 +157,7 @@ func TestDetectDeletedComponents_HelmAndKubernetesEntireStackDeleted(t *testing.
 
 	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
 	require.NoError(t, err)
-	require.Len(t, deleted, 2)
+	require.Len(t, deleted, 3)
 
 	byComponent := make(map[string]schema.Affected, len(deleted))
 	for _, d := range deleted {
@@ -163,8 +165,10 @@ func TestDetectDeletedComponents_HelmAndKubernetesEntireStackDeleted(t *testing.
 	}
 	require.Contains(t, byComponent, "nginx-ingress")
 	require.Contains(t, byComponent, "cert-manager")
+	require.Contains(t, byComponent, "custom-widget")
 	assert.Equal(t, cfg.HelmComponentType, byComponent["nginx-ingress"].ComponentType)
 	assert.Equal(t, cfg.KubernetesComponentType, byComponent["cert-manager"].ComponentType)
+	assert.Equal(t, "test-provider", byComponent["custom-widget"].ComponentType)
 	assert.Equal(t, affectedReasonDeletedStack, byComponent["nginx-ingress"].Affected)
 	assert.Equal(t, deletionTypeStack, byComponent["nginx-ingress"].DeletionType)
 	assert.Equal(t, affectedReasonDeletedStack, byComponent["cert-manager"].Affected)

@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -75,8 +76,18 @@ func (c *componentPathPatternCache) getComponentPathPattern(
 	case cfg.CloudFormationComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.CloudFormation.BasePath, component)
 	default:
-		// Unknown component type - return pattern without caching.
-		return "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
+		// A registered custom component type (see customAffectedComponentTypes) uses the base path
+		// of its provider. A provider without a base path has no source tree to match.
+		provider, ok := comp.GetProvider(componentType)
+		if !ok {
+			// Unknown component type - return pattern without caching.
+			return "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
+		}
+		basePath := provider.GetBasePath(atmosConfig)
+		if basePath == "" {
+			return "", nil
+		}
+		componentPath = filepath.Join(atmosConfig.BasePath, basePath, component)
 	}
 
 	componentPathAbs, err := filepath.Abs(componentPath)
