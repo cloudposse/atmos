@@ -117,8 +117,13 @@ func BuildComponentPath(
 	case cfg.ContainerComponentType:
 		return filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Container.BasePath, componentFolder)
 	default:
-		// Emulator components (and any type with no filesystem source tree) have no component
-		// path. See getComponentBasePath in describe_stacks.go.
+		// A registered custom component type uses the base path of its provider, the same folder
+		// describe affected matches changed files against (see customComponentBasePath). Emulator
+		// components, other types with no filesystem source tree, and unregistered types have no
+		// component path. See getComponentBasePath in describe_stacks.go.
+		if basePath, ok := customComponentBasePath(atmosConfig, componentType); ok && basePath != "" {
+			return filepath.Join(atmosConfig.BasePath, basePath, componentFolder)
+		}
 		return ""
 	}
 }

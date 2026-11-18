@@ -54,6 +54,21 @@ func customAffectedComponentTypes(componentsSection map[string]any) []string {
 	return types
 }
 
+// customComponentBasePath returns the base path of a registered custom component type (a type
+// not in deletableComponentTypes), as its provider reports it. The second result is false for
+// canonical and unregistered types. The base path is empty when the provider has no source tree.
+// Folder-change detection and component_path both use it, so they resolve the same folder. See #3208.
+func customComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentType string) (string, bool) {
+	if slices.Contains(deletableComponentTypes, componentType) {
+		return "", false
+	}
+	provider, ok := comp.GetProvider(componentType)
+	if !ok {
+		return "", false
+	}
+	return provider.GetBasePath(atmosConfig), true
+}
+
 // deletedComponentTypes returns the component types to evaluate for deletion in a BASE components
 // section: the canonical types, then the registered custom types present in that section.
 func deletedComponentTypes(remoteComponentsSection map[string]any) []string {

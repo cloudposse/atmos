@@ -84,6 +84,7 @@ func TestProcessStackAffected_RegisteredCustomComponentType(t *testing.T) {
 		assert.Equal(t, customTestType, affected[0].ComponentType)
 		assert.Equal(t, customTestStack, affected[0].Stack)
 		assert.Equal(t, affectedReasonStackVars, affected[0].Affected)
+		assert.Equal(t, filepath.Join(basePath, "components", customTestType, "deploy"), affected[0].ComponentPath)
 	})
 
 	t.Run("added component", func(t *testing.T) {
@@ -161,6 +162,7 @@ func TestDetectDeletedComponents_RegisteredCustomComponentType(t *testing.T) {
 		assert.Equal(t, deletionTypeComponent, deleted[0].DeletionType)
 		assert.Equal(t, "dev", deleted[0].Stage)
 		assert.True(t, deleted[0].Deleted)
+		assert.Equal(t, filepath.Join("components", customTestType, "deploy"), deleted[0].ComponentPath)
 	})
 
 	t.Run("stack deleted", func(t *testing.T) {
@@ -207,4 +209,47 @@ func TestGetComponentPathPattern_RegisteredCustomComponentType(t *testing.T) {
 
 	_, err = cache.getComponentPathPattern("deploy", "unregistered", atmosConfig)
 	assert.ErrorIs(t, err, errUtils.ErrUnsupportedComponentType)
+}
+
+// TestBuildComponentPath_RegisteredCustomComponentType checks the component_path of registered
+// custom types: a provider with a base path gets <base_path>/<provider base path>/<folder>, a
+// provider without a base path and an unregistered type get no path. The component field wins
+// over the component name, the same as for the built-in types.
+//
+//nolint:paralleltest // registerCustomTestComponentType mutates the shared component registry; must run serially.
+func TestBuildComponentPath_RegisteredCustomComponentType(t *testing.T) {
+	registerCustomTestComponentType(t)
+	require.NoError(t, comp.Register(&fakeComponentProvider{componentType: "config-only"}))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: filepath.Join("repo", "root")}
+	section := map[string]any{"component": "deploy-base"}
+	empty := map[string]any{}
+
+	assert.Equal(t, filepath.Join("repo", "root", "components", customTestType, "deploy-base"),
+		BuildComponentPath(atmosConfig, &section, customTestType, "deploy"))
+	assert.Equal(t, filepath.Join("repo", "root", "components", customTestType, "deploy"),
+		BuildComponentPath(atmosConfig, &empty, customTestType, "deploy"))
+	assert.Empty(t, BuildComponentPath(atmosConfig, &section, "config-only", "deploy"))
+	assert.Empty(t, BuildComponentPath(atmosConfig, &section, "unregistered", "deploy"))
+}
+
+// TestDetectDeletedComponents_ConfigOnlyCustomComponentType checks that a deleted component of a
+// registered custom type whose provider has no base path is reported with an empty ComponentPath.
+//
+//nolint:paralleltest // registerFakeComponentTypes mutates the shared component registry; must run serially.
+func TestDetectDeletedComponents_ConfigOnlyCustomComponentType(t *testing.T) {
+	registerFakeComponentTypes(t, "config-only")
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	remoteStacks := customTypeStacks("config-only", map[string]any{
+		"deploy": map[string]any{"vars": map[string]any{"stage": "dev"}},
+	})
+	currentStacks := customTypeStacks("config-only", map[string]any{})
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "", AffectedFilter{})
+	require.NoError(t, err)
+	require.Len(t, deleted, 1)
+	assert.Equal(t, "deploy", deleted[0].Component)
+	assert.Equal(t, "config-only", deleted[0].ComponentType)
+	assert.Empty(t, deleted[0].ComponentPath)
 }
