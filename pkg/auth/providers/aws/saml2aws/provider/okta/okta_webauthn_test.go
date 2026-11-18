@@ -166,8 +166,8 @@ func TestFidoClientChallengeU2F_Behavior(t *testing.T) {
 
 // A device that keeps asking for a touch times out between polls with the same sentinel as a hung read.
 func TestFidoClientChallengeU2F_PresenceTimeoutBetweenPolls(t *testing.T) {
-	savedTimeout, savedPoll := u2fAuthTimeout, u2fPollInterval // gitleaks:allow -- Test timing variables, not secrets.
-	u2fAuthTimeout, u2fPollInterval = 50*time.Millisecond, 5*time.Millisecond // gitleaks:allow -- Test timing variables, not secrets.
+	savedTimeout, savedPoll := u2fAuthTimeout, u2fPollInterval                      // gitleaks:allow -- Test timing variables, not secrets.
+	u2fAuthTimeout, u2fPollInterval = 50*time.Millisecond, 5*time.Millisecond       // gitleaks:allow -- Test timing variables, not secrets.
 	t.Cleanup(func() { u2fAuthTimeout, u2fPollInterval = savedTimeout, savedPoll }) // gitleaks:allow -- Test timing variables, not secrets.
 
 	closed := make(chan struct{})
