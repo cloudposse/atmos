@@ -93,7 +93,10 @@ func TestVerifyTrustedCert_CertifierClient(t *testing.T) {
 		}
 		req, err := http.NewRequest(http.MethodGet, certifier.URL+"/certifier", nil)
 		require.NoError(t, err)
-		_, err = newCertifierClient(oc.client, certifier.URL).Do(req)
+		res, err := newCertifierClient(oc.client, certifier.URL).Do(req)
+		if res != nil {
+			_ = res.Body.Close()
+		}
 		require.Error(t, err)
 	})
 }

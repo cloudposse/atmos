@@ -86,7 +86,7 @@ func ensurePlaywrightDriver() error {
 }
 
 // patchPlaywrightDriver applies playwright-go's compatibility patches to the driver
-// bundle (package/lib/coreBundle.js). playwright-go only patches inside
+// bundle (package/lib/coreBundle.js). The playwright-go library only patches inside
 // DownloadDriver, which Install calls but Run does not. A pre-seeded driver is
 // therefore unpatched until a browser download runs, and that never happens when
 // the required browser is already installed or a custom browser is configured.
@@ -203,26 +203,36 @@ func extractNpmPackage(tgz []byte, driverDir string) error {
 		if err != nil {
 			return fmt.Errorf("could not read playwright-core archive: %w", err)
 		}
-		// npm tarballs nest everything under a top-level "package/" directory,
-		// which is exactly the layout playwright-go expects on disk.
-		if header.Typeflag != tar.TypeReg || !strings.HasPrefix(header.Name, "package/") {
-			continue
-		}
-		// safeDriverJoin's returned absolute path isn't used since writes go
-		// through root by relative name instead; only the validation matters here.
-		if _, err := safeDriverJoin(driverDir, header.Name); err != nil {
+		wrote, err := extractNpmEntry(root, driverDir, header, tarReader)
+		if err != nil {
 			return err
 		}
-		relPath := filepath.FromSlash(header.Name)
-		if err := writePreseedFile(root, relPath, tarReader, header.FileInfo().Mode()); err != nil {
-			return err
-		}
-		extracted = true
+		extracted = extracted || wrote
 	}
 	if !extracted {
 		return fmt.Errorf("%w: no files extracted from playwright-core archive", errUtils.ErrPlaywrightDriverSeed)
 	}
 	return nil
+}
+
+// extractNpmEntry writes one regular file from the npm tarball into the driver directory.
+// It reports whether the entry was written; entries outside "package/" are skipped.
+func extractNpmEntry(root *os.Root, driverDir string, header *tar.Header, content io.Reader) (bool, error) {
+	// npm tarballs nest everything under a top-level "package/" directory,
+	// which is exactly the layout playwright-go expects on disk.
+	if header.Typeflag != tar.TypeReg || !strings.HasPrefix(header.Name, "package/") {
+		return false, nil
+	}
+	// safeDriverJoin's returned absolute path isn't used since writes go
+	// through root by relative name instead; only the validation matters here.
+	if _, err := safeDriverJoin(driverDir, header.Name); err != nil {
+		return false, err
+	}
+	relPath := filepath.FromSlash(header.Name)
+	if err := writePreseedFile(root, relPath, content, header.FileInfo().Mode()); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // seedNodeBinary places a Node.js binary at <driverDir>/node[.exe], verifying

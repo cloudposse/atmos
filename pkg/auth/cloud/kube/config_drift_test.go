@@ -84,7 +84,7 @@ func TestWriteClusterConfig_MergeRepairsDriftedAtmosEntry(t *testing.T) {
 
 // TestWriteClusterConfig_MergePreservesThirdPartyAuthInfo verifies that merging
 // the Atmos entry leaves unrelated users intact, including their tokens,
-// impersonation and auth providers, so `atmos ... update-kubeconfig` never clobbers a user's
+// impersonation and auth providers, so `atmos aws eks update-kubeconfig` never clobbers a user's
 // existing kubectl credentials.
 func TestWriteClusterConfig_MergePreservesThirdPartyAuthInfo(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config")
