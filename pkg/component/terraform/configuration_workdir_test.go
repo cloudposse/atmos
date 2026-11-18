@@ -37,21 +37,24 @@ func TestConfigurationWorkdirOwnsArtifactsNotState(t *testing.T) {
 				if mode == "component directory" && stack == "prod" {
 					continue
 				}
-				info := &schema.ConfigAndStacksInfo{Stack: stack, ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": stack, "source": map[string]any{"uri": "./module"}}}
-				if mode != "component directory" {
-					info.ComponentSection["provision"] = map[string]any{"workdir": map[string]any{"enabled": true}}
-				}
-				if mode == "explicit workdir" {
-					info.ComponentSection["metadata"] = map[string]any{"working_directory": filepath.Join(root, "chosen", stack)}
-				}
-				if mode == "relative workdir" {
-					info.ComponentSection["settings"] = map[string]any{"working_directory": filepath.Join("chosen", stack)}
-				}
 				for _, revision := range []string{"first", "second"} {
+					info := &schema.ConfigAndStacksInfo{Stack: stack, ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": stack, "source": map[string]any{"uri": "./module"}}}
+					if mode != "component directory" {
+						info.ComponentSection["provision"] = map[string]any{"workdir": map[string]any{"enabled": true}}
+					}
+					if mode == "explicit workdir" {
+						info.ComponentSection["metadata"] = map[string]any{"working_directory": filepath.Join(root, "chosen", stack)}
+					}
+					if mode == "relative workdir" {
+						info.ComponentSection["settings"] = map[string]any{"working_directory": filepath.Join("chosen", stack)}
+					}
 					provider.EXPECT().Prepare(gomock.Any(), info).Return(&schema.PreparedComponentConfiguration{Engine: "terraform", Source: source, Inputs: map[string]any{"value": revision}, BackendType: "local", Backend: map[string]any{"path": state}, Workspace: "default", Files: []schema.ComponentConfigurationFile{{Path: "generated.tf", Content: []byte("# {{ literal }} " + revision), IfExists: "overwrite"}}}, nil)
 					execution, err := testExecutor(t).prepareComponentExecution(context.Background(), provisioner.OutputWriters{}, config, info, false)
 					require.NoError(t, err)
 					require.Equal(t, execution.componentPath, execution.workingDir)
+					if mode == "component directory" {
+						require.Equal(t, filepath.Join(root, "components", "app"), execution.workingDir)
+					}
 					if mode != "component directory" {
 						require.Equal(t, execution.workingDir, info.ComponentSection[provWorkdir.WorkdirPathKey])
 						require.NotEqual(t, filepath.Join(root, "components", "app"), execution.workingDir)
@@ -62,6 +65,11 @@ func TestConfigurationWorkdirOwnsArtifactsNotState(t *testing.T) {
 					generated, err := os.ReadFile(filepath.Join(execution.workingDir, "generated.tf"))
 					require.NoError(t, err)
 					require.Equal(t, "# {{ literal }} "+revision, string(generated))
+					varfile, err := os.ReadFile(filepath.Join(execution.workingDir, execution.varFile))
+					require.NoError(t, err)
+					var variables map[string]any
+					require.NoError(t, json.Unmarshal(varfile, &variables))
+					require.Equal(t, revision, variables["value"])
 					backend, err := os.ReadFile(filepath.Join(execution.workingDir, "backend.tf.json"))
 					require.NoError(t, err)
 					var decoded map[string]any
@@ -103,6 +111,11 @@ func TestConfigurationExplicitWorkdirRejectsAnotherOwner(t *testing.T) {
 		_, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, config, info, false)
 		if stack == "dev" {
 			require.NoError(t, err)
+			owner, err := provWorkdir.ReadMetadata(target)
+			require.NoError(t, err)
+			require.NotNil(t, owner)
+			require.Equal(t, "dev", owner.Stack)
+			require.Equal(t, "app", owner.Component)
 			require.NoError(t, os.WriteFile(filepath.Join(target, "terraform.tfstate"), []byte("existing state"), 0o600))
 		} else {
 			require.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
