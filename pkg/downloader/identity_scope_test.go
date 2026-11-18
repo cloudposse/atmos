@@ -81,6 +81,12 @@ func TestSourceUsesIdentity(t *testing.T) {
 		{src: "gcs::https://www.googleapis.com/storage/v1/bucket/module.zip", want: false},
 		{src: "www.googleapis.com/storage/v1/bucket/module.zip", want: false},
 		{src: "file:///tmp/module", want: false},
+		{src: "./local/module", want: false},
+		{src: "../modules/vpc", want: false},
+		{src: "/abs/path/to/module", want: false},
+		{src: "components/terraform/vpc", want: false},
+		{src: "gitlab.com/acme/modules//vpc", want: true},
+		{src: "bitbucket.org/acme/modules", want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.src, func(t *testing.T) {
@@ -119,7 +125,7 @@ func TestWithIdentityForSource_ResolvesOnlyForTransportsThatUseIt(t *testing.T) 
 	})
 	background := context.Background()
 
-	for _, src := range []string{"oci://ghcr.io/acme/stacks:v1//catalog/vpc.yaml", "s3::https://s3.amazonaws.com/bucket/module.zip"} {
+	for _, src := range []string{"oci://ghcr.io/acme/stacks:v1//catalog/vpc.yaml", "s3::https://s3.amazonaws.com/bucket/module.zip", "./local/module"} {
 		ctx, err := WithIdentityForSource(background, &schema.AtmosConfiguration{}, src, "ops", "")
 		require.NoError(t, err, src)
 		assert.Equal(t, background, ctx, "the context is returned unchanged for %s", src)

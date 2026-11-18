@@ -26,22 +26,25 @@ type priorVariable struct {
 var exportedEnv = map[string]priorVariable{}
 
 // recordExport remembers the state of key before a broker replaces it. Only the first export of a
-// variable is recorded, so the remembered state is the one from before any broker ran.
-func recordExport(key string) {
+// variable is recorded, so the remembered state is the one from before any broker ran. It reports
+// whether this call created the record, so a failed export undoes only its own record.
+func recordExport(key string) bool {
 	normalized := normalizeEnvKey(key)
 
 	brokeredMu.Lock()
 	defer brokeredMu.Unlock()
 	if _, recorded := exportedEnv[normalized]; recorded {
-		return
+		return false
 	}
 	// A snapshot of the live process variable a broker is about to replace.
 	value, set := os.LookupEnv(key)
 	exportedEnv[normalized] = priorVariable{value: value, set: set}
+	return true
 }
 
 // forgetExport drops the record for a variable whose export failed, so it is not treated as
-// broker-owned.
+// broker-owned. Call it only for a record the failed attempt created: an earlier broker's
+// successful export of the same variable must stay recorded.
 func forgetExport(key string) {
 	brokeredMu.Lock()
 	defer brokeredMu.Unlock()

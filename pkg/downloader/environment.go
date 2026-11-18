@@ -106,7 +106,8 @@ func overlayEnvironment(base, overlay []string) []string {
 		}
 	}
 
-	merged := make([]string, 0, len(base)+len(last))
+	// Sized to one operand: a sum of two lengths is flagged as a possible allocation overflow.
+	merged := make([]string, 0, len(base))
 	for _, entry := range base {
 		if key, ok := envEntryKey(entry); ok {
 			if _, replaced := last[key]; replaced {

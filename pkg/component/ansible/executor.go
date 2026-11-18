@@ -86,6 +86,22 @@ func playbookEnvVars(atmosConfig *schema.AtmosConfiguration, info *schema.Config
 	return prepareComponentAuthEnvVars(authManager, info.Identity, envVars)
 }
 
+// playbookProcessEnv returns the process environment the ansible subprocess starts from when an
+// identity is in effect, or nil when there is no auth manager (the subprocess then inherits the
+// process environment unchanged).
+//
+// The identity prepares the whole process environment, not only the component's, because preparing
+// it is what removes the ambient credentials that conflict with the identity (for example
+// AWS_ACCESS_KEY_ID next to a file-based AWS profile). Left in place, the SDK inside the playbook
+// would use those ambient credentials first and run as a different account than the one selected.
+// Terraform, Helmfile, and Packer start their subprocesses from a sanitized environment the same way.
+func playbookProcessEnv(authManager auth.AuthManager, identity string) ([]string, error) {
+	if authManager == nil {
+		return nil, nil
+	}
+	return prepareComponentAuthEnvVars(authManager, identity, os.Environ())
+}
+
 // ExecutePlaybook executes an Ansible playbook command.
 func ExecutePlaybook(
 	ctx context.Context,
@@ -243,19 +259,27 @@ func ExecutePlaybook(
 	// Names only: the list carries the identity's environment, which can hold credentials.
 	log.Debug("Using ENV", "variables", envVarNames(envVars))
 
+	// The environment the subprocess starts from, without ambient credentials that conflict with
+	// the identity.
+	processEnv, err := playbookProcessEnv(authManager, info.Identity)
+	if err != nil {
+		return err
+	}
+
 	// In dry-run mode, print the command that would be executed.
 	if info.DryRun {
 		data.Writeln(strings.Join(append([]string{cmdArgs.Command}, cmdArgs.Args...), " "))
 		return nil
 	}
 
-	return executePlaybookCommandWithRetry(ctx, &atmosConfig, info, cmdArgs, componentPath, envVars)
+	return executePlaybookCommandWithRetry(ctx, &atmosConfig, info, cmdArgs, componentPath, envVars, processEnv)
 }
 
 // executePlaybookCommandWithRetry runs the resolved ansible-playbook command through
 // e.ExecuteShellCommandWithRetry. Extracted from ExecutePlaybook so the retry wiring can
 // be unit-tested directly with a fake invoke, without standing up ExecutePlaybook's full
-// stack-processing/auth preamble or requiring a real ansible-playbook binary.
+// stack-processing/auth preamble or requiring a real ansible-playbook binary. The processEnv
+// argument is the sanitized environment the subprocess starts from (see playbookProcessEnv).
 func executePlaybookCommandWithRetry(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
@@ -263,6 +287,7 @@ func executePlaybookCommandWithRetry(
 	cmdArgs *CommandArgs,
 	componentPath string,
 	envVars []string,
+	processEnv []string,
 ) error {
 	return e.ExecuteShellCommandWithRetry(
 		atmosConfig,
@@ -281,6 +306,8 @@ func executePlaybookCommandWithRetry(
 			)
 		},
 		e.WithProcessContext(ctx),
+		// A nil processEnv keeps the default: the subprocess inherits the process environment.
+		e.WithEnvironment(processEnv),
 	)
 }
 

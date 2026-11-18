@@ -1267,7 +1267,7 @@ func TestExecutePlaybookCommandWithRetry_MatchingError_Retries(t *testing.T) {
 	}
 
 	atmosConfig := schema.AtmosConfiguration{}
-	err = executePlaybookCommandWithRetry(context.Background(), &atmosConfig, info, cmdArgs, t.TempDir(), envVars)
+	err = executePlaybookCommandWithRetry(context.Background(), &atmosConfig, info, cmdArgs, t.TempDir(), envVars, nil)
 	require.Error(t, err, "all 3 attempts fail in this fixture, so the final error must propagate")
 
 	counterBytes, readErr := os.ReadFile(counterFile)
@@ -1301,7 +1301,7 @@ func TestExecutePlaybookCommandWithRetry_NonMatchingError_FailsFast(t *testing.T
 	}
 
 	atmosConfig := schema.AtmosConfiguration{}
-	err = executePlaybookCommandWithRetry(context.Background(), &atmosConfig, info, cmdArgs, t.TempDir(), envVars)
+	err = executePlaybookCommandWithRetry(context.Background(), &atmosConfig, info, cmdArgs, t.TempDir(), envVars, nil)
 	require.Error(t, err)
 
 	counterBytes, readErr := os.ReadFile(counterFile)
@@ -1364,4 +1364,75 @@ func TestEnvVarNames_DropsValues(t *testing.T) {
 		assert.NotContains(t, name, "hunter2")
 		assert.NotContains(t, name, "=")
 	}
+}
+
+// An identity prepares the whole process environment so the ambient credentials that conflict with
+// it are removed before the playbook starts.
+func TestPlaybookProcessEnv_IdentitySanitizesTheProcessEnvironment(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "ambient-key")
+	t.Setenv("ATMOS_TEST_UNRELATED", "kept")
+
+	t.Run("the identity removes conflicting ambient credentials", func(t *testing.T) {
+		manager := types.NewMockAuthManager(gomock.NewController(t))
+		manager.EXPECT().
+			PrepareShellEnvironment(gomock.Any(), "aws-id", gomock.Any()).
+			DoAndReturn(func(_ context.Context, _ string, current []string) ([]string, error) {
+				require.Contains(t, current, "AWS_ACCESS_KEY_ID=ambient-key",
+					"prerequisite: the identity is given the process environment to sanitize")
+				prepared := slices.DeleteFunc(slices.Clone(current), func(entry string) bool {
+					return strings.HasPrefix(entry, "AWS_ACCESS_KEY_ID=")
+				})
+				return append(prepared, "AWS_PROFILE=aws-id"), nil
+			})
+
+		processEnv, err := playbookProcessEnv(manager, "aws-id")
+
+		require.NoError(t, err)
+		assert.NotContains(t, processEnv, "AWS_ACCESS_KEY_ID=ambient-key")
+		assert.Contains(t, processEnv, "AWS_PROFILE=aws-id")
+		assert.Contains(t, processEnv, "ATMOS_TEST_UNRELATED=kept")
+	})
+
+	t.Run("no auth manager leaves the process environment alone", func(t *testing.T) {
+		processEnv, err := playbookProcessEnv(nil, "")
+
+		require.NoError(t, err)
+		assert.Nil(t, processEnv, "nil means the subprocess inherits the process environment unchanged")
+	})
+
+	t.Run("preparation failure is returned", func(t *testing.T) {
+		manager := types.NewMockAuthManager(gomock.NewController(t))
+		manager.EXPECT().PrepareShellEnvironment(gomock.Any(), "aws-id", gomock.Any()).Return(nil, errUtils.ErrAuthenticationFailed)
+
+		_, err := playbookProcessEnv(manager, "aws-id")
+
+		require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	})
+}
+
+// The sanitized environment must be what the playbook subprocess actually starts from. An ambient
+// variable stands in for a conflicting credential: with a sanitized environment that omits it, the
+// subprocess must not see it. The test binary is the subprocess (see testmain_test.go) and appends
+// to the counter file named by the variable it sees.
+func TestExecutePlaybookCommandWithRetry_StartsFromTheSanitizedEnvironment(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	ambientCounter := filepath.Join(t.TempDir(), "ambient")
+	t.Setenv("_ATMOS_TEST_COUNTER_FILE", ambientCounter)
+	info := &schema.ConfigAndStacksInfo{Command: exePath, SubCommand: "playbook"}
+	cmdArgs := &CommandArgs{Command: exePath, Args: []string{"playbook"}}
+	envVars := []string{"_ATMOS_TEST_EXIT_ONE=1"}
+	atmosConfig := schema.AtmosConfiguration{}
+
+	// Prerequisite: without a sanitized environment the subprocess inherits the ambient variable.
+	require.Error(t, executePlaybookCommandWithRetry(context.Background(), &atmosConfig, info, cmdArgs, t.TempDir(), envVars, nil))
+	require.FileExists(t, ambientCounter, "prerequisite: the ambient variable reaches the subprocess by default")
+	require.NoError(t, os.Remove(ambientCounter))
+
+	sanitized := slices.DeleteFunc(os.Environ(), func(entry string) bool {
+		return strings.HasPrefix(entry, "_ATMOS_TEST_COUNTER_FILE=")
+	})
+	require.Error(t, executePlaybookCommandWithRetry(context.Background(), &atmosConfig, info, cmdArgs, t.TempDir(), envVars, sanitized))
+
+	assert.NoFileExists(t, ambientCounter, "the subprocess starts from the sanitized environment, without the ambient variable")
 }

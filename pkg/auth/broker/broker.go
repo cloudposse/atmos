@@ -110,9 +110,11 @@ func runEnabledBrokers(ctx context.Context, atmosConfig *schema.AtmosConfigurati
 		for key, value := range env {
 			// Remember what the variable was before, so a remote read that names its own identity
 			// can run without the broker's credentials (see WithoutBrokeredEnvironment).
-			recordExport(key)
+			created := recordExport(key)
 			if err := os.Setenv(key, value); err != nil {
-				forgetExport(key)
+				if created {
+					forgetExport(key)
+				}
 				log.Warn("Failed to export credential broker variable", "broker", p.Name(), "key", key, "error", err)
 				continue
 			}

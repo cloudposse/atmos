@@ -164,18 +164,25 @@ var identitySkippedHosts = []string{".amazonaws.com/", "googleapis.com/"}
 func SourceUsesIdentity(src string) bool {
 	defer perf.Track(nil, "downloader.SourceUsesIdentity")()
 
-	lowered := strings.ToLower(strings.TrimSpace(src))
+	trimmed := strings.TrimSpace(src)
+	lowered := strings.ToLower(trimmed)
 	for _, prefix := range identitySkippedPrefixes {
 		if strings.HasPrefix(lowered, prefix) {
 			return false
 		}
 	}
-	if !strings.Contains(lowered, schemeSeparator) && !strings.HasPrefix(lowered, strings.ToLower(GitPrefix)) {
-		for _, host := range identitySkippedHosts {
-			if strings.Contains(lowered, host) {
-				return false
-			}
+	if strings.Contains(lowered, schemeSeparator) || strings.HasPrefix(lowered, strings.ToLower(GitPrefix)) {
+		return true
+	}
+
+	// No scheme and not forced to Git: a bucket URL, a Git shorthand, or a local path.
+	for _, host := range identitySkippedHosts {
+		if strings.Contains(lowered, host) {
+			return false
 		}
 	}
-	return true
+	// isRemoteSource recognizes the two scheme-less remote forms: an SCP-style Git URL
+	// (git@host:org/repo) and the shorthand for a supported host (github.com/org/repo). go-getter
+	// treats any other scheme-less source as a filesystem path.
+	return isRemoteSource(trimmed)
 }
