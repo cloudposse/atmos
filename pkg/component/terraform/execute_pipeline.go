@@ -14,7 +14,6 @@ import (
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
-	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/policy/planfile"
@@ -63,36 +62,22 @@ func (e *Executor) prepareComponentExecution(
 		return nil, err
 	}
 
-	var componentPath string
-	if prepared != nil && usesConfigurationPlan(info) {
-		// A reviewed plan uses the retained workdir; provisioning could replace its modules.
-		componentPath = ConstructTerraformComponentWorkingDir(atmosConfig, info)
-	} else {
-		componentPath, err = e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
-		if err != nil {
-			return nil, err
-		}
+	componentPath, err := e.resolvePreparedComponentPath(ctx, writers, atmosConfig, info, prepared)
+	if err != nil {
+		return nil, err
 	}
 
-	if prepared != nil && !info.DryRun {
-		if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
-			return nil, err
-		}
-		if err := configuration.WriteFiles(componentPath, prepared.Files); err != nil {
-			return nil, err
-		}
+	if err := writePreparedConfigurationFiles(info, prepared, componentPath); err != nil {
+		return nil, err
 	}
 
 	if err = checkComponentRestrictions(info); err != nil {
 		return nil, err
 	}
 
-	if shouldProcess && tenv == nil {
-		tenv, err = resolveAndInstallToolchainDeps(atmosConfig, info)
-		if err != nil {
-			return nil, err
-		}
-		info.Command = tenv.Resolve(info.Command)
+	tenv, err = resolveComponentToolchain(atmosConfig, info, shouldProcess, tenv)
+	if err != nil {
+		return nil, err
 	}
 
 	varFile := ConstructTerraformComponentVarfileName(info)
@@ -201,9 +186,7 @@ func (e *Executor) executeCommandPipeline(
 	opts ...component.ExecutionOption,
 ) error {
 	componentPath := execCtx.componentPath
-	if info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) {
-		ui.Warning("Dry-run preview may omit Terragrunt extra arguments, required var files, and environment variables because Terragrunt configuration is not evaluated")
-	}
+	warnConfigurationDryRun(info)
 
 	if shouldRunTerraformInit(atmosConfig, info) {
 		// Phase-level CI log grouping (Dimension "phase"): fold the `init` phase
