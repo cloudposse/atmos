@@ -87,6 +87,12 @@ the module graph or the binary. The copy also fixes the browser driver's timeout
     Attempts are clamped to at least 1, and a nil options value no longer panics.
   - stdout: the iTerm captcha image (GoogleApps) and the Duo U2F touch prompts (Okta) were written to stdout, the
     data channel, which corrupts output such as `eval $(atmos auth env)`. They go to stderr.
+  - TLS (code-scanning `missing-ssl-minversion`): every IdP transport (shared HTTP client, ADFS, Okta Duo
+    certifier) now sets an explicit TLS 1.2 minimum. TLS 1.3 is not required because many enterprise IdPs,
+    notably ADFS, still serve TLS 1.2 only, and ADFS relies on renegotiation, which TLS 1.3 removed.
+  - Okta Duo trusted-endpoint check: upstream skipped certificate verification for whatever `certifier_url` the
+    Duo page named. Verification is now skipped only for a loopback host, where the local certifier runs with a
+    self-signed certificate.
 - **Testability:** `getSAMLResponse` takes a narrow `samlPage` interface, mocked with `go.uber.org/mock`.
   The poll and settle delays in Okta and ADFS are package variables, so tests do not sleep.
   Tests that need a real browser moved to `browser_integration_test.go` and only run with
@@ -125,6 +131,9 @@ the module graph or the binary. The copy also fixes the browser driver's timeout
   and `github.com/go-jose/go-jose/v3`. `github.com/mxschmitt/playwright-go` moved from v0.6100.0 to v0.6401.0.
 - `NOTICE`: regenerated. It now lists the vendored package through its `LICENSE.md`, and drops the removed modules
   and `go-ntlmssp`, which only a dropped driver used.
+- `.gitignore`: the repo-wide `credentials` rule ignored the vendored `helper/credentials` package, so the first
+  push of this change was missing it and CI could not build. It is re-included with an exact-path exception, the
+  same way `pkg/auth/credentials/` already is.
 - `.golangci.yml`: Atmos style and convention linters are relaxed for the vendored path. Correctness linters
   still apply.
 - `errors/errors.go`: added `ErrPlaywrightBrowserManifest`.

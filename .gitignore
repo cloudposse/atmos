@@ -79,6 +79,7 @@ tools/gomodcheck/.gomodcheck
 credentials
 # Authentication credential sources are code, not local credential files.
 !/pkg/auth/credentials/
+!/pkg/auth/providers/aws/saml2aws/helper/credentials/
 
 # Tool version managers
 .tool-versions

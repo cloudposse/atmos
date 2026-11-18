@@ -126,33 +126,14 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 	}
 
 	samlDriver := p.getDriver()
-	downloadBrowser := p.shouldDownloadBrowser()
-
-	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url, logFieldDriver, samlDriver)
-	log.Debug("SAML configuration",
-		logFieldDriver, samlDriver,
-		"download_browser", downloadBrowser,
-		"requires_drivers", samlDriver == "Browser")
+	p.logAuthenticationStart(samlDriver)
 
 	if p.RoleToAssumeFromAssertion == "" {
 		return nil, fmt.Errorf("%w: no role to assume for assertion, SAML provider must be part of a chain", errUtils.ErrInvalidAuthConfig)
 	}
 
-	// Set up browser automation only for the Browser driver.
-	// Other drivers (GoogleApps, Okta, ADFS) use API/HTTP flows and don't need
-	// Playwright, XDG storage directories, or symlinks.
-	if samlDriver == "Browser" {
-		if err := p.setupBrowserAutomation(); err != nil {
-			return nil, err
-		}
-		// Pre-seed the Playwright driver from official registries: the download
-		// built into playwright-go/saml2aws points at a retired CDN and 404s.
-		// Best-effort — an already-installed driver keeps working offline.
-		if err := ensurePlaywrightDriver(); err != nil {
-			log.Warn("Could not pre-seed the Playwright driver; browser authentication may fail to download it", "error", err)
-		} else if err := patchPlaywrightDriver(); err != nil {
-			log.Debug("Could not patch the Playwright driver", "error", err)
-		}
+	if err := p.prepareBrowserDriver(samlDriver); err != nil {
+		return nil, err
 	}
 
 	// Configure logrus to forward to Atmos logger instead of stdout.
@@ -176,17 +157,9 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		return nil, err
 	}
 
-	decodedXML, err := base64.StdEncoding.DecodeString(assertionB64)
+	roles, err := rolesFromAssertion(assertionB64)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to decode assertion: %w", errUtils.ErrAwsSAMLDecodeFailed, err)
-	}
-	rolesStr, err := saml2aws.ExtractAwsRoles(decodedXML)
-	if err != nil {
-		return nil, fmt.Errorf("%w: extract AWS roles: %w", errUtils.ErrAwsSAMLDecodeFailed, err)
-	}
-	roles, err := saml2aws.ParseAWSRoles(rolesStr)
-	if err != nil {
-		return nil, fmt.Errorf("%w: parse AWS roles: %w", errUtils.ErrAwsSAMLDecodeFailed, err)
+		return nil, err
 	}
 
 	selectedRole := p.selectRole(roles)
@@ -203,6 +176,53 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 	log.Info("SAML authentication successful", "provider", p.name, logFieldRole, selectedRole.RoleARN)
 
 	return awsCreds, nil
+}
+
+// logAuthenticationStart logs the start of a SAML login and the effective driver settings.
+func (p *samlProvider) logAuthenticationStart(samlDriver string) {
+	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url, logFieldDriver, samlDriver)
+	log.Debug("SAML configuration",
+		logFieldDriver, samlDriver,
+		"download_browser", p.shouldDownloadBrowser(),
+		"requires_drivers", samlDriver == "Browser")
+}
+
+// prepareBrowserDriver sets up browser automation, but only for the Browser driver.
+// Other drivers (GoogleApps, Okta, ADFS) use API/HTTP flows and don't need
+// Playwright, XDG storage directories, or symlinks.
+func (p *samlProvider) prepareBrowserDriver(samlDriver string) error {
+	if samlDriver != "Browser" {
+		return nil
+	}
+	if err := p.setupBrowserAutomation(); err != nil {
+		return err
+	}
+	// Pre-seed the Playwright driver from official registries: the download
+	// built into playwright-go/saml2aws points at a retired CDN and 404s.
+	// Best-effort — an already-installed driver keeps working offline.
+	if err := ensurePlaywrightDriver(); err != nil {
+		log.Warn("Could not pre-seed the Playwright driver; browser authentication may fail to download it", "error", err)
+	} else if err := patchPlaywrightDriver(); err != nil {
+		log.Debug("Could not patch the Playwright driver", "error", err)
+	}
+	return nil
+}
+
+// rolesFromAssertion decodes a base64 SAML assertion and returns the AWS roles it grants.
+func rolesFromAssertion(assertionB64 string) ([]*saml2aws.AWSRole, error) {
+	decodedXML, err := base64.StdEncoding.DecodeString(assertionB64)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to decode assertion: %w", errUtils.ErrAwsSAMLDecodeFailed, err)
+	}
+	rolesStr, err := saml2aws.ExtractAwsRoles(decodedXML)
+	if err != nil {
+		return nil, fmt.Errorf("%w: extract AWS roles: %w", errUtils.ErrAwsSAMLDecodeFailed, err)
+	}
+	roles, err := saml2aws.ParseAWSRoles(rolesStr)
+	if err != nil {
+		return nil, fmt.Errorf("%w: parse AWS roles: %w", errUtils.ErrAwsSAMLDecodeFailed, err)
+	}
+	return roles, nil
 }
 
 // createSAMLConfig creates the saml2aws configuration.

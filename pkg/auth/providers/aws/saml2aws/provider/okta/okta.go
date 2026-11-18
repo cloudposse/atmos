@@ -10,6 +10,7 @@ import (
 	"html"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -1441,6 +1442,31 @@ func fidoWebAuthn(oc *Client, oktaOrgHost string, challengeContext *mfaChallenge
 	return gjson.GetBytes(body, "sessionToken").String(), nil
 }
 
+// certifierTLSConfig returns the TLS configuration for the Duo trusted-endpoint certifier request.
+// Atmos fork: upstream skipped certificate verification for whatever certifier_url the Duo page
+// named and left MinVersion unset. Only the locally running certifier has a self-signed
+// certificate, so verification is skipped only for a loopback host.
+func certifierTLSConfig(certifierURL string) *tls.Config {
+	return &tls.Config{
+		MinVersion:         provider.MinTLSVersion,
+		InsecureSkipVerify: isLoopbackURL(certifierURL), // #nosec G402 -- Loopback-only: the local Duo certifier uses a self-signed certificate.
+	}
+}
+
+// isLoopbackURL reports whether rawURL points at localhost or a loopback IP address.
+func isLoopbackURL(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := parsed.Hostname()
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func verifyTrustedCert(oc *Client, doc *goquery.Document, duoHost string, duoSubmitURL string, q url.Values) (*goquery.Document, error) {
 	// If you enable DUO trusted cert validation, it requires an extra step before continuing.
 	// The way the validation process works is it attempts to send a request to a localhost:15310
@@ -1463,7 +1489,7 @@ func verifyTrustedCert(oc *Client, doc *goquery.Document, duoHost string, duoSub
 
 	// The locally running certifier does not have a valid certificate, so we have to skip verification
 	customTransport := http.DefaultTransport.(*http.Transport).Clone()
-	customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	customTransport.TLSClientConfig = certifierTLSConfig(certifierUrl)
 	originalTransport := oc.client.Transport
 
 	oc.client.Transport = customTransport

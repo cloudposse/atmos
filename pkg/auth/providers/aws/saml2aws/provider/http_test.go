@@ -2,6 +2,7 @@ package provider
 
 import (
 	"bytes"
+	"crypto/tls"
 	"errors"
 	"io"
 	"log"
@@ -118,6 +119,8 @@ func TestNewDefaultTransport(t *testing.T) {
 		tr := NewDefaultTransport(skipVerify)
 		require.NotNil(t, tr.TLSClientConfig)
 		assert.Equal(t, skipVerify, tr.TLSClientConfig.InsecureSkipVerify)
+		// Regression: upstream left MinVersion unset (code-scanning missing-ssl-minversion).
+		assert.Equal(t, uint16(tls.VersionTLS12), tr.TLSClientConfig.MinVersion)
 		assert.NotNil(t, tr.Proxy)
 		assert.NotNil(t, tr.DialContext)
 	}
