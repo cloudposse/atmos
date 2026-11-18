@@ -41,9 +41,15 @@ type AIProviderConfig struct {
 
 // AICacheSettings contains token caching configuration.
 type AICacheSettings struct {
-	Enabled                  bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`                                                          // Enable token caching
-	CacheSystemPrompt        bool `yaml:"cache_system_prompt,omitempty" json:"cache_system_prompt,omitempty" mapstructure:"cache_system_prompt"`                      // Cache system prompt (Anthropic and Bedrock)
-	CacheProjectInstructions bool `yaml:"cache_project_instructions,omitempty" json:"cache_project_instructions,omitempty" mapstructure:"cache_project_instructions"` // Cache ATMOS.md content (Anthropic and Bedrock)
+	Enabled                  *bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`                                                          // Enable token caching (default: true when omitted)
+	CacheSystemPrompt        bool  `yaml:"cache_system_prompt,omitempty" json:"cache_system_prompt,omitempty" mapstructure:"cache_system_prompt"`                      // Cache system prompt (Anthropic and Bedrock)
+	CacheProjectInstructions bool  `yaml:"cache_project_instructions,omitempty" json:"cache_project_instructions,omitempty" mapstructure:"cache_project_instructions"` // Cache ATMOS.md content (Anthropic and Bedrock)
+}
+
+// IsEnabled reports whether token caching is enabled.
+// A nil receiver or an omitted `enabled` value means enabled; only an explicit `false` disables caching.
+func (c *AICacheSettings) IsEnabled() bool {
+	return c == nil || c.Enabled == nil || *c.Enabled
 }
 
 // AISessionSettings contains session management configuration.

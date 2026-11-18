@@ -630,7 +630,7 @@ ai:
 
 <dl>
   <dt>`cache.enabled`</dt>
-  <dd>Enable or disable prompt caching (default: `true`). Cached tokens cost at least 90% less for Anthropic and for Claude on Bedrock.</dd>
+  <dd>Enable or disable prompt caching (default: `true`). A `cache` block that omits `enabled` keeps caching enabled; set `enabled: false` to turn it off. Cached tokens cost at least 90% less for Anthropic and for Claude on Bedrock.</dd>
 
   <dt>`cache.cache_system_prompt`</dt>
   <dd>Cache the skill system prompt across messages (default: `true`).</dd>

@@ -460,7 +460,7 @@ func TestExtractCacheConfig(t *testing.T) {
 						"anthropic": {
 							Model: "claude-sonnet-4-5-20250929",
 							Cache: &schema.AICacheSettings{
-								Enabled: false,
+								Enabled: boolPtr(false),
 							},
 						},
 					},
@@ -481,7 +481,7 @@ func TestExtractCacheConfig(t *testing.T) {
 						"anthropic": {
 							Model: "claude-sonnet-4-5-20250929",
 							Cache: &schema.AICacheSettings{
-								Enabled:                  true,
+								Enabled:                  boolPtr(true),
 								CacheSystemPrompt:        true,
 								CacheProjectInstructions: false, // Only cache system prompt.
 							},
@@ -536,7 +536,7 @@ func TestExtractCacheConfig(t *testing.T) {
 						"anthropic": {
 							Model: "claude-sonnet-4-5-20250929",
 							Cache: &schema.AICacheSettings{
-								Enabled:                  true,
+								Enabled:                  boolPtr(true),
 								CacheSystemPrompt:        false,
 								CacheProjectInstructions: false,
 							},
@@ -903,7 +903,7 @@ func TestExtractCacheConfig_OnlySystemPrompt(t *testing.T) {
 			Providers: map[string]*schema.AIProviderConfig{
 				"anthropic": {
 					Cache: &schema.AICacheSettings{
-						Enabled:                  true,
+						Enabled:                  boolPtr(true),
 						CacheSystemPrompt:        true,
 						CacheProjectInstructions: false,
 					},
@@ -926,7 +926,7 @@ func TestExtractCacheConfig_OnlyProjectInstructions(t *testing.T) {
 			Providers: map[string]*schema.AIProviderConfig{
 				"anthropic": {
 					Cache: &schema.AICacheSettings{
-						Enabled:                  true,
+						Enabled:                  boolPtr(true),
 						CacheSystemPrompt:        false,
 						CacheProjectInstructions: true,
 					},
@@ -2023,7 +2023,7 @@ func TestCacheConfig_BothFalseDefaultsToTrue(t *testing.T) {
 			Providers: map[string]*schema.AIProviderConfig{
 				"anthropic": {
 					Cache: &schema.AICacheSettings{
-						Enabled:                  true,
+						Enabled:                  boolPtr(true),
 						CacheSystemPrompt:        false,
 						CacheProjectInstructions: false,
 					},
@@ -2218,6 +2218,46 @@ func TestSimpleClient_CacheConfigCombinations(t *testing.T) {
 			} else {
 				assert.Empty(t, memoryBlock.CacheControl.Type)
 			}
+		})
+	}
+}
+
+// boolPtr returns a pointer to b.
+func boolPtr(b bool) *bool { return &b }
+
+// TestExtractCacheConfig_OmittedEnabled checks a cache block without `enabled` keeps caching on.
+func TestExtractCacheConfig_OmittedEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		settings *schema.AICacheSettings
+		want     cacheConfig
+	}{
+		{
+			name:     "empty block caches both",
+			settings: &schema.AICacheSettings{},
+			want:     cacheConfig{enabled: true, cacheSystemPrompt: true, cacheProjectInstructions: true},
+		},
+		{
+			name:     "system prompt only",
+			settings: &schema.AICacheSettings{CacheSystemPrompt: true},
+			want:     cacheConfig{enabled: true, cacheSystemPrompt: true, cacheProjectInstructions: false},
+		},
+		{
+			name:     "explicit false with block selection stays disabled",
+			settings: &schema.AICacheSettings{Enabled: boolPtr(false), CacheSystemPrompt: true},
+			want:     cacheConfig{enabled: false},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+			atmosConfig.AI.Providers = map[string]*schema.AIProviderConfig{"anthropic": {Cache: tt.settings}}
+
+			got := extractCacheConfig(atmosConfig)
+
+			require.NotNil(t, got)
+			assert.Equal(t, tt.want, *got)
 		})
 	}
 }

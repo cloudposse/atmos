@@ -110,7 +110,7 @@ func extractCacheConfig(atmosConfig *schema.AtmosConfiguration) *cacheConfig {
 // applyCacheSettings applies explicit cache settings from the provider configuration.
 func applyCacheSettings(cache *cacheConfig, settings *schema.AICacheSettings) {
 	// User explicitly disabled caching.
-	if !settings.Enabled {
+	if !settings.IsEnabled() {
 		cache.enabled = false
 		cache.cacheSystemPrompt = false
 		cache.cacheProjectInstructions = false
