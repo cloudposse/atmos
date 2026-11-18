@@ -14,7 +14,51 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubCI "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	h "github.com/cloudposse/atmos/pkg/hooks"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestRunCIHooksForNodePreservesDetailedPlanStatus(t *testing.T) {
+	withGitHubActionsDetection(t)
+	initOutputTestIO(t)
+	for _, test := range []struct {
+		name       string
+		event      h.HookEvent
+		err        error
+		hasChanges bool
+		hasErrors  bool
+		ciExitCode int
+	}{
+		{"unchanged plan", h.AfterTerraformPlan, nil, false, false, 0},
+		{"changed plan", h.AfterTerraformPlan, fmt.Errorf("plan: %w", errUtils.ExitCodeError{Code: 2}), true, false, 2},
+		{"failed plan", h.AfterTerraformPlan, errUtils.ExitCodeError{Code: 1}, false, true, 1},
+		{"init failure", h.AfterTerraformPlan, errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2}), false, true, 1},
+		{"before hook failure", h.AfterTerraformPlan, fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2})), false, true, 1},
+		{"policy failure", h.AfterTerraformPlan, errors.Join(errUtils.ExitCodeError{Code: 2}, errUtils.ErrPolicyDenied), false, true, 1},
+		{"apply exit two", h.AfterTerraformApply, errUtils.ExitCodeError{Code: 2}, false, true, 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			outputPath := filepath.Join(t.TempDir(), "output")
+			t.Setenv("GITHUB_OUTPUT", outputPath)
+			enabled, disabled := true, false
+			config := &schema.AtmosConfiguration{CI: schema.CIConfig{
+				Enabled: true,
+				Output:  schema.CIOutputConfig{Enabled: &enabled},
+				Summary: schema.CISummaryConfig{Enabled: &disabled},
+				Checks:  schema.CIChecksConfig{Enabled: &disabled},
+			}}
+			nodeHooks := &terraformNodeHooks{cmd: newHookTestCmd(), afterEvent: test.event}
+			info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "probe"}
+			originalExit := errUtils.GetExitCode(test.err)
+			nodeHooks.runCIHooksForNode(config, info, "", test.err)
+			output, err := os.ReadFile(outputPath)
+			require.NoError(t, err)
+			require.Contains(t, string(output), fmt.Sprintf("has_changes=%t\n", test.hasChanges))
+			require.Contains(t, string(output), fmt.Sprintf("has_errors=%t\n", test.hasErrors))
+			require.Contains(t, string(output), fmt.Sprintf("exit_code=%d\n", test.ciExitCode))
+			require.Equal(t, originalExit, errUtils.GetExitCode(test.err), "scheduler error remains unchanged")
+		})
+	}
+}
 
 func TestTerraformHookOutcomePreservesDetailedPlanStatus(t *testing.T) {
 	for _, test := range []struct {
