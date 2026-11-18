@@ -154,6 +154,12 @@ func (e *Executor) runPreExecutionSteps(
 
 	warnOnConflictingEnvVars()
 
+	return assemblePreExecutionEnvVars(atmosConfig, info, tenv)
+}
+
+// assemblePreExecutionEnvVars keeps the prepared environment for configuration-owned
+// execution; ordinary components and dry runs still assemble their full environment.
+func assemblePreExecutionEnvVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, tenv *dependencies.ToolchainEnvironment) error {
 	if schema.ConfigurationOwned(info.ComponentSettingsSection) && !info.DryRun {
 		if err := checkConfigurationWorkspace(info); err != nil {
 			return err
