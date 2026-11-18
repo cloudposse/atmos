@@ -1,7 +1,6 @@
 package configuration
 
 import (
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -210,11 +209,8 @@ func ensureMode(root *os.Root, file schema.ComponentConfigurationFile) error {
 	if (!file.Sensitive && file.Mode == 0) || runtime.GOOS == "windows" {
 		return nil
 	}
-	output, err := openExistingGeneratedFile(root, file.Path)
-	if err != nil {
-		return generatedFileError(file.Path, err)
-	}
-	return generatedFileError(file.Path, errors.Join(applyMode(output, file, writtenMode(file)), output.Close()))
+	// Even a mode-only update must not change an inode shared by another path.
+	return replaceFile(root, file, true)
 }
 
 // replaceFile writes the bytes with the file's clamped permission bits; sensitive files, which can
@@ -223,22 +219,21 @@ func ensureMode(root *os.Root, file schema.ComponentConfigurationFile) error {
 // An existing file is replaced through a temporary file renamed over it, so a failed write leaves
 // the previous bytes, and the digest recorded for them, valid for a retry.
 func replaceFile(root *os.Root, file schema.ComponentConfigurationFile, exists bool) error {
-	if err := root.MkdirAll(filepath.Dir(file.Path), directoryMode); err != nil {
-		return generatedFileError(file.Path, err)
-	}
-	// Policy has already approved replacing an existing file; creating one must not race another writer.
 	if !exists {
 		return createFile(root, file.Path, file)
 	}
-	temporary := filepath.Join(filepath.Dir(file.Path), "."+filepath.Base(file.Path)+"."+rand.Text()+".tmp")
-	if err := createFile(root, temporary, file); err != nil {
-		return err
-	}
-	if err := root.Rename(temporary, file.Path); err != nil {
-		_ = root.Remove(temporary)
+	info, err := root.Lstat(file.Path)
+	if err != nil {
 		return generatedFileError(file.Path, err)
 	}
-	return nil
+	if !info.Mode().IsRegular() {
+		return generatedFileError(file.Path, errUtils.ErrPluginInvalidConfig)
+	}
+	mode := writtenMode(file)
+	if !file.Sensitive && file.Mode == 0 {
+		mode = info.Mode().Perm()
+	}
+	return generatedFileError(file.Path, restoreContents(root, file.Path, &fileState{content: file.Content, mode: mode}))
 }
 
 // createFile writes a new file with the permission bits the file carries and removes it again if

@@ -234,6 +234,14 @@ func (d *projectDiscovery) visit(path string, placement *unitPlacement, depth in
 }
 
 func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement *unitPlacement, depth int) error {
+	for _, source := range resolved.OwnedSources {
+		d.templates[source] = true
+	}
+	for _, path := range resolved.OwnedPaths {
+		if logical, err := logicalPath(path); err == nil {
+			d.generated[logical] = true
+		}
+	}
 	files := append(slices.Clone(placement.files), resolved.Files...)
 	for _, child := range slices.Sorted(maps.Keys(resolved.StackConfigs)) {
 		source := resolved.StackSources[child]
@@ -271,6 +279,9 @@ func (d *projectDiscovery) visitChild(path string, placement *unitPlacement, dep
 
 func (d *projectDiscovery) visitUnit(path string, resolved *model.Resolution, placement *unitPlacement) error {
 	if resolved.Source == "" && len(resolved.Folders) == 0 {
+		if placement.generationRoot != "" {
+			return missingSourceProblem(path)
+		}
 		return d.checkInlineModule(path)
 	}
 	resolved.Files = append(resolved.Files, placement.files...)
@@ -299,22 +310,6 @@ func (d *projectDiscovery) checkInlineModule(path string) error {
 		Code: model.WarningUnitWithoutSource, Path: filepath.ToSlash(rel),
 		Message: fmt.Sprintf("%s has no terraform { source } block and no Terraform files next to it, so it is treated as a shared configuration and is not listed as a component", filepath.ToSlash(rel)),
 	})
-	return nil
-}
-
-func checkIdentityCollisions(root string, inventory []model.DiscoveredUnit) error {
-	identities := map[string]string{}
-	for i := range inventory {
-		unit := &inventory[i]
-		key := unit.Stack + "\x00" + unit.Name
-		if previous, exists := identities[key]; exists {
-			return &model.Problem{
-				Code: model.CodeEvaluationError, Summary: "Two Terragrunt units resolve to the same component", Detail: fmt.Sprintf("%s/%s is produced by both %s and %s.", unit.Stack, unit.Name, filepath.ToSlash(mustRel(root, previous)), filepath.ToSlash(mustRel(root, unit.Config.Path))), Safe: true,
-				Hints: []string{"Remove one of the units, a symlink that repeats a unit, or an overlapping `included_paths` entry."},
-			}
-		}
-		identities[key] = unit.Config.Path
-	}
 	return nil
 }
 
@@ -386,6 +381,10 @@ func stackResolution(pctx *config.ParsingContext, stack *config.StackConfig, pat
 		Stacks: map[string]string{}, StackSources: map[string]string{}, StackConfigs: map[string]string{},
 	}
 	for _, unit := range stack.Units {
+		result.OwnedPaths = append(result.OwnedPaths, filepath.Join(unit.GeneratedPath(dir), unitFile))
+		if unit.Source != "" {
+			result.OwnedSources = append(result.OwnedSources, localPath(dir, unit.Source))
+		}
 		if !unit.IsEnabled() {
 			continue
 		}
@@ -503,7 +502,7 @@ func outputDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntCon
 		if !dep.ConfigPath.IsKnown() || dep.ConfigPath.IsNull() {
 			continue
 		}
-		physical, err := outputDependencyPath(environment, path, dep.ConfigPath.AsString())
+		physical, err := dependencyConfigPath(environment, path, dep.ConfigPath.AsString())
 		if err != nil {
 			return nil, err
 		}
@@ -520,19 +519,9 @@ func orderDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConf
 	}
 	var result []string
 	for _, dependency := range cfg.Dependencies.Paths {
-		if !filepath.IsAbs(dependency) {
-			dependency = filepath.Join(filepath.Dir(path), dependency)
-		}
-		info, err := environment.FS.Stat(dependency)
+		physical, err := dependencyConfigPath(environment, path, dependency)
 		if err != nil {
-			return nil, dependencyProblem(path, dependency, err)
-		}
-		if info.IsDir() {
-			dependency = filepath.Join(dependency, unitFile)
-		}
-		physical, err := logicalPath(dependency)
-		if err != nil {
-			return nil, dependencyProblem(path, dependency, err)
+			return nil, err
 		}
 		if !slices.Contains(result, physical) {
 			result = append(result, physical)
@@ -554,10 +543,16 @@ var (
 	errDuplicateInstance = errors.New("duplicate")
 )
 
-func outputDependencyPath(environment *atmosbridge.Venv, path, configured string) (string, error) {
+// dependencyConfigPath shares overlay-aware directory/default-config resolution for both
+// edge kinds while retaining the logical file identity used by L6 inventory.
+func dependencyConfigPath(environment *atmosbridge.Venv, path, configured string) (string, error) {
 	dependency := localPath(filepath.Dir(path), configured)
-	if filepath.Ext(dependency) != ".hcl" {
-		dependency = filepath.Join(dependency, unitFile)
+	info, err := environment.FS.Stat(dependency)
+	if err != nil {
+		return "", dependencyProblem(path, dependency, err)
+	}
+	if info.IsDir() {
+		dependency = config.GetDefaultConfigPath(environment.FS, dependency)
 	}
 	physical, err := logicalPath(dependency)
 	if err != nil {

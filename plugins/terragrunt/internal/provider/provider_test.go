@@ -776,3 +776,41 @@ func TestRelativeNormalizesMixedSeparators(t *testing.T) {
 		require.ErrorIs(t, err, ErrUnsupported)
 	}
 }
+
+func TestDiscoveryDependencyDirectoryWithHCLSuffix(t *testing.T) {
+	for _, skip := range []bool{false, true} {
+		t.Run(fmt.Sprint(skip), func(t *testing.T) {
+			root, err := filepath.EvalSymlinks(t.TempDir())
+			require.NoError(t, err)
+			files := map[string]string{
+				"module/main.tf":                  "terraform {}",
+				"live/network.hcl/terragrunt.hcl": `terraform { source = "../../module" }`,
+				"live/app/terragrunt.hcl": fmt.Sprintf(`terraform { source = "../../module" }
+dependency "network" {
+ config_path = "../network.hcl"
+ skip_outputs = %t
+}`, skip),
+			}
+			for name, content := range files {
+				path := filepath.Join(root, filepath.FromSlash(name))
+				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+				require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+			}
+			opts, err := encode(map[string]any{"enabled": true, "mode": "native", "discovery": map[string]any{"enabled": true}})
+			require.NoError(t, err)
+			response, err := New(engine.Resolve).Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts, IncludePaths: []string{"live/**"}, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "list"}, Invocation: &pluginv1.Invocation{Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "must-not-execute"}}})
+			require.NoError(t, err)
+			require.Len(t, response.Components, 2)
+			require.Equal(t, "app", response.Components[0].Address.Component)
+			require.Equal(t, "network.hcl", response.Components[1].Address.Component)
+			require.Len(t, response.Components[0].Dependencies, 1)
+			edge := response.Components[0].Dependencies[0]
+			require.Equal(t, response.Components[1].Address, edge.Target)
+			kind := pluginv1.ComponentDependency_OUTPUT
+			if skip {
+				kind = pluginv1.ComponentDependency_ORDER
+			}
+			require.Equal(t, kind, edge.Kind)
+		})
+	}
+}

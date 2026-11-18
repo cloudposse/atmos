@@ -162,6 +162,12 @@ func (c *AtmosConfiguration) HasComponentDiscovery() bool {
 	return false
 }
 
+// AllowsEmptyStackInventory permits discovery-only projects without an authored
+// YAML stacks path or include patterns. Configured YAML inventory must not vanish.
+func (c *AtmosConfiguration) AllowsEmptyStackInventory() bool {
+	return c.HasComponentDiscovery() && c.Stacks.BasePath == "" && len(c.Stacks.IncludedPaths) == 0
+}
+
 // MarshalJSON preserves dynamic provider sections beside built-in Terraform settings.
 //
 //nolint:gocritic // Value receiver preserves encoding when Terraform is held in an interface.

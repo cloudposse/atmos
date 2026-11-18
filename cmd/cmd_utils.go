@@ -1958,11 +1958,12 @@ func validateAtmosConfig(opts ...AtmosValidateOption) error {
 		return err
 	}
 
-	if vCfg.CheckStack && !atmosConfig.HasComponentDiscovery() {
+	if vCfg.CheckStack && !atmosConfig.AllowsEmptyStackInventory() {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
 			// Return an error with context instead of printing and exiting
 			return errUtils.Build(errUtils.ErrStacksDirectoryDoesNotExist).
+				WithCause(errUtils.ErrNoStackManifestsFound).
 				WithExplanationf("Stacks directory not found:  \n%s", atmosConfig.StacksBaseAbsolutePath).
 				WithContext("base_path", atmosConfig.BasePath).
 				WithContext("stacks_base_path", atmosConfig.Stacks.BasePath).
