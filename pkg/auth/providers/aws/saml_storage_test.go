@@ -222,8 +222,13 @@ func TestSAMLProvider_migrateLegacySymlink_NotASymlink(t *testing.T) {
 func TestSAMLProvider_migrateLegacySymlink_NonexistentPath(t *testing.T) {
 	// When the path does not exist at all, migration is a no-op.
 	p := &samlProvider{config: &schema.Provider{}}
-	// Must not panic.
-	p.migrateLegacySymlink(filepath.Join(t.TempDir(), "nonexistent"))
+	path := filepath.Join(t.TempDir(), "nonexistent")
+
+	require.NotPanics(t, func() { p.migrateLegacySymlink(path) })
+
+	// A no-op must not create anything at the path.
+	_, err := os.Lstat(path)
+	assert.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestSAMLProvider_migrateLegacySymlink_DanglingSymlink(t *testing.T) {

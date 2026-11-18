@@ -29,11 +29,11 @@ import (
 func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 	// Skip unless explicitly opted in via environment variable.
 	if os.Getenv("RUN_PLAYWRIGHT_INTEGRATION") != "1" {
-		t.Skip("Skipping Playwright integration test (set RUN_PLAYWRIGHT_INTEGRATION=1 to run)")
+		t.Skipf("Skipping Playwright integration test (set RUN_PLAYWRIGHT_INTEGRATION=1 to run)")
 	}
 
 	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
+		t.Skipf("Skipping integration test in short mode")
 	}
 
 	// Create isolated test environment.
@@ -274,11 +274,11 @@ func skipIfPlaywrightDriverUnavailable(t *testing.T, runOptions *playwright.RunO
 func TestPlaywrightDriverDownload_WithSAML2AWS(t *testing.T) {
 	// Skip unless explicitly opted in via environment variable.
 	if os.Getenv("RUN_PLAYWRIGHT_INTEGRATION") != "1" {
-		t.Skip("Skipping Playwright integration test (set RUN_PLAYWRIGHT_INTEGRATION=1 to run)")
+		t.Skipf("Skipping Playwright integration test (set RUN_PLAYWRIGHT_INTEGRATION=1 to run)")
 	}
 
 	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
+		t.Skipf("Skipping integration test in short mode")
 	}
 
 	// Create isolated test environment.

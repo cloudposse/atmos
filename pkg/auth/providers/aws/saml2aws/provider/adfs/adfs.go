@@ -58,7 +58,9 @@ func New(idpAccount *cfg.IDPAccount) (*Client, error) {
 
 	tr := &http.Transport{
 		Proxy:           http.ProxyFromEnvironment,
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: idpAccount.SkipVerify, Renegotiation: tls.RenegotiateFreelyAsClient},
+		// Atmos fork: explicit TLS 1.2 floor (upstream left MinVersion unset). Not TLS 1.3:
+		// renegotiation, which ADFS relies on, only exists up to TLS 1.2.
+		TLSClientConfig: &tls.Config{MinVersion: provider.MinTLSVersion, InsecureSkipVerify: idpAccount.SkipVerify, Renegotiation: tls.RenegotiateFreelyAsClient},
 	}
 
 	client, err := provider.NewHTTPClient(tr, provider.BuildHttpClientOpts(idpAccount))

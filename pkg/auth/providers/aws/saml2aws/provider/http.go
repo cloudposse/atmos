@@ -38,6 +38,12 @@ type HTTPClientOptions struct {
 	RetryDelay    time.Duration
 }
 
+// MinTLSVersion is the minimum TLS version for connections to identity providers.
+// Atmos fork: upstream left MinVersion unset. TLS 1.2 (not 1.3) is the floor because many
+// enterprise IdPs, notably ADFS, still serve TLS 1.2 only, and ADFS also relies on TLS
+// renegotiation, which TLS 1.3 removed.
+const MinTLSVersion = tls.VersionTLS12
+
 // NewDefaultTransport configure a transport with the TLS skip verify option
 func NewDefaultTransport(skipVerify bool) *http.Transport {
 	return &http.Transport{
@@ -51,7 +57,7 @@ func NewDefaultTransport(skipVerify bool) *http.Transport {
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: skipVerify},
+		TLSClientConfig:       &tls.Config{MinVersion: MinTLSVersion, InsecureSkipVerify: skipVerify},
 	}
 }
 

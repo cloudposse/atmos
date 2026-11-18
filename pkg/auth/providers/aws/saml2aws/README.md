@@ -64,7 +64,12 @@ identity provider and read the AWS roles from the SAML assertion.
     `name="ca"` with no id, so the flow gave up and failed. Captcha retries are capped at 5.
   - The iTerm inline captcha image is written to stderr instead of stdout.
   - `b64Safe` returns an error instead of panicking on invalid base64, and the U2F device is closed on that error.
-- **Okta driver:** the Duo U2F touch prompts are written to stderr instead of stdout.
+- **Okta driver:** the Duo U2F touch prompts are written to stderr instead of stdout. The Duo trusted-endpoint
+  check skips certificate verification only when `certifier_url` is a loopback host (the local certifier uses a
+  self-signed certificate); upstream skipped it for any URL the Duo page named.
+- **TLS:** every IdP transport (`provider.NewDefaultTransport`, ADFS, the Okta Duo certifier) sets
+  `MinVersion: tls.VersionTLS12` (`provider.MinTLSVersion`). TLS 1.3 is not required because many enterprise IdPs,
+  notably ADFS, still serve TLS 1.2 only, and ADFS relies on renegotiation, which TLS 1.3 removed.
 - **ADFS driver:** unnamed inputs and a `SAMLResponse` without a value no longer call `log.Fatalf`, and the MFA loop
   is limited: at most 5 one-time codes and 300 Azure MFA approval polls, then `ErrMFAAttemptsExceeded` is returned
   instead of looping forever.
