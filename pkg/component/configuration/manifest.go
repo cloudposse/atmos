@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -112,20 +113,38 @@ func removeStaleFiles(root *os.Root, previous map[string]string, current []strin
 		if slices.Contains(current, path) || !filepath.IsLocal(filepath.FromSlash(path)) {
 			continue
 		}
-		local := filepath.FromSlash(path)
-		digest, exists := fileDigest(root, local)
-		if !exists || (digest != previous[path] && verifyTerragruntSignature(root, local) != nil) {
-			continue
-		}
-		undo.capture(root, path)
-		if err := root.Remove(local); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := removeStaleFile(root, path, previous[path], undo); err != nil {
 			kept[path] = previous[path]
 			failures = errors.Join(failures, fmt.Errorf("%w: remove stale generated file %s: %w", errUtils.ErrPluginInvalidConfig, path, err))
-			continue
 		}
-		removeEmptyParents(root, filepath.Dir(local))
 	}
 	return failures
+}
+
+// removeStaleFile checks ownership and removes the leaf through one pinned ordinary parent.
+func removeStaleFile(root *os.Root, path, recorded string, undo restorePoint) error {
+	local := filepath.FromSlash(path)
+	directory, err := destinationDirectory(root, filepath.Dir(local), false)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	leaf := filepath.Base(local)
+	digest, exists := fileDigest(directory, leaf)
+	if !exists || (digest != recorded && verifyTerragruntSignature(directory, leaf) != nil) {
+		return nil
+	}
+	if err := undo.captureFrom(directory, path, leaf); err != nil {
+		return err
+	}
+	if err := removeFile(directory, leaf); err != nil {
+		return err
+	}
+	removeEmptyParents(root, filepath.Dir(local))
+	return nil
 }
 
 // restorePoint remembers the files a run changes, so a run whose manifest cannot be written leaves
@@ -140,23 +159,48 @@ type fileState struct {
 }
 
 // capture remembers a path's state the first time the run is about to change it. Only regular
-// files and absent paths are recorded; anything else is left alone by the run's policies.
-func (r restorePoint) capture(root *os.Root, path string) {
+// files and absent paths are recorded; unreadable or aliased paths fail before mutation.
+func (r restorePoint) capture(root *os.Root, path string) error {
 	if _, seen := r[path]; seen {
-		return
+		return nil
 	}
 	local := filepath.FromSlash(path)
-	info, err := root.Lstat(local)
-	switch {
-	case errors.Is(err, os.ErrNotExist):
+	directory, err := destinationDirectory(root, filepath.Dir(local), false)
+	if errors.Is(err, os.ErrNotExist) {
 		r[path] = &fileState{}
-	case err != nil || !info.Mode().IsRegular():
-		return
-	default:
-		if content, readErr := root.ReadFile(local); readErr == nil {
-			r[path] = &fileState{exists: true, content: content, mode: info.Mode().Perm()}
-		}
+		return nil
 	}
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return r.captureFrom(directory, path, filepath.Base(local))
+}
+
+// captureFrom reads a regular leaf by handle in the directory that the mutation uses.
+func (r restorePoint) captureFrom(directory *os.Root, path, leaf string) error {
+	if _, seen := r[path]; seen {
+		return nil
+	}
+	file, err := openExistingGeneratedFile(directory, leaf)
+	if errors.Is(err, os.ErrNotExist) {
+		r[path] = &fileState{}
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return err
+	}
+	r[path] = &fileState{exists: true, content: content, mode: info.Mode().Perm()}
+	return nil
 }
 
 // restore puts every captured file back, removing the ones the run created.
@@ -172,25 +216,64 @@ func (r restorePoint) restore(root *os.Root) error {
 
 func (r restorePoint) restoreFile(root *os.Root, path string) error {
 	state, local := r[path], filepath.FromSlash(path)
-	if !state.exists {
-		return removeFile(root, local)
-	}
-	if err := root.MkdirAll(filepath.Dir(local), directoryMode); err != nil {
-		return err
-	}
-	if err := root.WriteFile(local, state.content, state.mode); err != nil {
-		return err
-	}
-	if runtime.GOOS == "windows" {
+	directory, err := destinationDirectory(root, filepath.Dir(local), state.exists)
+	if !state.exists && errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
-	return root.Chmod(local, state.mode)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	leaf := filepath.Base(local)
+	if err := validateDestination(directory, leaf); err != nil {
+		return err
+	}
+	if !state.exists {
+		return removeFile(directory, leaf)
+	}
+	return restoreContents(directory, leaf, state)
+}
+
+// restoreContents replaces the directory entry instead of truncating a possible hard link.
+// A private exclusive temporary file keeps the original bytes and mode together, and both
+// writes and permission changes use its handle rather than following a substituted leaf.
+func restoreContents(directory *os.Root, leaf string, state *fileState) error {
+	temporary := "." + leaf + "." + rand.Text() + ".tmp"
+	file, err := directory.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, state.mode)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = directory.Remove(temporary) }()
+	_, writeErr := file.Write(state.content)
+	var modeErr error
+	if runtime.GOOS != "windows" {
+		modeErr = file.Chmod(state.mode)
+	}
+	if err := errors.Join(writeErr, modeErr, file.Close()); err != nil {
+		return err
+	}
+	return directory.Rename(temporary, leaf)
 }
 
 // removeEmptyParents tidies directories that only existed for a removed generated file.
-func removeEmptyParents(root *os.Root, directory string) {
-	for directory != "." && directory != string(filepath.Separator) && root.Remove(directory) == nil {
-		directory = filepath.Dir(directory)
+func removeEmptyParents(root *os.Root, path string) {
+	for path != "." && path != string(filepath.Separator) {
+		parent, err := destinationDirectory(root, filepath.Dir(path), false)
+		if err != nil {
+			return
+		}
+		leaf := filepath.Base(path)
+		info, statErr := parent.Lstat(leaf)
+		if statErr != nil || !info.IsDir() {
+			_ = parent.Close()
+			return
+		}
+		err = parent.Remove(leaf)
+		_ = parent.Close()
+		if err != nil {
+			return
+		}
+		path = filepath.Dir(path)
 	}
 }
 

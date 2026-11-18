@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -312,4 +313,132 @@ func TestFailedReplacementKeepsTheRecordedFile(t *testing.T) {
 	require.NoError(t, os.Chmod(child, 0o755))
 	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{replacement}))
 	require.Equal(t, "terraform { backend \"s3\" {} }\n", read(t, root, "child/backend.tf"))
+}
+
+// A stale manifest must not follow a renamed directory through a replacement link.
+func TestStaleCleanupRejectsAncestorAlias(t *testing.T) {
+	directory := t.TempDir()
+	require.NoError(t, WriteFiles(directory, []schema.ComponentConfigurationFile{generated("nested/generated.tf", "owned", "overwrite")}))
+	require.NoError(t, os.Rename(filepath.Join(directory, "nested"), filepath.Join(directory, "retained")))
+	if err := os.Symlink("retained", filepath.Join(directory, "nested")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	err := WriteFiles(directory, nil)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.Equal(t, "owned", read(t, directory, "retained/generated.tf"))
+	require.Contains(t, read(t, directory, manifestName), "nested/generated.tf", "failed cleanup remains retryable")
+	require.NoError(t, os.Remove(filepath.Join(directory, "nested")))
+	require.NoError(t, os.Rename(filepath.Join(directory, "retained"), filepath.Join(directory, "nested")))
+	require.NoError(t, WriteFiles(directory, nil))
+	require.NoFileExists(t, filepath.Join(directory, "nested", "generated.tf"))
+}
+
+func TestRollbackRejectsAliases(t *testing.T) {
+	for _, exists := range []bool{false, true} {
+		for _, ancestor := range []bool{false, true} {
+			t.Run(fmt.Sprintf("exists=%v/ancestor=%v", exists, ancestor), func(t *testing.T) {
+				directory := t.TempDir()
+				require.NoError(t, os.Mkdir(filepath.Join(directory, "nested"), 0o700))
+				if exists {
+					require.NoError(t, os.WriteFile(filepath.Join(directory, "nested", "generated.tf"), []byte("before"), 0o640))
+				}
+				root, err := os.OpenRoot(directory)
+				require.NoError(t, err)
+				defer root.Close()
+				undo := make(restorePoint)
+				require.NoError(t, undo.capture(root, "nested/generated.tf"))
+				require.NoError(t, os.WriteFile(filepath.Join(directory, "nested", "generated.tf"), []byte("after"), 0o600))
+				if ancestor {
+					require.NoError(t, os.Rename(filepath.Join(directory, "nested"), filepath.Join(directory, "retained")))
+					if err := os.Symlink("retained", filepath.Join(directory, "nested")); err != nil {
+						t.Skipf("symlink unavailable: %v", err)
+					}
+				} else {
+					require.NoError(t, os.Mkdir(filepath.Join(directory, "retained"), 0o700))
+					require.NoError(t, os.Rename(filepath.Join(directory, "nested", "generated.tf"), filepath.Join(directory, "retained", "generated.tf")))
+					if err := os.Symlink("../retained/generated.tf", filepath.Join(directory, "nested", "generated.tf")); err != nil {
+						t.Skipf("symlink unavailable: %v", err)
+					}
+				}
+				require.ErrorIs(t, undo.restore(root), errUtils.ErrPluginInvalidConfig)
+				require.Equal(t, "after", read(t, directory, "retained/generated.tf"), "rollback must leave the alias target untouched")
+				info, err := os.Lstat(filepath.Join(directory, "nested", "generated.tf"))
+				require.NoError(t, err)
+				if !ancestor {
+					require.NotZero(t, info.Mode()&os.ModeSymlink)
+				}
+			})
+		}
+	}
+}
+
+func TestRollbackReplacesHardLinkedLeaf(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "generated.tf")
+	require.NoError(t, os.WriteFile(path, []byte("before"), 0o640))
+	require.NoError(t, os.Chmod(path, 0o640))
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+	undo := make(restorePoint)
+	require.NoError(t, undo.capture(root, "generated.tf"))
+	require.NoError(t, os.WriteFile(path, []byte("after"), 0o600))
+	require.NoError(t, os.Chmod(path, 0o600))
+	if err := os.Link(path, filepath.Join(directory, "retained.tf")); err != nil {
+		t.Skipf("hard link unavailable: %v", err)
+	}
+	require.NoError(t, undo.restore(root))
+	require.Equal(t, "before", read(t, directory, "generated.tf"))
+	require.Equal(t, "after", read(t, directory, "retained.tf"), "rollback replacement must not truncate another hard link")
+	if runtime.GOOS != "windows" {
+		restored, err := os.Stat(path)
+		require.NoError(t, err)
+		retained, err := os.Stat(filepath.Join(directory, "retained.tf"))
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0o640), restored.Mode().Perm())
+		require.Equal(t, os.FileMode(0o600), retained.Mode().Perm(), "rollback must not chmod another hard link")
+	}
+	entries, err := os.ReadDir(directory)
+	require.NoError(t, err)
+	require.Len(t, entries, 2, "no temporary rollback file remains")
+	require.Equal(t, []string{"generated.tf", "retained.tf"}, []string{entries[0].Name(), entries[1].Name()})
+}
+
+func TestEmptyParentCleanupDoesNotFollowAlias(t *testing.T) {
+	directory := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(directory, "retained", "empty"), 0o700))
+	if err := os.Symlink("retained", filepath.Join(directory, "nested")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+	removeEmptyParents(root, filepath.Join("nested", "empty"))
+	require.DirExists(t, filepath.Join(directory, "retained", "empty"))
+	info, err := os.Lstat(filepath.Join(directory, "nested"))
+	require.NoError(t, err)
+	require.NotZero(t, info.Mode()&os.ModeSymlink)
+}
+
+func TestStaleCleanupRollbackRestoresNestedFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX directory permissions")
+	}
+	directory := t.TempDir()
+	require.NoError(t, WriteFiles(directory, []schema.ComponentConfigurationFile{generated("nested/dir/generated.tf", "before", "overwrite")}))
+	path := filepath.Join(directory, "nested", "dir", "generated.tf")
+	require.NoError(t, os.Chmod(path, 0o660))
+	metadata := filepath.Join(directory, ".atmos")
+	require.NoError(t, os.Chmod(metadata, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(metadata, 0o700) })
+	requireEffectiveDirectoryPermissions(t, metadata)
+	require.Error(t, WriteFiles(directory, nil), "manifest deletion fails after stale cleanup")
+	require.Equal(t, "before", read(t, directory, "nested/dir/generated.tf"))
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o660), info.Mode().Perm(), "rollback restores the original mode without generation clamping")
+	require.Contains(t, read(t, directory, manifestName), "nested/dir/generated.tf")
+	require.NoError(t, os.Chmod(metadata, 0o700))
+	require.NoError(t, WriteFiles(directory, nil))
+	require.NoFileExists(t, path)
 }

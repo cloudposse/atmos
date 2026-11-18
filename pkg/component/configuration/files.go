@@ -43,13 +43,8 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 		return fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
 	}
 	defer root.Close()
-	for _, file := range files {
-		if err := validateFile(file); err != nil {
-			return err
-		}
-		if err := validateDestination(root, file.Path); err != nil {
-			return generatedFileError(file.Path, err)
-		}
+	if err := validateFiles(root, files); err != nil {
+		return err
 	}
 	previous := readManifest(root)
 	undo := make(restorePoint)
@@ -59,7 +54,9 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 		// Clean the key, so ./provider.tf and provider.tf name the same recorded file.
 		key := filepath.ToSlash(filepath.Clean(file.Path))
 		names = append(names, key)
-		undo.capture(root, key)
+		if err := undo.capture(root, key); err != nil {
+			return errors.Join(generatedFileError(file.Path, err), keepRecordsAfterFailure(root, previous, current, undo))
+		}
 		digest, err := writeFile(root, file, previous[key])
 		if err != nil {
 			return errors.Join(err, keepRecordsAfterFailure(root, previous, current, undo))
@@ -94,6 +91,19 @@ func keepRecordsAfterFailure(root *os.Root, previous, current map[string]string,
 		}
 	}
 	return recordManifest(root, current, undo)
+}
+
+// validateFiles checks every destination before the batch performs its first mutation.
+func validateFiles(root *os.Root, files []schema.ComponentConfigurationFile) error {
+	for _, file := range files {
+		if err := validateFile(file); err != nil {
+			return err
+		}
+		if err := validateDestination(root, file.Path); err != nil {
+			return generatedFileError(file.Path, err)
+		}
+	}
+	return nil
 }
 
 func validateFile(file schema.ComponentConfigurationFile) error {
