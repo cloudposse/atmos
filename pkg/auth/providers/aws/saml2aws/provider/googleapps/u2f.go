@@ -16,9 +16,7 @@ const (
 	retryDelay     = 200 * time.Millisecond
 )
 
-var (
-	errNoDeviceFound = fmt.Errorf("no U2F devices found. device might not be plugged in")
-)
+var errNoDeviceFound = fmt.Errorf("no U2F devices found. device might not be plugged in")
 
 // U2FClient represents a challenge and the device used to respond
 type U2FClient struct {

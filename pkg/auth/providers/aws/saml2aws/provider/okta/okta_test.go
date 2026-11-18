@@ -75,7 +75,6 @@ func TestGetStateTokenFromOktaPageBody(t *testing.T) {
 				assert.NotNil(t, err)
 				assert.Equal(t, test.err.Error(), err.Error())
 			}
-
 		})
 	}
 }
@@ -270,7 +269,6 @@ func TestVerifyMfa(t *testing.T) {
 }
 
 func TestVerifyMfa_Email(t *testing.T) {
-
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/verify":
@@ -427,7 +425,8 @@ func setupTestDuoHttpServer(t *testing.T, duoFactor string) *httptest.Server {
 			assert.Equal(t, url.Values{
 				"parent": {"https://host-from-argument/signin/verify/duo/web"},
 				"tx":     {"TX|blah_tx_blah"},
-				"v":      {"2.8"}},
+				"v":      {"2.8"},
+			},
 				query)
 			assert.Nil(t, err)
 
@@ -449,7 +448,8 @@ func setupTestDuoHttpServer(t *testing.T, duoFactor string) *httptest.Server {
 				"react_support_error_message": {""},
 				"screen_resolution_height":    {"1692"},
 				"screen_resolution_width":     {"3008"},
-				"tx":                          {"TX|blah_tx_blah"}},
+				"tx":                          {"TX|blah_tx_blah"},
+			},
 				query)
 			assert.Nil(t, err)
 
@@ -677,7 +677,6 @@ func TestSetDeviceTokenCookie(t *testing.T) {
 	}
 	assert.NotEqual(t, actualDT, "")
 	assert.Equal(t, expectedDT, actualDT)
-
 }
 
 func TestOktaCfgFlagsDefaultState(t *testing.T) {
@@ -711,7 +710,6 @@ func TestOktaCfgFlagsCustomState(t *testing.T) {
 
 	assert.True(t, oc.disableSessions, fmt.Errorf("DisableSessions was set to true so disableSessions should be true"))
 	assert.False(t, oc.rememberDevice, fmt.Errorf("DisablDisableSessionseRememberDevice was set to true, so rememberDevice should be false"))
-
 }
 
 func TestOktaParseMfaIdentifer(t *testing.T) {
@@ -774,7 +772,6 @@ func TestOktaParseMfaIdentifer(t *testing.T) {
 }
 
 func TestGetStateToken(t *testing.T) {
-
 	persistedCookie := &http.Cookie{Name: "TestCookie", Value: "test"}
 	svr := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Contains(t, r.Cookies(), persistedCookie)
@@ -841,6 +838,7 @@ func (s *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h, s.handlers = s.handlers[0], s.handlers[1:]
 	h(w, r)
 }
+
 func TestVerifyTrustedCert(t *testing.T) {
 	host := ""
 
@@ -875,7 +873,6 @@ func TestVerifyTrustedCert(t *testing.T) {
 			assert.Equal(t, "0dcfcbe4-5e20-47a3-9037-cb1d1bf4ad5b", r.Form.Get("certs_txid"))
 			assert.Equal(t, fmt.Sprintf("https://%s/certs-url", host), r.Form.Get("certs_url"))
 			assert.Equal(t, fmt.Sprintf("https://%s/certifier-url", host), r.Form.Get("certifier_url"))
-
 		},
 	}
 
@@ -944,7 +941,6 @@ func TestVerifyEndpointHealth(t *testing.T) {
 			assert.Equal(t, "0dcfcbe4-5e20-47a3-9037-cb1d1bf4ad5b", r.URL.Query().Get("txid"))
 			assert.Equal(t, "HAlorymR7ZuV2CxZz9T10jABE4jzkWFBJYLEnlF4nUwCqQ=|1683218343|2a46eb852b3ef9f662304cee03d008daed6d71f6", r.URL.Query().Get("sid"))
 			assert.Equal(t, "XMLHttpRequest", r.Header.Get("X-Requested-With"))
-
 		},
 
 		"/submit": func(w http.ResponseWriter, r *http.Request) {

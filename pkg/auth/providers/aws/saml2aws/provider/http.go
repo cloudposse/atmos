@@ -33,7 +33,7 @@ const (
 )
 
 type HTTPClientOptions struct {
-	IsWithRetries bool //http retry feature switch
+	IsWithRetries bool // http retry feature switch
 	AttemptsCount uint
 	RetryDelay    time.Duration
 }
@@ -97,7 +97,6 @@ func atLeastOneAttempt(attempts uint) uint {
 
 // NewHTTPClient configure the default http client used by the providers
 func NewHTTPClient(tr http.RoundTripper, opts *HTTPClientOptions) (*HTTPClient, error) {
-
 	options := &cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,
 	}
@@ -114,7 +113,6 @@ func NewHTTPClient(tr http.RoundTripper, opts *HTTPClientOptions) (*HTTPClient, 
 
 // Do do the request
 func (hc *HTTPClient) Do(req *http.Request) (*http.Response, error) {
-
 	req.Header.Set("User-Agent", fmt.Sprintf("saml2aws/1.0 (%s %s) Versent", runtime.GOOS, runtime.GOARCH))
 
 	var resp *http.Response
@@ -168,7 +166,6 @@ func (hc *HTTPClient) doWithRetry(req *http.Request) (*http.Response, error) {
 			}),
 	)
 	return resp, err
-
 }
 
 // DisableFollowRedirect disable redirects
@@ -194,7 +191,6 @@ func SuccessOrRedirectResponseValidator(req *http.Request, resp *http.Response) 
 
 // SuccessOrRedirectOrUnauthorizedResponseValidator also allows 401
 func SuccessOrRedirectOrUnauthorizedResponseValidator(req *http.Request, resp *http.Response) error {
-
 	validatorResponse := SuccessOrRedirectResponseValidator(req, resp)
 
 	if validatorResponse == nil || resp.StatusCode == 401 {
@@ -205,7 +201,6 @@ func SuccessOrRedirectOrUnauthorizedResponseValidator(req *http.Request, resp *h
 }
 
 func (hc *HTTPClient) logHTTPRequest(req *http.Request) {
-
 	if dump.ContentEnable() {
 		log.Println(dump.RequestString(req))
 		return
@@ -218,7 +213,6 @@ func (hc *HTTPClient) logHTTPRequest(req *http.Request) {
 }
 
 func (hc *HTTPClient) logHTTPResponse(resp *http.Response) {
-
 	if dump.ContentEnable() {
 		log.Println(dump.ResponseString(resp))
 		return

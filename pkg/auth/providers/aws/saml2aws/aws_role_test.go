@@ -7,7 +7,6 @@ import (
 )
 
 func TestParseRoles(t *testing.T) {
-
 	roles := []string{
 		"arn:aws:iam::456456456456:saml-provider/example-idp,arn:aws:iam::456456456456:role/admin",
 		"arn:aws:iam::456456456456:role/admin,arn:aws:iam::456456456456:saml-provider/example-idp",
@@ -28,7 +27,6 @@ func TestParseRoles(t *testing.T) {
 
 	assert.NotNil(t, err)
 	assert.Nil(t, awsRoles)
-
 }
 
 func TestParseAWSRolesErrors(t *testing.T) {

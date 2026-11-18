@@ -27,7 +27,6 @@ func SetPrompter(prmpt Prompter) {
 // ValidateAndSetPrompter validates the user configuration and will create
 // a concrete prompter based on this configuration
 func ValidateAndSetPrompter(prmptCfg string) error {
-
 	if prmptCfg == "" || prmptCfg == "survey" || prmptCfg == "default" {
 		// nothing to do; the default prompter is the survey one.
 		return nil
@@ -50,7 +49,6 @@ func RequestSecurityCode(pattern string) string {
 
 // ChooseWithDefault given the choice return the option selected with a default
 func ChooseWithDefault(pr string, defaultValue string, options []string) (string, error) {
-
 	// ensure the default is not empty and avoid bad input error
 	if defaultValue == "" {
 		if len(options) > 0 {

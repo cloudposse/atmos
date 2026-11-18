@@ -55,9 +55,8 @@ var ErrMFAAttemptsExceeded = errors.New("too many MFA attempts")
 
 // New create a new ADFS client
 func New(idpAccount *cfg.IDPAccount) (*Client, error) {
-
 	tr := &http.Transport{
-		Proxy:           http.ProxyFromEnvironment,
+		Proxy: http.ProxyFromEnvironment,
 		// Atmos fork: explicit TLS 1.2 floor (upstream left MinVersion unset). Not TLS 1.3:
 		// renegotiation, which ADFS relies on, only exists up to TLS 1.2.
 		TLSClientConfig: &tls.Config{MinVersion: provider.MinTLSVersion, InsecureSkipVerify: idpAccount.SkipVerify, Renegotiation: tls.RenegotiateFreelyAsClient},
@@ -76,7 +75,6 @@ func New(idpAccount *cfg.IDPAccount) (*Client, error) {
 
 // Authenticate to ADFS and return the data from the body of the SAML assertion.
 func (ac *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error) {
-
 	var authSubmitURL string
 	var samlAssertion string
 	var instructions string
@@ -213,7 +211,6 @@ func (ac *Client) get(url string) (*goquery.Document, error) {
 	res, err := ac.client.Get(url)
 	if err != nil {
 		return nil, errors.Wrap(err, "error retieving form")
-
 	}
 	defer res.Body.Close()
 
@@ -235,7 +232,6 @@ func (ac *Client) submit(url string, form url.Values) (*goquery.Document, error)
 	res, err := ac.client.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "error submitting form")
-
 	}
 	defer res.Body.Close()
 
@@ -333,7 +329,6 @@ func updateOTPFormData(otpForm url.Values, s *goquery.Selection, token string) {
 	} else {
 		updatePassthroughFormData(otpForm, s)
 	}
-
 }
 
 func updatePassthroughFormData(otpForm url.Values, s *goquery.Selection) {
@@ -346,5 +341,4 @@ func updatePassthroughFormData(otpForm url.Values, s *goquery.Selection) {
 		return
 	}
 	otpForm.Add(name, val)
-
 }
