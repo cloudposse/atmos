@@ -550,6 +550,8 @@ func writePreparedConfigurationFiles(info *schema.ConfigAndStacksInfo, prepared 
 	if err := writePreparedConfiguration(componentPath, prepared); err != nil {
 		return fmt.Errorf("component %s in stack %s, working directory %s: %w", info.ComponentFromArg, info.Stack, componentPath, err)
 	}
+	// Prepared files can introduce sensitive declarations at an already inspected path.
+	loadTerraformModuleInfo(info, componentPath)
 	return nil
 }
 

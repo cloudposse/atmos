@@ -28,7 +28,7 @@ func TestRenderGeneratedPreservesCallerDisableSetting(t *testing.T) {
 		IfExists: codegen.ExistsOverwrite, Disable: true, DisableSignature: true,
 	}
 	before := config
-	content, err := RenderGenerated(t.Context(), log.New(log.WithOutput(io.Discard)), config)
+	content, err := RenderGenerated(t.Context(), log.New(log.WithOutput(io.Discard)), &config)
 	require.NoError(t, err)
 	require.Contains(t, string(content), "value = 1")
 	require.Equal(t, before, config, "in-memory rendering must not enable the caller's disabled generation block")

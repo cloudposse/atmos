@@ -886,3 +886,41 @@ func TestBackendInputProjectionRejectsUnknownTarget(t *testing.T) {
 	_, err := Resolve(t.Context(), request)
 	require.ErrorContains(t, err, errInputReferenceTarget.Error(), "an unknown target must not silently select a fallback or evaluate unrelated inputs")
 }
+
+func TestBackendInputProjectionOrdinaryLocalsAndExposedInclude(t *testing.T) {
+	for _, kind := range []string{"local", "include", "literal include"} {
+		t.Run(kind, func(t *testing.T) {
+			expression := `locals {
+ inputs = { cache = "selected-cache" }
+ cache = local.inputs.cache
+}
+download_dir = local.cache
+`
+			if kind != "local" {
+				expression = `include "root" {
+ path = find_in_parent_folders("root.hcl")
+ expose = true
+}
+download_dir = include.root.inputs.cache
+`
+			}
+			if kind == "literal include" {
+				expression = strings.Replace(expression, `find_in_parent_folders("root.hcl")`, `"../root.hcl"`, 1)
+			}
+			request := nativeUnit(t, expression)
+			childPath := filepath.Join(request.BasePath, "child", "terragrunt.hcl")
+			require.NoError(t, os.MkdirAll(filepath.Dir(childPath), 0o755))
+			require.NoError(t, os.Rename(request.Path, childPath))
+			request.Path = childPath
+			require.NoError(t, os.WriteFile(filepath.Join(request.BasePath, "root.hcl"), []byte(`inputs = { cache = "selected-cache" }`), 0o644))
+			prepared, err := Resolve(t.Context(), request)
+			require.NoError(t, err)
+			request.Phase = "backend"
+			require.NoError(t, os.WriteFile(filepath.Join(request.BasePath, "root.hcl"), []byte(`inputs = { cache = "selected-cache", unrelated = run_cmd("must-not-run") }`), 0o644))
+			backend, err := Resolve(t.Context(), request)
+			require.NoError(t, err)
+			require.Contains(t, backend.WorkingDir, "selected-cache")
+			require.Equal(t, prepared.WorkingDir, backend.WorkingDir)
+		})
+	}
+}

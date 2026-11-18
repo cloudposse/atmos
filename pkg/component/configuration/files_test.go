@@ -483,3 +483,143 @@ func TestUnchangedGeneratedFilePinsPermissionUpdates(t *testing.T) {
 	file.Path = "alias.tf"
 	require.ErrorIs(t, ensureMode(root, file), errUtils.ErrPluginInvalidConfig)
 }
+
+func TestManifestMetadataRejectsAliases(t *testing.T) {
+	for _, alias := range []string{"parent", "leaf", "dangling-parent", "dangling-leaf", "directory"} {
+		t.Run(alias, func(t *testing.T) {
+			directory := t.TempDir()
+			original := `{"files":{"authored.tf":"` + contentDigest([]byte("authored")) + `"}}`
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "authored.tf"), []byte("authored"), 0o600))
+			metadataAliasFixture(t, directory, alias, original)
+			root, err := os.OpenRoot(directory)
+			require.NoError(t, err)
+			defer root.Close()
+			require.Empty(t, readManifest(root), "aliased metadata cannot grant ownership")
+			require.Error(t, writeManifest(root, map[string]string{"new.tf": "digest"}))
+			require.Error(t, writeManifest(root, nil), "metadata removal rejects aliases too")
+			require.Error(t, WriteFiles(directory, nil), "empty batches must not bypass alias validation")
+			require.Error(t, WriteFiles(directory, []schema.ComponentConfigurationFile{generated("new.tf", "new", "overwrite")}))
+			require.NoFileExists(t, filepath.Join(directory, "new.tf"))
+			require.Equal(t, "authored", read(t, directory, "authored.tf"))
+			require.Equal(t, original, read(t, directory, filepath.Join("retained", "generated-files.json")))
+			info, err := os.Lstat(filepath.Join(directory, filepath.FromSlash(manifestName)))
+			if alias == "dangling-parent" {
+				require.ErrorIs(t, err, os.ErrNotExist)
+			} else {
+				require.NoError(t, err, "the rejected metadata entry is preserved")
+				require.NotNil(t, info)
+			}
+		})
+	}
+}
+
+func metadataAliasFixture(t *testing.T, directory, alias, original string) {
+	t.Helper()
+	require.NoError(t, os.Mkdir(filepath.Join(directory, "retained"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "retained", "generated-files.json"), []byte(original), 0o600))
+	name, target := ".atmos", "retained"
+	if alias == "dangling-parent" {
+		target = "missing"
+	} else if alias != "parent" {
+		require.NoError(t, os.Mkdir(filepath.Join(directory, ".atmos"), 0o755))
+		name, target = manifestName, filepath.Join("..", "retained", "generated-files.json")
+	}
+	if alias == "directory" {
+		require.NoError(t, os.Mkdir(filepath.Join(directory, filepath.FromSlash(name)), 0o755))
+		return
+	}
+	if alias == "dangling-leaf" {
+		target = "missing"
+	}
+	if err := os.Symlink(target, filepath.Join(directory, filepath.FromSlash(name))); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+}
+
+func TestManifestMetadataHardLinkIsolation(t *testing.T) {
+	directory := t.TempDir()
+	files := []schema.ComponentConfigurationFile{generated("generated.tf", "before", "overwrite")}
+	require.NoError(t, WriteFiles(directory, files))
+	metadata := filepath.Join(directory, filepath.FromSlash(manifestName))
+	require.NoError(t, os.Chmod(metadata, 0o640))
+	retained := filepath.Join(directory, "retained.json")
+	if err := os.Link(metadata, retained); err != nil {
+		t.Skipf("hard links unavailable: %v", err)
+	}
+	original := read(t, directory, "retained.json")
+	files[0].Content = []byte("after")
+	require.NoError(t, WriteFiles(directory, files))
+	require.Equal(t, original, read(t, directory, "retained.json"))
+	require.NotEqual(t, original, read(t, directory, manifestName))
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(metadata)
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0o640), info.Mode().Perm())
+	}
+	require.NoError(t, WriteFiles(directory, nil))
+	require.Equal(t, original, read(t, directory, "retained.json"))
+	require.NoFileExists(t, metadata)
+	entries, err := os.ReadDir(filepath.Join(directory, ".atmos"))
+	require.NoError(t, err)
+	require.Empty(t, entries, "no temporary metadata remains")
+}
+
+func TestWriteFilesOverwritePreservesOtherHardLinks(t *testing.T) {
+	root := t.TempDir()
+	state := filepath.Join(root, "terraform.tfstate")
+	generated := filepath.Join(root, "generated.tf")
+	require.NoError(t, os.WriteFile(state, []byte("protected state"), 0o600))
+	require.NoError(t, os.Link(state, generated))
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{{Path: "generated.tf", Content: []byte("replacement"), IfExists: "overwrite", Mode: 0o755}}))
+	content, err := os.ReadFile(state)
+	require.NoError(t, err)
+	require.Equal(t, "protected state", string(content))
+	content, err = os.ReadFile(generated)
+	require.NoError(t, err)
+	require.Equal(t, "replacement", string(content))
+	oldInfo, err := os.Stat(state)
+	require.NoError(t, err)
+	newInfo, err := os.Stat(generated)
+	require.NoError(t, err)
+	require.False(t, os.SameFile(oldInfo, newInfo))
+	if runtime.GOOS != "windows" {
+		require.Equal(t, os.FileMode(0o600), oldInfo.Mode().Perm())
+	}
+	entries, err := os.ReadDir(root)
+	require.NoError(t, err)
+	require.Len(t, entries, 3, "only state, generated file and ownership metadata remain")
+}
+
+func TestWriteFilesModeOnlyOverwritePreservesOtherHardLinks(t *testing.T) {
+	directory := t.TempDir()
+	original := filepath.Join(directory, "original.tf")
+	destination := filepath.Join(directory, "generated.tf")
+	require.NoError(t, os.WriteFile(original, []byte("same bytes"), 0o600))
+	require.NoError(t, os.Link(original, destination))
+	require.NoError(t, WriteFiles(directory, []schema.ComponentConfigurationFile{{Path: "generated.tf", Content: []byte("same bytes"), IfExists: "overwrite", Mode: 0o755}}))
+	before, err := os.Stat(original)
+	require.NoError(t, err)
+	after, err := os.Stat(destination)
+	require.NoError(t, err)
+	if runtime.GOOS != "windows" {
+		require.False(t, os.SameFile(before, after))
+		require.Equal(t, os.FileMode(0o600), before.Mode().Perm())
+		require.Equal(t, os.FileMode(0o755), after.Mode().Perm())
+	}
+	require.Equal(t, "same bytes", read(t, directory, "original.tf"))
+}
+
+func TestWriteFilesReplacementPreservesUnspecifiedMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows keeps its ACLs")
+	}
+	directory := t.TempDir()
+	path := filepath.Join(directory, "generated.tf")
+	require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
+	require.NoError(t, os.Chmod(path, 0o640))
+	require.NoError(t, WriteFiles(directory, []schema.ComponentConfigurationFile{generated("generated.tf", "after", "overwrite")}))
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o640), info.Mode().Perm())
+	require.Equal(t, "after", read(t, directory, "generated.tf"))
+}

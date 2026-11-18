@@ -2,11 +2,16 @@ package engine
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
+	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
+	"github.com/gruntwork-io/terragrunt/pkg/config"
+	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -365,4 +370,31 @@ func TestDestroyGuardDoesNotTrustDeniedTryFallback(t *testing.T) {
 	_, err := Resolve(t.Context(), request)
 	require.ErrorIs(t, err, errUndecidableDestroyPolicy)
 	require.NotErrorIs(t, err, ErrPreventDestroy)
+}
+
+func TestRenderGeneratedPreservesCallerConfiguration(t *testing.T) {
+	// The public parser map exposes the upstream generation value without importing its internal package.
+	parsed := config.TerragruntConfig{}
+	generated := parsed.GenerateConfigs["provider"]
+	generated.Path, generated.Contents, generated.Disable = "nested/main.tf", "locals { preserved = true }", true
+	original := generated
+	content, err := atmosbridge.RenderGenerated(t.Context(), log.New(log.WithOutput(io.Discard)), &generated)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "preserved = true")
+	require.Equal(t, original, generated, "rendering must not change caller configuration")
+}
+
+func TestDiscoveryKeepsDeclaredRemoteModuleSource(t *testing.T) {
+	root := stackProject(t, map[string]string{"live/terragrunt.stack.hcl": `unit "app" {
+ source = "../catalog/units/app"
+ path = "app"
+}`})
+	source := "git::https://example.invalid/repository.git//module?ref=v1"
+	require.NoError(t, os.WriteFile(filepath.Join(root, "catalog", "units", "app", "terragrunt.hcl"), []byte("terraform { source = \""+source+"\" }"), 0o644))
+	result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**"}, Environment: map[string]string{}})
+	require.NoError(t, err)
+	require.Len(t, result.Inventory, 1)
+	require.Equal(t, source, result.Inventory[0].Config.Source)
+	require.Equal(t, filepath.Join(root, "live", stackFile), result.Inventory[0].GenerationRoot)
+	require.NoDirExists(t, filepath.Join(root, "live", ".terragrunt-stack"))
 }

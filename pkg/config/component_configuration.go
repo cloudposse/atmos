@@ -10,8 +10,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Preserve the loader's established handling of unknown scalar Terraform keys.
-// Only object-valued unknown keys can declare a configuration provider.
+// Preserve the loader's established handling of unknown Terraform keys.
+// Only mappings with an explicit enabled or provider marker claim a provider section.
 func terraformConfigurationDecodeHook() mapstructure.DecodeHookFuncType {
 	typ := reflect.TypeOf(schema.Terraform{})
 	known := make(map[string]bool)
@@ -29,13 +29,23 @@ func terraformConfigurationDecodeHook() mapstructure.DecodeHookFuncType {
 		}
 		result := maps.Clone(fields)
 		for key, item := range result {
-			if known[key] || item == nil {
+			if known[key] {
 				continue
 			}
-			if reflect.TypeOf(item).Kind() != reflect.Map {
+			if !claimedConfigurationProvider(item) {
 				delete(result, key)
 			}
 		}
 		return result, nil
 	}
+}
+
+func claimedConfigurationProvider(value any) bool {
+	fields, ok := value.(map[string]any)
+	if !ok {
+		return false
+	}
+	_, enabled := fields["enabled"]
+	_, provider := fields["provider"]
+	return enabled || provider
 }
