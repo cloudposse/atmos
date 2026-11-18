@@ -22,6 +22,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/ollama"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/openai"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/openrouter"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/opper"
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/zai"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -177,6 +178,19 @@ func TestNewClient(t *testing.T) {
 					DefaultProvider: "zai",
 					Providers: map[string]*schema.AIProviderConfig{
 						"zai": {ApiKey: "test-key"},
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "Opper provider",
+			atmosConfig: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Enabled:         true,
+					DefaultProvider: "opper",
+					Providers: map[string]*schema.AIProviderConfig{
+						"opper": {ApiKey: "test-key"},
 					},
 				},
 			},
