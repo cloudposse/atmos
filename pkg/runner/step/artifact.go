@@ -72,6 +72,7 @@ func (h *ArtifactHandler) Execute(ctx context.Context, step *schema.WorkflowStep
 	if err != nil {
 		return nil, err
 	}
+	stepKey = vars.artifactScopeOrRoot().key() + "\x00" + stepKey
 	params, retained, err := h.sessionParams(session, stepKey, step, vars)
 	if err != nil {
 		return nil, err
@@ -123,8 +124,9 @@ func (h *ArtifactHandler) sessionParams(session *artifactSession, key string, st
 // attempt into the report collector, and builds the step result.
 func (h *ArtifactHandler) runOperation(ctx context.Context, step *schema.WorkflowStep, vars *Variables, svc artifact.Service, params *invoke.Params) (*StepResult, error) {
 	session := vars.artifactSession()
-	key := session.operationKey(step.Name, params)
-	operation, collector := session.begin(key)
+	scope := vars.artifactScopeOrRoot()
+	key := session.operationKey(scope, step.Name, params)
+	operation, collector := session.begin(key, scope)
 	params.Execution = artifact.Execution{OperationID: operation.id, PreparedAt: operation.preparedAt}
 	if step.Retry != nil {
 		// The wrapper owns the retry budget, so the service makes a single transport attempt.
@@ -137,7 +139,7 @@ func (h *ArtifactHandler) runOperation(ctx context.Context, step *schema.Workflo
 		runErr = errors.Join(ctx.Err(), runErr)
 	}
 	session.finish(key, runErr == nil)
-	collector.Record(&report.Entry{Step: step.Name, OperationID: operation.id, Attempt: operation.attempts, Outcome: outcome, Err: runErr})
+	collector.Record(&report.Entry{Step: step.Name, OperationID: operation.id, Action: params.Action, Attempt: operation.attempts, Position: operation.position, Outcome: outcome, Err: runErr})
 
 	result := artifactStepResult(params, outcome)
 	if runErr != nil {

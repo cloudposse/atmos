@@ -132,3 +132,92 @@ func TestRegister_InstallsTheProcessWideValidator(t *testing.T) {
 	assert.Equal(t, "2.0.0", prepared.Record.Version)
 	assert.Equal(t, produce.KindScaffold, prepared.Record.Kind)
 }
+
+func TestValidator_ConfinesLocalIncludes(t *testing.T) {
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "root")
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(parent, "outside.yaml"), []byte("key: value\n"), 0o600))
+	fixtures.WriteFile(t, dir, "inside.yaml", "key: value\n", 0o600)
+	linkAvailable := fixtures.Symlink(t, dir, "link.yaml", filepath.Join(parent, "outside.yaml"))
+	for _, tc := range []struct {
+		path  string
+		valid bool
+	}{{"./inside.yaml", true}, {"../outside.yaml", false}, {"./link.yaml", false}, {"file::" + filepath.Join(parent, "outside.yaml"), false}, {"git::file://" + filepath.Join(parent, "outside.yaml"), false}} {
+		t.Run(tc.path, func(t *testing.T) {
+			if tc.path == "./link.yaml" && !linkAvailable {
+				t.Skip("symlinks are unavailable")
+			}
+			manifest := "apiVersion: atmos/v1\nkind: AtmosScaffoldConfig\nmetadata:\n  name: test\nspec:\n  fields:\n    - name: lookup\n      type: computed\n      value: !include " + tc.path + "\n"
+			fixtures.WriteFile(t, dir, "scaffold.yaml", manifest, 0o644)
+			_, err := scaffold.Validator{}.ValidateScaffold(context.Background(), dir)
+			if tc.valid {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, errUtils.ErrArtifactScaffoldInvalid)
+			}
+		})
+	}
+}
+
+func TestValidator_RejectsManifestSymlinkOutsideRoot(t *testing.T) {
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "root")
+	require.NoError(t, os.Mkdir(dir, 0o755))
+	outside := filepath.Join(parent, "outside.yaml")
+	require.NoError(t, os.WriteFile(outside, []byte(validManifest), 0o600))
+	if !fixtures.Symlink(t, dir, "scaffold.yaml", outside) {
+		t.Skip("symlinks are unavailable")
+	}
+	_, err := scaffold.Validator{}.ValidateScaffold(context.Background(), dir)
+	require.ErrorIs(t, err, errUtils.ErrArtifactScaffoldInvalid)
+}
+
+// A scaffold root that does not exist, a manifest that cannot be read as a file, and a manifest
+// symlink that cannot be resolved are each reported as an invalid scaffold with the cause kept.
+func TestValidator_ReportsUnreadableRootsAndManifests(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T) string
+		cause error
+		names string
+	}{
+		{
+			name:  "root does not exist",
+			setup: func(t *testing.T) string { return filepath.Join(t.TempDir(), "missing") },
+			cause: os.ErrNotExist,
+			names: "scaffold root",
+		},
+		{
+			name: "manifest is a directory",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				require.NoError(t, os.Mkdir(filepath.Join(dir, "scaffold.yaml"), 0o755))
+				return dir
+			},
+			names: "scaffold.yaml",
+		},
+		{
+			name: "manifest symlink loops",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				if !fixtures.Symlink(t, dir, "scaffold.yaml", "scaffold.yaml") {
+					t.Skip("symlinks are unavailable")
+				}
+				return dir
+			},
+			names: "scaffold.yaml",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := scaffold.Validator{}.ValidateScaffold(context.Background(), tt.setup(t))
+
+			require.ErrorIs(t, err, errUtils.ErrArtifactScaffoldInvalid)
+			if tt.cause != nil {
+				require.ErrorIs(t, err, tt.cause)
+			}
+			assert.Contains(t, err.Error(), tt.names)
+		})
+	}
+}
