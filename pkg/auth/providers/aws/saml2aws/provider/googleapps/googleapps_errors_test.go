@@ -262,13 +262,17 @@ func TestChallenge_PromptAndFormFailures(t *testing.T) {
 			wantErr: "failed to read the TOTP code",
 		},
 		{
-			name:    "SMS request fails",
-			page:    func(t *testing.T) string { return challengePage(closedServerURL(t)+"/signin/challenge/ipp/2", `<button>Send text message</button>`) },
+			name: "SMS request fails",
+			page: func(t *testing.T) string {
+				return challengePage(closedServerURL(t)+"/signin/challenge/ipp/2", `<button>Send text message</button>`)
+			},
 			wantErr: "failed to post sms request form",
 		},
 		{
-			name:    "SMS request answered without a form",
-			page:    func(*testing.T) string { return challengePage("/signin/challenge/ipp/2", `<button>Send text message</button>`) },
+			name: "SMS request answered without a form",
+			page: func(*testing.T) string {
+				return challengePage("/signin/challenge/ipp/2", `<button>Send text message</button>`)
+			},
 			routes:  map[string]pageHandler{"/signin/challenge/ipp/2": static(`<html><body>sent</body></html>`)},
 			wantErr: "unable to extract challenge form",
 		},

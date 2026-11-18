@@ -32,9 +32,11 @@ func TestVerifyMfa_RequestFailures(t *testing.T) {
 		wantErr  string
 	}{
 		{
-			name:    "yubikey prompt failure stops authentication",
-			factor:  testFactor{id: "y", provider: "YUBICO", factorType: "token:hardware"},
-			prompt:  func(pr *mocks.Prompter) { pr.On("Password", "Press the button on your yubikey").Return("", errPrompt).Once() },
+			name:   "yubikey prompt failure stops authentication",
+			factor: testFactor{id: "y", provider: "YUBICO", factorType: "token:hardware"},
+			prompt: func(pr *mocks.Prompter) {
+				pr.On("Password", "Press the button on your yubikey").Return("", errPrompt).Once()
+			},
 			wantErr: "error reading the yubikey code",
 		},
 		{name: "unparseable verify URL", factor: totp, href: badURL, wantErr: "error building verify request"},

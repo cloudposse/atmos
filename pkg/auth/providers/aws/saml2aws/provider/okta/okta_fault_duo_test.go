@@ -71,10 +71,10 @@ func (d *duoFake) routes() *routes {
 			d.mu.Unlock()
 			return duoResultOK
 		},
-		"/duo/callback":                   static(`{"stat":"OK"}`),
-		"/certs":                          static(`{"stat":"OK"}`),
-		"/alive":                          static(`{}`),
-		"/report":                         static(`{}`),
+		"/duo/callback":                    static(`{"stat":"OK"}`),
+		"/certs":                           static(`{"stat":"OK"}`),
+		"/alive":                           static(`{}`),
+		"/report":                          static(`{}`),
 		"/frame/check_endpoint_app_status": static(`{}`),
 	})
 }
@@ -156,8 +156,10 @@ func TestVerifyMfa_DuoFailureModes(t *testing.T) {
 		},
 		{name: "endpoint health validation fails", option: "Duo Push", setup: func(_ *testing.T, d *duoFake) { d.auth = []string{duoEndpointHealthPage} }, fault: faultAt(faultTransport, "/alive", 0), wantErr: "couldn't validate endpoint health"},
 		{
-			name:    "option prompt failure",
-			prompt:  func(pr *mocks.Prompter) { pr.On("Choose", "Select a DUO MFA Option", mock.Anything).Return(0, errPrompt).Once() },
+			name: "option prompt failure",
+			prompt: func(pr *mocks.Prompter) {
+				pr.On("Choose", "Select a DUO MFA Option", mock.Anything).Return(0, errPrompt).Once()
+			},
 			wantErr: "error selecting the DUO MFA option",
 		},
 		{
@@ -220,8 +222,10 @@ func TestVerifyMfa_DuoU2FFailureModes(t *testing.T) {
 			wantErr: "no U2F device",
 		},
 		{
-			name:    "device rejects the challenge",
-			device:  func(d *mocks.U2FDevice) { d.On("Authenticate", mock.Anything).Return(nil, errors.New("device refused")).Once() },
+			name: "device rejects the challenge",
+			device: func(d *mocks.U2FDevice) {
+				d.On("Authenticate", mock.Anything).Return(nil, errors.New("device refused")).Once()
+			},
 			wantErr: "device refused",
 		},
 		{name: "finish prompt transport failure", device: signOK, fault: faultAt(faultTransport, "/frame/prompt", 2), wantErr: "error retrieving verify response"},
