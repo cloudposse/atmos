@@ -40,7 +40,7 @@ func generatedFiles(ctx context.Context, logger log.Logger, cfg *config.Terragru
 			policy = generated.IfDisabledStr
 			result.Generated[path] = ""
 		} else {
-			content, err := atmosbridge.RenderGenerated(ctx, logger, generated)
+			content, err := atmosbridge.RenderGenerated(ctx, logger, &generated)
 			if err != nil {
 				return err
 			}

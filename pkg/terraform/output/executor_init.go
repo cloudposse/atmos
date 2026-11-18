@@ -63,9 +63,7 @@ func (e *Executor) ensureInitialized(
 	})
 
 	if decision.RunInit {
-		if !config.ReadOnlyState {
-			workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
-		}
+		cleanOutputWorkspace(workspaceMgr, atmosConfig, config)
 		if err := e.runInit(ctx, runner, config, component, stack, stderrCapture, pluginCache, decision.Reconfigure, decision.Upgrade); err != nil {
 			return err
 		}
@@ -223,4 +221,11 @@ func ensureOutputWorkspace(ctx context.Context, manager WorkspaceManager, runner
 		return runner.WorkspaceSelect(ctx, config.Workspace)
 	}
 	return manager.EnsureWorkspace(ctx, runner, config.Workspace, config.BackendType, target.component, target.stack, target.stderr)
+}
+
+// cleanOutputWorkspace leaves initialized plugin-owned state untouched.
+func cleanOutputWorkspace(manager WorkspaceManager, atmosConfig *schema.AtmosConfiguration, config *ComponentConfig) {
+	if !config.ReadOnlyState {
+		manager.CleanWorkspace(atmosConfig, config.ComponentPath)
+	}
 }

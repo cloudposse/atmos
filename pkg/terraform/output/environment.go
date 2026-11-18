@@ -53,26 +53,7 @@ var prohibitedEnvVarPrefixes = []string{
 func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, authContext *schema.AuthContext) (map[string]string, error) {
 	defer perf.Track(nil, "output.defaultEnvironmentSetup.SetupEnvironment")()
 
-	// Get all environment variables from parent process (excluding prohibited vars).
-	environMap := envpkg.EnvironToMapFiltered(prohibitedEnvVars, prohibitedEnvVarPrefixes)
-	if config.BaseEnvironment != nil {
-		environMap = make(map[string]string)
-		for _, entry := range config.BaseEnvironment {
-			if key, value, ok := strings.Cut(entry, "="); ok {
-				environMap[key] = value
-			}
-		}
-		for _, key := range prohibitedEnvVars {
-			delete(environMap, key)
-		}
-		for key := range environMap {
-			for _, prefix := range prohibitedEnvVarPrefixes {
-				if strings.HasPrefix(key, prefix) {
-					delete(environMap, key)
-				}
-			}
-		}
-	}
+	environMap := outputBaseEnvironment(config.BaseEnvironment)
 
 	// Add auth-based environment variables if authContext is provided.
 	if authContext != nil && authContext.AWS != nil {
@@ -98,21 +79,7 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 		}
 	}
 
-	// Add/override environment variables from the component's env section.
-	if len(config.Env) > 0 {
-		log.Debug(
-			"Adding environment variables from component",
-			"source", "env section",
-			"count", len(config.Env),
-		)
-		for k, v := range config.Env {
-			// Terraform-exec owns CLI arguments for its internal output command.
-			if k == "TF_CLI_ARGS" || strings.HasPrefix(k, "TF_CLI_ARGS_") {
-				continue
-			}
-			environMap[k] = fmt.Sprintf("%v", v)
-		}
-	}
+	mergeOutputComponentEnvironment(environMap, config.Env)
 
 	// When components.terraform.init.pass_vars is enabled, export the component's
 	// vars as TF_VAR_* so the internal `terraform init` (run while resolving
@@ -205,4 +172,47 @@ func encodeTerraformVarValue(value any) string {
 		return fmt.Sprintf("%v", value)
 	}
 	return string(encoded)
+}
+
+// outputBaseEnvironment preserves an explicit empty environment and filters runner-owned settings.
+func outputBaseEnvironment(base []string) map[string]string {
+	if base == nil {
+		return envpkg.EnvironToMapFiltered(prohibitedEnvVars, prohibitedEnvVarPrefixes)
+	}
+	environment := make(map[string]string)
+	for _, entry := range base {
+		if key, value, ok := strings.Cut(entry, "="); ok {
+			environment[key] = value
+		}
+	}
+	for _, key := range prohibitedEnvVars {
+		delete(environment, key)
+	}
+	for key := range environment {
+		for _, prefix := range prohibitedEnvVarPrefixes {
+			if strings.HasPrefix(key, prefix) {
+				delete(environment, key)
+			}
+		}
+	}
+	return environment
+}
+
+// mergeOutputComponentEnvironment preserves component overrides while excluding CLI arguments.
+func mergeOutputComponentEnvironment(environMap map[string]string, environment map[string]any) {
+	// Add/override environment variables from the component's env section.
+	if len(environment) > 0 {
+		log.Debug(
+			"Adding environment variables from component",
+			"source", "env section",
+			"count", len(environment),
+		)
+		for k, v := range environment {
+			// Terraform-exec owns CLI arguments for its internal output command.
+			if k == "TF_CLI_ARGS" || strings.HasPrefix(k, "TF_CLI_ARGS_") {
+				continue
+			}
+			environMap[k] = fmt.Sprintf("%v", v)
+		}
+	}
 }
