@@ -49,3 +49,25 @@ func TestEnvironmentLookupUsesInvocationPath(t *testing.T) {
 		t.Fatal("environment mutated")
 	}
 }
+
+func TestWindowsLookupDoesNotAppendAmbientSuffix(t *testing.T) {
+	directory := t.TempDir()
+	for _, name := range []string{"helper.EXE", "helper.COM.EXE"} {
+		if err := os.WriteFile(filepath.Join(directory, name), []byte("executable"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATHEXT", ".EXE")
+	scoped := Environment(map[string]string{"PATH": directory, "PATHEXT": ".COM;.EXE"}, nil, nil).Exec.(scopedExec)
+	got, err := scoped.lookPath("helper", "windows")
+	if err != nil || got != filepath.Join(directory, "helper.EXE") {
+		t.Fatalf("lookup = %q, %v", got, err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "helper.COM"), []byte("first suffix"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	got, err = scoped.lookPath("helper", "windows")
+	if err != nil || got != filepath.Join(directory, "helper.COM") {
+		t.Fatalf("suffix order = %q, %v", got, err)
+	}
+}

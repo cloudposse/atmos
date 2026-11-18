@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -59,7 +60,12 @@ func writePreparedConfigurationFiles(info *schema.ConfigAndStacksInfo, prepared 
 	if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
 		return err
 	}
-	return configuration.WriteFiles(componentPath, prepared.Files)
+	if err := configuration.WriteFiles(componentPath, prepared.Files); err != nil {
+		return err
+	}
+	// Prepared files can introduce sensitive declarations at an already inspected path.
+	loadTerraformModuleInfo(info, componentPath)
+	return nil
 }
 
 func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
@@ -220,6 +226,10 @@ func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *
 // workspace than the one the configuration provider prepared, before any initialization runs.
 // The component environment overrides the base environment, as it does for the Terraform process.
 func checkConfigurationWorkspace(info *schema.ConfigAndStacksInfo) error {
+	return checkConfigurationWorkspaceForPlatform(info, runtime.GOOS)
+}
+
+func checkConfigurationWorkspaceForPlatform(info *schema.ConfigAndStacksInfo, platform string) error {
 	base := info.SanitizedEnv
 	if base == nil {
 		base = os.Environ()
@@ -227,7 +237,7 @@ func checkConfigurationWorkspace(info *schema.ConfigAndStacksInfo) error {
 	workspace := ""
 	for _, entries := range [][]string{base, info.ComponentEnvList} {
 		for _, entry := range entries {
-			if key, value, ok := strings.Cut(entry, "="); ok && key == "TF_WORKSPACE" {
+			if key, value, ok := strings.Cut(entry, "="); ok && (key == "TF_WORKSPACE" || platform == "windows" && strings.EqualFold(key, "TF_WORKSPACE")) {
 				workspace = value
 			}
 		}
