@@ -73,6 +73,8 @@ exclude = [
   "refspecs\\.linuxfoundation\\.org",
   # OpenBSD man pages (slow response times, intermittent timeouts in CI)
   "man\\.openbsd\\.org",
+  # FreeBSD man pages (timed out from CI runners on consecutive runs; resolves fine outside CI)
+  "man\\.freebsd\\.org",
   # Kubernetes.io (rate limits and connection resets in CI)
   "kubernetes\\.io",
   # runatlantis.io (connection resets on automated requests)
