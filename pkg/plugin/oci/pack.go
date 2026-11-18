@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -183,19 +182,11 @@ func BuildIndex(directory string, descriptors *extension.Registry, opts ...Optio
 	if err != nil {
 		return nil, err
 	}
-	annotations := releaseAnnotations(definition, files["plugin.yaml"])
-	if configured.source != "" {
-		source, ok := publishableSource(configured.source)
-		if !ok {
-			return nil, fmt.Errorf("%w: the package source must be an https URL without credentials, query, or fragment", errUtils.ErrPluginInvalidConfig)
-		}
-		annotations[annotationSource] = source
+	annotations, err := packingAnnotations(definition, files["plugin.yaml"], configured.source)
+	if err != nil {
+		return nil, err
 	}
-	platforms := make([]string, 0, len(definition.Spec.Platforms))
-	for platform := range definition.Spec.Platforms {
-		platforms = append(platforms, platform)
-	}
-	sort.Strings(platforms)
+	platforms := slices.Sorted(maps.Keys(definition.Spec.Platforms))
 	additions := make([]mutate.IndexAddendum, 0, len(platforms))
 	for _, platform := range platforms {
 		parsed, err := parsePlatform(platform)
@@ -227,6 +218,26 @@ func parsePlatform(value string) (*v1.Platform, error) {
 		return nil, err
 	}
 	return &v1.Platform{OS: target.OS, Architecture: target.Architecture, Variant: target.Variant}, nil
+}
+
+// packingAnnotations retains the original wire format when no display metadata is requested.
+func packingAnnotations(definition *manifest.Config, raw []byte, sourceOverride string) (map[string]string, error) {
+	annotations := releaseAnnotations(definition, raw)
+	// A manifest with only the original name/version metadata must still reproduce
+	// its historical release bytes. Display metadata and an explicit source opt in
+	// to the OCI display annotations; inspection continues accepting both shapes.
+	if definition.Metadata.DisplayName == "" && definition.Metadata.Description == "" && definition.Metadata.Repository == "" && sourceOverride == "" {
+		delete(annotations, annotationTitle)
+		delete(annotations, annotationImageVersion)
+	}
+	if sourceOverride != "" {
+		source, ok := publishableSource(sourceOverride)
+		if !ok {
+			return nil, fmt.Errorf("%w: the package source must be an https URL without credentials, query, or fragment", errUtils.ErrPluginInvalidConfig)
+		}
+		annotations[annotationSource] = source
+	}
+	return annotations, nil
 }
 
 // releaseAnnotations derives every annotation from the verified manifest bytes, so a

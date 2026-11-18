@@ -98,6 +98,43 @@ func TestReleaseLinksPackageToRepositoryFromManifestMetadata(t *testing.T) {
 	require.NoError(t, err, "derived annotations are part of the verified release shape")
 }
 
+func TestReleasePreservesLegacyAnnotationsUnlessMetadataIsRequested(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		options  []pluginoci.Option
+		metadata func(*manifest.Config)
+		display  bool
+	}{
+		{name: "original metadata"},
+		{name: "explicit source", options: []pluginoci.Option{pluginoci.WithSource("https://github.com/example/fixture")}, display: true},
+		{name: "display name", metadata: func(c *manifest.Config) { c.Metadata.DisplayName = "Fixture" }, display: true},
+		{name: "description", metadata: func(c *manifest.Config) { c.Metadata.Description = "Fixture plugin" }, display: true},
+		{name: "repository", metadata: func(c *manifest.Config) { c.Metadata.Repository = "https://github.com/example/fixture" }, display: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			directory, descriptors := packageFixture(t)
+			if test.metadata != nil {
+				writeMetadata(t, directory, test.metadata)
+			}
+			index, err := pluginoci.BuildIndex(directory, descriptors, test.options...)
+			require.NoError(t, err)
+			for _, annotations := range indexAnnotations(t, index) {
+				require.Equal(t, "example/fixture", annotations["dev.atmos.plugin.name"])
+				require.Equal(t, "1.2.3", annotations["dev.atmos.plugin.version"])
+				require.NotEmpty(t, annotations["dev.atmos.plugin.manifest.digest"])
+				if test.display {
+					require.NotEmpty(t, annotations[annotationTitle])
+					require.Equal(t, "1.2.3", annotations[annotationImgVersion])
+				} else {
+					require.Len(t, annotations, 3, "unrequested annotations change historical release digests")
+				}
+			}
+			_, err = pluginoci.Inspect(index, "")
+			require.NoError(t, err, "both historical and explicit display metadata remain verifiable")
+		})
+	}
+}
+
 func TestReleaseOmitsSourceWithoutHTTPSRepository(t *testing.T) {
 	for name, repository := range map[string]string{"absent": "", "ssh": "git@github.com:example/atmos-fixture.git", "plain http": "http://github.com/example/x", "credentials": "https://user:token@github.com/example/x"} {
 		t.Run(name, func(t *testing.T) {
