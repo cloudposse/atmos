@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/gitenv"
@@ -580,22 +581,16 @@ func TestComposeEnv_EmptyIdentity(t *testing.T) {
 
 // ---- composeEnv identity precedence ----
 
-type fakeIdentityManager struct{ envs map[string]map[string]string }
-
-func (f fakeIdentityManager) GetDefaultIdentity(bool) (string, error) { return "", nil }
-
-func (f fakeIdentityManager) EnsureIdentityEnvironment(_ context.Context, identity string) (map[string]string, error) {
-	return f.envs[identity], nil
-}
-
 func TestComposeEnv_IdentityReachesSubprocessEnvironment(t *testing.T) {
 	original := envComposer
 	t.Cleanup(func() { envComposer = original })
+	manager := gitenv.NewMockIdentityManager(gomock.NewController(t))
+	// Each identity is authenticated only by the case that selects it: the mock fails the test if
+	// the repository identity is resolved when the flag overrides it, or if any is with neither.
+	manager.EXPECT().EnsureIdentityEnvironment(gomock.Any(), "repo-id").Return(map[string]string{"ATMOS_TEST_GIT_SOCK": "repo"}, nil).Times(1)
+	manager.EXPECT().EnsureIdentityEnvironment(gomock.Any(), "flag-id").Return(map[string]string{"ATMOS_TEST_GIT_SOCK": "flag"}, nil).Times(1)
 	envComposer = gitenv.NewComposer(gitenv.WithManagerFactory(func(*schema.AtmosConfiguration) (gitenv.IdentityManager, error) {
-		return fakeIdentityManager{envs: map[string]map[string]string{
-			"repo-id": {"ATMOS_TEST_GIT_SOCK": "repo"},
-			"flag-id": {"ATMOS_TEST_GIT_SOCK": "flag"},
-		}}, nil
+		return manager, nil
 	}))
 	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
 	t.Setenv("ATMOS_TEST_GIT_SOCK", "ambient")

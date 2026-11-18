@@ -95,7 +95,9 @@ spec:
 
     Outside CI, an identity without a valid session fails with a hint to run `atmos auth login --identity <name>`. Atmos never prompts for a login in the middle of a fetch.
 
-    Only Git sources use the identity's environment. S3 and OCI sources authenticate as before. `atmos vendor update` and `atmos vendor diff` do not use the identity when they list available versions.
+    A source that names an identity is fetched with that identity only. Atmos does not add a token from your environment (such as `GITHUB_TOKEN`) to its URL, and credentials that Atmos Pro provisioned for other fetches are not passed to it.
+
+    Only Git sources use the identity's environment. S3 and OCI sources authenticate as before and do not need the identity's session. `atmos vendor update` and `atmos vendor diff` do not use the identity when they list available versions.
   </dd>
 
   <dt>`targets`</dt>

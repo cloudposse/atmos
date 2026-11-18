@@ -28,7 +28,9 @@ imports, which all depend on an identity's environment reaching the subprocess t
   identity. The global `--identity` flag (or `ATMOS_IDENTITY`) wins over the repository's configured
   identity. With neither, the process environment is used unchanged.
 - `atmos ansible playbook` layers the identity's prepared environment over the component environment before
-  starting `ansible-playbook`, the same way Helmfile and Packer do.
+  starting `ansible-playbook`, the same way Helmfile and Packer do. Its debug log lists the names of the
+  environment variables the playbook runs with, not their values, because that environment now carries the
+  identity's credentials.
 - The `environment/v1` materializer can now be restored from a credential read back from the credential
   store. It applies the same validation and secret masking as a fresh authentication, and refuses an
   expired or malformed credential.

@@ -17,6 +17,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests/testhelpers/gitscrub"
 )
 
 // Compile-time sentinels for the schema fields the tests set.
@@ -43,6 +44,9 @@ func localGitRepo(t *testing.T, owner string) string {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
+		// A caller's GIT_DIR, GIT_WORK_TREE, or GIT_INDEX_FILE would point these commands at the
+		// caller's repository instead of the temporary one, despite cmd.Dir.
+		cmd.Env = gitscrub.Environ()
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, string(out))
 	}
@@ -214,4 +218,53 @@ func TestFetchToTempDir_IdentityNeedingLoginFailsBeforeFetching(t *testing.T) {
 func TestComponentInstallerIdentity(t *testing.T) {
 	assert.Equal(t, "", (&componentVendorInstaller{}).identity())
 	assert.Equal(t, "ops", (&componentVendorInstaller{spec: &schema.VendorComponentSpec{Source: schema.VendorComponentSource{Identity: "ops"}}}).identity())
+}
+
+// A dry run probes the source with the same detector a real fetch uses, and the detector's result
+// depends on the identity in effect. So the dry run must resolve the identity exactly as the fetch
+// does: for a go-getter source, with the same precedence, and not at all for an OCI package.
+func TestDetectIfNeeded_ResolvesTheSourceIdentityLikeTheRealFetch(t *testing.T) {
+	const uri = "github.com/acme/modules.git//vpc"
+	require.True(t, needsCustomDetection(uri), "prerequisite: this source goes through the custom detector")
+	atmosConfig := &schema.AtmosConfiguration{Vendor: schema.Vendor{Identity: "default"}}
+
+	tests := []struct {
+		name     string
+		ctx      context.Context
+		pType    PkgType
+		entry    string
+		resolved []string
+	}{
+		{name: "the source's own identity", ctx: context.Background(), pType: PkgTypeRemote, entry: "ops", resolved: []string{"ops"}},
+		{name: "vendor.identity when the source names none", ctx: context.Background(), pType: PkgTypeRemote, resolved: []string{"default"}},
+		{name: "the --identity flag overrides both", ctx: downloader.WithIdentityOverride(context.Background(), "flag-id"), pType: PkgTypeRemote, entry: "ops", resolved: []string{"flag-id"}},
+		{name: "an OCI package resolves none, as its fetch does", ctx: context.Background(), pType: PkgTypeOci, entry: "ops"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var resolved []string
+			downloader.RegisterIdentityEnvironmentResolver(func(_ context.Context, _ *schema.AtmosConfiguration, identity string) ([]string, error) {
+				resolved = append(resolved, identity)
+				return []string{"SSH_AUTH_SOCK=/tmp/" + identity + ".sock"}, nil
+			})
+			t.Cleanup(func() { downloader.RegisterIdentityEnvironmentResolver(nil) })
+
+			require.NoError(t, detectIfNeeded(tt.ctx, atmosConfig, uri, tt.pType, tt.entry))
+
+			assert.Equal(t, tt.resolved, resolved)
+		})
+	}
+}
+
+// A real fetch fails when its identity has no session. A dry run of the same source must report
+// that too, instead of passing and leaving the failure for the real run.
+func TestDetectIfNeeded_IdentityNeedingLoginFailsTheDryRun(t *testing.T) {
+	downloader.RegisterIdentityEnvironmentResolver(func(context.Context, *schema.AtmosConfiguration, string) ([]string, error) {
+		return nil, errUtils.ErrRemoteIdentityLoginRequired
+	})
+	t.Cleanup(func() { downloader.RegisterIdentityEnvironmentResolver(nil) })
+
+	err := detectIfNeeded(context.Background(), &schema.AtmosConfiguration{}, "github.com/acme/modules.git//vpc", PkgTypeRemote, "ops")
+
+	require.ErrorIs(t, err, errUtils.ErrRemoteIdentityLoginRequired)
 }

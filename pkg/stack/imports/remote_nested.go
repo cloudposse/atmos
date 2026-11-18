@@ -3,6 +3,8 @@ package imports
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,7 +104,7 @@ func (r *RemoteImporter) resolveNestedUnguarded(ctx context.Context, uri, nested
 	}
 
 	cacheKey := uri + "|nested_imports=remote"
-	if matches, ok := r.cachedMatches(cacheKey); ok {
+	if matches, ok := r.cachedMatches(ctx, cacheKey); ok {
 		return matches, nil
 	}
 
@@ -110,7 +112,7 @@ func (r *RemoteImporter) resolveNestedUnguarded(ctx context.Context, uri, nested
 	if err != nil {
 		return nil, err
 	}
-	r.storeMatches(cacheKey, matches)
+	r.storeMatches(ctx, cacheKey, matches)
 	return matches, nil
 }
 
@@ -162,7 +164,8 @@ func (r *RemoteImporter) ensureSourceDir(ctx context.Context, sourceURI, ttl str
 	if !IsOCIURI(sourceURI) {
 		sourceURI = r.prepareGitSource(ctx, sourceURI)
 	}
-	destDir := filepath.Join(r.cache.BaseDir(), uriToTempName(sourceURI)+".source")
+	// The clone is fetched as one identity, so it is shared only by imports that use that identity.
+	destDir := filepath.Join(r.cache.BaseDir(), uriToTempName(scopedKey(ctx, sourceURI))+".source")
 	return r.reuseOrFetchSourceDir(ctx, sourceURI, destDir, ttl)
 }
 
@@ -177,7 +180,7 @@ func (r *RemoteImporter) prepareGitSource(ctx context.Context, sourceURI string)
 	//
 	// A source that names an identity carries its own per-fetch environment, which takes precedence
 	// over the ambient broker, so the broker is not consulted for it.
-	if r.atmosConfig != nil && len(downloader.EnvironmentFromContext(ctx)) == 0 {
+	if r.atmosConfig != nil && !downloader.FetchUsesIdentity(ctx) {
 		broker.EnsureCredentials(ctx, r.atmosConfig)
 	}
 
@@ -190,8 +193,10 @@ func (r *RemoteImporter) reuseOrFetchSourceDir(ctx context.Context, sourceURI, d
 	r.sourceMu.Lock()
 	defer r.sourceMu.Unlock()
 
+	sessionKey := scopedKey(ctx, sourceURI)
+
 	// Within-run dedup: already fetched this process -> reuse, ignoring TTL.
-	if r.sessionFetched[sourceURI] {
+	if r.sessionFetched[sessionKey] {
 		if _, err := os.Stat(destDir); err == nil {
 			return destDir, nil
 		}
@@ -199,14 +204,14 @@ func (r *RemoteImporter) reuseOrFetchSourceDir(ctx context.Context, sourceURI, d
 
 	// Cross-run reuse: only when a TTL is configured and the persisted clone is fresh.
 	if sourceCacheFresh(destDir, ttl) {
-		r.sessionFetched[sourceURI] = true
+		r.sessionFetched[sessionKey] = true
 		return destDir, nil
 	}
 
 	if err := r.fetchSourceDir(ctx, sourceURI, destDir); err != nil {
 		return "", err
 	}
-	r.sessionFetched[sourceURI] = true
+	r.sessionFetched[sessionKey] = true
 	return destDir, nil
 }
 
@@ -337,9 +342,11 @@ func ResolveRemoteImportNested(atmosConfig *schema.AtmosConfiguration, uri, nest
 }
 
 // ResolveRemoteImportNestedIdentity is ResolveRemoteImportNested for one import that may name an
-// Atmos Auth identity. The identity (the import's own, else settings.imports.identity) is resolved
+// Atmos Auth identity. The identity (the import's own, else imports.identity) is resolved
 // to a per-fetch environment that the import's Git subprocesses run with; nothing is written to
-// the process environment. An import that names no identity behaves exactly as before.
+// the process environment. An import that names no identity behaves exactly as before, and so does
+// one fetched over a transport the identity cannot serve (an oci:// import authenticates through
+// the registry keychain), which is never refused for want of an identity session.
 func ResolveRemoteImportNestedIdentity(atmosConfig *schema.AtmosConfiguration, uri, nestedImports, ttl, identity string) ([]RemoteImportMatch, error) {
 	defer perf.Track(atmosConfig, "imports.ResolveRemoteImportNestedIdentity")()
 
@@ -347,13 +354,25 @@ func ResolveRemoteImportNestedIdentity(atmosConfig *schema.AtmosConfiguration, u
 	if atmosConfig != nil {
 		sectionDefault = atmosConfig.Imports.Identity
 	}
-	ctx, err := downloader.WithIdentity(context.Background(), atmosConfig, identity, sectionDefault)
+	ctx, err := downloader.WithIdentityForSource(context.Background(), atmosConfig, uri, identity, sectionDefault)
 	if err != nil {
-		return nil, err
+		// Marked so a caller can tell "the identity could not be used" from "the source is not
+		// there": only the second may be skipped (skip_if_missing).
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrRemoteImportIdentity, err)
 	}
 	importer, err := getGlobalImporter(atmosConfig)
 	if err != nil {
 		return nil, err
 	}
 	return importer.resolveNested(ctx, uri, nestedImports, ttl)
+}
+
+// SkippableWhenMissing reports whether a failed remote import may be skipped under
+// `skip_if_missing`. That option covers a source that is not there. An identity that could not be
+// resolved (no session, an unknown name) is a different failure: skipping it would load the stack
+// without the import and without telling the user to log in, so it is never skippable.
+func SkippableWhenMissing(err error) bool {
+	defer perf.Track(nil, "imports.SkippableWhenMissing")()
+
+	return err != nil && !errors.Is(err, errUtils.ErrRemoteImportIdentity)
 }

@@ -135,7 +135,7 @@ source:
 
   <dt>`identity`</dt>
   <dd>
-  The name of an [Atmos Auth identity](/cli/configuration/auth/identities) used to fetch this source, for example `identity: source-reader`. It overrides [`vendor.identity`](/cli/configuration/vendor) in `atmos.yaml`, and the `--identity` flag overrides both. The identity's environment is applied only to the `git` commands that fetch this source. Outside CI, an identity without a valid session fails with a hint to run `atmos auth login --identity <name>`. See [`identity` in `vendor.yaml`](/vendor/config/sources#attributes) for the limits.
+  The name of an [Atmos Auth identity](/cli/configuration/auth/identities) used to fetch this source, for example `identity: source-reader`. It overrides [`vendor.identity`](/cli/configuration/vendor) in `atmos.yaml`. On a component command the `--identity` flag selects the identity the component itself runs as and does not change the identity a `source:` is fetched with; it overrides the source identity only on [`atmos vendor pull`](/cli/commands/vendor/pull). The identity's environment is applied only to the `git` commands that fetch this source. Outside CI, an identity without a valid session fails with a hint to run `atmos auth login --identity <name>`. See [`identity` in `vendor.yaml`](/vendor/config/sources#attributes) for the limits.
   </dd>
 
   <dt>`ttl`</dt>

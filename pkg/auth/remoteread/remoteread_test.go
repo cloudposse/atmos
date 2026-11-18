@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -20,6 +22,9 @@ import (
 
 // Compile-time sentinel: the tests build the auth configuration through this struct.
 var _ = schema.AtmosConfiguration{}
+
+// Compile-time sentinel: the scoping tests tell configurations apart by this field.
+var _ = schema.AuthConfig{Realm: "a"}
 
 func newTestResolver(t *testing.T, manager identityManager, inCI bool) *Resolver {
 	t.Helper()
@@ -167,6 +172,152 @@ func TestResolve_ReturnedEnvironmentIsACopy(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"A=1"}, second)
+}
+
+func TestResolve_FailedResolutionIsRetriedAndNotCached(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	manager := types.NewMockAuthManager(ctrl)
+	transient := errors.Join(errUtils.ErrIdentityAuthFailed, errors.New("token endpoint timed out"))
+	gomock.InOrder(
+		manager.EXPECT().EnsureIdentityEnvironment(gomock.Any(), "ops").Return(nil, transient),
+		// The second fetch tries again; the third is served from the successful resolution.
+		manager.EXPECT().EnsureIdentityEnvironment(gomock.Any(), "ops").Return(map[string]string{"A": "1"}, nil),
+	)
+	resolver := newTestResolver(t, manager, true)
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	_, err := resolver.Resolve(context.Background(), atmosConfig, "ops")
+	require.ErrorIs(t, err, errUtils.ErrRemoteIdentityLoginRequired)
+
+	second, err := resolver.Resolve(context.Background(), atmosConfig, "ops")
+	require.NoError(t, err, "a failure must not be kept for the life of the process")
+	assert.Equal(t, []string{"A=1"}, second)
+
+	third, err := resolver.Resolve(context.Background(), atmosConfig, "ops")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"A=1"}, third)
+}
+
+func TestResolve_ManagerFailureIsRetried(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	manager := types.NewMockAuthManager(ctrl)
+	manager.EXPECT().EnsureIdentityEnvironment(gomock.Any(), "ops").Return(map[string]string{"A": "1"}, nil).Times(1)
+	boom := errors.New("keyring locked")
+	calls := 0
+	resolver := NewResolver(
+		WithManagerFactory(func(*schema.AtmosConfiguration) (identityManager, error) {
+			calls++
+			if calls == 1 {
+				return nil, boom
+			}
+			return manager, nil
+		}),
+		WithCIDetector(func() bool { return true }),
+	)
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	_, err := resolver.Resolve(context.Background(), atmosConfig, "ops")
+	require.ErrorIs(t, err, boom)
+
+	env, err := resolver.Resolve(context.Background(), atmosConfig, "ops")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"A=1"}, env)
+	assert.Equal(t, 2, calls, "the manager is built again after a failure, then kept")
+}
+
+// The same identity name under two auth configurations must not share an environment or a manager:
+// that would let one configuration fetch with the other's credentials.
+func TestResolve_ScopedToAuthConfiguration(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	managers := map[string]*types.MockAuthManager{"a": types.NewMockAuthManager(ctrl), "b": types.NewMockAuthManager(ctrl)}
+	managers["a"].EXPECT().EnsureIdentityEnvironment(gomock.Any(), "ops").Return(map[string]string{"REALM": "a"}, nil).Times(1)
+	managers["b"].EXPECT().EnsureIdentityEnvironment(gomock.Any(), "ops").Return(map[string]string{"REALM": "b"}, nil).Times(1)
+	built := map[string]int{}
+	resolver := NewResolver(
+		WithManagerFactory(func(atmosConfig *schema.AtmosConfiguration) (identityManager, error) {
+			built[atmosConfig.Auth.Realm]++
+			return managers[atmosConfig.Auth.Realm], nil
+		}),
+		WithCIDetector(func() bool { return true }),
+	)
+	configA := func() *schema.AtmosConfiguration {
+		return &schema.AtmosConfiguration{Auth: schema.AuthConfig{Realm: "a"}}
+	}
+	configB := &schema.AtmosConfiguration{Auth: schema.AuthConfig{Realm: "b"}}
+
+	fromA, err := resolver.Resolve(context.Background(), configA(), "ops")
+	require.NoError(t, err)
+	fromB, err := resolver.Resolve(context.Background(), configB, "ops")
+	require.NoError(t, err)
+	// A second copy of configuration A (a different pointer, the same content) reuses A's scope.
+	againA, err := resolver.Resolve(context.Background(), configA(), "ops")
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"REALM=a"}, fromA)
+	assert.Equal(t, []string{"REALM=b"}, fromB, "configuration B must not receive configuration A's environment")
+	assert.Equal(t, []string{"REALM=a"}, againA)
+	assert.Equal(t, map[string]int{"a": 1, "b": 1}, built, "one manager per configuration, reused for equal configurations")
+}
+
+// The same auth section loaded from another directory is another configuration: the default realm
+// and the profile fallback both derive from that directory.
+func TestResolve_ScopedToConfigurationDirectory(t *testing.T) {
+	first, ok := scopeKey(&schema.AtmosConfiguration{CliConfigPath: "repo-one"})
+	require.True(t, ok)
+	second, ok := scopeKey(&schema.AtmosConfiguration{CliConfigPath: "repo-two"})
+	require.True(t, ok)
+	same, ok := scopeKey(&schema.AtmosConfiguration{CliConfigPath: "repo-one"})
+	require.True(t, ok)
+
+	assert.NotEqual(t, first, second)
+	assert.Equal(t, first, same)
+
+	_, ok = scopeKey(nil)
+	assert.False(t, ok, "a nil configuration has no scope to share")
+}
+
+// The auth manager keeps the chain it is authenticating in a field, so the resolver must never run
+// two identities through one manager at the same time.
+func TestResolve_ManagerIsNeverUsedConcurrently(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	manager := types.NewMockAuthManager(ctrl)
+	var inFlight, maxInFlight atomic.Int32
+	ensure := func(_ context.Context, identity string) (map[string]string, error) {
+		current := inFlight.Add(1)
+		defer inFlight.Add(-1)
+		for {
+			seen := maxInFlight.Load()
+			if current <= seen || maxInFlight.CompareAndSwap(seen, current) {
+				break
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+		return map[string]string{"ID": identity}, nil
+	}
+	identities := []string{"one", "two", "three", "four"}
+	for _, identity := range identities {
+		manager.EXPECT().EnsureIdentityEnvironment(gomock.Any(), identity).DoAndReturn(ensure).Times(1)
+	}
+	resolver := newTestResolver(t, manager, true)
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	var wg sync.WaitGroup
+	results := make([][]string, len(identities))
+	for i, identity := range identities {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			env, err := resolver.Resolve(context.Background(), atmosConfig, identity)
+			if err == nil {
+				results[i] = env
+			}
+		}()
+	}
+	wg.Wait()
+
+	assert.Equal(t, int32(1), maxInFlight.Load(), "identities must be resolved one at a time")
+	assert.Equal(t, []string{"ID=one"}, results[0])
+	assert.Equal(t, []string{"ID=four"}, results[len(results)-1])
 }
 
 // Importing this package registers the resolver the downloader uses, so a named identity reaches the

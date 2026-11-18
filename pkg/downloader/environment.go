@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/auth/broker"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -57,21 +58,38 @@ func fetchEnvironmentValue(ctx context.Context, name string) string {
 			return value
 		}
 	}
+	// A named identity never sees what an ambient broker exported: see applyFetchEnvironment.
+	if IdentityFromContext(ctx) != "" {
+		if prior, exported := broker.PreBrokerValue(name); exported {
+			return prior
+		}
+	}
 	//nolint:forbidigo // Live env read of broker-exported GIT_CONFIG_*; mirrors pkg/http/client.go.
 	return os.Getenv(name)
 }
 
 // applyFetchEnvironment gives cmd the process environment overlaid with the per-fetch environment
-// carried by ctx. It is a no-op without an overlay, so fetches that name no identity keep
-// inheriting the process environment exactly as before.
+// carried by ctx. It is a no-op for a fetch that names no identity and carries no overlay, so such
+// a fetch keeps inheriting the process environment exactly as before.
+//
+// A fetch that names an identity runs with that identity's credentials only. An ambient credential
+// broker exports its Git rewrites (GIT_CONFIG_*) and tokens into the process environment, where an
+// earlier fetch in the same process may have put them. Left in place, Git would rewrite this
+// fetch's URL to carry the broker's token instead of using the identity. So for a named identity
+// every broker-exported variable is first restored to what it was before the broker ran, and the
+// identity's own environment is applied on top.
 func applyFetchEnvironment(ctx context.Context, cmd *exec.Cmd) {
 	overlay := EnvironmentFromContext(ctx)
-	if len(overlay) == 0 {
+	namedIdentity := IdentityFromContext(ctx) != ""
+	if len(overlay) == 0 && !namedIdentity {
 		return
 	}
 	base := cmd.Env
 	if base == nil {
 		base = os.Environ()
+	}
+	if namedIdentity {
+		base = broker.WithoutBrokeredEnvironment(base)
 	}
 	cmd.Env = overlayEnvironment(base, overlay)
 }

@@ -15,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests/testhelpers/gitscrub"
 )
 
 // Compile-time sentinels for the schema fields the tests set.
@@ -53,6 +54,9 @@ func identityTestRepo(t *testing.T) string {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
+		// A caller's GIT_DIR, GIT_WORK_TREE, or GIT_INDEX_FILE would point these commands at the
+		// caller's repository instead of the temporary one, despite cmd.Dir.
+		cmd.Env = gitscrub.Environ()
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, string(out))
 	}
@@ -113,4 +117,29 @@ func TestDownloadSource_IdentityNeedingLoginFails(t *testing.T) {
 	err := downloadSource(context.Background(), &schema.AtmosConfiguration{}, &schema.VendorComponentSource{Identity: "ops"}, "git::https://git.example.invalid/acme/modules.git", filepath.Join(t.TempDir(), "dst"))
 
 	require.ErrorIs(t, err, errUtils.ErrRemoteIdentityLoginRequired)
+}
+
+// An OCI or S3 source authenticates through its own credential chain. The identity it would never
+// use must not be resolved, so a missing session cannot stop the download.
+func TestDownloadSource_IdentityIsNotResolvedForTransportsThatCannotUseIt(t *testing.T) {
+	resolved := 0
+	downloader.RegisterIdentityEnvironmentResolver(func(context.Context, *schema.AtmosConfiguration, string) ([]string, error) {
+		resolved++
+		return nil, errUtils.ErrRemoteIdentityLoginRequired
+	})
+	t.Cleanup(func() { downloader.RegisterIdentityEnvironmentResolver(nil) })
+	atmosConfig := &schema.AtmosConfiguration{Vendor: schema.Vendor{Identity: "default"}}
+	// A canceled context stops the fetch itself at once, without the network.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	for _, uri := range []string{"oci://ghcr.io/acme/modules:v1", "s3::https://s3.amazonaws.com/bucket/module.zip"} {
+		t.Run(uri, func(t *testing.T) {
+			err := downloadSource(ctx, atmosConfig, &schema.VendorComponentSource{Identity: "ops"}, uri, filepath.Join(t.TempDir(), "dst"))
+
+			require.Error(t, err, "the canceled fetch fails")
+			assert.NotErrorIs(t, err, errUtils.ErrRemoteIdentityLoginRequired, "but not because of the identity")
+		})
+	}
+	assert.Zero(t, resolved, "the identity is never resolved for these transports")
 }

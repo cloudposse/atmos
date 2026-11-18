@@ -283,7 +283,11 @@ imports:
 
 The identity is chosen in this order: `identity` on the import, then `imports.identity`. With neither, fetching works as before. The `--identity` flag does not reach stack processing, so it does not change which identity an import uses.
 
-The identity's environment is applied only to the `git` commands that fetch that import, so imports fetched concurrently can use different identities. Outside CI, an identity without a valid session fails with a hint to run `atmos auth login --identity <name>`. Atmos never prompts for a login in the middle of a fetch. The default applies to every remote import, but only Git sources use the identity's environment.
+The identity's environment is applied only to the `git` commands that fetch that import, so imports fetched concurrently can use different identities. Outside CI, an identity without a valid session fails with a hint to run `atmos auth login --identity <name>`. Atmos never prompts for a login in the middle of a fetch. The default applies to every remote import, but only Git sources use the identity's environment. An `oci://` import authenticates through the registry and does not need the identity's session.
+
+An import that names an identity is fetched with that identity only. Atmos does not add a token from your environment (such as `GITHUB_TOKEN`) to its URL, and credentials that Atmos Pro provisioned for other fetches are not passed to it. Imports fetched with different identities are cached separately.
+
+`skip_if_missing` skips an import whose source does not exist. It does not skip an import whose identity cannot be used: that still fails with the login hint.
 
 A remote `import` in `atmos.yaml` cannot name an identity. See [CLI configuration imports](/cli/configuration/imports#private-repositories-and-authentication).
 

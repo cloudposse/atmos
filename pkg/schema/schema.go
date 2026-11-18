@@ -2599,7 +2599,7 @@ type StackImport struct {
 	// Examples: "0s" (always re-fetch), "5m", "1h", "7d", or keywords like "daily".
 	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
 	// Identity names the Atmos Auth identity used to fetch this remote import. It overrides
-	// `settings.imports.identity` and is overridden by the global `--identity` flag. Ignored for
+	// `imports.identity` and is overridden by the global `--identity` flag. Ignored for
 	// local imports.
 	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }

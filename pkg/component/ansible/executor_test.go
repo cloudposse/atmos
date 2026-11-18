@@ -1353,3 +1353,15 @@ func TestPlaybookEnvVars_DeliversIdentityEnvironment(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 	})
 }
+
+// The debug log lists the environment a playbook runs with. It carries the identity's
+// environment, so only the names may be logged.
+func TestEnvVarNames_DropsValues(t *testing.T) {
+	names := envVarNames([]string{"AWS_SECRET_ACCESS_KEY=hunter2", "SSH_AUTH_SOCK=/tmp/ops.sock", "URL=a=b", "FLAG"})
+
+	assert.Equal(t, []string{"AWS_SECRET_ACCESS_KEY", "SSH_AUTH_SOCK", "URL", "FLAG"}, names)
+	for _, name := range names {
+		assert.NotContains(t, name, "hunter2")
+		assert.NotContains(t, name, "=")
+	}
+}
