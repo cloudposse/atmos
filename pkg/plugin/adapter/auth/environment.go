@@ -33,9 +33,35 @@ func (m *environmentMaterializer) Apply(ctx context.Context, params *types.PostA
 	if params == nil {
 		return errUtils.ErrPluginProtocol
 	}
-	credentials, ok := params.Credentials.(*types.PluginCredentials)
+	environment, err := m.adopt(params.Credentials)
+	if err != nil {
+		return err
+	}
+	if params.AuthContext != nil {
+		params.AuthContext.Environment = maps.Clone(environment)
+	}
+	return nil
+}
+
+// Restore populates the materializer from a credential read back from the credential store. A
+// fresh process that finds a still-valid stored credential skips authentication, so nothing else
+// would call Apply. The same validation and secret masking as Apply apply; an expired or
+// malformed credential is refused, never adopted.
+func (m *environmentMaterializer) Restore(ctx context.Context, stored types.ICredentials) error {
+	defer perf.Track(nil, "auth.environmentMaterializer.Restore")()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	_, err := m.adopt(stored)
+	return err
+}
+
+// adopt validates an environment/v1 credential, registers every value with the masker, and keeps a
+// private copy. It returns the environment it adopted.
+func (m *environmentMaterializer) adopt(value types.ICredentials) (map[string]string, error) {
+	credentials, ok := value.(*types.PluginCredentials)
 	if !ok || credentials.Type != "environment/v1" || credentials.IsExpired() {
-		return errUtils.ErrPluginProtocol
+		return nil, errUtils.ErrPluginProtocol
 	}
 	clone := *credentials
 	clone.Data = maps.Clone(credentials.Data)
@@ -44,18 +70,15 @@ func (m *environmentMaterializer) Apply(ctx context.Context, params *types.PostA
 	for name, value := range clone.Data {
 		text, ok := value.(string)
 		if !ok {
-			return errUtils.ErrPluginProtocol
+			return nil, errUtils.ErrPluginProtocol
 		}
 		atmosio.RegisterSecret(text)
 		environment[name] = text
 	}
-	if params.AuthContext != nil {
-		params.AuthContext.Environment = maps.Clone(environment)
-	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.credentials = &clone
-	return nil
+	return environment, nil
 }
 
 func (m *environmentMaterializer) Environment() (map[string]string, error) {

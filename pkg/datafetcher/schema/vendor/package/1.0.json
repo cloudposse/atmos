@@ -137,6 +137,10 @@
                     }
                   },
                   "additionalProperties": false
+                },
+                "identity": {
+                  "type": "string",
+                  "description": "Atmos Auth identity used to fetch this source. Overrides vendor.identity and is overridden by the global --identity flag."
                 }
               },
               "required": ["component", "source", "version", "targets"]

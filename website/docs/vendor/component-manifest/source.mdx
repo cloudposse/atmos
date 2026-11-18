@@ -26,6 +26,7 @@ spec:
       - "**/*.md"
     excluded_paths:
       - "**/context.tf"
+    identity: source-reader
 ```
 
 ## Attributes
@@ -48,6 +49,11 @@ spec:
   <dt>`version`</dt>
   <dd>
     The version of the component to vendor. This value is substituted into `{{.Version}}` placeholders in the `uri`.
+  </dd>
+
+  <dt>`identity`</dt>
+  <dd>
+    The name of an [Atmos Auth identity](/cli/configuration/auth/identities) used to fetch the source and its [mixins](/vendor/component-manifest/mixins). It overrides [`vendor.identity`](/cli/configuration/vendor) in `atmos.yaml`, and the `--identity` flag of [`atmos vendor pull`](/cli/commands/vendor/pull) overrides both. The identity's environment is applied only to the `git` commands that fetch this component. See [`identity` in `vendor.yaml`](/vendor/config/sources#attributes) for the details and limits.
   </dd>
 
   <dt>`included_paths`</dt>

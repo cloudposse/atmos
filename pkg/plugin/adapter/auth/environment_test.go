@@ -104,3 +104,60 @@ func TestEnvironmentMaterializerMasksComposedCredentials(t *testing.T) {
 	require.Equal(t, "access="+atmosio.MaskReplacement+" secret="+atmosio.MaskReplacement,
 		atmosio.MaskString("access=private-access secret=private-secret"))
 }
+
+func TestEnvironmentMaterializerRestore(t *testing.T) {
+	valid := func() *types.PluginCredentials {
+		return &types.PluginCredentials{Type: "environment/v1", ExpiresAt: time.Now().Add(time.Hour), Data: map[string]any{"TOKEN": "restored-private-token"}}
+	}
+	t.Run("a stored credential supplies the environment and is masked", func(t *testing.T) {
+		m := EnvironmentMaterializer("identity", nil)
+		stored := valid()
+		require.NoError(t, m.(*environmentMaterializer).Restore(t.Context(), stored))
+		values, err := m.Environment()
+		require.NoError(t, err)
+		require.Equal(t, map[string]string{"TOKEN": "restored-private-token"}, values)
+		require.NotContains(t, atmosio.MaskString("value restored-private-token end"), "restored-private-token")
+		stored.Data["TOKEN"] = "mutated"
+		values, err = m.Environment()
+		require.NoError(t, err)
+		require.Equal(t, "restored-private-token", values["TOKEN"], "restore must copy the stored credential")
+	})
+	tests := []struct {
+		name   string
+		stored types.ICredentials
+	}{
+		{"expired credential is refused", &types.PluginCredentials{Type: "environment/v1", ExpiresAt: time.Now().Add(-time.Hour), Data: map[string]any{"TOKEN": "x"}}},
+		{"missing expiry is refused", &types.PluginCredentials{Type: "environment/v1", Data: map[string]any{"TOKEN": "x"}}},
+		{"wrong credential type is refused", &types.PluginCredentials{Type: "secret-values/v1", ExpiresAt: time.Now().Add(time.Hour), Data: map[string]any{"TOKEN": "x"}}},
+		{"non-string value is refused", &types.PluginCredentials{Type: "environment/v1", ExpiresAt: time.Now().Add(time.Hour), Data: map[string]any{"TOKEN": 1}}},
+		{"other credential kinds are refused", &types.AWSCredentials{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := EnvironmentMaterializer("identity", nil)
+			require.ErrorIs(t, m.(*environmentMaterializer).Restore(t.Context(), tt.stored), errUtils.ErrPluginProtocol)
+			_, err := m.Environment()
+			require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed, "a refused credential must not be adopted")
+		})
+	}
+	t.Run("cancelled context is refused", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		require.ErrorIs(t, EnvironmentMaterializer("identity", nil).(*environmentMaterializer).Restore(ctx, valid()), context.Canceled)
+	})
+}
+
+func TestIdentityRestoreCredentials(t *testing.T) {
+	stored := &types.PluginCredentials{Type: "environment/v1", ExpiresAt: time.Now().Add(time.Hour), Data: map[string]any{"TOKEN": "id-restored-token"}}
+	t.Run("delegates to a restoring materializer", func(t *testing.T) {
+		id := &identity{materializer: EnvironmentMaterializer("identity", nil)}
+		require.NoError(t, id.RestoreCredentials(t.Context(), stored))
+		values, err := id.Environment()
+		require.NoError(t, err)
+		require.Equal(t, map[string]string{"TOKEN": "id-restored-token"}, values)
+	})
+	t.Run("file-backed materializers need no restore", func(t *testing.T) {
+		id := &identity{materializer: AWSMaterializer("identity", &schema.Identity{})}
+		require.NoError(t, id.RestoreCredentials(t.Context(), stored))
+	})
+}

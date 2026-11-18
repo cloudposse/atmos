@@ -231,9 +231,22 @@ func VendorSource(
 // (oci://) need no special handling: the downloader registers an OCI getter alongside the other
 // protocols.
 func downloadSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
+	// The source's own identity, then vendor.identity. The identity's environment is scoped to this
+	// download's context (never the process environment). It is resolved only for a transport that
+	// can use it: an OCI or S3 source keeps authenticating through its own credential chain and is
+	// not refused because the identity has no session.
+	sectionDefault := ""
+	if atmosConfig != nil {
+		sectionDefault = atmosConfig.Vendor.Identity
+	}
+	ctx, err := downloader.WithIdentityForSource(ctx, atmosConfig, uri, sourceSpec.Identity, sectionDefault)
+	if err != nil {
+		return err
+	}
+
 	downloadOpts := []downloader.GoGetterOption{downloader.WithRetryConfig(effectiveRetryConfig(sourceSpec))}
 	dl := downloader.NewGoGetterDownloader(atmosConfig, downloadOpts...)
-	_, err := dl.(downloader.ContextFileDownloader).FetchWithMetadataContext(ctx, uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout)
+	_, err = dl.(downloader.ContextFileDownloader).FetchWithMetadataContext(ctx, uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).

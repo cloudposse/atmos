@@ -1461,6 +1461,13 @@ var (
 	ErrScaffoldComputedFieldNotSettable       = errors.New("computed field cannot be set")
 	ErrScaffoldFileDelimitersInvalid          = errors.New("spec.files[].delimiters must be exactly two non-empty strings")
 
+	// Remote-read identity errors (identity: on vendor sources, component sources, and remote imports).
+	ErrRemoteIdentityLoginRequired       = errors.New("remote read identity is not logged in")
+	ErrRemoteIdentityResolverUnavailable = errors.New("remote read identity cannot be resolved")
+	// ErrRemoteImportIdentity marks a remote import that failed because its identity could not be
+	// resolved, as opposed to a source that is missing. `skip_if_missing` never skips it.
+	ErrRemoteImportIdentity = errors.New("failed to resolve the identity for a remote import")
+
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")
 	ErrSourceNotFound        = errors.New("source not found")

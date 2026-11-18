@@ -167,7 +167,14 @@ func (r *RemoteImporter) writeDownloadMeta(uri string) {
 // uses for git-subdir imports, so the same setting governs both caching mechanisms.
 func (r *RemoteImporter) Download(uri string) (result string, resultErr error) {
 	defer perf.Track(nil, "imports.RemoteImporter.Download")()
-	if err := guard.Source(context.Background(), "import", uri, ""); err != nil {
+
+	return r.download(context.Background(), uri)
+}
+
+// download is Download for one caller context: the context carries the per-fetch environment of a
+// named identity (see downloader.WithIdentity).
+func (r *RemoteImporter) download(ctx context.Context, uri string) (result string, resultErr error) {
+	if err := guard.Source(ctx, "import", uri, ""); err != nil {
 		return "", err
 	}
 	defer func() {
@@ -175,10 +182,10 @@ func (r *RemoteImporter) Download(uri string) (result string, resultErr error) {
 			guard.RegisterRemote(result, uri)
 		}
 	}()
-	return r.downloadUnguarded(uri)
+	return r.downloadUnguarded(ctx, uri)
 }
 
-func (r *RemoteImporter) downloadUnguarded(uri string) (result string, resultErr error) {
+func (r *RemoteImporter) downloadUnguarded(ctx context.Context, uri string) (result string, resultErr error) {
 	defer perf.Track(nil, "imports.RemoteImporter.Download")()
 
 	if !IsRemote(uri) {
@@ -193,22 +200,25 @@ func (r *RemoteImporter) downloadUnguarded(uri string) (result string, resultErr
 		ttl = r.atmosConfig.Imports.TTL
 	}
 
-	if cachedPath := r.cachedDownload(uri); cachedPath != "" {
+	// Every cache below is keyed by the identity the fetch runs as (see scopedKey).
+	key := scopedKey(ctx, uri)
+
+	if cachedPath := r.cachedDownload(key); cachedPath != "" {
 		return cachedPath, nil
 	}
 
 	// A ttl is configured but the cached content (if any) is stale: evict it so
 	// GetOrFetch below treats this as a miss instead of reusing stale content.
-	if ttl != "" && !r.downloadCacheFresh(uri, ttl) {
-		_ = r.cache.Delete(uri)
+	if ttl != "" && !r.downloadCacheFresh(key, ttl) {
+		_ = r.cache.Delete(key)
 	}
 
 	// Use GetOrFetch to properly handle file locking and atomic writes.
 	// This ensures safe concurrent access across multiple atmos processes.
 	fetched := false
-	_, err := r.cache.GetOrFetch(uri, func() ([]byte, error) {
+	_, err := r.cache.GetOrFetch(key, func() ([]byte, error) {
 		fetched = true
-		return r.fetchDownloadBytes(uri)
+		return r.fetchDownloadBytes(ctx, uri)
 	})
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrDownloadRemoteImport).
@@ -221,15 +231,15 @@ func (r *RemoteImporter) downloadUnguarded(uri string) (result string, resultErr
 	// Record freshness only when a real fetch just happened, matching fetchSourceDir's
 	// write-only-on-fetch semantics (not sliding expiration on every cache hit).
 	if fetched && ttl != "" {
-		r.writeDownloadMeta(uri)
+		r.writeDownloadMeta(key)
 	}
 
 	// Get the final cached path.
-	destPath, _ := r.cache.GetPath(uri)
+	destPath, _ := r.cache.GetPath(key)
 
 	// Add to memory cache.
 	r.memMu.Lock()
-	r.memCache[uri] = destPath
+	r.memCache[key] = destPath
 	r.memMu.Unlock()
 
 	return destPath, nil
@@ -248,14 +258,14 @@ func (r *RemoteImporter) Resolve(uri string) ([]RemoteImportMatch, error) {
 		ttl = r.atmosConfig.Imports.TTL
 	}
 
-	return r.resolve(uri, ttl)
+	return r.resolve(context.Background(), uri, ttl)
 }
 
 // resolve fetches a remote import and returns all local stack files it resolves to.
 // The ttl controls cross-run reuse of the cloned source repo for git subdir imports
 // (see ensureSourceDir); an empty ttl refreshes the clone once per invocation.
-func (r *RemoteImporter) resolve(uri, ttl string) (result []RemoteImportMatch, resultErr error) {
-	if err := guard.Source(context.Background(), "import", uri, ""); err != nil {
+func (r *RemoteImporter) resolve(ctx context.Context, uri, ttl string) (result []RemoteImportMatch, resultErr error) {
+	if err := guard.Source(ctx, "import", uri, ""); err != nil {
 		return nil, err
 	}
 	defer func() {
@@ -268,13 +278,13 @@ func (r *RemoteImporter) resolve(uri, ttl string) (result []RemoteImportMatch, r
 			}
 		}
 	}()
-	return r.resolveUnguarded(uri, ttl)
+	return r.resolveUnguarded(ctx, uri, ttl)
 }
 
 // resolveUnguarded resolves a remote import to local stack files without the source-policy guard.
 // Git and oci:// imports with a "//" path are resolved from a shared source directory (file, directory, or
 // glob); any other remote URI is downloaded as a single file.
-func (r *RemoteImporter) resolveUnguarded(uri, ttl string) (result []RemoteImportMatch, resultErr error) {
+func (r *RemoteImporter) resolveUnguarded(ctx context.Context, uri, ttl string) (result []RemoteImportMatch, resultErr error) {
 	defer perf.Track(nil, "imports.RemoteImporter.resolve")()
 
 	if !IsRemote(uri) {
@@ -284,19 +294,13 @@ func (r *RemoteImporter) resolveUnguarded(uri, ttl string) (result []RemoteImpor
 			Err()
 	}
 
-	if matches, ok := r.cachedMatches(uri); ok {
+	if matches, ok := r.cachedMatches(ctx, uri); ok {
 		return matches, nil
 	}
 
 	isOCI := IsOCIURI(uri)
 	if !isOCI && !IsGitURI(uri) {
-		path, err := r.Download(uri)
-		if err != nil {
-			return nil, err
-		}
-		matches := []RemoteImportMatch{{Path: path, Key: uri}}
-		r.storeMatches(uri, matches)
-		return matches, nil
+		return r.downloadMatches(ctx, uri)
 	}
 
 	sourceURI, subdir := getter.SourceDirSubdir(uri)
@@ -309,26 +313,33 @@ func (r *RemoteImporter) resolveUnguarded(uri, ttl string) (result []RemoteImpor
 			Err()
 	}
 	if subdir == "" {
-		path, err := r.Download(uri)
-		if err != nil {
-			return nil, err
-		}
-		matches := []RemoteImportMatch{{Path: path, Key: uri}}
-		r.storeMatches(uri, matches)
-		return matches, nil
+		return r.downloadMatches(ctx, uri)
 	}
 
-	matches, err := r.resolveSourceSubdir(uri, sourceURI, subdir, ttl)
+	matches, err := r.resolveSourceSubdir(ctx, uri, sourceURI, subdir, ttl)
 	if err != nil {
 		return nil, err
 	}
-	r.storeMatches(uri, matches)
+	r.storeMatches(ctx, uri, matches)
 	return matches, nil
 }
 
-func (r *RemoteImporter) cachedMatches(uri string) ([]RemoteImportMatch, bool) {
+// downloadMatches downloads uri as a single file and returns it as the import's one match.
+func (r *RemoteImporter) downloadMatches(ctx context.Context, uri string) ([]RemoteImportMatch, error) {
+	path, err := r.download(ctx, uri)
+	if err != nil {
+		return nil, err
+	}
+	matches := []RemoteImportMatch{{Path: path, Key: uri}}
+	r.storeMatches(ctx, uri, matches)
+	return matches, nil
+}
+
+// cachedMatches returns the matches stored for uri by a fetch made as the same identity as ctx.
+func (r *RemoteImporter) cachedMatches(ctx context.Context, uri string) ([]RemoteImportMatch, bool) {
+	key := scopedKey(ctx, uri)
 	r.memMu.RLock()
-	cached, ok := r.matchCache[uri]
+	cached, ok := r.matchCache[key]
 	r.memMu.RUnlock()
 	if !ok {
 		return nil, false
@@ -338,9 +349,9 @@ func (r *RemoteImporter) cachedMatches(uri string) ([]RemoteImportMatch, bool) {
 			continue
 		}
 		r.memMu.Lock()
-		delete(r.matchCache, uri)
+		delete(r.matchCache, key)
 		for _, stale := range cached {
-			delete(r.memCache, stale.Key)
+			delete(r.memCache, scopedKey(ctx, stale.Key))
 		}
 		r.memMu.Unlock()
 		return nil, false
@@ -348,11 +359,12 @@ func (r *RemoteImporter) cachedMatches(uri string) ([]RemoteImportMatch, bool) {
 	return cloneMatches(cached), true
 }
 
-func (r *RemoteImporter) storeMatches(uri string, matches []RemoteImportMatch) {
+// storeMatches records the matches for uri under the identity ctx fetched them as.
+func (r *RemoteImporter) storeMatches(ctx context.Context, uri string, matches []RemoteImportMatch) {
 	r.memMu.Lock()
 	defer r.memMu.Unlock()
 
-	r.matchCache[uri] = cloneMatches(matches)
+	r.matchCache[scopedKey(ctx, uri)] = cloneMatches(matches)
 }
 
 func cloneMatches(matches []RemoteImportMatch) []RemoteImportMatch {
@@ -370,8 +382,8 @@ func cloneMatches(matches []RemoteImportMatch) []RemoteImportMatch {
 //
 // Ambient credential brokers (e.g. Atmos Pro github/sts) are provisioned inside
 // ensureSourceDir, before its detectGitSource call — see the note there.
-func (r *RemoteImporter) resolveSourceSubdir(originalURI, sourceURI, subdir, ttl string) ([]RemoteImportMatch, error) {
-	sourceRoot, err := r.ensureSourceDir(sourceURI, ttl)
+func (r *RemoteImporter) resolveSourceSubdir(ctx context.Context, originalURI, sourceURI, subdir, ttl string) ([]RemoteImportMatch, error) {
+	sourceRoot, err := r.ensureSourceDir(ctx, sourceURI, ttl)
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +400,7 @@ func (r *RemoteImporter) resolveSourceSubdir(originalURI, sourceURI, subdir, ttl
 			return nil, err
 		}
 		key := originalURI + "#" + filepath.ToSlash(rel)
-		cachedPath, err := r.cacheFile(key, file)
+		cachedPath, err := r.cacheFile(scopedKey(ctx, key), file)
 		if err != nil {
 			return nil, err
 		}
@@ -398,12 +410,12 @@ func (r *RemoteImporter) resolveSourceSubdir(originalURI, sourceURI, subdir, ttl
 	return matches, nil
 }
 
-func (r *RemoteImporter) detectGitSource(sourceURI string) string {
+func (r *RemoteImporter) detectGitSource(ctx context.Context, sourceURI string) string {
 	atmosConfig := r.atmosConfig
 	if atmosConfig == nil {
 		atmosConfig = &schema.AtmosConfiguration{}
 	}
-	detector := downloader.NewCustomGitDetector(atmosConfig, sourceURI)
+	detector := downloader.NewCustomGitDetectorContext(ctx, atmosConfig, sourceURI)
 	detected, ok, err := detector.Detect(sourceURI, "")
 	if err != nil || !ok {
 		return sourceURI
@@ -652,11 +664,11 @@ func (r *RemoteImporter) cachedDownload(uri string) string {
 	return ""
 }
 
-func (r *RemoteImporter) fetchDownloadBytes(uri string) ([]byte, error) {
+func (r *RemoteImporter) fetchDownloadBytes(ctx context.Context, uri string) ([]byte, error) {
 	// The cache owns locking and the final atomic write.
-	tempPath := filepath.Join(r.cache.BaseDir(), uriToTempName(uri))
+	tempPath := filepath.Join(r.cache.BaseDir(), uriToTempName(scopedKey(ctx, uri)))
 	defer os.Remove(tempPath)
-	if err := r.downloader.Fetch(uri, tempPath, downloader.ClientModeFile, defaultDownloadTimeout); err != nil {
+	if err := r.fetch(ctx, uri, tempPath, downloader.ClientModeFile); err != nil {
 		return nil, err
 	}
 	return os.ReadFile(tempPath)

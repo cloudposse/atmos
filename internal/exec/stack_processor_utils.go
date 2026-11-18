@@ -1659,9 +1659,11 @@ func processYAMLConfigFileWithContextInternal(
 			}
 			// Download the remote import.
 			log.Debug("Downloading remote stack import", "uri", imp, "file", relativeFilePath, "nested_imports", nestedImports, "ttl", importTTL)
-			remoteMatches, err := stackimports.ResolveRemoteImportNested(atmosConfig, imp, nestedImports, importTTL)
+			remoteMatches, err := stackimports.ResolveRemoteImportNestedIdentity(atmosConfig, imp, nestedImports, importTTL, importStruct.Identity)
 			if err != nil {
-				if importStruct.SkipIfMissing {
+				// skip_if_missing covers a source that is not there, never an identity that could
+				// not be resolved (see stackimports.SkippableWhenMissing).
+				if importStruct.SkipIfMissing && stackimports.SkippableWhenMissing(err) {
 					log.Debug("Skipping missing remote import", "uri", imp)
 					continue
 				}

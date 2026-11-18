@@ -1,6 +1,7 @@
 package imports
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -120,19 +121,19 @@ func TestRemoteImporter_GitSubdir_TTLCrossRunReuse(t *testing.T) {
 
 	// Run 1: cold cache -> fetch once.
 	var c1 atomic.Int32
-	_, err := newImporterWithCache(t, baseDir, &c1).resolveNested(importURI, "", "1h")
+	_, err := newImporterWithCache(t, baseDir, &c1).resolveNested(context.Background(), importURI, "", "1h")
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), c1.Load(), "cold cache must fetch")
 
 	// Run 2: warm cache, fresh TTL -> reuse, no fetch.
 	var c2 atomic.Int32
-	_, err = newImporterWithCache(t, baseDir, &c2).resolveNested(importURI, "", "1h")
+	_, err = newImporterWithCache(t, baseDir, &c2).resolveNested(context.Background(), importURI, "", "1h")
 	require.NoError(t, err)
 	assert.Equal(t, int32(0), c2.Load(), "fresh persisted clone should be reused across runs within TTL")
 
 	// Run 3: no TTL -> always refresh.
 	var c3 atomic.Int32
-	_, err = newImporterWithCache(t, baseDir, &c3).resolveNested(importURI, "", "")
+	_, err = newImporterWithCache(t, baseDir, &c3).resolveNested(context.Background(), importURI, "", "")
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), c3.Load(), "no TTL should refresh the clone each run")
 
@@ -140,7 +141,7 @@ func TestRemoteImporter_GitSubdir_TTLCrossRunReuse(t *testing.T) {
 	destDir := filepath.Join(baseDir, uriToTempName(testSourceURI)+".source")
 	backdateSourceMetadata(t, destDir, 2*time.Hour)
 	var c4 atomic.Int32
-	_, err = newImporterWithCache(t, baseDir, &c4).resolveNested(importURI, "", "1h")
+	_, err = newImporterWithCache(t, baseDir, &c4).resolveNested(context.Background(), importURI, "", "1h")
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), c4.Load(), "expired clone should be refreshed")
 }

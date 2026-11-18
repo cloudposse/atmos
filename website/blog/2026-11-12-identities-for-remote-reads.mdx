@@ -1,0 +1,105 @@
+---
+slug: identities-for-remote-reads
+title: "Use an Atmos Auth Identity to Fetch Private Sources"
+authors: [osterman]
+tags: [feature, bugfix]
+---
+
+Vendoring a module from a private repository, importing a stack catalog from one, or provisioning a
+component from one has always meant getting credentials into the environment first. Either you exported a
+token for the whole process so every command could see it, or you put a private key in the URL with
+`sshkey=` and committed that to configuration. Neither tells Atmos which credential belongs to which source.
+
+<!--truncate-->
+
+## The Problem
+
+When several sources need different credentials, a process-wide environment variable cannot express it. One
+token is visible to every fetch, and it is visible to everything else the process runs. The `sshkey=` URL
+parameter keeps a private key in your configuration, which is the opposite of what an
+[identity](/cli/configuration/auth/identities) is for.
+
+Identities already describe who you are to a provider and how a session is established. They just were not
+usable when Atmos read a remote location.
+
+## The Fix
+
+A remote read can now name an Atmos Auth identity. The identity's environment is applied to the `git`
+commands for that one fetch, and nothing is exported to the process, so sources fetched concurrently can use
+different identities.
+
+The same `identity` field works in three places: a source in
+[`vendor.yaml`](/vendor/config/sources#attributes), a component's
+[`source`](/cli/commands/terraform/source#source-fields), and a remote
+[stack import](/stacks/imports#private-repositories-and-authentication).
+
+## How to Use It
+
+Name an identity on a vendored source:
+
+```yaml title="vendor.yaml"
+spec:
+  sources:
+    - component: vpc
+      source: git::ssh://git@github.com/acme/modules.git//vpc?ref={{.Version}}
+      version: 1.4.0
+      identity: source-reader
+      targets:
+        - components/terraform/vpc
+```
+
+On a component source:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      source:
+        uri: git::ssh://git@github.com/acme/modules.git//vpc
+        version: 1.4.0
+        identity: source-reader
+```
+
+On a remote stack import, using the object form of `import`:
+
+```yaml
+import:
+  - path: git::ssh://git@github.com/acme/stacks.git//catalog/vpc?ref=v2
+    identity: source-reader
+```
+
+To name the identity once for a project, set a default in `atmos.yaml`:
+
+```yaml title="atmos.yaml"
+vendor:
+  identity: source-reader
+imports:
+  identity: source-reader
+```
+
+The identity is chosen in this order: the `--identity` flag of [`atmos vendor pull`](/cli/commands/vendor/pull),
+then the field on the entry, then the default from `atmos.yaml`. With none of them, nothing changes. The
+identity name can stay the same between a laptop and CI while its kind differs by profile, so the same
+`vendor.yaml` works in both.
+
+Outside CI, an identity without a valid session fails with a hint to run
+`atmos auth login --identity <name>`. Atmos never prompts for a login in the middle of a fetch.
+
+A few limits apply:
+
+- A remote `import` in `atmos.yaml` cannot name an identity.
+- `atmos vendor update` and `atmos vendor diff` do not use the identity when they list versions.
+- S3 and OCI sources authenticate as before.
+- A default applies to every remote source, though only Git sources use the identity's environment.
+
+## Fixes Along the Way
+
+- `atmos git` now honors `git.repositories.<name>.auth.identity` and the `--identity` flag. Both were ignored.
+- `atmos ansible playbook --identity` now passes the identity's environment to `ansible-playbook`.
+- A stored plugin credential of kind `environment/v1` now works in a fresh process, so `atmos auth exec`,
+  `atmos auth shell`, and `atmos git` no longer fail after a previous login.
+
+## Get Involved
+
+Try it on a private source and tell us what you hit. Open an issue or a discussion on
+[GitHub](https://github.com/cloudposse/atmos).

@@ -250,6 +250,8 @@ import:
   - "git::https://github.com/acme/private-config.git//.atmos.d/ai.yaml?ref=v1.2.3"
 ```
 
+A remote `import` in `atmos.yaml` cannot name an Atmos Auth identity. Only the importing file's own `auth:` section is loaded while imports resolve, so an identity defined in another file or profile is not visible yet. Stack manifest imports can name one; see [Private Repositories and Authentication](/stacks/imports#private-repositories-and-authentication).
+
 ### Pin Remote Imports
 
 Atmos warns when a `git::` import is pinned to a **mutable** ref - a branch (for example
@@ -310,6 +312,7 @@ top-level `import` entries.
 - Templated imports of Atmos configuration are not supported (unlike stacks)
 - Only `.yml` and `.yaml` files are processed when using glob patterns
 - The object entry form does not support a per-import `ttl` (use the global `imports.ttl`)
+- A remote entry cannot name an Atmos Auth identity. The `imports.identity` setting applies to remote [stack manifest imports](/stacks/imports#private-repositories-and-authentication) only
 
 ## See Also
 

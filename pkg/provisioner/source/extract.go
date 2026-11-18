@@ -75,6 +75,11 @@ func parseSourceMap(sourceMap map[string]any) (*schema.VendorComponentSource, er
 		spec.Version = v
 	}
 
+	// Optional: identity (the Atmos Auth identity used to fetch the source).
+	if identity, ok := sourceMap["identity"].(string); ok {
+		spec.Identity = identity
+	}
+
 	// Optional: included_paths.
 	if paths, ok := sourceMap["included_paths"].([]any); ok {
 		spec.IncludedPaths = toStringSlice(paths)

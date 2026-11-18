@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/cloudposse/atmos/pkg/auth/broker"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/batch"
@@ -37,6 +38,7 @@ func InstallBatch(ctx context.Context, config *schema.AtmosConfiguration, packag
 	if err != nil {
 		return nil, err
 	}
+	ctx = downloader.WithIdentityOverride(ctx, opts.Identity)
 	b := &batchInstaller{ctx: ctx, config: config, packages: packages, options: opts, observer: observer, report: &BatchReport{Results: make([]Result, len(packages))}}
 	for i, pkg := range packages {
 		b.report.Results[i] = Result{Name: pkg.Name, Outcome: "canceled"}

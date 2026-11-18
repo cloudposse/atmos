@@ -25,6 +25,7 @@ import (
 	"github.com/otiai10/copy"
 
 	"github.com/cloudposse/atmos/tests/testhelpers"
+	"github.com/cloudposse/atmos/tests/testhelpers/gitscrub"
 )
 
 // Owner and Repo identify the single upstream this package mirrors today:
@@ -201,33 +202,10 @@ func gitEnv() []string {
 }
 
 // filterGitDirEnv is the pure filtering logic behind gitEnv, split out so it can be unit tested
-// without touching the real process environment. Env variable names are matched
-// case-insensitively (via strings.ToUpper) because Windows resolves environment variable names
-// case-insensitively, so a lower/mixed-case GIT_DIR (etc.) would otherwise slip through untouched
-// and stay active for git.
+// without touching the real process environment. The logic lives in gitscrub, a standard-library
+// only package, so tests that cannot import this one (it depends on the downloader) share it.
 func filterGitDirEnv(env []string) []string {
-	kept := make([]string, 0, len(env))
-	for _, kv := range env {
-		key, _, _ := strings.Cut(kv, "=")
-		switch strings.ToUpper(key) {
-		case "GIT_DIR",
-			"GIT_WORK_TREE",
-			"GIT_INDEX_FILE",
-			"GIT_OBJECT_DIRECTORY",
-			"GIT_ALTERNATE_OBJECT_DIRECTORIES",
-			// GIT_COMMON_DIR can redirect the repository's non-worktree files outside the throwaway
-			// repository, and GIT_NAMESPACE would make the receive-pack store main under
-			// refs/namespaces/<ns>/, where the HTTP backend (which does not inherit it) cannot see it.
-			"GIT_COMMON_DIR",
-			"GIT_NAMESPACE",
-			// GIT_TEMPLATE_DIR would seed the throwaway repositories with the host's template,
-			// including any executable hooks that could fail or hang the mirror's own commit.
-			"GIT_TEMPLATE_DIR":
-			continue
-		}
-		kept = append(kept, kv)
-	}
-	return kept
+	return gitscrub.Filter(env)
 }
 
 // buildEnv returns gitEnv, with the caller's global, system, and command-scope git configuration

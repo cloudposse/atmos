@@ -108,7 +108,13 @@ func runEnabledBrokers(ctx context.Context, atmosConfig *schema.AtmosConfigurati
 		// downstream auth-retry would be wrong.
 		exported := false
 		for key, value := range env {
+			// Remember what the variable was before, so a remote read that names its own identity
+			// can run without the broker's credentials (see WithoutBrokeredEnvironment).
+			created := recordExport(key)
 			if err := os.Setenv(key, value); err != nil {
+				if created {
+					forgetExport(key)
+				}
 				log.Warn("Failed to export credential broker variable", "broker", p.Name(), "key", key, "error", err)
 				continue
 			}
@@ -162,11 +168,12 @@ func SwapRegistryForTest() func() {
 	}
 }
 
-// resetBrokeredForTest clears the brokered-credentials flag so a test observes only what
-// its own registered providers provision. Pairs with SwapRegistryForTest.
+// resetBrokeredForTest clears the brokered-credentials flag and the record of exported variables so
+// a test observes only what its own registered providers provision. Pairs with SwapRegistryForTest.
 func resetBrokeredForTest() {
 	brokeredMu.Lock()
 	brokeredCredentials = false
+	exportedEnv = map[string]priorVariable{}
 	brokeredMu.Unlock()
 }
 

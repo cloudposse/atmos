@@ -24,8 +24,9 @@ import (
 )
 
 var (
-	setupComponentAuthForCLI = e.SetupComponentAuthForCLI
-	processStacks            = e.ProcessStacks
+	setupComponentAuthForCLI    = e.SetupComponentAuthForCLI
+	processStacks               = e.ProcessStacks
+	prepareComponentAuthEnvVars = e.PrepareComponentAuthEnvironment
 )
 
 // Flags represents Ansible command-line flags.
@@ -49,7 +50,10 @@ func checkConfig(atmosConfig *schema.AtmosConfiguration) error {
 	return nil
 }
 
-func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+// processStacksWithAuth processes the stack and returns the auth manager used for it (nil when no
+// explicit identity was given), so the caller can also hand the identity's environment to the
+// playbook subprocess.
+func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
 	var authManager auth.AuthManager
 	if info.Identity != "" {
 		// Ansible owns -i for inventory, so only explicit --identity/ATMOS_IDENTITY
@@ -57,17 +61,45 @@ func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.
 		var err error
 		authManager, err = setupComponentAuthForCLI(atmosConfig, info)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	processedInfo, err := processStacks(atmosConfig, *info, true, true, true, nil, authManager)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	*info = processedInfo
-	return nil
+	return authManager, nil
+}
+
+// playbookEnvVars builds the environment variables for the ansible subprocess: the component
+// environment plus the Atmos paths, with the identity's prepared environment layered on top when
+// an auth manager is present. This is how Helmfile and Packer deliver identity environments, so a
+// credential made of plain environment variables (for example SSH_AUTH_SOCK) reaches Ansible.
+func playbookEnvVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager) ([]string, error) {
+	envVars, err := prepareEnvVars(atmosConfig, info.ComponentEnvList)
+	if err != nil {
+		return nil, err
+	}
+	return prepareComponentAuthEnvVars(authManager, info.Identity, envVars)
+}
+
+// playbookProcessEnv returns the process environment the ansible subprocess starts from when an
+// identity is in effect, or nil when there is no auth manager (the subprocess then inherits the
+// process environment unchanged).
+//
+// The identity prepares the whole process environment, not only the component's, because preparing
+// it is what removes the ambient credentials that conflict with the identity (for example
+// AWS_ACCESS_KEY_ID next to a file-based AWS profile). Left in place, the SDK inside the playbook
+// would use those ambient credentials first and run as a different account than the one selected.
+// Terraform, Helmfile, and Packer start their subprocesses from a sanitized environment the same way.
+func playbookProcessEnv(authManager auth.AuthManager, identity string) ([]string, error) {
+	if authManager == nil {
+		return nil, nil
+	}
+	return prepareComponentAuthEnvVars(authManager, identity, os.Environ())
 }
 
 // ExecutePlaybook executes an Ansible playbook command.
@@ -97,7 +129,8 @@ func ExecutePlaybook(
 		}
 	}
 
-	if err := processStacksWithAuth(&atmosConfig, info); err != nil {
+	authManager, err := processStacksWithAuth(&atmosConfig, info)
+	if err != nil {
 		return err
 	}
 
@@ -219,11 +252,19 @@ func ExecutePlaybook(
 	e.ConvertComponentEnvSectionToList(info)
 
 	// Prepare ENV vars.
-	envVars, err := prepareEnvVars(&atmosConfig, info.ComponentEnvList)
+	envVars, err := playbookEnvVars(&atmosConfig, info, authManager)
 	if err != nil {
 		return err
 	}
-	log.Debug("Using ENV", "variables", envVars)
+	// Names only: the list carries the identity's environment, which can hold credentials.
+	log.Debug("Using ENV", "variables", envVarNames(envVars))
+
+	// The environment the subprocess starts from, without ambient credentials that conflict with
+	// the identity.
+	processEnv, err := playbookProcessEnv(authManager, info.Identity)
+	if err != nil {
+		return err
+	}
 
 	// In dry-run mode, print the command that would be executed.
 	if info.DryRun {
@@ -231,13 +272,14 @@ func ExecutePlaybook(
 		return nil
 	}
 
-	return executePlaybookCommandWithRetry(ctx, &atmosConfig, info, cmdArgs, componentPath, envVars)
+	return executePlaybookCommandWithRetry(ctx, &atmosConfig, info, cmdArgs, componentPath, envVars, processEnv)
 }
 
 // executePlaybookCommandWithRetry runs the resolved ansible-playbook command through
 // e.ExecuteShellCommandWithRetry. Extracted from ExecutePlaybook so the retry wiring can
 // be unit-tested directly with a fake invoke, without standing up ExecutePlaybook's full
-// stack-processing/auth preamble or requiring a real ansible-playbook binary.
+// stack-processing/auth preamble or requiring a real ansible-playbook binary. The processEnv
+// argument is the sanitized environment the subprocess starts from (see playbookProcessEnv).
 func executePlaybookCommandWithRetry(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
@@ -245,6 +287,7 @@ func executePlaybookCommandWithRetry(
 	cmdArgs *CommandArgs,
 	componentPath string,
 	envVars []string,
+	processEnv []string,
 ) error {
 	return e.ExecuteShellCommandWithRetry(
 		atmosConfig,
@@ -263,6 +306,8 @@ func executePlaybookCommandWithRetry(
 			)
 		},
 		e.WithProcessContext(ctx),
+		// A nil processEnv keeps the default: the subprocess inherits the process environment.
+		e.WithEnvironment(processEnv),
 	)
 }
 
@@ -618,4 +663,15 @@ func prepareEnvVars(atmosConfig *schema.AtmosConfiguration, envList []string) ([
 
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
 	return envVars, nil
+}
+
+// envVarNames returns the variable names of "KEY=value" entries, for logging an environment
+// without its values.
+func envVarNames(envVars []string) []string {
+	names := make([]string, 0, len(envVars))
+	for _, entry := range envVars {
+		name, _, _ := strings.Cut(entry, "=")
+		names = append(names, name)
+	}
+	return names
 }

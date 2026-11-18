@@ -7,14 +7,17 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/gitenv"
 	"github.com/cloudposse/atmos/pkg/ci"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -574,6 +577,48 @@ func TestComposeEnv_EmptyIdentity(t *testing.T) {
 	require.NoError(t, err)
 	// Should at least contain PATH.
 	assert.NotEmpty(t, env)
+}
+
+// ---- composeEnv identity precedence ----
+
+func TestComposeEnv_IdentityReachesSubprocessEnvironment(t *testing.T) {
+	original := envComposer
+	t.Cleanup(func() { envComposer = original })
+	manager := gitenv.NewMockIdentityManager(gomock.NewController(t))
+	// Each identity is authenticated only by the case that selects it: the mock fails the test if
+	// the repository identity is resolved when the flag overrides it, or if any is with neither.
+	manager.EXPECT().EnsureIdentityEnvironment(gomock.Any(), "repo-id").Return(map[string]string{"ATMOS_TEST_GIT_SOCK": "repo"}, nil).Times(1)
+	manager.EXPECT().EnsureIdentityEnvironment(gomock.Any(), "flag-id").Return(map[string]string{"ATMOS_TEST_GIT_SOCK": "flag"}, nil).Times(1)
+	envComposer = gitenv.NewComposer(gitenv.WithManagerFactory(func(*schema.AtmosConfiguration) (gitenv.IdentityManager, error) {
+		return manager, nil
+	}))
+	setAtmosConfigPtr(t, &schema.AtmosConfiguration{})
+	t.Setenv("ATMOS_TEST_GIT_SOCK", "ambient")
+
+	tests := []struct {
+		name, flag, repo string
+		want             string
+	}{
+		{"no identity keeps the process environment", "", "", "ambient"},
+		{"repository identity", "", "repo-id", "repo"},
+		{"flag overrides repository identity", "flag-id", "repo-id", "flag"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			viper.Set("identity", tt.flag)
+			t.Cleanup(func() { viper.Set("identity", "") })
+
+			env, err := composeEnv(context.Background(), tt.repo)
+			require.NoError(t, err)
+			var got []string
+			for _, entry := range env {
+				if strings.HasPrefix(entry, "ATMOS_TEST_GIT_SOCK=") {
+					got = append(got, strings.TrimPrefix(entry, "ATMOS_TEST_GIT_SOCK="))
+				}
+			}
+			assert.Equal(t, []string{tt.want}, got)
+		})
+	}
 }
 
 func TestCloneRefExcludesBranchAndOverridesConfiguredBranch(t *testing.T) {
