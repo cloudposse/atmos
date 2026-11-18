@@ -161,6 +161,12 @@ func (w *discoveryWalker) walk(pattern string) error {
 	if err != nil || !within(resolved, w.root) {
 		return fmt.Errorf("%w: %s", errDiscoveryRoot, start)
 	}
+	// WalkDir does not follow links below its start, but it does open a start that sits beneath a
+	// linked directory, so a symlinked ancestor is reported and skipped like any other linked directory.
+	if link, linked := symlinkedAncestor(w.root, start); linked {
+		w.scan.Warnings = append(w.scan.Warnings, symlinkWarning(link))
+		return nil
+	}
 	return filepath.WalkDir(start, func(path string, entry fs.DirEntry, walkErr error) error {
 		if os.IsNotExist(walkErr) && path == start {
 			return nil
@@ -170,6 +176,31 @@ func (w *discoveryWalker) walk(pattern string) error {
 		}
 		return w.visit(path, entry)
 	})
+}
+
+// symlinkedAncestor reports the first directory symlink between root and start, inclusive of start,
+// as a root-relative slash path. A symlinked configuration file at the end is not a directory link.
+func symlinkedAncestor(root, start string) (string, bool) {
+	rel, err := filepath.Rel(root, start)
+	if err != nil || rel == "." {
+		return "", false
+	}
+	current := root
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if err != nil {
+			return "", false
+		}
+		if info.Mode()&fs.ModeSymlink == 0 {
+			continue
+		}
+		if target, err := os.Stat(current); err == nil && target.IsDir() {
+			link, _ := filepath.Rel(root, current)
+			return filepath.ToSlash(link), true
+		}
+	}
+	return "", false
 }
 
 func (w *discoveryWalker) visit(path string, entry fs.DirEntry) error {

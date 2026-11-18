@@ -23,6 +23,20 @@ func asProblem(t *testing.T, err error) *model.Problem {
 	return problem
 }
 
+// requireCauseContains checks the error text together with the text of its underlying cause. A
+// generic evaluation failure keeps the cause out of the fields shown to the user, so that text is
+// only reachable through the wrapped error.
+func requireCauseContains(t *testing.T, err error, text string, msgAndArgs ...any) {
+	t.Helper()
+	require.Error(t, err, msgAndArgs...)
+	full := err.Error()
+	var problem *model.Problem
+	if errors.As(err, &problem) && problem.Err != nil {
+		full += ": " + problem.Err.Error()
+	}
+	require.Contains(t, full, text, msgAndArgs...)
+}
+
 func TestSyntaxErrorNamesFileLineAndColumnAndStaysSafe(t *testing.T) {
 	request := nativeUnit(t, "inputs = {\n  a = find_in_parent_folders(\"x\"\n}\n")
 	request.Phase = "discover"
@@ -70,6 +84,11 @@ func TestProblemForPassesCancellationAndWrapsUnknownErrors(t *testing.T) {
 	problem := asProblem(t, wrapped)
 	require.False(t, problem.Safe)
 	require.Equal(t, model.CodeEvaluationError, problem.Code)
+	require.Empty(t, problem.Detail, "raw evaluator text stays out of Detail")
+	require.NotContains(t, problem.Summary, "secret detail")
+	require.ErrorContains(t, problem.Err, "secret detail", "the cause is kept for errors.Is and errors.As")
+	require.Equal(t, filepath.Join("a", "b.hcl"), problem.File)
+	require.NotEmpty(t, problem.Hints)
 	require.NoError(t, problemFor(nil, "f"))
 	require.ErrorIs(t, problemFor(errContextCanceled(), "f"), errContextCanceled())
 }

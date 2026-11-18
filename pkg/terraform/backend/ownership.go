@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -85,6 +86,27 @@ func RemoveHostBackend(directory string) error {
 		return err
 	}
 	return removeHostBackendFile(root, hostBackendReceipt)
+}
+
+// WillRemoveHostBackend reports whether RemoveHostBackend would remove the named file: it is the
+// host backend, its receipt exists, and the bytes still match what the host wrote. Any other
+// state, including an unreadable one, is not provably removable.
+func WillRemoveHostBackend(directory, path string) bool {
+	defer perf.Track(nil, "backend.WillRemoveHostBackend")()
+	if filepath.Clean(path) != hostBackendName {
+		return false
+	}
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return false
+	}
+	defer root.Close()
+	receipt, err := root.ReadFile(hostBackendReceipt)
+	if err != nil {
+		return false
+	}
+	digest, err := backendDigest(root)
+	return err == nil && digest == string(receipt)
 }
 
 // removeHostBackendFile removes one host-owned file and classifies a failure.
