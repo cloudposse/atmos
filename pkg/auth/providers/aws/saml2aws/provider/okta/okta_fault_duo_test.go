@@ -163,9 +163,11 @@ func TestVerifyMfa_DuoFailureModes(t *testing.T) {
 			wantErr: "error selecting the DUO MFA option",
 		},
 		{
-			name:    "passcode prompt failure",
-			option:  "Passcode",
-			prompt:  func(pr *mocks.MockPrompter) { pr.EXPECT().StringRequired("Enter passcode").Return("", errPrompt).Times(1) },
+			name:   "passcode prompt failure",
+			option: "Passcode",
+			prompt: func(pr *mocks.MockPrompter) {
+				pr.EXPECT().StringRequired("Enter passcode").Return("", errPrompt).Times(1)
+			},
 			wantErr: "error reading the DUO passcode",
 		},
 		{name: "prompt transport failure", option: "Duo Push", fault: faultAt(faultTransport, "/frame/prompt", 1), wantErr: "error retrieving verify response"},
