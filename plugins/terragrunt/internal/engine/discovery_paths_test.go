@@ -506,3 +506,53 @@ func TestDiscoveryContextCanceledDuringEvaluation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.Nil(t, result)
 }
+
+func TestDiscoveryExcludedUnitDoesNotValidateUnusedDependencies(t *testing.T) {
+	for _, dependency := range []string{`dependency "missing" { config_path = "../absent" }`, `dependencies { paths = ["../absent"] }`} {
+		for _, test := range []struct {
+			command  string
+			noRun    bool
+			excluded bool
+		}{
+			{command: "plan", noRun: true, excluded: true},
+			{command: "apply", noRun: true},
+			{command: "plan", noRun: false},
+		} {
+			t.Run(fmt.Sprintf("%s/%s/no_run=%t", dependency, test.command, test.noRun), func(t *testing.T) {
+				root, err := filepath.EvalSymlinks(t.TempDir())
+				require.NoError(t, err)
+				require.NoError(t, os.MkdirAll(filepath.Join(root, "module"), 0o755))
+				for _, unit := range []string{"healthy", "excluded"} {
+					dir := filepath.Join(root, unit)
+					require.NoError(t, os.MkdirAll(dir, 0o755))
+					content := `terraform { source = "../module" }`
+					if unit == "excluded" {
+						content += fmt.Sprintf("\nexclude {\n if = true\n actions = [\"plan\"]\n no_run = %t\n}\n%s\n", test.noRun, dependency)
+					}
+					require.NoError(t, os.WriteFile(filepath.Join(dir, "terragrunt.hcl"), []byte(content), 0o644))
+				}
+				result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, Command: test.command, Environment: map[string]string{}})
+				require.NoError(t, err)
+				healthy := slices.IndexFunc(result.Inventory, func(unit model.DiscoveredUnit) bool {
+					return unit.Config.Path == filepath.Join(root, "healthy", "terragrunt.hcl")
+				})
+				require.NotEqual(t, -1, healthy)
+				require.Equal(t, filepath.Join(root, "module"), result.Inventory[healthy].Config.Source)
+				if !test.excluded {
+					require.Len(t, result.Failures, 1)
+					require.ErrorContains(t, result.Failures[0].Err, "dependency")
+					require.Len(t, result.Inventory, 1)
+					return
+				}
+				require.Empty(t, result.Failures)
+				require.Len(t, result.Inventory, 2)
+				excluded := result.Inventory[1-healthy].Config
+				require.Equal(t, filepath.Join(root, "excluded", "terragrunt.hcl"), excluded.Path)
+				require.True(t, PreventsRun(excluded.Exclude, test.command))
+				require.Empty(t, excluded.Dependencies)
+				require.Empty(t, excluded.OutputDependencies)
+				require.Equal(t, filepath.Join(root, "module"), excluded.Source)
+			})
+		}
+	}
+}

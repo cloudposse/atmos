@@ -10,29 +10,33 @@ import (
 )
 
 func TestLocalModuleSubdirPreservesRootAndIdentity(t *testing.T) {
-	request := nativeUnit(t, "")
-	base, err := filepath.EvalSymlinks(request.BasePath)
-	require.NoError(t, err)
-	root := filepath.Join(base, "repository")
-	module := filepath.Join(root, "modules", "app")
-	require.NoError(t, os.MkdirAll(module, 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "modules", "shared"), 0o755))
-	source := "./repository//modules/app"
-	encoded, err := json.Marshal(source)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(encoded)+" }"), 0o644))
+	for _, subdir := range []string{"modules/app", ""} {
+		t.Run("subdir="+subdir, func(t *testing.T) {
+			request := nativeUnit(t, "")
+			base, err := filepath.EvalSymlinks(request.BasePath)
+			require.NoError(t, err)
+			root := filepath.Join(base, "repository")
+			module := filepath.Join(root, "modules", "app")
+			require.NoError(t, os.MkdirAll(module, 0o755))
+			require.NoError(t, os.MkdirAll(filepath.Join(root, "modules", "shared"), 0o755))
+			source := "./repository//" + subdir
+			encoded, err := json.Marshal(source)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(encoded)+" }"), 0o644))
 
-	result, err := Resolve(t.Context(), request)
-	require.NoError(t, err)
-	require.Equal(t, root+"//modules/app", result.Source)
-	require.Contains(t, result.Folders, root)
-	require.NotEqual(t, root, result.WorkingDir)
+			result, err := Resolve(t.Context(), request)
+			require.NoError(t, err)
+			require.Equal(t, root+"//"+subdir, result.Source)
+			require.Contains(t, result.Folders, root)
+			require.NotEqual(t, root, result.WorkingDir)
 
-	request.Phase = "inventory"
-	inventory, err := Resolve(t.Context(), request)
-	require.NoError(t, err)
-	require.Len(t, inventory.Inventory, 1)
-	require.Equal(t, root+"//modules/app", inventory.Inventory[0].Config.Source)
+			request.Phase = "inventory"
+			inventory, err := Resolve(t.Context(), request)
+			require.NoError(t, err)
+			require.Len(t, inventory.Inventory, 1)
+			require.Equal(t, root+"//"+subdir, inventory.Inventory[0].Config.Source)
+		})
+	}
 }
 
 func TestLocalModuleSubdirRejectsTraversal(t *testing.T) {
@@ -72,5 +76,11 @@ func TestLocalModuleSubdirAcceptsExistingRootWithDotInName(t *testing.T) {
 			}
 			require.Error(t, err, "a dotted bare path that names no local directory stays a remote shorthand")
 		})
+	}
+}
+
+func TestSafeModuleSubdirRejectsEscapes(t *testing.T) {
+	for _, subdir := range []string{"..", "modules/../outside", "/absolute", `\absolute`, "C:/outside", `C:\outside`, "C:outside"} {
+		t.Run(subdir, func(t *testing.T) { require.False(t, safeModuleSubdir(subdir)) })
 	}
 }

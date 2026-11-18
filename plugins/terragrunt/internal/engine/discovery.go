@@ -481,6 +481,9 @@ func (e *unitEvaluator) resolveUnitInventory(ctx context.Context) (*model.Resolu
 
 // populateInventoryDependencies keeps output reads in the scheduling dependency set.
 func (e *unitEvaluator) populateInventoryDependencies(cfg *config.TerragruntConfig, result *model.Resolution) error {
+	if PreventsRun(result.Exclude, OperationCommand(e.request.Command, e.request.Arguments)) {
+		return nil
+	}
 	var err error
 	if result.OutputDependencies, err = outputDependencies(e.environment, cfg, e.path); err != nil {
 		return err

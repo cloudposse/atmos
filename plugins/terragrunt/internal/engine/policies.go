@@ -64,7 +64,10 @@ func localModuleSubdir(source string, existingRoot func(root string) bool) (root
 }
 
 func safeModuleSubdir(subdir string) bool {
-	if subdir == "" || filepath.IsAbs(subdir) || filepath.VolumeName(subdir) != "" || strings.HasPrefix(subdir, "/") || strings.HasPrefix(subdir, `\`) {
+	if subdir == "" {
+		return true
+	}
+	if absoluteModuleSubdir(subdir) {
 		return false
 	}
 	for _, part := range strings.Split(filepath.ToSlash(subdir), "/") {
@@ -73,6 +76,11 @@ func safeModuleSubdir(subdir string) bool {
 		}
 	}
 	return true
+}
+
+// absoluteModuleSubdir rejects native absolute paths and Windows-qualified paths on every host.
+func absoluteModuleSubdir(subdir string) bool {
+	return (len(subdir) >= 2 && subdir[1] == ':') || filepath.IsAbs(subdir) || filepath.VolumeName(subdir) != "" || strings.HasPrefix(subdir, "/") || strings.HasPrefix(subdir, `\`)
 }
 
 func checkVersions(ctx context.Context, request *model.Request, terraform, terragrunt string) error {
