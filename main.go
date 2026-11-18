@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/cloudposse/atmos/cmd"
@@ -13,9 +14,12 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/panics"
 	"github.com/cloudposse/atmos/pkg/signals"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// main runs Atmos and coordinates signal-driven credential and process cleanup.
 func main() {
+	installSignalExitNotice()
 	// Set up signal handling for graceful shutdown.
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -26,19 +30,17 @@ func main() {
 			if !shouldExitOnSignal(sig) {
 				continue
 			}
+			signals.RequestExit(sig)
+			signals.WaitForCleanup()
 			// Run registered exit cleanups (e.g. restore the terminal from raw
 			// mode) - os.Exit below skips deferred functions.
 			signals.RunExitCleanups()
 			// Clean up resources before exit.
 			cmd.Cleanup()
 			errUtils.CloseSentry()
-			// Exit with correct POSIX exit code (128 + signal number).
-			// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
-			if s, ok := sig.(syscall.Signal); ok {
-				errUtils.OsExit(128 + int(s))
-			}
-			// Fallback to SIGINT exit code if signal type assertion fails.
-			errUtils.OsExit(130)
+			// Preserve the first retained POSIX signal code, even if different
+			// listeners observed concurrent signals in a different order.
+			errUtils.OsExit(signals.ResolveExitCode(1))
 		}
 	}()
 
@@ -47,7 +49,30 @@ func main() {
 
 	// Run the application and exit with the appropriate code.
 	// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
-	errUtils.OsExit(run())
+	errUtils.OsExit(signals.ResolveExitCode(run()))
+}
+
+const signalExitCodeBase = 128
+
+// installSignalExitNotice covers direct error exits as well as the main return path.
+func installSignalExitNotice() {
+	exit := errUtils.OsExit
+	var notice sync.Once
+	errUtils.OsExit = func(code int) {
+		code = signals.ResolveExitCode(code)
+		// Script sessions own SIGINT and may return 130 without the global handler.
+		if signals.ExitRequested() || code == signalExitCodeBase+int(syscall.SIGINT) || code == signalExitCodeBase+int(syscall.SIGTERM) {
+			notice.Do(func() {
+				signals.RunExitCleanups()
+				if code == signalExitCodeBase+int(syscall.SIGINT) {
+					ui.Warning("Interrupted.")
+				} else {
+					ui.Warning("Terminated.")
+				}
+			})
+		}
+		exit(code)
+	}
 }
 
 // run executes the main application logic and returns an exit code.
@@ -64,22 +89,16 @@ func run() (exitCode int) {
 	defer panics.Recover(&exitCode)
 
 	// Ensure cleanup happens on normal exit.
-	defer cmd.Cleanup()
+	defer func() {
+		signals.WaitForCleanup()
+		cmd.Cleanup()
+	}()
 
 	// A generated toolchain proxy invokes this executable under a command name
 	// such as "ls". Dispatch it before generic flag handling so "ls --version"
 	// reaches the proxied tool rather than Atmos's --version handler.
 	if handled, err := cmd.TryRunToolchainProxy(os.Args); handled {
-		if err != nil {
-			if code, ok := silentExitCode(err); ok {
-				return code
-			}
-			errUtils.CaptureError(err)
-			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
-			return errUtils.GetExitCode(err)
-		}
-		return 0
+		return proxyExitCode(err)
 	}
 
 	// Handle --version flag at application entry point to avoid deep exit in command infrastructure.
@@ -88,25 +107,7 @@ func run() (exitCode int) {
 	// Note: Only intercept --version flag here. The "version" subcommand should go through
 	// normal Cobra flow to ensure PersistentPreRun executes (needed for proper logging setup).
 	if hasVersionFlag(os.Args) {
-		// Check for conflicting flags: --version and --use-version cannot be used together.
-		if hasUseVersionFlag(os.Args) {
-			// Print error directly since config/formatters aren't initialized yet.
-			// Use MaskWriter for consistent masking (gracefully falls back if not initialized).
-			maskedStderr := ioLayer.MaskWriter(os.Stderr)
-			_, _ = maskedStderr.Write([]byte("\nError: --version and --use-version cannot be used together\n\n"))
-			_, _ = maskedStderr.Write([]byte("Hints:\n"))
-			_, _ = maskedStderr.Write([]byte("  - Use --version to display the current Atmos version\n"))
-			_, _ = maskedStderr.Write([]byte("  - Use --use-version to run a command with a specific Atmos version\n\n"))
-			return 1
-		}
-		err := cmd.ExecuteVersion()
-		if err != nil {
-			errUtils.CaptureError(err)
-			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
-			return errUtils.GetExitCode(err)
-		}
-		return 0 // Exit normally after printing version.
+		return runVersion()
 	}
 
 	err := cmd.Execute()
@@ -137,6 +138,43 @@ func run() (exitCode int) {
 	return 0
 }
 
+// proxyExitCode reports proxy errors while preserving silent child exit codes.
+func proxyExitCode(err error) int {
+	if err != nil {
+		if code, ok := silentExitCode(err); ok {
+			return code
+		}
+		errUtils.CaptureError(err)
+		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+		_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
+		return errUtils.GetExitCode(err)
+	}
+	return 0
+}
+
+// runVersion handles the entry-point version flag before command initialization.
+func runVersion() int {
+	// Check for conflicting flags: --version and --use-version cannot be used together.
+	if hasUseVersionFlag(os.Args) {
+		// Print error directly since config/formatters aren't initialized yet.
+		// Use MaskWriter for consistent masking (gracefully falls back if not initialized).
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		_, _ = maskedStderr.Write([]byte("\nError: --version and --use-version cannot be used together\n\n"))
+		_, _ = maskedStderr.Write([]byte("Hints:\n"))
+		_, _ = maskedStderr.Write([]byte("  - Use --version to display the current Atmos version\n"))
+		_, _ = maskedStderr.Write([]byte("  - Use --use-version to run a command with a specific Atmos version\n\n"))
+		return 1
+	}
+	err := cmd.ExecuteVersion()
+	if err != nil {
+		errUtils.CaptureError(err)
+		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+		_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
+		return errUtils.GetExitCode(err)
+	}
+	return 0 // Exit normally after printing version.
+}
+
 // silentExitCode reports the exit code to use when err is a silent exit-code
 // carrier (a terminal-handoff step that exited non-zero). Such errors must
 // propagate the code without themed rendering, which would query the terminal
@@ -151,8 +189,12 @@ func silentExitCode(err error) (int, bool) {
 
 // shouldExitOnSignal reports whether the process should exit in response to sig.
 // SIGINT is ignored while a foreground interactive/TTY step owns the terminal
-// (the child process handles Ctrl-C). SIGTERM always exits as an escape hatch.
+// (the child process handles Ctrl-C). A credential operation instead handles
+// both signals by cancellation and bounded cleanup before process exit.
 func shouldExitOnSignal(sig os.Signal) bool {
+	if signals.CleanupExitDeferred() || signals.ExitRequested() {
+		return true
+	}
 	return sig != os.Interrupt || !signals.InterruptExitSuspended()
 }
 

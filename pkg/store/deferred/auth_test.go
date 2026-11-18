@@ -16,6 +16,40 @@ import (
 	"github.com/cloudposse/atmos/pkg/store/providers"
 )
 
+type operationStore struct{ *store.MockIdentityAwareStore }
+
+func (*operationStore) UsesOperationIdentity() bool { return true }
+
+func TestOperationIdentityBindingNeverAcquiresUnownedCredentials(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	backend := &operationStore{store.NewMockIdentityAwareStore(ctrl)}
+	factory := authdeferred.NewMockAuthFactory(ctrl)
+	ac := &schema.AtmosConfiguration{
+		AuthManager:  authdeferred.NewManager(authdeferred.AuthOptions{Factory: factory}),
+		Stores:       store.StoreRegistry{"remote": backend},
+		StoresConfig: map[string]store.StoreConfig{"remote": {Identity: "reader"}},
+	}
+	backend.EXPECT().ResetAuthContext()
+	backend.EXPECT().SetAuthContext(gomock.Cond(func(resolver store.AuthContextResolver) bool {
+		_, ok := resolver.(store.ScopedEnvironmentAuthContextResolver)
+		return ok
+	}), "reader")
+	require.NoError(t, resolveStoreAuth(ac, &schema.ConfigAndStacksInfo{Stack: "dev"}, "remote"))
+	// No factory expectation: binding must not perform an eager authentication.
+}
+
+func TestOperationIdentityRejectsDisabledAuthentication(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	backend := &operationStore{store.NewMockIdentityAwareStore(ctrl)}
+	ac := &schema.AtmosConfiguration{
+		AuthManager:  authdeferred.NewManager(authdeferred.AuthOptions{Disabled: true}),
+		Stores:       store.StoreRegistry{"remote": backend},
+		StoresConfig: map[string]store.StoreConfig{"remote": {Identity: "reader"}},
+	}
+	backend.EXPECT().ResetAuthContext()
+	require.ErrorIs(t, resolveStoreAuth(ac, nil, "remote"), store.ErrIdentityNotConfigured)
+}
+
 func TestResolveStoreAuthClearsPreviousIdentity(t *testing.T) {
 	for _, scenario := range []string{"no manager", "no stack info", "no input info", "disabled", "component disabled"} {
 		t.Run(scenario, func(t *testing.T) {
@@ -245,4 +279,15 @@ func TestResolveStoreAuthWarnsWhenDisabledBypassesPinnedIdentity(t *testing.T) {
 		require.NoError(t, resolveStoreAuth(ac, &schema.ConfigAndStacksInfo{Stack: "dev"}, "remote"))
 		assert.Empty(t, warnings)
 	})
+}
+
+func TestOperationIdentityRejectsMissingIdentity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	backend := &operationStore{store.NewMockIdentityAwareStore(ctrl)}
+	ac := &schema.AtmosConfiguration{
+		AuthManager: authdeferred.NewManager(authdeferred.AuthOptions{Factory: authdeferred.NewMockAuthFactory(ctrl)}),
+		Stores:      store.StoreRegistry{"remote": backend},
+	}
+	backend.EXPECT().ResetAuthContext()
+	require.ErrorIs(t, resolveStoreAuth(ac, nil, "remote"), store.ErrIdentityNotConfigured)
 }

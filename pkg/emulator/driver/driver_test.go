@@ -49,6 +49,20 @@ func TestK3sDriverDefaults(t *testing.T) {
 	assert.NotEmpty(t, defaults.Env["K3S_TOKEN"], "k3s requires a node token")
 }
 
+// TestGiteaDriverDefaults verifies the Gitea driver enables Actions with a preset
+// runner registration token. Gitea rejects a preset token shorter than 32
+// characters at startup, and a runner container registers with the same value.
+func TestGiteaDriverDefaults(t *testing.T) {
+	d, err := emu.ResolveDriver("gitea")
+	require.NoError(t, err)
+
+	defaults := d.Defaults()
+	assert.Equal(t, "true", defaults.Env["GITEA__actions__ENABLED"])
+	assert.Equal(t, emu.GiteaRunnerRegistrationToken, defaults.Env["GITEA_RUNNER_REGISTRATION_TOKEN"])
+	assert.GreaterOrEqual(t, len(emu.GiteaRunnerRegistrationToken), 32)
+	assert.Equal(t, "gitea/gitea:28.3", defaults.Image)
+}
+
 func TestRegisteredDrivers_TargetsAndDefaults(t *testing.T) {
 	cases := map[string]struct {
 		target string

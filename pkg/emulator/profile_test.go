@@ -38,10 +38,21 @@ func TestEndpoint_PreservesNonLoopbackHost(t *testing.T) {
 }
 
 func TestLoopbackHostToIPv4(t *testing.T) {
-	for _, in := range []string{"", "localhost", "::1", "[::1]", "::", "[::]", "0.0.0.0"} {
+	for _, in := range []string{"", "localhost", "::", "[::]", "0.0.0.0"} {
 		assert.Equal(t, "127.0.0.1", loopbackHostToIPv4(in), "loopback/wildcard %q → IPv4 loopback", in)
 	}
-	for _, in := range []string{"example.com", "emulator.internal", "10.0.0.5", "host.docker.internal"} {
+	for _, in := range []string{"example.com", "emulator.internal", "10.0.0.5", "host.docker.internal", "::1"} {
 		assert.Equal(t, in, loopbackHostToIPv4(in), "non-loopback %q preserved", in)
+	}
+	assert.Equal(t, "::1", loopbackHostToIPv4("[::1]"), "bracketed IPv6 literal is unbracketed")
+}
+
+func TestEndpoint_PreservesExplicitIPv6Host(t *testing.T) {
+	// A port published only on ::1 is unreachable over IPv4, so the explicit
+	// address must survive into URLs and authorities, bracketed.
+	for _, host := range []string{"::1", "[::1]"} {
+		ep := Endpoint{Host: host, Ports: map[int]int{4566: 34566}}
+		assert.Equal(t, "http://[::1]:34566", ep.URL("http"), "host %q", host)
+		assert.Equal(t, "[::1]:34566", ep.Authority(), "host %q", host)
 	}
 }

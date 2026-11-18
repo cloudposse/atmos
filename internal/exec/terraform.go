@@ -279,7 +279,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 // to stay under the linter's argument-count limit.
 type execMetadataSyncParams struct {
 	Cmd    *cobra.Command
-	Parser func(subCommand string, exitCode int, output string) any
+	Parser func(subCommand, component string, exitCode int, output string) any
 	Err    error
 }
 
@@ -327,7 +327,7 @@ func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand 
 
 	var data any
 	if params.Parser != nil {
-		data = params.Parser(subCommand, rawExitCode, info.ExecMetadataRawOutput)
+		data = params.Parser(subCommand, info.ComponentFromArg, rawExitCode, info.ExecMetadataRawOutput)
 	}
 
 	// info.ExecMetadataRawMetrics is typed `any` (not *process.ProcessMetrics)

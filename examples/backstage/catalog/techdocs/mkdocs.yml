@@ -1,0 +1,11 @@
+site_name: Atmos service handbook
+nav:
+  - Overview: index.md
+  - Request and provision: provisioning.md
+  - Gitea CI/CD: cicd.md
+plugins:
+  - techdocs-core
+
+theme:
+  name: material
+  font: false

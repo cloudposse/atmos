@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	smithymiddleware "github.com/aws/smithy-go/middleware"
@@ -78,6 +80,19 @@ func DescribeCluster(ctx context.Context, client EKSClient, clusterName, region 
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrEKSClusterNotFound, clusterName)
 	}
 
+	// The SDK may resolve the region from credentials or shared configuration.
+	// In that case the caller's region is empty; recover it from the cluster ARN.
+	if region == "" {
+		clusterARN, err := arn.Parse(aws.ToString(output.Cluster.Arn))
+		if err != nil {
+			return nil, fmt.Errorf("%w: cannot determine cluster region: %w", errUtils.ErrEKSDescribeCluster, err)
+		}
+		if clusterARN.Region == "" {
+			return nil, fmt.Errorf("%w: cluster ARN has no region", errUtils.ErrEKSDescribeCluster)
+		}
+		region = clusterARN.Region
+	}
+
 	var caData string
 	if output.Cluster.CertificateAuthority != nil {
 		caData = aws.ToString(output.Cluster.CertificateAuthority.Data)
@@ -136,8 +151,10 @@ func GetToken(ctx context.Context, creds types.ICredentials, clusterName, region
 
 // BuildKubeClusterInfo adapts an EKSClusterInfo + identity name into the
 // cloud-agnostic kube.ClusterInfo, building the "aws eks token" exec-plugin
-// command line that kube.BuildClusterConfig embeds verbatim.
-func BuildKubeClusterInfo(info *EKSClusterInfo, identityName string) *kube.ClusterInfo {
+// command line that kube.BuildClusterConfig embeds verbatim. It captures the
+// effective working directory for subsequent token requests and returns an error
+// if that directory cannot be resolved.
+func BuildKubeClusterInfo(info *EKSClusterInfo, identityName string) (*kube.ClusterInfo, error) {
 	defer perf.Track(nil, "aws.BuildKubeClusterInfo")()
 
 	execArgs := []string{
@@ -150,6 +167,12 @@ func BuildKubeClusterInfo(info *EKSClusterInfo, identityName string) *kube.Clust
 		info.Region,
 	}
 
+	// Capture the effective directory after Atmos processes --chdir/ATMOS_CHDIR.
+	// An absolute path lets kubectl invoke Atmos from any working directory.
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrWorkingDirAccessFailed, err)
+	}
 	var execEnv []clientcmdapi.ExecEnvVar
 	if identityName != "" {
 		execArgs = append(execArgs, "--identity="+identityName)
@@ -158,6 +181,8 @@ func BuildKubeClusterInfo(info *EKSClusterInfo, identityName string) *kube.Clust
 			Value: identityName,
 		})
 	}
+
+	execEnv = append(execEnv, clientcmdapi.ExecEnvVar{Name: "ATMOS_CHDIR", Value: workingDir})
 
 	return &kube.ClusterInfo{
 		Name:                     info.Name,
@@ -168,7 +193,7 @@ func BuildKubeClusterInfo(info *EKSClusterInfo, identityName string) *kube.Clust
 		UserPrefix:               "eks",
 		ExecArgs:                 execArgs,
 		ExecEnv:                  execEnv,
-	}
+	}, nil
 }
 
 // addPresignExpiry returns a middleware that adds X-Amz-Expires to the presigned URL query string.

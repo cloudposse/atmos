@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -540,4 +541,56 @@ func TestIntegration_FullLifecycle(t *testing.T) {
 	// Verify metadata sidecar is also gone.
 	_, err = os.Stat(filepath.Join(tmpDir, name+metadataSuffix))
 	assert.True(t, os.IsNotExist(err))
+}
+
+// Replacing an artifact keeps the permission bits of the file already on disk. The previous
+// adapter truncated the file in place, so an artifact restricted by hand stayed restricted.
+func TestUploadReplaceKeepsDestinationMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("POSIX permission bits are not enforced on %s", runtime.GOOS)
+	}
+
+	tests := []struct {
+		name     string
+		existing os.FileMode
+		want     os.FileMode
+	}{
+		{name: "restricted artifact stays restricted", existing: 0o600, want: 0o600},
+		{name: "readable artifact stays readable", existing: 0o644, want: 0o644},
+		{name: "group-writable artifact stays group-writable", existing: 0o664, want: 0o664},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			store := &Store{basePath: dir}
+			path := filepath.Join(dir, "plan.tar")
+			require.NoError(t, os.WriteFile(path, []byte("old"), tt.existing))
+			require.NoError(t, os.Chmod(path, tt.existing))
+
+			require.NoError(t, store.Upload(context.Background(), "plan.tar", strings.NewReader("new contents"), -1, nil))
+
+			info, err := os.Stat(path)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, info.Mode().Perm())
+			data, err := os.ReadFile(path)
+			require.NoError(t, err)
+			assert.Equal(t, "new contents", string(data))
+		})
+	}
+}
+
+// A new artifact has no destination to inherit from and keeps the default mode.
+func TestUploadNewArtifactUsesDefaultMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("POSIX permission bits are not enforced on %s", runtime.GOOS)
+	}
+	dir := t.TempDir()
+	store := &Store{basePath: dir}
+
+	require.NoError(t, store.Upload(context.Background(), "fresh.tar", strings.NewReader("data"), -1, nil))
+
+	info, err := os.Stat(filepath.Join(dir, "fresh.tar"))
+	require.NoError(t, err)
+	assert.NotZero(t, info.Mode().Perm()&0o600)
+	assert.Zero(t, info.Mode().Perm()&^os.FileMode(0o644), "default mode must not exceed 0644 before umask")
 }

@@ -53,6 +53,13 @@ Think of each demo folder as representing an example of a standalone repository.
 17. └── backend-provisioning/     # Manage a Terraform state backend directly with `atmos terraform backend` (create/update/delete), against a local AWS emulator.
 ```
 
+## Backstage Developer Portal
+
+The [`backstage`](backstage/) example runs a local service catalog with Git and AWS
+emulators. A Backstage template opens an infrastructure PR; after merge, Atmos
+provisions an S3 bucket and registers its Git-backed service catalog entry.
+No cloud credentials are required.
+
 ## Playground
 
 

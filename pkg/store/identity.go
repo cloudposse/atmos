@@ -63,6 +63,14 @@ type EnvironmentAuthContextResolver interface {
 	ResolveEnvironmentAuthContext(ctx context.Context, identityName string) (*EnvironmentAuthConfig, error)
 }
 
+// ScopedEnvironmentAuthContextResolver releases the store's identity before
+// returning, including failed operations and cancellation. It never logs out
+// the identity's root provider or changes the component's authentication.
+type ScopedEnvironmentAuthContextResolver interface {
+	EnvironmentAuthContextResolver
+	WithEnvironmentAuthContext(context.Context, string, func(context.Context, *EnvironmentAuthConfig) error) error
+}
+
 // SecretsAuthContext carries an identity-resolving AuthContextResolver and the effective default
 // identity name to non-store secret backends (e.g. cloud-KMS SOPS providers) that live outside the
 // store registry but need the same identity->credentials resolution. It is populated by the same
@@ -87,4 +95,12 @@ type IdentityAwareStore interface {
 	// ResetAuthContext clears runtime credentials, the inherited identity, and cached
 	// clients before rebinding a shared store to a different evaluation context.
 	ResetAuthContext()
+}
+
+// OperationIdentityStore acquires its own identity inside each operation.
+// Deferred binding must supply a manager-backed resolver, never credentials
+// acquired before the store can take responsibility for releasing them.
+type OperationIdentityStore interface {
+	IdentityAwareStore
+	UsesOperationIdentity() bool
 }

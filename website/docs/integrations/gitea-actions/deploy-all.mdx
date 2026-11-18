@@ -1,0 +1,20 @@
+---
+title: Deploy All Components
+slug: /integrations/gitea-actions/deploy-all
+description: Run a Gitea Actions workflow across every component instance in your stacks.
+---
+
+import EmbedFile from '@site/src/components/EmbedFile'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Run a workflow across every component instance in your stacks. Generate the job matrix from Atmos instead of maintaining a separate inventory in your workflow.
+</Intro>
+
+Complete [Setup and Authentication](/integrations/gitea-actions/setup) first.
+
+## Workflow
+
+Fan out across every instance defined in your stacks using `atmos list instances --format=matrix`. Use it for full deploys, drift sweeps, or initial bootstraps. `workflow_dispatch` needs Gitea 1.23 or later.
+
+<EmbedFile filePath="examples/gitea-actions/workflows/deploy-all.yml" />

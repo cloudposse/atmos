@@ -5,10 +5,6 @@ Workflow Error
 
 Error: workflow step execution failed: max attempts (3) exceeded, last error: always fails
 
- Traceback (most recent call last):
-   flaky:2:5: in <toplevel>
- Error in fail: always fails
-
 The script step flaky (interpreter: starlark) failed to execute.
 
 💡 To resume the workflow from this step, run:

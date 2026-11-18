@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -426,6 +427,18 @@ func TestPlugin_GetArtifactKey(t *testing.T) {
 		key, err := p.getArtifactKey(info, ciCtx)
 		require.NoError(t, err)
 		assert.Equal(t, "dev-us-east-1/vpc/abc123.tfplan.tar", key)
+	})
+
+	t.Run("source-tree reference key keeps the fixed layout and is recognized as a reference", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc",
+			Stack:            "dev-us-east-1",
+		}
+		ciCtx := &provider.Context{SHA: "tree-0123abcd-fedcba98"}
+		key, err := p.getArtifactKey(info, ciCtx)
+		require.NoError(t, err)
+		assert.Equal(t, "dev-us-east-1/vpc/tree-0123abcd-fedcba98.tfplan.tar", key)
+		assert.True(t, planfile.IsSourceReference(key))
 	})
 
 	t.Run("nil info returns error", func(t *testing.T) {

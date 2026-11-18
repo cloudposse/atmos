@@ -107,10 +107,12 @@ func NewGitHubActionsStore(options *GitHubActionsStoreOptions) (store.Store, err
 // isGitHubActionsRunner reports whether the process is running inside a GitHub Actions runner.
 // GitHub sets GITHUB_ACTIONS=true in every workflow job. It is inlined here (rather than reusing
 // pkg/github/actions) to avoid an import cycle (that package transitively imports pkg/store).
+// Gitea Actions runners also set GITHUB_ACTIONS=true for compatibility, but they are not GitHub
+// runners, so GITEA_ACTIONS=true excludes them; options.ci.enabled still forces reads.
 func isGitHubActionsRunner() bool {
-	// GITHUB_ACTIONS is an external CI signal set by GitHub, not Atmos configuration.
-	//nolint:forbidigo // GITHUB_ACTIONS is an external CI env var, not Atmos config.
-	return os.Getenv("GITHUB_ACTIONS") == "true"
+	// GITHUB_ACTIONS and GITEA_ACTIONS are external CI signals, not Atmos configuration.
+	//nolint:forbidigo // GITHUB_ACTIONS/GITEA_ACTIONS are external CI env vars, not Atmos config.
+	return os.Getenv("GITHUB_ACTIONS") == "true" && os.Getenv("GITEA_ACTIONS") != "true"
 }
 
 // getClient lazily builds the GitHub client, preserving an already-injected client (tests).

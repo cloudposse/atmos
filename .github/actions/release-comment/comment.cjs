@@ -9,10 +9,12 @@ module.exports = async ({ github, context }) => {
   async function createCommentForPR(pr_id, release) {
     // Constructing the message to be posted or updated as a comment
     const messageId = `<!-- release-pr-comment:${release.id} -->`;
-    const message = `
-    ${messageId}
-    These changes were released in [${release.name}](${release.html_url}).
-    `;
+    // Keep every line flush-left: GitHub renders lines indented by 4+ spaces as a code
+    // block, which exposes the hidden marker and breaks the release link.
+    const message = [
+      messageId,
+      `These changes were released in [${release.name}](${release.html_url}).`,
+    ].join('\n');
 
     // Сreate a new comment
     await github.rest.issues.createComment({

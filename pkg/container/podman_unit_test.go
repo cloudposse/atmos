@@ -400,7 +400,7 @@ func TestPodmanRuntime_parsePodmanContainer_Ports(t *testing.T) {
 					},
 				},
 			},
-			expected: []PortBinding{{ContainerPort: 4566, HostPort: 40933, Protocol: "tcp"}},
+			expected: []PortBinding{{Bind: "0.0.0.0", ContainerPort: 4566, HostPort: 40933, Protocol: "tcp"}},
 		},
 		{
 			name: "unpublished port (host_port 0) is skipped",

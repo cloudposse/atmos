@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	vault "github.com/hashicorp/vault/api"
@@ -22,6 +23,9 @@ const vaultValueKey = "value"
 // vaultHTTPNotFound is the HTTP status Vault returns for a missing secret.
 const vaultHTTPNotFound = 404
 
+// vaultIdentityLifetimeOperation releases a dedicated identity after each operation.
+const vaultIdentityLifetimeOperation = "operation"
+
 // VaultStore is an implementation of the store.Store interface for HashiCorp Vault (KV v2).
 type VaultStore struct {
 	client         VaultKVClient
@@ -31,19 +35,22 @@ type VaultStore struct {
 	ambientToken   string
 
 	// Identity-based authentication fields.
-	identityName string
-	authResolver store.AuthContextResolver
+	identityName     string
+	authResolver     store.AuthContextResolver
+	identityLifetime string
+	authMu           sync.Mutex
 }
 
 // VaultStoreOptions configures a HashiCorp Vault store.
 type VaultStoreOptions struct {
-	URL            string  `mapstructure:"url"`
-	Address        string  `mapstructure:"address"`
-	Token          string  `mapstructure:"token"`
-	Mount          string  `mapstructure:"mount"`
-	Path           string  `mapstructure:"path"`
-	Prefix         *string `mapstructure:"prefix"`
-	StackDelimiter *string `mapstructure:"stack_delimiter"`
+	URL              string  `mapstructure:"url"`
+	Address          string  `mapstructure:"address"`
+	Token            string  `mapstructure:"token"`
+	Mount            string  `mapstructure:"mount"`
+	Path             string  `mapstructure:"path"`
+	Prefix           *string `mapstructure:"prefix"`
+	StackDelimiter   *string `mapstructure:"stack_delimiter"`
+	IdentityLifetime string  `mapstructure:"identity_lifetime"`
 }
 
 // VaultKVClient abstracts the Vault KV v2 operations the store needs (for testability).
@@ -71,6 +78,8 @@ var (
 	_ store.DeletableStore     = (*VaultStore)(nil)
 	_ store.StatusStore        = (*VaultStore)(nil)
 	_ store.ListableStore      = (*VaultStore)(nil)
+	_ store.ContextStore       = (*VaultStore)(nil)
+	_ store.ContextFieldStore  = (*VaultStore)(nil)
 )
 
 // vaultKVv2Client adapts the official Vault KV v2 helper to VaultKVClient. It also retains the
@@ -159,6 +168,12 @@ func (c *vaultKVv2Client) List(ctx context.Context, path string) ([]string, erro
 // supplied via options or the standard VAULT_ADDR environment variable (read by the Vault SDK);
 // the token may be supplied via options or the standard VAULT_TOKEN environment variable.
 func NewVaultStore(options *VaultStoreOptions, identityName string) (store.Store, error) {
+	if options.IdentityLifetime != "" && options.IdentityLifetime != "session" && options.IdentityLifetime != vaultIdentityLifetimeOperation {
+		return nil, store.ErrVaultIdentityLifetime
+	}
+	if options.IdentityLifetime == vaultIdentityLifetimeOperation && identityName == "" {
+		return nil, store.ErrIdentityNotConfigured
+	}
 	mount := options.Mount
 	if mount == "" {
 		mount = options.Path // back-compat: allow `path` as the KV mount.
@@ -191,10 +206,11 @@ func NewVaultStore(options *VaultStoreOptions, identityName string) (store.Store
 	}
 
 	s := &VaultStore{
-		client:       &vaultKVv2Client{kv: client.KVv2(mount), client: client, mount: mount},
-		mount:        mount,
-		ambientToken: ambientToken,
-		identityName: identityName,
+		client:           &vaultKVv2Client{kv: client.KVv2(mount), client: client, mount: mount},
+		mount:            mount,
+		ambientToken:     ambientToken,
+		identityName:     identityName,
+		identityLifetime: options.IdentityLifetime,
 	}
 	if options.Prefix != nil {
 		s.prefix = *options.Prefix
@@ -212,6 +228,10 @@ func NewVaultStore(options *VaultStoreOptions, identityName string) (store.Store
 // SetAuthContext implements store.IdentityAwareStore. A configured identity supplies VAULT_TOKEN
 // through native environment/v1 credentials and never falls back to a static or ambient token.
 func (s *VaultStore) SetAuthContext(resolver store.AuthContextResolver, identityName string) {
+	if s.identityLifetime == vaultIdentityLifetimeOperation {
+		s.authMu.Lock()
+		defer s.authMu.Unlock()
+	}
 	s.authResolver = resolver
 	if identityName != "" {
 		s.identityName = identityName
@@ -226,10 +246,18 @@ func (s *VaultStore) SetAuthContext(resolver store.AuthContextResolver, identity
 // authentication leaves this restored token active.
 func (s *VaultStore) ResetAuthContext() {
 	defer perf.Track(nil, "providers.VaultStore.ResetAuthContext")()
+	if s.identityLifetime == vaultIdentityLifetimeOperation {
+		s.authMu.Lock()
+		defer s.authMu.Unlock()
+	}
 
 	s.authResolver = nil
 	s.identityName = ""
-	s.client.SetToken(s.ambientToken)
+	if s.identityLifetime == vaultIdentityLifetimeOperation {
+		s.client.SetToken("")
+	} else {
+		s.client.SetToken(s.ambientToken)
+	}
 }
 
 func (s *VaultStore) prepareAuth(ctx context.Context) error {
@@ -258,6 +286,43 @@ func (s *VaultStore) prepareAuth(ctx context.Context) error {
 	return nil
 }
 
+// UsesOperationIdentity reports whether this store owns authentication and cleanup.
+func (s *VaultStore) UsesOperationIdentity() bool {
+	return s.identityLifetime == vaultIdentityLifetimeOperation
+}
+
+// withAuth runs an operation with the configured identity lifetime. Operation-scoped
+// calls serialize token use and clear the client token before resolver cleanup returns.
+func (s *VaultStore) withAuth(ctx context.Context, operation func(context.Context) error) error {
+	defer perf.Track(nil, "providers.VaultStore.withAuth")()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.identityLifetime != vaultIdentityLifetimeOperation {
+		if err := s.prepareAuth(ctx); err != nil {
+			return err
+		}
+		return operation(ctx)
+	}
+	s.authMu.Lock()
+	defer s.authMu.Unlock()
+	if s.identityName == "" || s.authResolver == nil {
+		return store.ErrIdentityNotConfigured
+	}
+	resolver, ok := s.authResolver.(store.ScopedEnvironmentAuthContextResolver)
+	if !ok {
+		return store.ErrAuthContextNotAvailable
+	}
+	return resolver.WithEnvironmentAuthContext(ctx, s.identityName, func(ctx context.Context, auth *store.EnvironmentAuthConfig) error {
+		if auth == nil || auth.Environment["VAULT_TOKEN"] == "" {
+			return store.ErrAuthContextNotAvailable
+		}
+		s.client.SetToken(auth.Environment["VAULT_TOKEN"])
+		defer s.client.SetToken("")
+		return operation(ctx)
+	})
+}
+
 func (s *VaultStore) getKey(stack string, component string, key string) (string, error) {
 	if s.stackDelimiter == nil {
 		return "", store.ErrStackDelimiterNotSet
@@ -279,19 +344,23 @@ func (s *VaultStore) Set(stack string, component string, key string, value any) 
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
-	if err := s.prepareAuth(context.TODO()); err != nil {
-		return err
-	}
-
-	if err := s.client.Put(context.TODO(), path, map[string]any{vaultValueKey: value}); err != nil {
-		return fmt.Errorf(errWrapFormatWithID, store.ErrVaultWrite, path, err)
-	}
-	return nil
+	return s.withAuth(context.TODO(), func(ctx context.Context) error {
+		if err := s.client.Put(ctx, path, map[string]any{vaultValueKey: value}); err != nil {
+			return fmt.Errorf(errWrapFormatWithID, store.ErrVaultWrite, path, err)
+		}
+		return nil
+	})
 }
 
 // Get reads the "value" field from a KV v2 path.
 // Empty stack/component coordinates are omitted from the path by getKey.
 func (s *VaultStore) Get(stack string, component string, key string) (any, error) {
+	return s.GetContext(context.TODO(), stack, component, key)
+}
+
+// GetContext reads a scalar/default document with a cancellable operation.
+func (s *VaultStore) GetContext(ctx context.Context, stack, component, key string) (any, error) {
+	defer perf.Track(nil, "providers.VaultStore.GetContext")()
 	if key == "" {
 		return nil, store.ErrEmptyKey
 	}
@@ -300,20 +369,27 @@ func (s *VaultStore) Get(stack string, component string, key string) (any, error
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
-	return s.getByPath(path)
+	return s.getByPath(ctx, path)
 }
 
 // GetKey reads the "value" field by a raw KV path (optionally prefixed).
 func (s *VaultStore) GetKey(key string) (any, error) {
+	return s.GetKeyContext(context.TODO(), key)
+}
+
+// GetKeyContext reads a raw key with a cancellable operation.
+func (s *VaultStore) GetKeyContext(ctx context.Context, key string) (any, error) {
+	defer perf.Track(nil, "providers.VaultStore.GetKeyContext")()
 	if key == "" {
 		return nil, store.ErrEmptyKey
 	}
 	path := s.getRawKeyPath(key)
-	return s.getByPath(path)
+	return s.getByPath(ctx, path)
 }
 
-func (s *VaultStore) getByPath(path string) (any, error) {
-	data, err := s.getDocumentByPath(path)
+// getByPath unwraps Atmos's value field or returns a document written by another client.
+func (s *VaultStore) getByPath(ctx context.Context, path string) (any, error) {
+	data, err := s.getDocumentByPath(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -324,13 +400,20 @@ func (s *VaultStore) getByPath(path string) (any, error) {
 	return data, nil
 }
 
-func (s *VaultStore) getDocumentByPath(path string) (map[string]any, error) {
-	if err := s.prepareAuth(context.TODO()); err != nil {
-		return nil, err
-	}
-	data, err := s.client.Get(context.TODO(), path)
+// getDocumentByPath reads a KV document under store authentication and rejects
+// an absent data map after authentication and operation cleanup have completed.
+func (s *VaultStore) getDocumentByPath(ctx context.Context, path string) (map[string]any, error) {
+	var data map[string]any
+	err := s.withAuth(ctx, func(ctx context.Context) error {
+		var err error
+		data, err = s.client.Get(ctx, path)
+		if err != nil {
+			return fmt.Errorf("%w '%s': %w", store.ErrVaultRead, path, err)
+		}
+		return err
+	})
 	if err != nil {
-		return nil, fmt.Errorf("%w '%s': %w", store.ErrVaultRead, path, err)
+		return nil, err
 	}
 	if data == nil {
 		return nil, fmt.Errorf("%w '%s'", store.ErrVaultEmptyData, path)
@@ -347,6 +430,12 @@ func (s *VaultStore) getRawKeyPath(key string) string {
 
 // GetField reads one exact top-level field from a structured KV v2 document.
 func (s *VaultStore) GetField(stack, component, key, field string) (any, error) {
+	return s.GetFieldContext(context.TODO(), stack, component, key, field)
+}
+
+// GetFieldContext reads one exact field with a cancellable operation.
+func (s *VaultStore) GetFieldContext(ctx context.Context, stack, component, key, field string) (any, error) {
+	defer perf.Track(nil, "providers.VaultStore.GetFieldContext")()
 	if key == "" {
 		return nil, store.ErrEmptyKey
 	}
@@ -357,22 +446,30 @@ func (s *VaultStore) GetField(stack, component, key, field string) (any, error) 
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
-	return s.getFieldByPath(path, field)
+	return s.getFieldByPath(ctx, path, field)
 }
 
 // GetKeyField reads one exact top-level field from a structured document addressed by raw key.
 func (s *VaultStore) GetKeyField(key, field string) (any, error) {
+	return s.GetKeyFieldContext(context.TODO(), key, field)
+}
+
+// GetKeyFieldContext reads one exact raw-key field with a cancellable operation.
+func (s *VaultStore) GetKeyFieldContext(ctx context.Context, key, field string) (any, error) {
+	defer perf.Track(nil, "providers.VaultStore.GetKeyFieldContext")()
 	if key == "" {
 		return nil, store.ErrEmptyKey
 	}
 	if field == "" {
 		return nil, store.ErrEmptyField
 	}
-	return s.getFieldByPath(s.getRawKeyPath(key), field)
+	return s.getFieldByPath(ctx, s.getRawKeyPath(key), field)
 }
 
-func (s *VaultStore) getFieldByPath(path, field string) (any, error) {
-	data, err := s.getDocumentByPath(path)
+// getFieldByPath selects an exact top-level field and reports missing fields
+// without including document contents in the error.
+func (s *VaultStore) getFieldByPath(ctx context.Context, path, field string) (any, error) {
+	data, err := s.getDocumentByPath(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -394,13 +491,12 @@ func (s *VaultStore) Delete(stack string, component string, key string) error {
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
-	if err := s.prepareAuth(context.TODO()); err != nil {
-		return err
-	}
-	if err := s.client.Delete(context.TODO(), path); err != nil {
-		return fmt.Errorf(errWrapFormatWithID, store.ErrVaultDelete, path, err)
-	}
-	return nil
+	return s.withAuth(context.TODO(), func(ctx context.Context) error {
+		if err := s.client.Delete(ctx, path); err != nil {
+			return fmt.Errorf(errWrapFormatWithID, store.ErrVaultDelete, path, err)
+		}
+		return nil
+	})
 }
 
 // Has reports whether the current secret version is available at the computed path, via the KV v2
@@ -415,18 +511,22 @@ func (s *VaultStore) Has(stack string, component string, key string) (bool, erro
 	if err != nil {
 		return false, fmt.Errorf(errWrapFormat, store.ErrGetKey, err)
 	}
-	if err := s.prepareAuth(context.TODO()); err != nil {
+	found := false
+	err = s.withAuth(context.TODO(), func(ctx context.Context) error {
+		if err := s.client.HasMetadata(ctx, path); err != nil {
+			// Missing, deleted, or destroyed current versions and empty metadata map to absence.
+			if errors.Is(err, store.ErrVaultEmptyData) || isVaultNotFound(err) {
+				return nil
+			}
+			return fmt.Errorf("%w '%s': %w", store.ErrVaultRead, path, err)
+		}
+		found = true
+		return nil
+	})
+	if err != nil {
 		return false, err
 	}
-
-	if err := s.client.HasMetadata(context.TODO(), path); err != nil {
-		// Missing, deleted, or destroyed current versions and empty metadata map to absence.
-		if errors.Is(err, store.ErrVaultEmptyData) || isVaultNotFound(err) {
-			return false, nil
-		}
-		return false, fmt.Errorf("%w '%s': %w", store.ErrVaultRead, path, err)
-	}
-	return true, nil
+	return found, nil
 }
 
 // Keys lists the keys under a stack/component scope (or globally when both are empty), via
@@ -439,13 +539,17 @@ func (s *VaultStore) Keys(stack string, component string) ([]string, error) {
 	}
 
 	path := getKeyPrefix(s.prefix, *s.stackDelimiter, stack, component, "/")
-	if err := s.prepareAuth(context.TODO()); err != nil {
-		return nil, err
-	}
-
-	keys, err := s.client.List(context.TODO(), path)
+	var keys []string
+	err := s.withAuth(context.TODO(), func(ctx context.Context) error {
+		var err error
+		keys, err = s.client.List(ctx, path)
+		if err != nil {
+			return fmt.Errorf("%w '%s': %w", store.ErrVaultList, path, err)
+		}
+		return err
+	})
 	if err != nil {
-		return nil, fmt.Errorf("%w '%s': %w", store.ErrVaultList, path, err)
+		return nil, err
 	}
 
 	// Vault marks a folder entry with a trailing "/" (a deeper path segment, e.g. a key

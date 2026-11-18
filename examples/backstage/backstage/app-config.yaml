@@ -1,0 +1,62 @@
+app:
+  title: Atmos Developer Portal
+  baseUrl: http://localhost:3000
+  extensions:
+    - theme:app/light: false
+    - theme:app/dark: false
+    - page:catalog:
+        config:
+          path: /
+    - catalog-filter:catalog/list:
+        config:
+          initialFilter: all
+    - page:scaffolder:
+        config:
+          title: Create service
+  listen:
+    host: 0.0.0.0
+
+organization:
+  name: Atmos Demo
+
+backend:
+  baseUrl: http://localhost:7007
+  listen:
+    host: 0.0.0.0
+    port: 7007
+  cors:
+    origin: http://localhost:3000
+    methods: [GET, HEAD, PATCH, POST, PUT, DELETE]
+    credentials: true
+  reading:
+    allow:
+      - host: local-backstage-git:3000
+        paths: [/atmos/deployments/raw/branch/main/catalog/]
+  database:
+    client: better-sqlite3
+    connection: ':memory:'
+
+auth:
+  providers:
+    guest: {}
+
+permission:
+  enabled: false
+
+techdocs:
+  builder: external
+  publisher:
+    type: local
+    local:
+      publishDirectory: /demo/techdocs-site
+
+catalog:
+  rules:
+    - allow: [Component, System, Group, User, Resource, Location, Template]
+  locations:
+    - type: file
+      target: /demo/catalog/entities.yaml
+    - type: file
+      target: /demo/templates/describe-atmos/template.yaml
+    - type: file
+      target: /demo/templates/request-service/template.yaml

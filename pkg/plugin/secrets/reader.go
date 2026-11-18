@@ -3,6 +3,7 @@ package secrets
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -55,7 +56,7 @@ func (r *reader) ReadSecret(ctx context.Context, name string) (string, error) {
 	}
 	value, err := r.readValue(ctx, reference)
 	if err != nil {
-		return "", errUtils.ErrAuthenticationFailed
+		return "", sanitizedReadError(err)
 	}
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -66,6 +67,17 @@ func (r *reader) ReadSecret(ctx context.Context, name string) (string, error) {
 	}
 	atmosio.RegisterSecret(text)
 	return text, nil
+}
+
+// sanitizedReadError preserves cancellation causes without retaining backend diagnostics.
+func sanitizedReadError(err error) error {
+	result := errUtils.ErrAuthenticationFailed
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded} {
+		if errors.Is(err, cause) {
+			result = errors.Join(result, cause)
+		}
+	}
+	return result
 }
 
 type secretReference struct {
@@ -98,6 +110,8 @@ func (r *reader) reference(name string) (*secretReference, error) {
 	return ref, nil
 }
 
+// readValue resolves store authentication independently and reads the selected
+// path or field, passing the request context when the backend supports it.
 func (r *reader) readValue(ctx context.Context, ref *secretReference) (any, error) {
 	backend := r.config.Stores[ref.store]
 	// A fresh resolver avoids re-entering the manager currently authenticating this
@@ -110,11 +124,23 @@ func (r *reader) readValue(ctx context.Context, ref *secretReference) (any, erro
 			return nil, err
 		}
 		if ref.field != "" {
+			if contextual, ok := backend.(store.ContextFieldStore); ok {
+				if ref.stack != "" {
+					return contextual.GetFieldContext(ctx, ref.stack, ref.component, ref.path, ref.field)
+				}
+				return contextual.GetKeyFieldContext(ctx, ref.path, ref.field)
+			}
 			fieldBackend := backend.(store.FieldStore)
 			if ref.stack != "" {
 				return fieldBackend.GetField(ref.stack, ref.component, ref.path, ref.field)
 			}
 			return fieldBackend.GetKeyField(ref.path, ref.field)
+		}
+		if contextual, ok := backend.(store.ContextStore); ok {
+			if ref.stack != "" {
+				return contextual.GetContext(ctx, ref.stack, ref.component, ref.path)
+			}
+			return contextual.GetKeyContext(ctx, ref.path)
 		}
 		if ref.stack != "" {
 			return backend.Get(ref.stack, ref.component, ref.path)

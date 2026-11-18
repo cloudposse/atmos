@@ -912,6 +912,12 @@ func TestExecute_HandlerError_DoesNotPropagateToExecute(t *testing.T) {
 }
 
 func TestDetectStoreFromEnv(t *testing.T) {
+	t.Run("Gitea does not select GitHub artifacts", func(t *testing.T) {
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+		t.Setenv("GITHUB_ACTIONS", "true")
+		t.Setenv("GITEA_ACTIONS", "true")
+		assert.Nil(t, detectStoreFromEnv())
+	})
 	t.Run("no env vars returns nil", func(t *testing.T) {
 		// Clear relevant env vars.
 		t.Setenv("ATMOS_PLANFILE_BUCKET", "")

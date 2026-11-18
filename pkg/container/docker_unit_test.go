@@ -643,12 +643,12 @@ func TestParseDockerPorts(t *testing.T) {
 		{
 			name:     "docker published port with ipv4 and ipv6 entries",
 			portsStr: "0.0.0.0:54321->4566/tcp, [::]:54321->4566/tcp",
-			expected: []PortBinding{{ContainerPort: 4566, HostPort: 54321, Protocol: "tcp"}},
+			expected: []PortBinding{{Bind: "0.0.0.0", ContainerPort: 4566, HostPort: 54321, Protocol: "tcp"}, {Bind: "::", ContainerPort: 4566, HostPort: 54321, Protocol: "tcp"}},
 		},
 		{
 			name:     "loopback published udp port",
 			portsStr: "127.0.0.1:15353->53/udp",
-			expected: []PortBinding{{ContainerPort: 53, HostPort: 15353, Protocol: "udp"}},
+			expected: []PortBinding{{Bind: "127.0.0.1", ContainerPort: 53, HostPort: 15353, Protocol: "udp"}},
 		},
 		{
 			name:     "unpublished container port ignored",
@@ -663,7 +663,7 @@ func TestParseDockerPorts(t *testing.T) {
 		{
 			name:     "mixed published and unpublished ports",
 			portsStr: "80/tcp, 0.0.0.0:18080->8080/tcp",
-			expected: []PortBinding{{ContainerPort: 8080, HostPort: 18080, Protocol: "tcp"}},
+			expected: []PortBinding{{Bind: "0.0.0.0", ContainerPort: 8080, HostPort: 18080, Protocol: "tcp"}},
 		},
 	}
 

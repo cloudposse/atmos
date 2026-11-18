@@ -376,6 +376,19 @@ func TestBuildEphemeralPreviewAllOptions(t *testing.T) {
 	assert.Contains(t, preview, "--network=host alpine:latest /bin/sh -lc echo ok")
 }
 
+func TestBuildEphemeralPreviewKeepsBindAddress(t *testing.T) {
+	preview := BuildEphemeralPreview("docker", &EphemeralConfig{
+		Image: "alpine:latest",
+		Ports: []PortBinding{
+			{Bind: "127.0.0.1", HostPort: 3000, ContainerPort: 3000, Protocol: "tcp"},
+			{Bind: "::1", ContainerPort: 4000, Protocol: "tcp"},
+		},
+	})
+
+	assert.Contains(t, preview, "-p 127.0.0.1:3000:3000/tcp")
+	assert.Contains(t, preview, "-p [::1]::4000/tcp")
+}
+
 func TestBuildImagePreviews(t *testing.T) {
 	buildPreview := BuildImageBuildPreview("", &BuildConfig{
 		Dockerfile: "Dockerfile",

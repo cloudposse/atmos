@@ -228,7 +228,7 @@ func ExecuteTerraformGenerateBackends(
 						return err
 					}
 				} else {
-					stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
+					stackName, err = cfg.GetContextPrefix(stackFileName, &context, GetStackNamePattern(atmosConfig), stackFileName)
 					if err != nil {
 						return err
 					}
@@ -380,7 +380,7 @@ func ExecuteTerraformGenerateBackends(
 					} else {
 						// Replace the tokens in the file template
 						// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
-						backendFilePath = cfg.ReplaceContextTokens(context, fileTemplate)
+						backendFilePath = cfg.ReplaceContextTokens(&context, fileTemplate)
 						backendFileAbsolutePath, err = filepath.Abs(backendFilePath)
 						if err != nil {
 							return err

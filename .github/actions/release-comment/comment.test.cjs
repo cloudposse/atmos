@@ -94,3 +94,16 @@ test('comment write failures propagate and stop later notifications', async () =
   await assert.rejects(notify(api), /comment forbidden/);
   assert.deepEqual(api.calls.comments.map(c => c.issue_number), [41]);
 });
+
+test('comment body is unindented markdown so GitHub renders the link and hides the marker', async () => {
+  const api = fixture({ associations: [[41]] });
+  await notify(api);
+  const { body } = api.calls.comments[0];
+  assert.equal(
+    body,
+    `<!-- release-pr-comment:${release.id} -->\nThese changes were released in [${release.name}](${release.html_url}).`,
+  );
+  for (const line of body.split('\n')) {
+    assert.doesNotMatch(line, /^\s/, 'indented lines render as a code block on GitHub');
+  }
+});

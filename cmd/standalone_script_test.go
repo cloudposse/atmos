@@ -197,7 +197,8 @@ func TestStandaloneStdinExecution(t *testing.T) {
 		{name: "script flags", source: `output = ctx.args`, args: []string{"-", "--help", "--chdir=script-owned", "--interpreter=script-owned"}, want: "[\"--help\",\"--chdir=script-owned\",\"--interpreter=script-owned\"]\n"},
 		{name: "load from working directory", source: "load(\"helper.star\", \"message\")\noutput = message", args: []string{"--interpreter=starlark", "-"}, want: "loaded from cwd\n"},
 		{name: "globals before stdin", source: `output = ctx.args`, args: []string{"--logs-level", "Off", "--interpreter=starlark", "-", "--chdir=script-owned"}, want: "[\"--chdir=script-owned\"]\n"},
-		{name: "traceback", source: `fail("stdin failure")`, args: []string{"-"}, errorText: "stdin failure"},
+		{name: "raised failure", source: `fail("stdin failure")`, args: []string{"-"}, errorText: "stdin failure"},
+		{name: "traceback", source: `output = 1 // 0`, args: []string{"-"}, errorText: "division by zero"},
 		{name: "empty source", args: []string{"-"}},
 		{name: "parsed arguments", source: "def main(args, flags):\n    print(args[\"name\"])\ncli.command(main, args=[cli.arg(\"name\")])", args: []string{"-", "--", "hello"}, want: "hello\n"},
 		{name: "missing required argument", source: "def main(args, flags):\n    fail(\"must not run\")\ncli.command(main, args=[cli.arg(\"name\")])", args: []string{"-"}, errorText: "missing required argument `<name>`"},
@@ -222,8 +223,13 @@ func TestStandaloneStdinExecution(t *testing.T) {
 			})
 			if tc.errorText != "" {
 				require.ErrorContains(t, err, tc.errorText)
-				if tc.name == "traceback" {
-					assert.Contains(t, strings.Join(cockroach.GetAllDetails(err), "\n"), "<stdin>:1:5")
+				details := strings.Join(cockroach.GetAllDetails(err), "\n")
+				switch tc.name {
+				case "traceback":
+					assert.Contains(t, details, "<stdin>:1:")
+				case "raised failure":
+					// Deliberately raised failures keep their message and log the traceback at debug level.
+					assert.Empty(t, details)
 				}
 			} else {
 				require.NoError(t, err)

@@ -408,3 +408,14 @@ func TestContainerHandlerValidateInvalidPullEchoesValue(t *testing.T) {
 	assert.Contains(t, formatted, "Pull policy must be", "default message should keep the valid-options explanation")
 	assert.Contains(t, formatted, "sometimes", "default message should echo the actual invalid value")
 }
+
+func TestContainerHandlerRejectsInvalidHost(t *testing.T) {
+	handler := &ContainerHandler{}
+	cfg, _, err := handler.buildRunConfig(context.Background(), &schema.WorkflowStep{
+		Name: "svc",
+		Run:  &schema.ContainerRunStep{Image: "alpine", Command: "echo ok", Ports: []schema.ContainerPort{{Host: "localhost:8080", Container: 80}}},
+	}, NewVariables())
+	require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+	require.ErrorContains(t, err, "ports[0].host")
+	assert.Nil(t, cfg)
+}

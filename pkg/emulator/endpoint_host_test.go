@@ -147,6 +147,33 @@ func TestParseLinuxDefaultGateway(t *testing.T) {
 	assert.Empty(t, parseLinuxDefaultGateway("Iface Destination Gateway\neth0 00000001 0102A8C0\n"))
 }
 
+func TestPublishedPortsHost(t *testing.T) {
+	tests := []struct {
+		name, bind, override, want string
+		inContainer                bool
+	}{
+		{name: "IPv6", bind: "[::1]", want: "::1"},
+		{name: "IPv4 wildcard", bind: "0.0.0.0", want: "localhost"},
+		{name: "IPv6 wildcard", bind: "[::]", want: "::1"},
+		{name: "unset", want: "localhost"},
+		{name: "override", bind: "::1", override: "emulator.internal", want: "emulator.internal"},
+		{name: "localhost override", bind: "::1", override: "localhost", want: "localhost"},
+		{name: "container gateway", bind: "::1", inContainer: true, want: "192.168.2.1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(envEmulatorEndpointHost, tt.override)
+			restore := stubEndpointHostDetection(t, tt.inContainer, "eth0 00000000 0102A8C0 0003 0 0 0 00000000 0 0 0\n")
+			defer restore()
+			origLookup := lookupHost
+			lookupHost = func(context.Context, string) ([]string, error) { return nil, errors.New("no such host") }
+			defer func() { lookupHost = origLookup }()
+			bindings := map[int]container.PortBinding{4566: {Bind: tt.bind}, 4571: {Bind: "192.0.2.1"}}
+			assert.Equal(t, tt.want, publishedPortsHost(bindings))
+		})
+	}
+}
+
 // stubEndpointHostDetection fakes containerization detection (now delegated to
 // container.ProcessRunsInContainer, an exported var directly reassignable by
 // any importing package's tests) and the /proc/net/route reader this package

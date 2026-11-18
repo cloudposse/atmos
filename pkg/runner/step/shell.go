@@ -50,13 +50,9 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		return nil, err
 	}
 
-	// Resolve working directory if specified.
-	workDir := step.WorkingDirectory
-	if workDir != "" {
-		workDir, err = vars.ResolveStepField(step, "working_directory", workDir)
-		if err != nil {
-			return nil, fmt.Errorf("step '%s': failed to resolve working_directory: %w", step.Name, err)
-		}
+	workDir, err := resolveShellWorkingDirectory(step, vars)
+	if err != nil {
+		return nil, err
 	}
 
 	envVars, err := h.resolveEnv(step, vars)
@@ -93,24 +89,8 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 
 	writer := NewOutputModeWriter(mode, step.Name, step.Viewport, GetShowConfig(step, nil))
 	writer.writers = vars.OutputWriters
-	stdout, stderr, err := h.runInterpreter(ctx, writer, shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars, params: vars.ScriptArgs, stdin: vars.HookStdin.take()})
-	if err == nil {
-		// The interpreter reports a background job that the deadline killed as success.
-		err = deadline.Expired()
-	}
-	if err != nil {
-		err = deadline.Wrap(err)
-		return NewStepResult(stdout).
-			WithError(stderr).
-			WithMetadata("stdout", stdout).
-			WithMetadata("stderr", stderr).
-			WithMetadata(exitCodeMetadata, getExitCode(err)), err
-	}
-
-	return NewStepResult(stdout).
-		WithMetadata("stdout", stdout).
-		WithMetadata("stderr", stderr).
-		WithMetadata(exitCodeMetadata, 0), nil
+	stdout, stderr, err := h.runInterpreter(ctx, writer, &shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars, params: vars.ScriptArgs, stdin: vars.HookStdin.take()})
+	return shellExecutionResult(stdout, stderr, err, deadline, false)
 }
 
 // shellRunSpec holds the resolved inputs for a single shell execution.
@@ -130,7 +110,7 @@ type shellRunSpec struct {
 // gives registry consumers (hooks, custom commands, parallel/matrix children)
 // the same cross-platform, masked, exit-code-preserving shell semantics the
 // workflow executor already used, instead of depending on the host `/bin/sh`.
-func (h *ShellHandler) runInterpreter(ctx context.Context, writer *OutputModeWriter, spec shellRunSpec) (string, string, error) {
+func (h *ShellHandler) runInterpreter(ctx context.Context, writer *OutputModeWriter, spec *shellRunSpec) (string, string, error) {
 	stdin := spec.stdin
 	if stdin == nil {
 		stdin = os.Stdin
@@ -199,13 +179,9 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 		return nil, err
 	}
 
-	// Resolve working directory if specified.
-	workDir := step.WorkingDirectory
-	if workDir != "" {
-		workDir, err = vars.ResolveStepField(step, "working_directory", workDir)
-		if err != nil {
-			return nil, fmt.Errorf("step '%s': failed to resolve working_directory: %w", step.Name, err)
-		}
+	workDir, err := resolveShellWorkingDirectory(step, vars)
+	if err != nil {
+		return nil, err
 	}
 
 	envVars, err := h.resolveEnv(step, vars)
@@ -241,24 +217,8 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 
 	writer := NewOutputModeWriter(mode, step.Name, viewport, show)
 	writer.writers = vars.OutputWriters
-	stdout, stderr, err := h.runInterpreter(ctx, writer, shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars, params: vars.ScriptArgs, stdin: vars.HookStdin.take()})
-	if err == nil {
-		// The interpreter reports a background job that the deadline killed as success.
-		err = deadline.Expired()
-	}
-	if err != nil {
-		err = deadline.Wrap(err)
-		return NewStepResult(stdout).
-			WithError(stderr).
-			WithMetadata("stdout", stdout).
-			WithMetadata("stderr", stderr).
-			WithMetadata(exitCodeMetadata, getExitCode(err)), err
-	}
-
-	return NewStepResult(strings.TrimSpace(stdout)).
-		WithMetadata("stdout", stdout).
-		WithMetadata("stderr", stderr).
-		WithMetadata(exitCodeMetadata, 0), nil
+	stdout, stderr, err := h.runInterpreter(ctx, writer, &shellRunSpec{stepName: step.Name, command: command, workDir: workDir, env: envVars, params: vars.ScriptArgs, stdin: vars.HookStdin.take()})
+	return shellExecutionResult(stdout, stderr, err, deadline, true)
 }
 
 func (h *ShellHandler) resolveEnv(step *schema.WorkflowStep, vars *Variables) ([]string, error) {
@@ -277,4 +237,40 @@ func (h *ShellHandler) resolveEnv(step *schema.WorkflowStep, vars *Variables) ([
 		env = envpkg.UpdateEnvVar(env, key, value)
 	}
 	return env, nil
+}
+
+func resolveShellWorkingDirectory(step *schema.WorkflowStep, vars *Variables) (string, error) {
+	if step.WorkingDirectory == "" {
+		return "", nil
+	}
+	workDir, err := vars.ResolveStepField(step, "working_directory", step.WorkingDirectory)
+	if err != nil {
+		return "", fmt.Errorf("step '%s': failed to resolve working_directory: %w", step.Name, err)
+	}
+	return workDir, nil
+}
+
+// shellExecutionResult preserves raw stream metadata while optionally trimming the primary value.
+func shellExecutionResult(stdout, stderr string, err error, deadline *StepDeadline, trim bool) (*StepResult, error) {
+	if err == nil {
+		// The interpreter reports a background job that the deadline killed as success.
+		err = deadline.Expired()
+	}
+	if err != nil {
+		err = deadline.Wrap(err)
+		return NewStepResult(stdout).
+			WithError(stderr).
+			WithMetadata("stdout", stdout).
+			WithMetadata("stderr", stderr).
+			WithMetadata(exitCodeMetadata, getExitCode(err)), err
+	}
+
+	value := stdout
+	if trim {
+		value = strings.TrimSpace(stdout)
+	}
+	return NewStepResult(value).
+		WithMetadata("stdout", stdout).
+		WithMetadata("stderr", stderr).
+		WithMetadata(exitCodeMetadata, 0), nil
 }

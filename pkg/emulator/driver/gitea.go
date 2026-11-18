@@ -17,8 +17,13 @@ import (
 // A fresh Gitea boots installed-but-empty (INSTALL_LOCK skips the web wizard);
 // the manager's git bootstrap then creates the admin user and the deployment
 // repository, mirroring the Vault/OpenBao bootstrap.
+//
+// Gitea Actions is enabled with a preset instance-wide runner registration token,
+// so a Gitea runner container (gitea/runner) on the stack's shared network can
+// register itself with no bootstrap step. The image must be Gitea 1.23 or later
+// for the preset token and 1.25.6 or later for complete workflow_run support.
 const (
-	giteaImage = "gitea/gitea:1.22"
+	giteaImage = "gitea/gitea:28.3"
 	// The giteaPort is Gitea's default HTTP listener (the smart-HTTP Git endpoint and API).
 	giteaPort = 3000
 	// The giteaDataDir is Gitea's persistent state root inside the container (its
@@ -40,6 +45,10 @@ func giteaEnv() map[string]string {
 		"GITEA__server__DOMAIN":         "localhost",
 		// Keep the demo self-contained: no email, no captcha, local accounts only.
 		"GITEA__service__DISABLE_REGISTRATION": "true",
+		// Run GitHub-Actions-compatible workflows from .gitea/workflows. Gitea creates
+		// GITEA_RUNNER_REGISTRATION_TOKEN as an instance-wide runner token at startup.
+		"GITEA__actions__ENABLED":         "true",
+		"GITEA_RUNNER_REGISTRATION_TOKEN": emu.GiteaRunnerRegistrationToken,
 	}
 }
 
