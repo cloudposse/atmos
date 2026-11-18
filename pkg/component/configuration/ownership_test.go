@@ -86,3 +86,36 @@ func TestTerragruntOwnershipFailsClosedWhenSignatureCannotBeRead(t *testing.T) {
 		})
 	}
 }
+
+func TestOwnedFilesRejectAncestorAliasAfterPreflight(t *testing.T) {
+	for _, policy := range []string{"overwrite_terragrunt", "remove_terragrunt", "remove"} {
+		t.Run(policy, func(t *testing.T) {
+			directory := t.TempDir()
+			require.NoError(t, os.Mkdir(filepath.Join(directory, "nested"), 0o700))
+			original := "# " + terragruntSignature + "\nkeep"
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "nested", "generated.tf"), []byte(original), 0o600))
+			root, err := os.OpenRoot(directory)
+			require.NoError(t, err)
+			defer root.Close()
+			file := schema.ComponentConfigurationFile{Path: filepath.Join("nested", "generated.tf"), Content: []byte("replacement"), IfExists: policy}
+			require.NoError(t, validateDestination(root, file.Path))
+			require.NoError(t, os.Rename(filepath.Join(directory, "nested"), filepath.Join(directory, "retained")))
+			if err := os.Symlink("retained", filepath.Join(directory, "nested")); err != nil {
+				t.Skipf("symlink unavailable: %v", err)
+			}
+			_, err = writeFile(root, file, "")
+			require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+			contents, err := os.ReadFile(filepath.Join(directory, "retained", "generated.tf"))
+			require.NoError(t, err)
+			require.Equal(t, original, string(contents))
+		})
+	}
+}
+
+func TestRemoveMissingGeneratedFileDoesNotCreateDirectories(t *testing.T) {
+	for _, policy := range []string{"remove", "remove_terragrunt"} {
+		directory := t.TempDir()
+		require.NoError(t, WriteFiles(directory, []schema.ComponentConfigurationFile{{Path: filepath.Join("missing", "generated.tf"), IfExists: policy}}))
+		require.NoDirExists(t, filepath.Join(directory, "missing"))
+	}
+}

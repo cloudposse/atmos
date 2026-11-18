@@ -1,0 +1,413 @@
+package service_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/artifacttest"
+	"github.com/cloudposse/atmos/pkg/artifact/service"
+)
+
+var errTransport = errors.New("connection reset")
+
+func TestPublish_InterruptionBeforePayloadLeavesNothingAndRetryCreates(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	src := e.source("hello")
+	e.repos["dst"].InjectFailure(artifacttest.FailBeforePayload, errTransport, 1)
+
+	outcome, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", src))
+	require.ErrorIs(t, err, errTransport)
+	assert.Empty(t, outcome.Operation.Outcome, "a failed write never reports success")
+	_, found := e.repos["dst"].RecordDigestOf(exampleRef)
+	assert.False(t, found)
+	assert.False(t, e.repos["dst"].IsPending(exampleRef))
+	assert.Equal(t, 1, e.repos["dst"].Calls("Publish"), "a non-temporary failure is never blind-retried")
+	assert.Empty(t, e.repos["dst"].HeldLocks())
+
+	retry, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", src))
+	require.NoError(t, err)
+	assert.Equal(t, artifact.OutcomeCreated, retry.Operation.Outcome)
+}
+
+func TestPublish_InterruptionDuringPayloadOrAfterMetadataIsAmbiguousUntilSameIntentRetry(t *testing.T) {
+	for _, point := range []artifacttest.FailPoint{artifacttest.FailDuringPayload, artifacttest.FailAfterMetadata} {
+		t.Run(string(point), func(t *testing.T) {
+			e := newEnv(t, envConfig{})
+			src := e.source("hello")
+			e.repos["dst"].InjectFailure(point, errTransport, 1)
+
+			outcome, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", src))
+			require.ErrorIs(t, err, errUtils.ErrArtifactPublicationAmbiguous)
+			require.ErrorIs(t, err, errTransport, "the cause is retained for diagnostics")
+			assert.Contains(t, err.Error(), outcome.Operation.OperationID, "recovery diagnostics name the operation")
+			assert.Empty(t, outcome.Operation.Outcome, "partial work is never advertised as success")
+			assert.True(t, e.repos["dst"].IsPending(exampleRef), "the reference stays unavailable")
+			assert.Equal(t, 1, e.repos["dst"].Calls("Publish"), "no blind retry of an ambiguous mutation")
+			assert.Empty(t, e.repos["dst"].HeldLocks())
+
+			_, err = e.svc.Inspect(context.Background(), artifact.InspectRequest{Repository: "dst", Ref: exampleRef})
+			require.ErrorIs(t, err, errUtils.ErrArtifactPublicationUnavailable, "readers cannot see a pending publication")
+
+			retry, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", src))
+			require.NoError(t, err, "the same-intent retry repairs the interrupted publication")
+			assert.Equal(t, artifact.OutcomeCreated, retry.Operation.Outcome)
+			assert.False(t, e.repos["dst"].IsPending(exampleRef))
+			_, err = e.svc.Inspect(context.Background(), artifact.InspectRequest{Repository: "dst", Ref: exampleRef})
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestPublish_DifferentIntentCannotStealAPendingPublication(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	e.repos["dst"].InjectFailure(artifacttest.FailDuringPayload, errTransport, 1)
+	_, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", e.source("first")))
+	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationAmbiguous)
+
+	other, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", e.source("different")))
+	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationUnavailable)
+	assert.Contains(t, err.Error(), "op-1", "the pending operation ID is surfaced for recovery")
+	assert.Empty(t, other.Operation.Outcome)
+}
+
+func TestPublish_CommitWithLostResponseIsReconciledNotRetried(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	src := e.source("hello")
+	e.repos["dst"].InjectFailure(artifacttest.FailAfterCommit, errTransport, 1)
+
+	outcome, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", src))
+	require.NoError(t, err, "success only after reconciliation read the completed reference")
+	assert.Equal(t, artifact.OutcomeCreated, outcome.Operation.Outcome)
+	assert.Equal(t, 1, e.repos["dst"].Calls("Publish"), "reconciliation replaces the retry")
+	var reconciled bool
+	for _, diagnostic := range outcome.Operation.Diagnostics {
+		reconciled = reconciled || diagnostic.Code == "reconciled"
+	}
+	assert.True(t, reconciled, "the reconciliation is reported")
+	assert.Contains(t, e.journal.phases(), service.PhaseReconciled)
+	current, ok := e.repos["dst"].RecordDigestOf(exampleRef)
+	require.True(t, ok)
+	assert.Equal(t, outcome.Operation.RecordDigest, current)
+}
+
+func TestPublish_CommitWithLostResponseOnReplacementIsReconciled(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	e.publish("dst", e.source("first"))
+	e.repos["dst"].InjectFailure(artifacttest.FailAfterCommit, errTransport, 1)
+	request := e.publishRequest("dst", e.source("second"))
+	request.Force = true
+	outcome, err := e.svc.PublishDetailed(context.Background(), request)
+	require.NoError(t, err)
+	assert.Equal(t, artifact.OutcomeReplaced, outcome.Operation.Outcome)
+}
+
+func TestPublish_TemporaryFailuresRetryOnlyAfterReconciliationProvesNothingCommitted(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	src := e.source("hello")
+	e.repos["dst"].InjectFailure(artifacttest.FailBeforePayload, &temporaryError{"throttled"}, 2)
+
+	outcome, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", src))
+	require.NoError(t, err)
+	assert.Equal(t, artifact.OutcomeCreated, outcome.Operation.Outcome)
+	assert.Equal(t, 3, e.repos["dst"].Calls("Publish"))
+	e.sleepMu.Lock()
+	assert.Equal(t, []time.Duration{time.Millisecond, 2 * time.Millisecond}, e.sleeps, "exponential backoff")
+	e.sleepMu.Unlock()
+
+	var attempts []int
+	for _, entry := range e.journal.snapshot() {
+		assert.Equal(t, "op-1", entry.OperationID, "every attempt reuses the operation ID")
+		if entry.Phase == service.PhasePending {
+			attempts = append(attempts, entry.Attempt)
+		}
+	}
+	assert.Equal(t, []int{1, 2, 3}, attempts)
+}
+
+func TestPublish_TemporaryFailureExhaustsAttempts(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	e.repos["dst"].InjectFailure(artifacttest.FailBeforePayload, &temporaryError{"throttled"}, 10)
+	_, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", e.source("hello")))
+	var temporary *temporaryError
+	require.ErrorAs(t, err, &temporary)
+	assert.Equal(t, 3, e.repos["dst"].Calls("Publish"))
+}
+
+func TestPublish_CancellationDuringUncommittedWriteIsPreserved(t *testing.T) {
+	caps := artifacttest.DefaultCapabilities()
+	m := newMockSetup(t, &caps)
+	m.expectLock()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	gomock.InOrder(
+		m.repo.EXPECT().Resolve(gomock.Any(), exampleRef).Return(artifact.PinnedReference{}, errUtils.ErrArtifactNotFound),
+		m.repo.EXPECT().Publish(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *artifact.PreparedArtifact, artifact.PublishOptions) (*artifact.PublishResult, error) {
+			cancel()
+			return nil, errTransport
+		}),
+		m.repo.EXPECT().Resolve(gomock.Any(), exampleRef).Return(artifact.PinnedReference{}, errUtils.ErrArtifactNotFound),
+	)
+	_, err := m.svc.Publish(ctx, m.e.publishRequest("dst", m.e.source("hello")))
+	require.ErrorIs(t, err, errTransport)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestPublish_ExecutionAttemptLimitIsHonored(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	e.repos["dst"].InjectFailure(artifacttest.FailBeforePayload, &temporaryError{"throttled"}, 10)
+	request := e.publishRequest("dst", e.source("hello"))
+	request.Execution.MaxAttempts = 1
+	_, err := e.svc.PublishDetailed(context.Background(), request)
+	require.Error(t, err)
+	assert.Equal(t, 1, e.repos["dst"].Calls("Publish"))
+}
+
+func TestPublish_TemporaryFailureAfterCommitIsReconciledWithoutRetry(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	e.repos["dst"].InjectFailure(artifacttest.FailAfterCommit, &temporaryError{"timeout"}, 5)
+	outcome, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", e.source("hello")))
+	require.NoError(t, err)
+	assert.Equal(t, artifact.OutcomeCreated, outcome.Operation.Outcome)
+	assert.Equal(t, 1, e.repos["dst"].Calls("Publish"), "a committed publication is never repeated")
+}
+
+func TestPublish_DateRolloverAcrossRetriesReusesCapturedTime(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	e.clock.Set(time.Date(2026, 3, 4, 23, 59, 59, 0, time.UTC))
+	e.onSleep = func(time.Duration) { e.clock.Advance(2 * time.Second) } // Crosses midnight between attempts.
+	e.repos["dst"].InjectFailure(artifacttest.FailBeforePayload, &temporaryError{"throttled"}, 1)
+
+	outcome, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", e.source("hello")))
+	require.NoError(t, err)
+	assert.Equal(t, "2026-03-04T23:59:59Z", outcome.Record.CreatedAt.String(), "the retry reuses the time captured before the first attempt")
+	assert.Equal(t, 2, e.repos["dst"].Calls("Publish"))
+	assert.Equal(t, "op-1", outcome.Operation.OperationID)
+	assert.Equal(t, []service.JournalPhase{
+		service.PhasePrepared, service.PhaseLocked, service.PhasePending, service.PhasePending, service.PhaseCommitted, service.PhaseReleased,
+	}, e.journal.phases(), "one lifecycle, two attempts")
+}
+
+func TestPublish_FailedForceReplacementLeavesReferenceUnavailableUntilSameIntentRetry(t *testing.T) {
+	e := newEnv(t, envConfig{})
+	first := e.publish("dst", e.source("first"))
+	oldPinned, err := e.repos["dst"].Resolve(context.Background(), exampleRef)
+	require.NoError(t, err)
+
+	e.repos["dst"].InjectFailure(artifacttest.FailDuringPayload, errTransport, 1)
+	request := e.publishRequest("dst", e.source("second"))
+	request.Force = true
+	_, err = e.svc.PublishDetailed(context.Background(), request)
+	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationAmbiguous)
+	assert.True(t, e.repos["dst"].IsPending(exampleRef))
+	_, err = e.repos["dst"].Resolve(context.Background(), exampleRef)
+	require.ErrorIs(t, err, errUtils.ErrArtifactPublicationUnavailable, "no rollback is claimed: the reference is unavailable, not silently the old version")
+
+	retried, err := e.svc.PublishDetailed(context.Background(), request)
+	require.NoError(t, err)
+	assert.Equal(t, artifact.OutcomeReplaced, retried.Operation.Outcome)
+	assert.NotEqual(t, first.Operation.RecordDigest, retried.Operation.RecordDigest)
+
+	_, err = e.repos["dst"].Read(context.Background(), oldPinned)
+	require.ErrorIs(t, err, errUtils.ErrArtifactNotFound, "the old digest never serves the replacement's bytes")
+}
+
+func TestPublish_TwoWritersOneReferenceLockSerializesThem(t *testing.T) {
+	const writers = 8
+	e := newEnv(t, envConfig{})
+	sources := make([]string, writers)
+	for i := range sources {
+		sources[i] = e.source(fmt.Sprintf("content-%d", i))
+	}
+	var wg sync.WaitGroup
+	var created, conflicts atomic.Int64
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", sources[i]))
+			switch {
+			case err == nil:
+				created.Add(1)
+			case errors.Is(err, errUtils.ErrArtifactConflict):
+				conflicts.Add(1)
+			default:
+				t.Errorf("unexpected error: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	assert.Equal(t, int64(1), created.Load(), "exactly one writer wins the reference")
+	assert.Equal(t, int64(writers-1), conflicts.Load())
+	assert.Empty(t, e.repos["dst"].HeldLocks())
+	assert.Equal(t, 1, e.repos["dst"].Calls("Publish"), "losers conflict before writing anything")
+}
+
+func TestPublish_TwoWritersWithIdenticalIntentCreateOnce(t *testing.T) {
+	const writers = 6
+	e := newEnv(t, envConfig{})
+	src := e.source("same")
+	var wg sync.WaitGroup
+	var created, unchanged atomic.Int64
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			outcome, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", src))
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+			switch outcome.Operation.Outcome {
+			case artifact.OutcomeCreated:
+				created.Add(1)
+			case artifact.OutcomeUnchanged:
+				unchanged.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	assert.Equal(t, int64(1), created.Load())
+	assert.Equal(t, int64(writers-1), unchanged.Load())
+	assert.Equal(t, 1, e.repos["dst"].Calls("Publish"))
+}
+
+// unlockedRepository hides the writer lock so the repository's own conditional guard is exercised.
+// It forwards every other operation to base through the generated repository mock.
+func unlockedRepository(t *testing.T, base artifact.Repository) *artifact.MockRepository {
+	t.Helper()
+	return delegatingRepository(t, base, repoHooks{lock: func(_ context.Context, request artifact.LockRequest) (artifact.LockHandle, error) {
+		handle := artifact.NewMockLockHandle(gomock.NewController(t))
+		handle.EXPECT().Resource().Return(request.Resource).AnyTimes()
+		handle.EXPECT().Owner().Return("noop").AnyTimes()
+		handle.EXPECT().Scope().Return(artifact.LockScopeHost).AnyTimes()
+		handle.EXPECT().Token().Return("noop").AnyTimes()
+		handle.EXPECT().ExpiresAt().Return(time.Time{}, false).AnyTimes()
+		handle.EXPECT().Renew(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+		handle.EXPECT().Release(gomock.Any()).Return(nil).AnyTimes()
+		return handle, nil
+	}})
+}
+
+func TestPublish_ConditionalGuardRejectsRacingWritersEvenWithoutAWriterLock(t *testing.T) {
+	const writers = 6
+	e := newEnv(t, envConfig{})
+	bare := artifacttest.New(artifacttest.Options{Alias: "bare"})
+	e.static.Repositories["bare"] = unlockedRepository(t, bare)
+	e.static.Info["bare"] = service.RepositoryInfo{Alias: "bare", Capabilities: bare.Capabilities(), Packaging: artifact.PackagingNone}
+
+	sources := make([]string, writers)
+	for i := range sources {
+		sources[i] = e.source(fmt.Sprintf("racing-%d", i))
+	}
+	var wg sync.WaitGroup
+	var wins atomic.Int64
+	var digests sync.Map
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			outcome, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("bare", sources[i]))
+			if err == nil {
+				wins.Add(1)
+				digests.Store(outcome.Operation.RecordDigest, true)
+			}
+		}()
+	}
+	wg.Wait()
+	assert.Equal(t, int64(1), wins.Load(), "exactly one writer wins the reference")
+	current, ok := bare.RecordDigestOf(exampleRef)
+	require.True(t, ok)
+	var count int
+	digests.Range(func(key, _ any) bool { count++; return true })
+	assert.Equal(t, int64(count), wins.Load(), "each reported success corresponds to a distinct committed record")
+	pinned, err := bare.Resolve(context.Background(), exampleRef)
+	require.NoError(t, err)
+	assert.Equal(t, current, pinned.RecordDigest, "the reference is bound to exactly one artifact")
+}
+
+func TestPublish_DelegatedLockIsTakenFromTheProvider(t *testing.T) {
+	e := newEnv(t, envConfig{repos: map[string]artifacttest.Options{"dst": {}, "coord": {}}})
+	e.setInfo("dst", func(info *service.RepositoryInfo) { info.LockProvider = "coord" })
+
+	outcome, err := e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", e.source("hello")))
+	require.NoError(t, err)
+	assert.Equal(t, artifact.OutcomeCreated, outcome.Operation.Outcome)
+	assert.Equal(t, 1, e.repos["coord"].Calls("Lock"), "the delegate provides the lock")
+	assert.Zero(t, e.repos["dst"].Calls("Lock"), "the target repository is not asked to lock")
+	assert.Empty(t, e.repos["coord"].HeldLocks(), "the delegated lock is released")
+
+	e.setInfo("dst", func(info *service.RepositoryInfo) { info.LockProvider = "" })
+	_, err = e.svc.PublishDetailed(context.Background(), e.publishRequest("dst", e.source("other")))
+	require.Error(t, err, "the second publish conflicts, but only after locking")
+	assert.Equal(t, 1, e.repos["dst"].Calls("Lock"), "without delegation the target repository locks for itself")
+}
+
+// A listing over the default repositories may be a partial success, and is then marked incomplete.
+// Cancellation is never that: the marker stays set, and the error says the listing did not finish.
+func TestList_CancellationIsNeverASuccessfulPartialListing(t *testing.T) {
+	tests := []struct {
+		name           string
+		beta           func(ctx context.Context, cancel context.CancelFunc) error
+		wantErr        error
+		wantIncomplete bool
+	}{
+		{"canceled while one repository was still listing", func(ctx context.Context, cancel context.CancelFunc) error {
+			cancel()
+			return ctx.Err()
+		}, context.Canceled, true},
+		{"canceled while one repository failed for another reason", func(_ context.Context, cancel context.CancelFunc) error {
+			cancel()
+			return errTransport
+		}, context.Canceled, true},
+		{"one repository failed without cancellation", func(context.Context, context.CancelFunc) error {
+			return errTransport
+		}, nil, true},
+		{"every repository listed", nil, nil, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, envConfig{repos: map[string]artifacttest.Options{"alpha": {}, "beta": {}}})
+			seedList(t, e, "alpha", map[string]string{"app/a:1": "a1"}, nil)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+
+			// Alpha completes first, so the failure of beta always meets one repository that succeeded.
+			alphaDone := make(chan struct{})
+			var once sync.Once
+			e.static.Repositories["alpha"] = delegatingRepository(t, e.repos["alpha"], repoHooks{list: func(ctx context.Context, query artifact.ListQuery) (*artifact.ListPage, error) {
+				page, err := e.repos["alpha"].List(ctx, query)
+				once.Do(func() { close(alphaDone) })
+				return page, err
+			}})
+			if tc.beta != nil {
+				e.static.Repositories["beta"] = delegatingRepository(t, e.repos["beta"], repoHooks{list: func(ctx context.Context, _ artifact.ListQuery) (*artifact.ListPage, error) {
+					<-alphaDone
+					return nil, tc.beta(ctx, cancel)
+				}})
+			}
+
+			result, err := e.svc.List(ctx, artifact.ListRequest{})
+
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr, "a canceled listing must not be reported as a success")
+			} else {
+				require.NoError(t, err)
+			}
+			require.NotNil(t, result)
+			assert.Equal(t, tc.wantIncomplete, result.Incomplete)
+			require.Len(t, result.Artifacts, 1, "what alpha returned stays visible")
+			assert.Equal(t, "app/a", result.Artifacts[0].Name)
+		})
+	}
+}

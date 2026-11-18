@@ -12,7 +12,28 @@ const maxConfigIncludeDepth = 100
 // configYamlDecoder keeps recursive include evaluation within one config read.
 // The shared include resolver supplies the correct file context for each subtree.
 type configYamlDecoder struct {
-	includes map[string]bool
+	includes     map[string]bool
+	path         []string
+	origin       func([]string, string, bool)
+	remoteSource string
+
+	// anchors holds each anchored node's single evaluation; evaluating guards against alias cycles.
+	anchors    map[*yaml.Node]*anchorEntry
+	evaluating map[*yaml.Node]bool
+
+	// aliasLimit overrides maxAliasExpansion when set; aliasExpanded is the number of values the
+	// aliases decoded so far have copied.
+	aliasLimit    int64
+	aliasExpanded int64
+
+	// nodeOrigin is the file the include or alias just decoded took its value from. The mapping
+	// entry that owns the value reads it so the setting's origin is the included file.
+	nodeOrigin *includeOrigin
+
+	// remoteTaint is the first remote include evaluated since it was last cleared. An include whose
+	// result is not a mapping (a scalar or a list) has no per-key origin records of its own, so a
+	// remote include nested anywhere inside it marks the whole result as remote-supplied.
+	remoteTaint *includeOrigin
 }
 
 // evaluateInclude resolves an included subtree using its file context and

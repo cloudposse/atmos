@@ -1,0 +1,464 @@
+package oci
+
+import (
+	"context"
+	"encoding/base64"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	"github.com/google/go-containerregistry/pkg/authn"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"oras.land/oras-go/v2/errdef"
+	"oras.land/oras-go/v2/registry/remote/auth"
+	"oras.land/oras-go/v2/registry/remote/errcode"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/keyring"
+)
+
+type failingAuthenticator struct{}
+
+func (failingAuthenticator) Authorization() (*authn.AuthConfig, error) { return nil, os.ErrPermission }
+
+func TestCredentialFromAdaptsEveryAuthenticatorShape(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString([]byte("encoded-user:encoded-secret"))
+	for _, tc := range []struct {
+		name          string
+		authenticator authn.Authenticator
+		want          auth.Credential
+		err           error
+	}{
+		{"nil authenticator is anonymous", nil, auth.EmptyCredential, nil},
+		{"anonymous", authn.Anonymous, auth.EmptyCredential, nil},
+		{"basic", &authn.Basic{Username: "u", Password: "p"}, auth.Credential{Username: "u", Password: "p"}, nil},
+		{"registry token", &authn.Bearer{Token: "access"}, auth.Credential{AccessToken: "access"}, nil},
+		{"identity token", authn.FromConfig(authn.AuthConfig{IdentityToken: "refresh"}), auth.Credential{RefreshToken: "refresh"}, nil},
+		{"base64 auth field", authn.FromConfig(authn.AuthConfig{Auth: encoded}), auth.Credential{Username: "encoded-user", Password: "encoded-secret"}, nil},
+		{"explicit fields win over auth field", authn.FromConfig(authn.AuthConfig{Username: "u", Password: "p", Auth: encoded}), auth.Credential{Username: "u", Password: "p"}, nil},
+		{"malformed auth field", authn.FromConfig(authn.AuthConfig{Auth: "!!"}), auth.EmptyCredential, errUtils.ErrOCIRegistry},
+		{"auth field without separator", authn.FromConfig(authn.AuthConfig{Auth: base64.StdEncoding.EncodeToString([]byte("nocolon"))}), auth.EmptyCredential, errUtils.ErrOCIRegistry},
+		{"authenticator failure fails closed", failingAuthenticator{}, auth.EmptyCredential, os.ErrPermission},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := credentialFrom(tc.authenticator)
+			if tc.err != nil {
+				require.ErrorIs(t, err, tc.err)
+				assert.Equal(t, auth.EmptyCredential, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestCredentialsAreReleasedOnlyToTheirRegistry(t *testing.T) {
+	credential := hostScopedCredential("registry.example.com:5000", &authn.Basic{Username: "u", Password: "p"})
+	for host, wantSecret := range map[string]bool{
+		"registry.example.com:5000": true,
+		"REGISTRY.example.com:5000": true,
+		"registry.example.com":      false,
+		"evil.example.com:5000":     false,
+		"auth.example.com":          false,
+	} {
+		got, err := credential(t.Context(), host)
+		require.NoError(t, err)
+		assert.Equal(t, wantSecret, got.Password == "p", host)
+	}
+
+	hub := hostScopedCredential("docker.io", &authn.Basic{Username: "u", Password: "p"})
+	got, err := hub(t.Context(), "registry-1.docker.io")
+	require.NoError(t, err)
+	assert.Equal(t, "p", got.Password, "Docker Hub traffic is redirected to its API endpoint")
+	assert.Equal(t, "docker.io", orasHost("index.docker.io"))
+	assert.Equal(t, "ghcr.io", orasHost("ghcr.io"))
+}
+
+func TestRepositoryFailsClosedBeforeAnyRequest(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "http://")
+	repository := Repository{Registry: host, Path: "acme/plugin"}
+	resource, err := repository.legacy()
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name    string
+		auth    authn.Authenticator
+		matched bool
+		err     error
+	}{
+		{"resolver error", nil, true, os.ErrPermission},
+		{"matched identity without credentials", nil, true, nil},
+		{"matched identity resolves to anonymous", authn.Anonymous, true, nil},
+		{"bound authenticator cannot authorize", failingAuthenticator{}, true, nil},
+		{"matched identity with an empty credential", authn.FromConfig(authn.AuthConfig{}), true, nil},
+		{"matched identity with an empty basic credential", authn.FromConfig(authn.AuthConfig{Auth: base64.StdEncoding.EncodeToString([]byte(":"))}), true, nil},
+		{"matched identity with a username only", authn.FromConfig(authn.AuthConfig{Username: "identity"}), true, nil},
+		{"matched identity with a password only", authn.FromConfig(authn.AuthConfig{Password: "bound"}), true, nil},
+		{"matched identity with a username-only basic credential", authn.FromConfig(authn.AuthConfig{Auth: base64.StdEncoding.EncodeToString([]byte("identity:"))}), true, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			controller := gomock.NewController(t)
+			resolver := NewMockAuthenticationResolver(controller)
+			resolver.EXPECT().Resolve(gomock.Any(), resource).Return(tc.auth, tc.matched, tc.err)
+			// Neither ambient keyring credentials nor anonymous access may stand in for the identity.
+			store := keyring.NewMockKeyring(controller)
+			client := NewClient(nil, WithAuthenticationResolver(resolver), WithKeychain(CredentialKeychain{Store: store}))
+			opened, err := client.Repository(t.Context(), repository)
+			require.ErrorIs(t, err, errUtils.ErrOCIRegistry)
+			if tc.err != nil {
+				require.ErrorIs(t, err, tc.err)
+			}
+			assert.Nil(t, opened)
+		})
+	}
+	assert.Zero(t, requests.Load(), "no request may reach the registry when the identity cannot be resolved")
+}
+
+// A bound identity must be able to produce an Authorization header: a token, or a username with a
+// password. These shapes are accepted.
+func TestNonEmptyCredentialAcceptsSendableCredentials(t *testing.T) {
+	for name, config := range map[string]authn.AuthConfig{
+		"username and password":      {Username: "identity", Password: "bound"},
+		"access token":               {RegistryToken: "token"},
+		"refresh token":              {IdentityToken: "refresh"},
+		"encoded basic":              {Auth: base64.StdEncoding.EncodeToString([]byte("identity:bound"))},
+		"username with encoded auth": {Username: "publisher", Auth: base64.StdEncoding.EncodeToString([]byte("publisher:secret"))},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := nonEmptyCredential{Authenticator: authn.FromConfig(config)}.Authorization()
+			require.NoError(t, err)
+			assert.NotNil(t, got)
+		})
+	}
+}
+
+// An authorization failure from the bound identity carries the registry sentinel and its cause.
+func TestNonEmptyCredentialClassifiesAuthorizationFailures(t *testing.T) {
+	_, err := nonEmptyCredential{Authenticator: failingAuthenticator{}}.Authorization()
+	require.ErrorIs(t, err, errUtils.ErrOCIRegistry)
+	assert.ErrorIs(t, err, os.ErrPermission)
+}
+
+func TestBoundIdentityTakesPrecedenceOverAmbientCredentials(t *testing.T) {
+	var seen atomic.Value
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if user, password, ok := r.BasicAuth(); ok {
+			seen.Store(user + ":" + password)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"name":"acme/plugin","tags":["1.0.0"]}`))
+			return
+		}
+		w.Header().Set("WWW-Authenticate", `Basic realm="registry"`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(server.Close)
+	host := strings.TrimPrefix(server.URL, "http://")
+	repository := Repository{Registry: host, Path: "acme/plugin"}
+	resource, err := repository.legacy()
+	require.NoError(t, err)
+
+	controller := gomock.NewController(t)
+	resolver := NewMockAuthenticationResolver(controller)
+	resolver.EXPECT().Resolve(gomock.Any(), resource).Return(&authn.Basic{Username: "identity", Password: "bound"}, true, nil)
+	store, err := keyring.New(keyring.Config{Type: keyring.TypeMemory})
+	require.NoError(t, err)
+	chain := CredentialKeychain{Store: store}
+	require.NoError(t, chain.Login(host, &authn.AuthConfig{Username: "ambient", Password: "stored"}))
+
+	client := NewClient(nil, WithAuthenticationResolver(resolver), WithKeychain(chain))
+	opened, err := client.Repository(t.Context(), repository)
+	require.NoError(t, err)
+	tags, err := opened.Tags(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"1.0.0"}, tags)
+	assert.Equal(t, "identity:bound", seen.Load())
+}
+
+func TestParseRepositoryUsesLegacyRegistryRules(t *testing.T) {
+	repository, err := ParseRepository("ghcr.io/acme/plugin")
+	require.NoError(t, err)
+	assert.Equal(t, Repository{Registry: "ghcr.io", Path: "acme/plugin"}, repository)
+	assert.Equal(t, "ghcr.io/acme/plugin", repository.String())
+
+	hub, err := ParseRepository("library/nginx")
+	require.NoError(t, err)
+	assert.Equal(t, Repository{Registry: "index.docker.io", Path: "library/nginx"}, hub)
+
+	_, err = ParseRepository("not a repository")
+	require.ErrorIs(t, err, errUtils.ErrOCIRegistry)
+	_, err = Repository{Registry: "bad registry", Path: "x"}.legacy()
+	require.ErrorIs(t, err, errUtils.ErrOCIRegistry)
+}
+
+func TestNewReferrersIndexRoundTripsDescriptors(t *testing.T) {
+	found := []ocispec.Descriptor{{
+		MediaType: ocispec.MediaTypeImageManifest, Size: 10, Digest: digest.FromString("a"),
+		ArtifactType: "application/vnd.dev.sigstore.bundle.v0.3+json", Annotations: map[string]string{"k": "v"},
+		Data:     []byte("inline"),
+		Platform: &ocispec.Platform{Architecture: "arm64", OS: "linux", OSVersion: "6.1", OSFeatures: []string{"f1", "f2"}, Variant: "v8"},
+	}}
+	index, err := newReferrersIndex(found)
+	require.NoError(t, err)
+	// Mutating the registry response afterwards must not reach the index (source to result isolation).
+	found[0].Data[0] = 'X'
+	found[0].Platform.OSFeatures[0] = "changed"
+	found[0].Annotations["k"] = "changed"
+	manifest, err := index.IndexManifest()
+	require.NoError(t, err)
+	require.Len(t, manifest.Manifests, 1)
+	assert.Equal(t, found[0].Digest.String(), manifest.Manifests[0].Digest.String())
+	assert.Equal(t, found[0].ArtifactType, manifest.Manifests[0].ArtifactType)
+	assert.Equal(t, map[string]string{"k": "v"}, manifest.Manifests[0].Annotations)
+	assert.Equal(t, []byte("inline"), manifest.Manifests[0].Data, "embedded data survives the conversion")
+	require.NotNil(t, manifest.Manifests[0].Platform, "the platform survives the conversion")
+	assert.Equal(t, &v1.Platform{Architecture: "arm64", OS: "linux", OSVersion: "6.1", OSFeatures: []string{"f1", "f2"}, Variant: "v8"}, manifest.Manifests[0].Platform)
+	size, err := index.Size()
+	require.NoError(t, err)
+	raw, err := index.RawManifest()
+	require.NoError(t, err)
+	assert.Equal(t, int64(len(raw)), size)
+	hash, err := index.Digest()
+	require.NoError(t, err)
+	assert.Equal(t, digest.FromBytes(raw).String(), hash.String())
+	_, err = index.Image(hash)
+	require.ErrorIs(t, err, errUtils.ErrOCIRegistry)
+	_, err = index.ImageIndex(hash)
+	require.ErrorIs(t, err, errUtils.ErrOCIRegistry)
+
+	_, err = newReferrersIndex([]ocispec.Descriptor{{Digest: "not-a-digest"}})
+	require.ErrorIs(t, err, errUtils.ErrOCIIntegrity)
+}
+
+func TestStatusClassification(t *testing.T) {
+	notFound := wrapRegistry(&errorResponse404)
+	assert.True(t, IsNotFound(notFound))
+	assert.Equal(t, http.StatusNotFound, statusOf(notFound))
+	assert.True(t, definiteRejection(wrapRegistry(&errorResponse403)))
+	assert.False(t, definiteRejection(wrapRegistry(errors.New("connection reset"))))
+	assert.False(t, definiteRejection(wrapRegistry(&errorResponse503)))
+	assert.False(t, IsNotFound(wrapRegistry(&errorResponse403)))
+	assert.False(t, IsNotFound(nil))
+	assert.NoError(t, wrapRegistry(nil))
+}
+
+var (
+	errorResponse404 = errcode.ErrorResponse{Method: http.MethodGet, StatusCode: http.StatusNotFound}
+	errorResponse403 = errcode.ErrorResponse{Method: http.MethodPut, StatusCode: http.StatusForbidden}
+	errorResponse503 = errcode.ErrorResponse{Method: http.MethodPut, StatusCode: http.StatusServiceUnavailable}
+)
+
+func TestReadSubjectClassifiesScanFailuresAsIntegrity(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		manifest string
+	}{
+		{"truncated manifest", `{"schemaVersion":2,"layers":[`},
+		{"malformed subject", `{"schemaVersion":2,"subject":{"size":"x"}}`},
+		{"not an object", `[1,2]`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := NewMockStore(ctrl)
+			desc := Descriptor(ocispec.MediaTypeImageManifest, []byte(tc.manifest))
+			store.EXPECT().Fetch(gomock.Any(), desc).Return(io.NopCloser(strings.NewReader(tc.manifest)), nil)
+
+			subject, err := readSubject(t.Context(), store, &desc)
+
+			require.ErrorIs(t, err, errUtils.ErrOCIIntegrity)
+			assert.Nil(t, subject)
+		})
+	}
+}
+
+func TestReadSubjectSkipsLongStringsAndFindsSubject(t *testing.T) {
+	subject := `{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + strings.Repeat("a", 64) + `","size":1}`
+	longString := strings.Repeat(`x\"y`, 1<<18)
+	for _, tc := range []struct {
+		name     string
+		manifest string
+		want     bool
+	}{
+		{"long string value then subject", `{"annotations":{"k":"` + longString + `"},"subject":` + subject + `}`, true},
+		{"long key is skipped", `{"` + strings.Repeat("k", 4096) + `":1,"subject":` + subject + `}`, true},
+		{"escaped subject key", `{"subject":` + subject + `}`, true},
+		{"scalars and nesting before subject", `{"a":1.5e3,"b":true,"c":null,"d":[{"e":"]}"}],"subject":` + subject + `}`, true},
+		{"long string without subject", `{"annotations":{"k":"` + longString + `"},"n":7}`, false},
+		{"empty object", `{}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := NewMockStore(ctrl)
+			desc := Descriptor(ocispec.MediaTypeImageManifest, []byte(tc.manifest))
+			store.EXPECT().Fetch(gomock.Any(), desc).Return(io.NopCloser(strings.NewReader(tc.manifest)), nil)
+
+			got, err := readSubject(t.Context(), store, &desc)
+
+			require.NoError(t, err)
+			if !tc.want {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, int64(1), got.Size)
+			assert.Equal(t, ocispec.MediaTypeImageManifest, got.MediaType)
+		})
+	}
+}
+
+func TestReadSubjectVerifiesTheWholeBodyBeforeAcceptingEitherResult(t *testing.T) {
+	subject := `{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + strings.Repeat("a", 64) + `","size":1}`
+	declared := `{"subject":` + subject + `,"annotations":{"k":"v"}}`
+	tampered := `{"subject":` + subject + `,"annotations":{"k":"w"}}`
+	tests := []struct {
+		name string
+		desc ocispec.Descriptor
+		body string
+	}{
+		{"subject found early but the tail is tampered", Descriptor(ocispec.MediaTypeImageManifest, []byte(declared)), tampered},
+		{"subject found early but the body is longer", Descriptor(ocispec.MediaTypeImageManifest, []byte(declared)), declared + " "},
+		{"no subject and the digest differs", Descriptor(ocispec.MediaTypeImageManifest, []byte(`{"a":1}`)), `{"a":2}`},
+		{"no subject and the body is shorter than declared", ocispec.Descriptor{MediaType: ocispec.MediaTypeImageManifest, Digest: digest.FromString(`{"a":1}   `), Size: 10}, `{"a":1}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := NewMockStore(ctrl)
+			store.EXPECT().Fetch(gomock.Any(), tc.desc).Return(io.NopCloser(strings.NewReader(tc.body)), nil)
+
+			got, err := readSubject(t.Context(), store, &tc.desc)
+
+			require.ErrorIs(t, err, errUtils.ErrOCIIntegrity)
+			assert.Nil(t, got)
+		})
+	}
+}
+
+// cancelAfterFirstReadReader serves a body and cancels the context once the first chunk was read. It
+// ignores the context otherwise, like ORAS local storage, and counts the bytes it served.
+type cancelAfterFirstReadReader struct {
+	reader io.Reader
+	cancel context.CancelFunc
+	served int64
+}
+
+func (c *cancelAfterFirstReadReader) Read(p []byte) (int, error) {
+	n, err := c.reader.Read(p)
+	c.served += int64(n)
+	c.cancel()
+	return n, err
+}
+
+func (c *cancelAfterFirstReadReader) Close() error { return nil }
+
+func TestReadSubjectStopsReadingWhenTheContextIsCanceled(t *testing.T) {
+	subject := `{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + strings.Repeat("a", 64) + `","size":1}`
+	padding := strings.Repeat("p", 4<<20)
+	tests := []struct {
+		name     string
+		manifest string
+	}{
+		{"subject found early with a large tail", `{"subject":` + subject + `,"annotations":{"k":"` + padding + `"}}`},
+		{"no subject and a large body", `{"annotations":{"k":"` + padding + `"}}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			store := NewMockStore(ctrl)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			desc := Descriptor(ocispec.MediaTypeImageManifest, []byte(tc.manifest))
+			body := &cancelAfterFirstReadReader{reader: strings.NewReader(tc.manifest), cancel: cancel}
+			store.EXPECT().Fetch(gomock.Any(), desc).Return(body, nil)
+
+			got, err := readSubject(ctx, store, &desc)
+
+			require.ErrorIs(t, err, context.Canceled)
+			assert.NotErrorIs(t, err, errUtils.ErrOCIIntegrity)
+			assert.Nil(t, got)
+			assert.Less(t, body.served, int64(len(tc.manifest)), "the canceled read must not consume the whole body")
+		})
+	}
+}
+
+func TestReadSubjectStillRejectsAWrongDigestWhenTheContextStaysActive(t *testing.T) {
+	subject := `{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"sha256:` + strings.Repeat("a", 64) + `","size":1}`
+	declared := `{"subject":` + subject + `,"annotations":{"k":"v"}}`
+	tampered := `{"subject":` + subject + `,"annotations":{"k":"w"}}`
+	ctrl := gomock.NewController(t)
+	store := NewMockStore(ctrl)
+	desc := Descriptor(ocispec.MediaTypeImageManifest, []byte(declared))
+	store.EXPECT().Fetch(gomock.Any(), desc).Return(io.NopCloser(strings.NewReader(tampered)), nil)
+
+	got, err := readSubject(t.Context(), store, &desc)
+
+	require.ErrorIs(t, err, errUtils.ErrOCIIntegrity)
+	assert.Nil(t, got)
+}
+
+func TestReadOnlyLayoutClassifiesEveryReadError(t *testing.T) {
+	store := NewMockRepositoryStore(gomock.NewController(t))
+	store.EXPECT().Fetch(gomock.Any(), gomock.Any()).Return(nil, os.ErrPermission)
+	store.EXPECT().Exists(gomock.Any(), gomock.Any()).Return(false, os.ErrPermission)
+	store.EXPECT().Resolve(gomock.Any(), gomock.Any()).Return(ocispec.Descriptor{}, os.ErrPermission)
+	store.EXPECT().Predecessors(gomock.Any(), gomock.Any()).Return(nil, os.ErrPermission)
+	layout := &readOnlyLayout{store: store}
+	_, fetchErr := layout.Fetch(t.Context(), ocispec.Descriptor{})
+	_, existsErr := layout.Exists(t.Context(), ocispec.Descriptor{})
+	_, resolveErr := layout.Resolve(t.Context(), "missing")
+	_, predecessorsErr := layout.Predecessors(t.Context(), ocispec.Descriptor{})
+	for _, err := range []error{fetchErr, existsErr, resolveErr, predecessorsErr} {
+		require.ErrorIs(t, err, errUtils.ErrOCILayout)
+		assert.ErrorIs(t, err, os.ErrPermission)
+	}
+}
+
+func TestReadOnlyLayoutMissingReferenceIsNotRegistryFailure(t *testing.T) {
+	directory := t.TempDir()
+	_, err := OpenLayout(t.Context(), directory)
+	require.NoError(t, err)
+	source, err := OpenLayoutReadOnly(t.Context(), directory)
+	require.NoError(t, err)
+	destination, err := OpenLayout(t.Context(), t.TempDir())
+	require.NoError(t, err)
+	_, err = Copy(t.Context(), Source{Store: source, Reference: "missing"}, Destination{Store: destination, Reference: "copy"})
+	require.ErrorIs(t, err, errUtils.ErrOCILayout)
+	assert.ErrorIs(t, err, errdef.ErrNotFound)
+	assert.NotErrorIs(t, err, errUtils.ErrOCIRegistry)
+}
+
+func TestRepositoryRegistryTokenIgnoresMalformedBasicAuth(t *testing.T) {
+	repository := Repository{Registry: "registry.example.com", Path: "acme/plugin"}
+	resource, err := repository.legacy()
+	require.NoError(t, err)
+	resolver := NewMockAuthenticationResolver(gomock.NewController(t))
+	resolver.EXPECT().Resolve(gomock.Any(), resource).Return(authn.FromConfig(authn.AuthConfig{RegistryToken: "valid-token", Auth: "!"}), true, nil)
+	client := NewClient(nil, WithAuthenticationResolver(resolver))
+	opened, err := client.Repository(t.Context(), repository)
+	require.NoError(t, err)
+	store, ok := opened.(*registryStore)
+	require.True(t, ok)
+	authClient, ok := store.repo.Client.(*auth.Client)
+	require.True(t, ok)
+	credential, err := authClient.Credential(t.Context(), repository.Registry)
+	require.NoError(t, err)
+	assert.Equal(t, "valid-token", credential.AccessToken)
+	assert.Empty(t, credential.Username)
+	assert.Empty(t, credential.Password)
+}

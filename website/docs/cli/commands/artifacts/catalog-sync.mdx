@@ -1,0 +1,79 @@
+---
+title: atmos artifacts catalog sync
+sidebar_label: catalog sync
+sidebar_class_name: command
+id: catalog-sync
+description: Merge an inventory's releases into the repository's published catalog.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Resolve the releases of an inventory and merge them into the latest published catalog. Entries the inventory does not mention are kept, so sync is safe to run on a schedule.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts catalog sync --help" src="/casts/screengrabs/atmos-artifacts-catalog-sync--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts catalog sync --repository=<alias> --input=<inventory> [flags]
+```
+
+## Examples
+
+```shell
+# Merge an inventory into the published catalog
+atmos artifacts catalog sync --repository=shared --input=inventory.yaml
+```
+
+## Behavior
+
+Sync takes the repository's lock when it provides one, reads the latest catalog, resolves each inventory ref, merges the releases, and publishes a new revision. A listed version whose tag now resolves to a different digest is updated and reported under `updated`. Nothing is removed: use [`remove`](/cli/commands/artifacts/catalog-remove) to unlist a release.
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(required)</em></dt>
+    <dd>
+        Configured repository alias the inventory refs are relative to. Its `catalog` setting selects the catalog.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--input` <em>(required)</em></dt>
+    <dd>
+        An `AtmosArtifactInventory` manifest listing the releases to merge.
+        Environment variable: `ATMOS_ARTIFACTS_INPUT`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Errors
+
+<dl>
+    <dt>Catalog not configured</dt>
+    <dd>The repository has no `catalog`. Nothing is written.</dd>
+
+    <dt>Reference not found</dt>
+    <dd>An inventory ref does not resolve in the repository. Nothing is written.</dd>
+
+    <dt>Catalog changed</dt>
+    <dd>Another writer published between the read and the write. Run the command again, and run only one catalog writer at a time.</dd>
+</dl>
+
+Every failure exits with a nonzero status.
+
+## Related
+
+- [`atmos artifacts catalog build`](/cli/commands/artifacts/catalog-build)
+- [`atmos artifacts catalog add`](/cli/commands/artifacts/catalog-add)
+- [Artifacts Configuration](/cli/configuration/artifacts)

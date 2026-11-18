@@ -234,10 +234,12 @@ func TestRunSessionAttachedWarnsWhenMaskingEnabled(t *testing.T) {
 	exe, err := os.Executable()
 	require.NoError(t, err)
 
-	cmd := exec.Command(exe, "-test.run=TestShellSessionHelper", "--", "sleep", "1ms")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, exe, "-test.run=TestShellSessionHelper", "--", "sleep", "1ms")
 	cmd.Env = os.Environ()
 
-	err = runSessionAttached(cmd, &ShellSessionSpec{EnableMasking: true})
+	err = runSessionAttached(ctx, cmd, &ShellSessionSpec{EnableMasking: true}, cancel)
 	require.NoError(t, err)
 }
 
@@ -263,12 +265,14 @@ func TestRunSessionAttachedWarnsWhenTTYRequested(t *testing.T) {
 	exe, err := os.Executable()
 	require.NoError(t, err)
 
-	cmd := exec.Command(exe, "-test.run=TestShellSessionHelper", "--", "sleep", "1ms")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, exe, "-test.run=TestShellSessionHelper", "--", "sleep", "1ms")
 	cmd.Env = os.Environ()
 
 	// TTY requested but running through the attached fallback: the loss of
 	// masking is unexpected, so the visible warning branch fires.
-	err = runSessionAttached(cmd, &ShellSessionSpec{TTY: true, EnableMasking: true})
+	err = runSessionAttached(ctx, cmd, &ShellSessionSpec{TTY: true, EnableMasking: true}, cancel)
 	require.NoError(t, err)
 }
 

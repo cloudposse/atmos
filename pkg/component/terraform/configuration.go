@@ -22,8 +22,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provisioner"
-	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/backend"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -366,14 +364,6 @@ func checkConfigurationWorkspace(info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
-// Workdir runtime paths generated artifacts must never write. They mirror the paths the
-// workdir sync preserves: Terraform data and workspace-state directories, Atmos metadata,
-// provider lock files at any depth, and the default local-backend state files at the root.
-var (
-	runtimeArtifactDirs  = map[string]bool{".terraform": true, "terraform.tfstate.d": true, workdir.AtmosDir: true}
-	runtimeArtifactFiles = map[string]bool{"terraform.tfstate": true, "terraform.tfstate.backup": true, ".terraform.tfstate.lock.info": true}
-)
-
 // rejectRuntimeArtifacts checks the whole artifact set before any file is written, so a
 // generated file can never replace Terraform state, provider locks, or workdir metadata,
 // even with an overwrite policy.
@@ -387,16 +377,7 @@ func rejectRuntimeArtifacts(files []schema.ComponentConfigurationFile) error {
 }
 
 func isRuntimeArtifact(path string) bool {
-	path = filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
-	if runtimeArtifactFiles[path] || strings.HasSuffix(path, provisioner.CanonicalLockFilename) {
-		return true
-	}
-	for _, segment := range strings.Split(path, "/") {
-		if runtimeArtifactDirs[segment] {
-			return true
-		}
-	}
-	return false
+	return configuration.IsRuntimeArtifact(path)
 }
 
 // planSnapshot is the configuration a saved plan is bound to: the provider identity and the
