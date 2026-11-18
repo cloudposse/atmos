@@ -95,11 +95,65 @@ func TestPatchPlaywrightDriver_ExternalCLIIsNoop(t *testing.T) {
 	assert.Equal(t, unpatchedCoreBundle, string(data))
 }
 
-// A driver that cannot run reports a seed error instead of being silently accepted.
-func TestPatchPlaywrightDriver_BrokenDriverFails(t *testing.T) {
-	seedFakePlaywrightDriver(t)
-	t.Setenv(fakePlaywrightNodeEnv, "0.0.0-mismatch")
+// A bundle without the expected code reports a seed error and is left untouched.
+func TestPatchPlaywrightDriver_UnexpectedBundleFails(t *testing.T) {
+	bundlePath := seedFakePlaywrightDriver(t)
+	const unexpected = "console.log('a different playwright-core release');"
+	require.NoError(t, os.WriteFile(bundlePath, []byte(unexpected), 0o644))
 
 	err := patchPlaywrightDriver()
 	require.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+
+	data, readErr := os.ReadFile(bundlePath)
+	require.NoError(t, readErr)
+	assert.Equal(t, unexpected, string(data))
+	assertNoStagedBundles(t, filepath.Dir(bundlePath))
+}
+
+// Regression: playwright-go rewrote the bundle in place, so a failed write truncated the live copy
+// and concurrent readers could see a partial file. The patch is now published by renaming a staged
+// file, so the patched bundle is a different file than the one that was patched.
+func TestPatchPlaywrightDriver_PublishesAtomically(t *testing.T) {
+	bundlePath := seedFakePlaywrightDriver(t)
+	before, err := os.Stat(bundlePath)
+	require.NoError(t, err)
+
+	require.NoError(t, patchPlaywrightDriver())
+
+	after, err := os.Stat(bundlePath)
+	require.NoError(t, err)
+	assert.False(t, os.SameFile(before, after), "the bundle must be replaced, not rewritten in place")
+	assert.Equal(t, before.Mode().Perm(), after.Mode().Perm(), "the bundle keeps its file mode")
+	assertNoStagedBundles(t, filepath.Dir(bundlePath))
+}
+
+// Negative path: an already patched bundle is not rewritten at all.
+func TestPatchPlaywrightDriver_PatchedBundleIsNotRewritten(t *testing.T) {
+	bundlePath := seedFakePlaywrightDriver(t)
+	require.NoError(t, patchPlaywrightDriver())
+	before, err := os.Stat(bundlePath)
+	require.NoError(t, err)
+
+	require.NoError(t, patchPlaywrightDriver())
+
+	after, err := os.Stat(bundlePath)
+	require.NoError(t, err)
+	assert.True(t, os.SameFile(before, after))
+}
+
+// A missing bundle next to a seeded CLI is reported, and nothing is created.
+func TestPatchPlaywrightDriver_MissingBundleFails(t *testing.T) {
+	bundlePath := seedFakePlaywrightDriver(t)
+	require.NoError(t, os.Remove(bundlePath))
+
+	require.ErrorIs(t, patchPlaywrightDriver(), errUtils.ErrPlaywrightDriverSeed)
+	assert.NoFileExists(t, bundlePath)
+}
+
+// assertNoStagedBundles fails if a staged patch file was left behind.
+func assertNoStagedBundles(t *testing.T, dir string) {
+	t.Helper()
+	staged, err := filepath.Glob(filepath.Join(dir, ".coreBundle-*.tmp"))
+	require.NoError(t, err)
+	assert.Empty(t, staged)
 }

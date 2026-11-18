@@ -42,10 +42,10 @@ func TestSaveStorageStateRestrictsPermissions(t *testing.T) {
 	}
 	fileInfo, err := os.Stat(statePath)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(storageStateFilePerm), fileInfo.Mode().Perm())
+	assert.Equal(t, os.FileMode(0o600), fileInfo.Mode().Perm())
 	dirInfo, err := os.Stat(filepath.Dir(statePath))
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(storageStateDirPerm), dirInfo.Mode().Perm())
+	assert.Equal(t, os.FileMode(0o700), dirInfo.Mode().Perm())
 }
 
 func TestSaveStorageStateReturnsSaveError(t *testing.T) {
@@ -91,14 +91,14 @@ func TestSaveStorageStateNeverWorldReadable(t *testing.T) {
 		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 		dirInfo, err := os.Stat(dir)
 		require.NoError(t, err)
-		assert.Equal(t, os.FileMode(storageStateDirPerm), dirInfo.Mode().Perm())
+		assert.Equal(t, os.FileMode(0o700), dirInfo.Mode().Perm())
 		return writeStateLikePlaywright(t)(opts...)
 	})
 
 	require.NoError(t, saveStorageState(saver, statePath))
 	info, err := os.Stat(statePath)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(storageStateFilePerm), info.Mode().Perm())
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 }
 
 // A failed save keeps the previous state and leaves no temporary file behind.

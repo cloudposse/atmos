@@ -2,11 +2,15 @@ package prompter
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
 	"strings"
 )
+
+// errPinentryIncomplete is returned when pinentry ends its output without a completed GETPIN answer.
+var errPinentryIncomplete = errors.New("pinentry did not return a complete code")
 
 const (
 	defaultPinentryDialog string = "Security token [%s]"
@@ -106,12 +110,21 @@ func (r *RealPinentryRunner) Run(command string) (output string, err error) {
 	}
 
 	output, parseErr := ParseResults(out)
-	waitErr := cmd.Wait()
-	if parseErr != nil {
+	if parseErr != nil && !errors.Is(parseErr, errPinentryIncomplete) {
+		// Atmos fork: ParseResults stopped reading, so a child that is still writing could block on a full
+		// pipe and Wait would never return. Terminate it, close the pipe and reap it, keeping the parse error.
+		_ = cmd.Process.Kill()
+		_ = out.Close()
+		_ = cmd.Wait()
 		return "", parseErr
 	}
+	waitErr := cmd.Wait()
 	if waitErr != nil {
+		// A failing process is the more informative cause than an answer that was cut short.
 		return "", waitErr
+	}
+	if parseErr != nil {
+		return "", parseErr
 	}
 	return output, nil
 }
@@ -120,11 +133,17 @@ func (r *RealPinentryRunner) Run(command string) (output string, err error) {
 // user input, or whether the program yielded any error
 func ParseResults(pinEntryOutput io.Reader) (output string, err error) {
 	scanner := bufio.NewScanner(pinEntryOutput)
+	completed := false
 	for scanner.Scan() {
 		line := scanner.Text()
 		// fmt.Println(line)
 		if strings.HasPrefix(line, "D ") {
 			output = line[2:]
+			completed = false
+		}
+		// Atmos fork: the answer to GETPIN is complete only when the data line is followed by OK.
+		if output != "" && (line == "OK" || strings.HasPrefix(line, "OK ")) {
+			completed = true
 		}
 		if strings.HasPrefix(line, "ERR ") {
 			return "", fmt.Errorf("error while running pinentry: %s", line[4:])
@@ -134,6 +153,12 @@ func ParseResults(pinEntryOutput io.Reader) (output string, err error) {
 	// Atmos fork: upstream ignored scanner.Err(), so a read failure after "D <code>" returned the code as a success.
 	if scanErr := scanner.Err(); scanErr != nil {
 		return "", fmt.Errorf("error while reading pinentry output: %w", scanErr)
+	}
+
+	// Atmos fork: upstream returned whatever "D" line it had seen, so a clean exit without the final OK
+	// returned a cut-off code, and a clean exit with no data at all returned an empty code as a success.
+	if output == "" || !completed {
+		return "", errPinentryIncomplete
 	}
 
 	return output, err

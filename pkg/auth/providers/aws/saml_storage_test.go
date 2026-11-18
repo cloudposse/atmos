@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -323,12 +325,21 @@ func TestSAMLProvider_setupBrowserAutomation_HandlesStorageSetupFailureGracefull
 
 	sp := p.(*samlProvider)
 
+	// Capture the logger so the test can see that the failure reached the non-fatal handler.
+	var logs bytes.Buffer
+	previous := log.Default()
+	captured := log.New()
+	captured.SetOutput(&logs)
+	log.SetDefault(captured)
+	t.Cleanup(func() { log.SetDefault(previous) })
+
 	// Storage dir failure is non-fatal — setupBrowserAutomation returns nil.
 	err = sp.setupBrowserAutomation()
 	assert.NoError(t, err, "storage dir failure is non-fatal — should return nil")
+	assert.Contains(t, logs.String(), "Failed to setup browser storage directory", "the storage failure must reach the non-fatal handler")
 
 	// Verify the function continued past the storage failure: auto-download is still enabled.
-	assert.True(t, sp.createLoginDetails().DownloadBrowser)
+	assert.True(t, sp.createLoginDetails(sp.getDriver()).DownloadBrowser)
 }
 
 func TestSAMLProvider_setupBrowserAutomation_FailsOnInvalidExecutable(t *testing.T) {
@@ -371,7 +382,7 @@ func TestSAMLProvider_setupBrowserAutomation_KeepsEnvWhenDownloadDisabled(t *tes
 	// Atmos no longer sets or unsets SAML2AWS_AUTO_BROWSER_DOWNLOAD: nothing reads it.
 	assert.Equal(t, "true", os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"),
 		"a value the user exported must be left alone")
-	assert.False(t, p.createLoginDetails().DownloadBrowser, "non-Browser drivers never download")
+	assert.False(t, p.createLoginDetails(p.getDriver()).DownloadBrowser, "non-Browser drivers never download")
 }
 
 func TestSAMLProvider_setupBrowserAutomation_LogsBrowserType(t *testing.T) {

@@ -1,6 +1,7 @@
 package adfs
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"log"
@@ -39,6 +40,10 @@ const (
 // Atmos fork: the Azure MFA poll interval is a package variable (upstream hard-coded
 // time.Sleep(1 * time.Second)) so tests can shorten it.
 var azureMFAPollInterval = 1 * time.Second
+
+// Atmos fork: azureMFAWaitTimeout is the overall elapsed-time limit for Azure MFA approval. The poll
+// count alone does not bound the wait, because each poll request can itself take a long time.
+var azureMFAWaitTimeout = 5 * time.Minute
 
 // Atmos fork: upstream looped without a limit, so a server that kept returning an MFA page
 // prompted for codes, or polled, forever. The limits below end the loop with ErrMFAAttemptsExceeded.
@@ -81,7 +86,7 @@ func (ac *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 
 	awsURN := url.QueryEscape(ac.idpAccount.AmazonWebservicesURN)
 
-	adfsURL := fmt.Sprintf("%s/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=%s", loginDetails.URL, awsURN)
+	adfsURL := buildSignOnURL(loginDetails.URL, awsURN)
 
 	mfaToken := loginDetails.MFAToken
 
@@ -146,8 +151,14 @@ func (ac *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 	}
 
 	mfaPromptAttempts, azureMFAPolls := 0, 0
+	var azureCtx context.Context
 	for {
 		responseType, samlAssertion, err := checkResponse(doc)
+		// Atmos fork: a parse error (for example a SAMLResponse input without a value) ends the
+		// authentication before the response is dispatched, so a later MFA input cannot submit a code.
+		if err != nil {
+			return "", err
+		}
 
 		switch responseType {
 		case SAML_RESPONSE:
@@ -165,7 +176,7 @@ func (ac *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 				}
 			}
 
-			doc.Find("input").Each(func(i int, s *goquery.Selection) {
+			challengeScope(doc).Find("input").Each(func(i int, s *goquery.Selection) {
 				updateOTPFormData(otpForm, s, mfaToken)
 			})
 			doc, err = ac.submit(challengeSubmitURL(doc, authSubmitURL), otpForm)
@@ -180,40 +191,85 @@ func (ac *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 				return "", fmt.Errorf("%w: no Azure MFA approval after %d polls", ErrMFAAttemptsExceeded, azureMFAPolls)
 			}
 			azureMFAPolls++
-			azureForm := url.Values{}
-			doc.Find("input").Each(func(i int, s *goquery.Selection) {
-				updatePassthroughFormData(azureForm, s)
-			})
-			sel := doc.Find("p#validEntropyNumber")
-			if sel.Index() != -1 {
-				if instructions != sel.Text() {
-					instructions = sel.Text()
-					log.Println("Open your Microsoft Authenticator app and tap the number you see below to sign in.")
-					log.Println(instructions)
-				}
+			if azureCtx == nil {
+				var cancel context.CancelFunc
+				azureCtx, cancel = context.WithTimeout(context.Background(), azureMFAWaitTimeout)
+				defer cancel()
 			}
-			sel = doc.Find("p#instructions")
-			if sel.Index() != -1 {
-				if instructions != sel.Text() {
-					instructions = sel.Text()
-					log.Println(instructions)
-				}
-			}
-			time.Sleep(azureMFAPollInterval)
-			doc, err = ac.submit(challengeSubmitURL(doc, authSubmitURL), azureForm)
+			doc, err = ac.pollAzureMFA(azureCtx, doc, authSubmitURL, responseType, &instructions)
 			if err != nil {
-				return samlAssertion, errors.Wrap(err, "error retrieving mfa form results")
-			}
-			if responseType == AZURE_MFA_SERVER_WAIT {
-				sel := doc.Find("label#errorText")
-				if sel.Index() != -1 {
-					return samlAssertion, errors.New(sel.Text())
-				}
+				return samlAssertion, err
 			}
 		case UNKNOWN:
 			return samlAssertion, errors.New("unable to classify response from auth server")
 		}
 	}
+}
+
+// pollAzureMFA waits one poll interval, then submits the Azure MFA wait form and returns the response.
+// Atmos fork: the wait and the request are bound by ctx, so the overall approval time is limited
+// whatever the server's response time. The count cap in Authenticate remains a separate guard.
+func (ac *Client) pollAzureMFA(ctx context.Context, doc *goquery.Document, fallbackURL string, responseType AuthResponseType, instructions *string) (*goquery.Document, error) {
+	azureForm := url.Values{}
+	challengeScope(doc).Find("input").Each(func(i int, s *goquery.Selection) {
+		updatePassthroughFormData(azureForm, s)
+	})
+	sel := doc.Find("p#validEntropyNumber")
+	if sel.Index() != -1 {
+		if *instructions != sel.Text() {
+			*instructions = sel.Text()
+			log.Println("Open your Microsoft Authenticator app and tap the number you see below to sign in.")
+			log.Println(*instructions)
+		}
+	}
+	sel = doc.Find("p#instructions")
+	if sel.Index() != -1 {
+		if *instructions != sel.Text() {
+			*instructions = sel.Text()
+			log.Println(*instructions)
+		}
+	}
+
+	timer := time.NewTimer(azureMFAPollInterval)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("%w: no Azure MFA approval within %s", ErrMFAAttemptsExceeded, azureMFAWaitTimeout)
+	case <-timer.C:
+	}
+
+	doc, err := ac.submitContext(ctx, challengeSubmitURL(doc, fallbackURL), azureForm)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("%w: no Azure MFA approval within %s", ErrMFAAttemptsExceeded, azureMFAWaitTimeout)
+		}
+		return nil, errors.Wrap(err, "error retrieving mfa form results")
+	}
+	if responseType == AZURE_MFA_SERVER_WAIT {
+		sel := doc.Find("label#errorText")
+		if sel.Index() != -1 {
+			return nil, errors.New(sel.Text())
+		}
+	}
+	return doc, nil
+}
+
+// buildSignOnURL returns the IdP-initiated sign-on URL for the relying party.
+// Atmos fork: the configured URL may already be the full sign-on URL (the docs ask for the IdP's SSO URL).
+// An existing sign-on endpoint is reused as is, and loginToRp is added only when it is missing, instead of
+// appending a second endpoint inside the query. A base URL is handled as before.
+func buildSignOnURL(baseURL, awsURN string) string {
+	if parsed, err := url.Parse(baseURL); err == nil && strings.Contains(strings.ToLower(parsed.Path), "/adfs/ls/idpinitiatedsignon.aspx") {
+		query := parsed.Query()
+		if !query.Has("loginToRp") {
+			if parsed.RawQuery != "" {
+				parsed.RawQuery += "&"
+			}
+			parsed.RawQuery += "loginToRp=" + awsURN
+		}
+		return parsed.String()
+	}
+	return fmt.Sprintf("%s/adfs/ls/IdpInitiatedSignOn.aspx?loginToRp=%s", baseURL, awsURN)
 }
 
 func (ac *Client) get(url string) (*goquery.Document, error) {
@@ -232,7 +288,11 @@ func (ac *Client) get(url string) (*goquery.Document, error) {
 }
 
 func (ac *Client) submit(url string, form url.Values) (*goquery.Document, error) {
-	req, err := http.NewRequest("POST", url, strings.NewReader(form.Encode()))
+	return ac.submitContext(context.Background(), url, form)
+}
+
+func (ac *Client) submitContext(ctx context.Context, url string, form url.Values) (*goquery.Document, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, errors.Wrap(err, "error building request")
 	}
@@ -269,7 +329,13 @@ func setDocumentURL(doc *goquery.Document, res *http.Response) {
 // or it cannot be resolved, the fallback (the login form's action) is used, as before.
 func challengeSubmitURL(doc *goquery.Document, fallback string) string {
 	var action string
-	doc.Find("form").Each(func(_ int, s *goquery.Selection) {
+	// Atmos fork: the action comes from the form that owns the challenge controls, not from whichever form
+	// is last on the page. Pages without such a form keep the previous behavior.
+	forms := doc.Find("form")
+	if owner := challengeForm(doc); owner != nil {
+		forms = owner
+	}
+	forms.Each(func(_ int, s *goquery.Selection) {
 		if val, ok := s.Attr("action"); ok {
 			action = val
 		}
@@ -282,6 +348,38 @@ func challengeSubmitURL(doc *goquery.Document, fallback string) string {
 		return fallback
 	}
 	return doc.Url.ResolveReference(parsed).String()
+}
+
+// challengeForm returns the first form that contains MFA challenge controls (a one-time code, security
+// code, challenge answer or AuthMethod input), or nil when no form does.
+func challengeForm(doc *goquery.Document) *goquery.Selection {
+	var owner *goquery.Selection
+	doc.Find("form").EachWithBreak(func(_ int, f *goquery.Selection) bool {
+		found := false
+		f.Find("input").EachWithBreak(func(_ int, in *goquery.Selection) bool {
+			name, _ := in.Attr("name")
+			lname := strings.ToLower(name)
+			if lname == "authmethod" || strings.Contains(lname, "security_code") || strings.Contains(lname, "verificationcode") ||
+				strings.Contains(lname, "challengequestionanswer") || strings.Contains(lname, "oathcode") {
+				found = true
+			}
+			return !found
+		})
+		if found {
+			owner = f
+		}
+		return !found
+	})
+	return owner
+}
+
+// challengeScope returns the selection whose inputs make up an MFA submission: the form that owns the
+// challenge controls, or the whole page when there is no such form.
+func challengeScope(doc *goquery.Document) *goquery.Selection {
+	if owner := challengeForm(doc); owner != nil {
+		return owner
+	}
+	return doc.Selection
 }
 
 func checkResponse(doc *goquery.Document) (AuthResponseType, string, error) {

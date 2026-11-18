@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMacHostPlatform(t *testing.T) {
@@ -81,7 +82,9 @@ func TestParseOSRelease(t *testing.T) {
 func TestPlaywrightHostPlatform(t *testing.T) {
 	t.Run("override wins", func(t *testing.T) {
 		t.Setenv(playwrightHostPlatformOverrideEnv, "ubuntu20.04-arm64")
-		assert.Equal(t, "ubuntu20.04-arm64", playwrightHostPlatform())
+		got, err := playwrightHostPlatform()
+		require.NoError(t, err)
+		assert.Equal(t, "ubuntu20.04-arm64", got)
 	})
 
 	t.Run("detected for the current OS", func(t *testing.T) {
@@ -90,7 +93,8 @@ func TestPlaywrightHostPlatform(t *testing.T) {
 		t.Cleanup(func() { darwinHostInfo = original })
 		darwinHostInfo = func() (string, string, error) { return "23.4.0", "Apple M2", nil }
 
-		got := playwrightHostPlatform()
+		got, err := playwrightHostPlatform()
+		require.NoError(t, err)
 		switch runtime.GOOS {
 		case "darwin":
 			assert.Equal(t, "mac14-arm64", got)
@@ -114,7 +118,9 @@ func TestPlaywrightHostPlatform(t *testing.T) {
 		t.Cleanup(func() { darwinHostInfo = original })
 		darwinHostInfo = func() (string, string, error) { return "", "", assert.AnError }
 
-		assert.Empty(t, playwrightHostPlatform())
+		got, err := playwrightHostPlatform()
+		require.ErrorIs(t, err, assert.AnError, "an unreadable Mac must not be reported as an Intel host")
+		assert.Empty(t, got)
 	})
 }
 

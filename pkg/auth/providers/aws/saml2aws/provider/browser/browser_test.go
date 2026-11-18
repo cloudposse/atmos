@@ -85,27 +85,122 @@ func TestAuthenticateRejectsInvalidBrowserTypeBeforeStartingPlaywright(t *testin
 
 // Without an installed driver and without download, Run fails with a clear message (no network needed).
 func TestAuthenticateWithoutDriverFails(t *testing.T) {
+	// An external driver configured in the developer's environment would otherwise be used instead.
+	t.Setenv("PLAYWRIGHT_CLI_PATH", "")
+	t.Setenv("PLAYWRIGHT_NODEJS_PATH", "")
 	client := &Client{Headless: true, BrowserDriverDir: t.TempDir()}
 
 	_, err := client.Authenticate(&creds.LoginDetails{URL: testIdPURL})
 	require.ErrorContains(t, err, "please install the driver")
 }
 
-func TestSigninRegex(t *testing.T) {
-	regex, err := signinRegex()
-	require.NoError(t, err)
-
+func TestIsSigninURL(t *testing.T) {
 	for _, u := range []string{
 		"https://signin.aws.amazon.com/saml",
 		"https://us-east-1.signin.aws.amazon.com/saml",
 		"https://signin.amazonaws-us-gov.com/saml",
+		"https://us-gov-west-1.signin.amazonaws-us-gov.com/saml",
 		"https://signin.amazonaws.cn/saml",
+		"https://signin.aws.amazon.com:443/saml",
+		"https://signin.aws.amazon.com/saml?RelayState=x",
+		// Backward compatibility: per-provider ACS endpoints used by IAM SAML providers.
+		"https://signin.aws.amazon.com/saml/acs/SAMLSP4SH0A1EXAMPLE",
+		"https://us-east-1.signin.aws.amazon.com/saml/acs/SAMLSP4SH0A1EXAMPLE",
 	} {
-		assert.True(t, regex.MatchString(u), u)
+		assert.True(t, isSigninURL(u), u)
 	}
-	for _, u := range []string{"https://google.com/", "http://signin.aws.amazon.com/saml", "https://signin.aws.amazon.com/console"} {
-		assert.False(t, regex.MatchString(u), u)
+	for _, u := range []string{
+		"https://google.com/",
+		"http://signin.aws.amazon.com/saml",
+		"https://signin.aws.amazon.com/console",
+		"https://signin.aws.amazon.com/samlx",
+		"https://signin.aws.amazon.com:8443/saml",
+		// Regression: AWS sign-in text inside another request must not match.
+		"https://idp.example.com/track?next=https://signin.aws.amazon.com/saml",
+		"https://idp.example.com/https://signin.aws.amazon.com/saml",
+		"https://signin.aws.amazon.com.evil.example/saml",
+		"https://evil.example/#https://signin.aws.amazon.com/saml",
+		"https://signin.aws.amazon.com@evil.example/saml",
+		"%zz",
+	} {
+		assert.False(t, isSigninURL(u), u)
 	}
+}
+
+// Regression: the ExpectRequest predicate only accepts a sign-in request that carries a SAMLResponse.
+func TestSigninRequestWithAssertion(t *testing.T) {
+	tests := []struct {
+		name     string
+		url      string
+		postData string
+		postErr  error
+		want     bool
+	}{
+		{name: "assertion", url: testSigninURL, postData: samlPostBody(testAssertion), want: true},
+		{name: "relay state only", url: testSigninURL, postData: "RelayState=state"},
+		{name: "empty body", url: testSigninURL},
+		{name: "body read error ends the wait to report it", url: testSigninURL, postErr: errTest, want: true},
+		{name: "other URL", url: "https://idp.example.com/saml"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			req := NewMockRequest(ctrl)
+			req.EXPECT().URL().Return(tt.url)
+			if tt.url == testSigninURL {
+				req.EXPECT().PostData().Return(tt.postData, tt.postErr)
+			}
+			assert.Equal(t, tt.want, signinRequestWithAssertion(req))
+		})
+	}
+}
+
+// Regression: a sign-in request without a SAMLResponse recorded before the waiter starts must not count as
+// captured, or the valid assertion that arrives later is never waited for.
+func TestGetSAMLResponseWaitsPastUnusableCapture(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	page := NewMocksamlPage(ctrl)
+	early := NewMockRequest(ctrl)
+	valid := NewMockRequest(ctrl)
+	client := newTestClient(t)
+
+	var handler func(playwright.Request)
+	page.EXPECT().OnRequest(gomock.Any()).Do(func(fn func(playwright.Request)) { handler = fn })
+	page.EXPECT().Goto(testIdPURL).DoAndReturn(func(string, ...playwright.PageGotoOptions) (playwright.Response, error) {
+		handler(early)
+		return nil, nil
+	})
+	early.EXPECT().URL().Return(testSigninURL)
+	early.EXPECT().PostData().Return("RelayState=state", nil)
+	page.EXPECT().ExpectRequest(gomock.Any(), gomock.Any(), gomock.Any()).Return(valid, nil)
+	valid.EXPECT().PostData().Return(samlPostBody(testAssertion), nil)
+
+	got, err := getSAMLResponse(page, &creds.LoginDetails{URL: testIdPURL}, client)
+	require.NoError(t, err)
+	assert.Equal(t, testAssertion, got)
+}
+
+// A body-read error recorded by the callback is reported when the wait fails, not hidden behind the wait error.
+func TestGetSAMLResponseKeepsRecordedBodyErrorWhenWaitFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	page := NewMocksamlPage(ctrl)
+	early := NewMockRequest(ctrl)
+	client := newTestClient(t)
+
+	errWait := errors.New("wait timed out")
+	var handler func(playwright.Request)
+	page.EXPECT().OnRequest(gomock.Any()).Do(func(fn func(playwright.Request)) { handler = fn })
+	page.EXPECT().Goto(testIdPURL).DoAndReturn(func(string, ...playwright.PageGotoOptions) (playwright.Response, error) {
+		handler(early)
+		return nil, nil
+	})
+	early.EXPECT().URL().Return(testSigninURL)
+	early.EXPECT().PostData().Return("", errTest)
+	page.EXPECT().ExpectRequest(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errWait)
+
+	_, err := getSAMLResponse(page, &creds.LoginDetails{URL: testIdPURL}, client)
+	require.ErrorIs(t, err, errTest)
+	require.ErrorIs(t, err, errWait)
 }
 
 func TestExpectRequestOptions(t *testing.T) {

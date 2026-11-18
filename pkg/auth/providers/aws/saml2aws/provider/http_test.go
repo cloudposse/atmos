@@ -322,6 +322,25 @@ func TestResponseValidators(t *testing.T) {
 	}
 }
 
+// Regression: the status error must keep the endpoint and status but not the query string (session tokens).
+func TestResponseValidatorRedactsQuery(t *testing.T) {
+	const secretQuery = "sessionToken=secret-session-token" // gitleaks:allow -- Fake token proving redaction, not a credential.
+	req, err := http.NewRequest(http.MethodGet, "https://idp.example.com/login?"+secretQuery, nil)
+	require.NoError(t, err)
+	resp := &http.Response{StatusCode: http.StatusForbidden, Status: "403 Forbidden"}
+
+	for _, validate := range []func(*http.Request, *http.Response) error{
+		SuccessOrRedirectResponseValidator,
+		SuccessOrRedirectOrUnauthorizedResponseValidator,
+	} {
+		err := validate(req, resp)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "https://idp.example.com/login")
+		assert.Contains(t, err.Error(), "403 Forbidden")
+		assert.NotContains(t, err.Error(), "secret-session-token")
+	}
+}
+
 // Regression: upstream's DUMP_CONTENT switch printed full requests and responses (password form
 // bodies, session cookies, SAML assertions), and the debug log printed full URLs, whose query
 // strings can carry session tokens. Neither may reach the logs.
@@ -447,10 +466,12 @@ func TestNewHTTPClientTimeoutBoundsUnresponsiveServer(t *testing.T) {
 // Regression: the computed backoff, not only the base delay, is capped.
 func TestClientDoWithRetriesCapsBackoff(t *testing.T) {
 	const (
-		baseDelay = 40 * time.Millisecond
-		attempts  = 5
-		// Uncapped exponential waits total 40+80+160+320 = 600ms; capped waits total 4*40 = 160ms.
-		maxElapsed = 400 * time.Millisecond
+		baseDelay = 50 * time.Millisecond
+		attempts  = 8
+		// Uncapped exponential waits total 50*(2^7-1) = 6.35s; capped waits total 7*50 = 350ms.
+		// The bound sits far above the capped total, so scheduler pauses cannot fail the test.
+		// retry-go v3 has no clock seam, so the delay is measured on the wall clock.
+		maxElapsed = 3 * time.Second
 	)
 	orig := retryMaxDelay
 	retryMaxDelay = baseDelay

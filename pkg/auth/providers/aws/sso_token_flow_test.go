@@ -219,6 +219,11 @@ func TestPollForAccessToken(t *testing.T) {
 func newRefreshTestProvider(t *testing.T, endpoint string) *ssoProvider {
 	t.Helper()
 	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
+	// Inherited FIPS or dual-stack endpoint policies make the SDK reject the custom fake endpoint.
+	t.Setenv("AWS_USE_FIPS_ENDPOINT", "false")
+	t.Setenv("AWS_USE_DUALSTACK_ENDPOINT", "false")
+	// A service-specific endpoint from the environment would replace spec.endpoint_url and bypass the fixture.
+	t.Setenv("AWS_ENDPOINT_URL_SSO_OIDC", endpoint)
 
 	p, err := NewSSOProvider("sso", &schema.Provider{
 		Kind:     "aws/iam-identity-center",
@@ -330,9 +335,10 @@ func TestSSOProviderSaveFullCachedToken_RestrictsFilePermissions(t *testing.T) {
 	require.NoError(t, err)
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(ssoTokenCacheFilePerms), info.Mode().Perm(), "token cache holds bearer and refresh tokens")
+	// Literal modes, independent of the writer's constants: a widened constant must fail this test.
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm(), "token cache holds bearer and refresh tokens")
 
 	dirInfo, err := os.Stat(filepath.Dir(path))
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(ssoTokenCacheDirPerms), dirInfo.Mode().Perm())
+	assert.Equal(t, os.FileMode(0o700), dirInfo.Mode().Perm())
 }

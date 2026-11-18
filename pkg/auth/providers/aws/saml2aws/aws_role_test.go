@@ -109,3 +109,23 @@ func TestParseAWSRolesCommaARNInRolePath(t *testing.T) {
 		}
 	}
 }
+
+// TestParseAWSRolesClassifiesByResourceType verifies a role path that mentions "saml-provider/" is not mistaken for a SAML provider.
+func TestParseAWSRolesClassifiesByResourceType(t *testing.T) {
+	const (
+		provider = "arn:aws:iam::123456789012:saml-provider/idp"
+		role     = "arn:aws:iam::123456789012:role/team:saml-provider/admin"
+	)
+
+	for _, value := range []string{provider + "," + role, role + "," + provider} {
+		roles, err := ParseAWSRoles([]string{value})
+		if assert.NoError(t, err) && assert.Len(t, roles, 1) {
+			assert.Equal(t, provider, roles[0].PrincipalARN)
+			assert.Equal(t, role, roles[0].RoleARN)
+		}
+	}
+
+	// A role ARN whose path mentions saml-provider/ twice must not provide a principal.
+	_, err := ParseAWSRoles([]string{role + ",arn:aws:iam::123456789012:role/other:saml-provider/x"})
+	assert.Error(t, err)
+}

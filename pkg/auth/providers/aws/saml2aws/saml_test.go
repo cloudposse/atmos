@@ -92,11 +92,13 @@ func TestExtractMFATokenDurationFail(t *testing.T) {
 
 func TestExtractMFATokenDuration2(t *testing.T) {
 	data, err := os.ReadFile("testdata/assertion_invalid_date.xml")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	_, err = ExtractMFATokenExpiryTime(data)
-	t.Log(err)
-	assert.NotNil(t, err)
+	// The fixture's only fault is the malformed timestamp, so the error must be the timestamp parse error.
+	var parseErr *time.ParseError
+	require.ErrorAs(t, err, &parseErr)
+	assert.Equal(t, "This-is-invalid-2016-09-10F32:59:39.387Z", parseErr.Value)
 }
 
 // samlResponse wraps a namespaced SAML 2.0 assertion in a Response element.
@@ -408,4 +410,28 @@ func TestExtractRolesIgnoresForeignNamespaceChildren(t *testing.T) {
 	xml := `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:x="urn:other"><x:AttributeStatement/></saml:Assertion>`
 	_, err := ExtractAwsRoles([]byte(xml))
 	require.ErrorIs(t, err, ErrMissingElement{Tag: attributeStatementTag})
+}
+
+// Regression: SAML 2.0 permits several AttributeStatement elements; upstream read only the first, so a Role
+// attribute in a later statement was never found.
+func TestExtractFromMultipleAttributeStatements(t *testing.T) {
+	const sessionDuration = `<saml2:Attribute Name="https://aws.amazon.com/SAML/Attributes/SessionDuration">` +
+		`<saml2:AttributeValue>3600</saml2:AttributeValue></saml2:Attribute>`
+	data := samlResponse("", attributeStatement(otherAttribute)+attributeStatement(roleAttribute, sessionDuration))
+
+	roles, err := ExtractAwsRoles(data)
+	require.NoError(t, err)
+	require.Len(t, roles, 2)
+	assert.Equal(t, "arn:aws:iam::123456789012:role/admin,arn:aws:iam::123456789012:saml-provider/idp", roles[0])
+	assert.Equal(t, "arn:aws:iam::210987654321:role/read,arn:aws:iam::210987654321:saml-provider/idp", roles[1])
+
+	duration, err := ExtractSessionDuration(data)
+	require.NoError(t, err)
+	assert.Equal(t, int64(3600), duration)
+
+	// Roles in several statements are returned in document order.
+	both := samlResponse("", attributeStatement(roleAttribute)+attributeStatement(roleAttribute))
+	roles, err = ExtractAwsRoles(both)
+	require.NoError(t, err)
+	assert.Len(t, roles, 4)
 }

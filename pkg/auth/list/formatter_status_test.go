@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -74,7 +75,8 @@ func TestIdentityStatusAndExpirationAgree(t *testing.T) {
 			if tt.wantDuration == "" {
 				assert.Equal(t, emptyMarker, expiration)
 			} else {
-				assert.Contains(t, expiration, tt.wantDuration)
+				// Compare the whole visible text: a substring check accepts 11s for 1s and 15m for 5m.
+				assert.Equal(t, tt.wantDuration, ansi.Strip(expiration))
 			}
 		})
 	}
@@ -120,6 +122,6 @@ func TestFormatExpirationWithColorKeepsText(t *testing.T) {
 	assert.Empty(t, formatExpirationWithColor("", authStatusValid))
 	assert.Equal(t, "5m", formatExpirationWithColor("5m", authStatusUnknown), "unknown status is left unstyled")
 	for _, status := range []authStatus{authStatusValid, authStatusExpiring, authStatusExpired} {
-		assert.Contains(t, formatExpirationWithColor("5m", status), "5m")
+		assert.Equal(t, "5m", ansi.Strip(formatExpirationWithColor("5m", status)))
 	}
 }

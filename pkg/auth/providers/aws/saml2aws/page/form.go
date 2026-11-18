@@ -25,13 +25,8 @@ func (form *Form) BuildRequest() (*http.Request, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "error building request")
 		}
-		query := target.Query()
-		for name, vals := range *form.Values {
-			for _, val := range vals {
-				query.Add(name, val)
-			}
-		}
-		target.RawQuery = query.Encode()
+		// Atmos fork: per the HTML form submission algorithm, the encoded fields replace any query in the action URL.
+		target.RawQuery = form.Values.Encode()
 		req, err := http.NewRequest(http.MethodGet, target.String(), nil)
 		if err != nil {
 			return nil, errors.Wrap(err, "error building request")
@@ -74,7 +69,7 @@ func NewFormFromDocument(doc *goquery.Document, formFilter string) (*Form, error
 
 	attrValue, ok := formSelection.Attr("action")
 	if ok {
-		action, err := resolveFormAction(attrValue, doc.Url)
+		action, err := resolveFormAction(attrValue, formBaseURL(doc))
 		if err != nil {
 			return nil, err
 		}
@@ -107,6 +102,27 @@ func NewFormFromDocument(doc *goquery.Document, formFilter string) (*Form, error
 	})
 
 	return &form, nil
+}
+
+// formBaseURL returns the URL relative form actions resolve against.
+// Atmos fork: the first base[href] element takes precedence over the document URL, as in the HTML specification.
+// A relative base href is itself resolved against the document URL; an unparsable href falls back to the document URL.
+func formBaseURL(doc *goquery.Document) *url.URL {
+	href, ok := doc.Find("base[href]").First().Attr("href")
+	if !ok || strings.TrimSpace(href) == "" {
+		return doc.Url
+	}
+	base, err := url.Parse(strings.TrimSpace(href))
+	if err != nil {
+		return doc.Url
+	}
+	if doc.Url != nil {
+		return doc.Url.ResolveReference(base)
+	}
+	if base.IsAbs() {
+		return base
+	}
+	return nil
 }
 
 // resolveFormAction resolves a form action against the document URL.

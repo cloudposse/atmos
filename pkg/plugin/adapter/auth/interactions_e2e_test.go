@@ -24,6 +24,7 @@ import (
 
 const (
 	deviceFixtureName          = "device-fixture"
+	deviceFixtureQuietName     = "device-fixture-noninteractive"
 	deviceFixtureMalformedName = "device-fixture-malformed"
 	deviceFixtureURI           = "https://issuer.example/device"
 	deviceFixtureCode          = "WXYZ-2345"
@@ -33,9 +34,19 @@ const (
 // deviceFixtureFields maps provider names to the interaction fields the fake
 // plugin sends before its credential result.
 var deviceFixtureFields = map[string]map[string]string{
-	deviceFixtureName: {"verification_uri": deviceFixtureURI, "user_code": deviceFixtureCode},
+	deviceFixtureName:      {"verification_uri": deviceFixtureURI, "user_code": deviceFixtureCode},
+	deviceFixtureQuietName: {"verification_uri": deviceFixtureURI, "user_code": deviceFixtureCode},
 	// A complete, token-bearing URI must never be rendered or echoed in errors.
 	deviceFixtureMalformedName: {"verification_uri": deviceFixtureURI + "?code=" + deviceFixtureLeak, "user_code": deviceFixtureCode},
+}
+
+// deviceFixtureInteractive is the interactive policy the host must forward to the plugin in the
+// invocation for each provider name. The child process checks it, so a dropped or altered
+// invocation fails the call instead of being masked by the host's local gate.
+var deviceFixtureInteractive = map[string]bool{
+	deviceFixtureName:          true,
+	deviceFixtureQuietName:     false,
+	deviceFixtureMalformedName: true,
 }
 
 // sendDeviceThenCredentials emits one device-code interaction and then an
@@ -95,7 +106,7 @@ func TestDeviceInteractionThroughRealPluginTransport(t *testing.T) {
 		wantPrompt  bool
 	}{
 		{name: "interactive host renders the prompt on stderr", provider: deviceFixtureName, interactive: true, wantPrompt: true},
-		{name: "noninteractive host refuses the prompt", provider: deviceFixtureName, interactive: false, wantErr: errUtils.ErrPluginInteractionRequired},
+		{name: "noninteractive host refuses the prompt", provider: deviceFixtureQuietName, interactive: false, wantErr: errUtils.ErrPluginInteractionRequired},
 		{name: "token-bearing URI is rejected without echoing it", provider: deviceFixtureMalformedName, interactive: true, wantErr: errUtils.ErrPluginProtocol},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

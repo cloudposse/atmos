@@ -32,7 +32,7 @@ func TestHasValidPlaywrightDrivers(t *testing.T) {
 			name: "directory with empty version subdirectory returns false",
 			setup: func(t *testing.T) string {
 				dir := t.TempDir()
-				versionDir := filepath.Join(dir, "1.47.2")
+				versionDir := filepath.Join(dir, "chromium-1234")
 				require.NoError(t, os.Mkdir(versionDir, 0o755))
 				return dir
 			},
@@ -43,11 +43,8 @@ func TestHasValidPlaywrightDrivers(t *testing.T) {
 			name: "directory with version containing files returns true",
 			setup: func(t *testing.T) string {
 				dir := t.TempDir()
-				versionDir := filepath.Join(dir, "1.47.2")
-				require.NoError(t, os.Mkdir(versionDir, 0o755))
-
-				// Create a realistic browser directory with a nested binary.
-				browserDir := filepath.Join(versionDir, "chromium-1234")
+				// Create a realistic browser revision directory with a binary.
+				browserDir := filepath.Join(dir, "chromium-1234")
 				require.NoError(t, os.MkdirAll(browserDir, 0o755))
 				require.NoError(t, os.WriteFile(filepath.Join(browserDir, "chrome"), []byte("fake"), 0o755))
 
@@ -62,13 +59,11 @@ func TestHasValidPlaywrightDrivers(t *testing.T) {
 				dir := t.TempDir()
 
 				// Empty version.
-				emptyVersion := filepath.Join(dir, "1.46.0")
+				emptyVersion := filepath.Join(dir, "chromium-1100")
 				require.NoError(t, os.Mkdir(emptyVersion, 0o755))
 
 				// Valid version.
-				validVersion := filepath.Join(dir, "1.47.2")
-				require.NoError(t, os.Mkdir(validVersion, 0o755))
-				browserDir := filepath.Join(validVersion, "chromium-1234")
+				browserDir := filepath.Join(dir, "chromium-1234")
 				require.NoError(t, os.MkdirAll(browserDir, 0o755))
 				require.NoError(t, os.WriteFile(filepath.Join(browserDir, "chrome"), []byte("fake"), 0o755))
 
@@ -88,6 +83,37 @@ func TestHasValidPlaywrightDrivers(t *testing.T) {
 			},
 			expected: false,
 			wantLog:  "no browser binaries",
+		},
+		{
+			// Regression: a registry holding only a Playwright tool is not an installed browser.
+			name: "tool directories only returns false",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				for _, tool := range []string{"ffmpeg-1013", "winldd-1007"} {
+					toolDir := filepath.Join(dir, tool)
+					require.NoError(t, os.Mkdir(toolDir, 0o755))
+					require.NoError(t, os.WriteFile(filepath.Join(toolDir, "tool"), []byte("fake"), 0o755))
+				}
+				return dir
+			},
+			expected: false,
+			wantLog:  "no browser binaries",
+		},
+		{
+			// An older browser revision stays eligible so the exact-revision check can trigger the upgrade.
+			name: "tool next to an older browser revision returns true",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				toolDir := filepath.Join(dir, "ffmpeg-1013")
+				require.NoError(t, os.Mkdir(toolDir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(toolDir, "tool"), []byte("fake"), 0o755))
+				browserDir := filepath.Join(dir, "chromium_headless_shell-1000")
+				require.NoError(t, os.Mkdir(browserDir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(browserDir, "headless_shell"), []byte("fake"), 0o755))
+				return dir
+			},
+			expected: true,
+			wantLog:  "Found browser binaries",
 		},
 		{
 			name: "non-existent directory returns false",
@@ -142,7 +168,7 @@ func TestHasPlaywrightDriversOrCanDownload(t *testing.T) {
 			downloadBrowserDriver: false,
 			setup: func(t *testing.T) string {
 				homeDir := t.TempDir()
-				playwrightDir := filepath.Join(homeDir, ".cache", "ms-playwright", "1.47.2")
+				playwrightDir := filepath.Join(homeDir, ".cache", "ms-playwright")
 				require.NoError(t, os.MkdirAll(playwrightDir, 0o755))
 
 				// Create fake browser.
@@ -159,7 +185,7 @@ func TestHasPlaywrightDriversOrCanDownload(t *testing.T) {
 			downloadBrowserDriver: false,
 			setup: func(t *testing.T) string {
 				homeDir := t.TempDir()
-				playwrightDir := filepath.Join(homeDir, "Library", "Caches", "ms-playwright", "1.47.2")
+				playwrightDir := filepath.Join(homeDir, "Library", "Caches", "ms-playwright")
 				require.NoError(t, os.MkdirAll(playwrightDir, 0o755))
 
 				// Create fake browser.
@@ -176,7 +202,7 @@ func TestHasPlaywrightDriversOrCanDownload(t *testing.T) {
 			downloadBrowserDriver: false,
 			setup: func(t *testing.T) string {
 				homeDir := t.TempDir()
-				playwrightDir := filepath.Join(homeDir, "AppData", "Local", "ms-playwright", "1.47.2")
+				playwrightDir := filepath.Join(homeDir, "AppData", "Local", "ms-playwright")
 				require.NoError(t, os.MkdirAll(playwrightDir, 0o755))
 
 				// Create fake browser.
@@ -194,7 +220,7 @@ func TestHasPlaywrightDriversOrCanDownload(t *testing.T) {
 			setup: func(t *testing.T) string {
 				homeDir := t.TempDir()
 				// Create empty version directory (like the bug we fixed).
-				playwrightDir := filepath.Join(homeDir, "Library", "Caches", "ms-playwright", "1.47.2")
+				playwrightDir := filepath.Join(homeDir, "Library", "Caches", "ms-playwright")
 				require.NoError(t, os.MkdirAll(playwrightDir, 0o755))
 
 				return homeDir
@@ -242,7 +268,7 @@ func TestGetDriver_WithPlaywrightDrivers(t *testing.T) {
 			setup: func(t *testing.T) string {
 				// Even with valid drivers, explicit config wins.
 				homeDir := t.TempDir()
-				playwrightDir := filepath.Join(homeDir, "Library", "Caches", "ms-playwright", "1.47.2")
+				playwrightDir := filepath.Join(homeDir, "Library", "Caches", "ms-playwright")
 				require.NoError(t, os.MkdirAll(playwrightDir, 0o755))
 				browserDir := filepath.Join(playwrightDir, "chromium-1234")
 				require.NoError(t, os.MkdirAll(browserDir, 0o755))
@@ -257,7 +283,7 @@ func TestGetDriver_WithPlaywrightDrivers(t *testing.T) {
 			url:            "https://accounts.google.com/saml",
 			setup: func(t *testing.T) string {
 				homeDir := t.TempDir()
-				playwrightDir := filepath.Join(homeDir, "Library", "Caches", "ms-playwright", "1.47.2")
+				playwrightDir := filepath.Join(homeDir, "Library", "Caches", "ms-playwright")
 				require.NoError(t, os.MkdirAll(playwrightDir, 0o755))
 				browserDir := filepath.Join(playwrightDir, "chromium-1234")
 				require.NoError(t, os.MkdirAll(browserDir, 0o755))
@@ -291,7 +317,7 @@ func TestGetDriver_WithPlaywrightDrivers(t *testing.T) {
 			setup: func(t *testing.T) string {
 				homeDir := t.TempDir()
 				// Create empty version directory (the bug scenario).
-				playwrightDir := filepath.Join(homeDir, "Library", "Caches", "ms-playwright", "1.47.2")
+				playwrightDir := filepath.Join(homeDir, "Library", "Caches", "ms-playwright")
 				require.NoError(t, os.MkdirAll(playwrightDir, 0o755))
 				return homeDir
 			},

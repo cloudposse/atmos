@@ -61,7 +61,7 @@ func NewDUOU2FClient(challengeNonce, appID, version, keyHandle, stateToken strin
 // ChallengeU2F takes a FidoClient and returns a signed assertion to send to Okta
 func (d *DUOU2FClient) ChallengeU2F() (*ResponseData, error) {
 	if d.Device == nil {
-		return nil, errors.New("no device found")
+		return nil, errU2FNoDevice
 	}
 	request := &u2fhost.AuthenticateRequest{
 		Challenge: d.ChallengeNonce,
@@ -72,42 +72,63 @@ func (d *DUOU2FClient) ChallengeU2F() (*ResponseData, error) {
 	}
 	// do the change
 	prompted := false
-	timeout := time.After(time.Second * 25)
-	interval := time.NewTicker(time.Millisecond * 250)
-	var responsePayload *ResponseData
+	// Atmos fork: the wait is bounded by u2fAuthTimeout (25 seconds, as before) even while a device read
+	// is blocked, and no new read starts after the deadline. See FidoClient.ChallengeU2F.
+	deadline := time.Now().Add(u2fAuthTimeout)
+	timeout := time.After(u2fAuthTimeout)
+	interval := time.NewTicker(u2fPollInterval)
 
+	// The device is closed on return, except when a blocked Authenticate call is abandoned on timeout:
+	// closing a HID handle while another goroutine is reading from it is unsafe, so the abandoned call
+	// closes the device itself once its read returns.
+	closeDevice := true
 	defer func() {
-		d.Device.Close()
+		if closeDevice {
+			d.Device.Close()
+		}
 	}()
 	defer interval.Stop()
 	for {
+		pending := authenticateDeviceAsync(d.Device, request)
+		var result u2fAuthResult
+		select {
+		case result = <-pending:
+		case <-timeout:
+			closeDevice = false
+			go func() {
+				<-pending
+				d.Device.Close()
+			}()
+			return nil, u2fTimeoutError()
+		}
+		response, err := result.response, result.err
+		if err == nil {
+			// Atmos fork: upstream printed the touch prompts to stdout, the caller's data
+			// channel; they are written to stderr with the other interactive prompts.
+			fmt.Fprintf(os.Stderr, "  ==> Touch accepted. Proceeding with authentication\n")
+			return &ResponseData{
+				SessionId:     d.StateToken,
+				ClientData:    response.ClientData,
+				SignatureData: response.SignatureData,
+				KeyHandle:     d.KeyHandle,
+			}, nil
+		}
+
+		var presenceErr *u2fhost.TestOfUserPresenceRequiredError
+		if !errors.As(err, &presenceErr) {
+			return nil, err
+		}
+		if !prompted {
+			fmt.Fprintf(os.Stderr, "\nTouch the flashing U2F device to authenticate...\n")
+			prompted = true
+		}
+
 		select {
 		case <-timeout:
-			return nil, errors.New("failed to get authentication response after 25 seconds")
+			return nil, u2fTimeoutError()
 		case <-interval.C:
-			response, err := d.Device.Authenticate(request)
-			if err == nil {
-				responsePayload = &ResponseData{
-					SessionId:     d.StateToken,
-					ClientData:    response.ClientData,
-					SignatureData: response.SignatureData,
-					KeyHandle:     d.KeyHandle,
-				}
-				// Atmos fork: upstream printed the touch prompts to stdout, the caller's data
-				// channel; they are written to stderr with the other interactive prompts.
-				fmt.Fprintf(os.Stderr, "  ==> Touch accepted. Proceeding with authentication\n")
-				return responsePayload, nil
-			}
-
-			var presenceErr *u2fhost.TestOfUserPresenceRequiredError
-			switch {
-			case errors.As(err, &presenceErr):
-				if !prompted {
-					fmt.Fprintf(os.Stderr, "\nTouch the flashing U2F device to authenticate...\n")
-					prompted = true
-				}
-			default:
-				return responsePayload, err
+			if !time.Now().Before(deadline) {
+				return nil, u2fTimeoutError()
 			}
 		}
 	}

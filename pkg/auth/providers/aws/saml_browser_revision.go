@@ -39,7 +39,11 @@ var requiredBrowserDir = func(browserName string) (string, error) {
 	if _, err := playwright.NewDriver(opts); err != nil {
 		return "", fmt.Errorf("%w: %w", errUtils.ErrPlaywrightBrowserManifest, err)
 	}
-	return readBrowserDir(playwrightManifestPath(opts.DriverDirectory), browserName, playwrightHostPlatform())
+	hostPlatform, err := playwrightHostPlatform()
+	if err != nil {
+		return "", fmt.Errorf("%w: cannot determine the host platform: %w", errUtils.ErrPlaywrightBrowserManifest, err)
+	}
+	return readBrowserDir(playwrightManifestPath(opts.DriverDirectory), browserName, hostPlatform)
 }
 
 // playwrightManifestPath returns the browsers.json path of the Playwright driver.
@@ -47,6 +51,10 @@ var requiredBrowserDir = func(browserName string) (string, error) {
 // (for example a distro-packaged driver) also moves the manifest.
 func playwrightManifestPath(driverDir string) string {
 	if cliPath := os.Getenv("PLAYWRIGHT_CLI_PATH"); cliPath != "" { //nolint:forbidigo // Third-party (playwright-go) env var, read the same way the library reads it.
+		// Node resolves a symlinked entry script to its target before loading the package around it.
+		if resolved, err := filepath.EvalSymlinks(cliPath); err == nil {
+			cliPath = resolved
+		}
 		return filepath.Join(filepath.Dir(cliPath), playwrightBrowserManifest)
 	}
 	return filepath.Join(driverDir, "package", playwrightBrowserManifest)
@@ -97,31 +105,47 @@ func readBrowserDir(manifestPath, browserName, hostPlatform string) (string, err
 // otherwise <cache>/ms-playwright, where <cache> is $XDG_CACHE_HOME or ~/.cache on Linux,
 // ~/Library/Caches on macOS, and %LOCALAPPDATA% or ~/AppData/Local on Windows.
 func playwrightRegistryDir() (string, error) {
-	switch browsersPath := playwrightBrowsersPathEnv(); browsersPath {
-	case "":
-	case "0":
+	browsersPath := playwrightBrowsersPathEnv()
+	if browsersPath == "0" {
 		opts := &playwright.RunOptions{}
 		if _, err := playwright.NewDriver(opts); err != nil {
 			return "", err
 		}
 		// The playwright-core package root is the directory holding cli.js and browsers.json.
 		return filepath.Join(filepath.Dir(playwrightManifestPath(opts.DriverDirectory)), playwrightLocalBrowsers), nil
-	default:
-		// Playwright resolves a relative path against INIT_CWD (set by npm) before the working directory.
-		if filepath.IsAbs(browsersPath) {
-			return filepath.Clean(browsersPath), nil
-		}
-		if initCwd := os.Getenv("INIT_CWD"); initCwd != "" { //nolint:forbidigo // Third-party (npm/Playwright) env var, read the same way the driver reads it.
-			return filepath.Abs(filepath.Join(initCwd, browsersPath))
-		}
-		return filepath.Abs(browsersPath)
 	}
 
-	cacheDir, err := playwrightDefaultCacheDir(runtime.GOOS)
-	if err != nil {
-		return "", err
+	registryDir := browsersPath
+	if registryDir == "" {
+		cacheDir, err := playwrightDefaultCacheDir(runtime.GOOS)
+		if err != nil {
+			return "", err
+		}
+		registryDir = filepath.Join(cacheDir, playwrightCacheDir)
 	}
-	return filepath.Join(cacheDir, playwrightCacheDir), nil
+
+	// Playwright resolves a relative registry path, including a relative default cache directory such as
+	// XDG_CACHE_HOME=cache, against INIT_CWD (set by npm) before the working directory.
+	if filepath.IsAbs(registryDir) {
+		return filepath.Clean(registryDir), nil
+	}
+	if initCwd := playwrightInitCwdEnv(); initCwd != "" {
+		return filepath.Abs(filepath.Join(initCwd, registryDir))
+	}
+	return filepath.Abs(registryDir)
+}
+
+// playwrightInitCwdEnv returns the directory npm was started from, using Playwright's precedence for
+// INIT_CWD: the variable itself, then its npm_config_ and npm_package_config_ lowercase forms.
+func playwrightInitCwdEnv() string {
+	for _, name := range []string{"INIT_CWD", "npm_config_init_cwd", "npm_package_config_init_cwd"} {
+		// A defined but empty value still wins and falls back to the working directory, as in Playwright.
+		// Third-party (npm/Playwright) env vars, read the same way the driver reads them.
+		if value, ok := os.LookupEnv(name); ok {
+			return value
+		}
+	}
+	return ""
 }
 
 // playwrightBrowsersPathEnv returns the configured PLAYWRIGHT_BROWSERS_PATH using Playwright's

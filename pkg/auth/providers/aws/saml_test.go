@@ -331,7 +331,7 @@ func TestSAMLProvider_setupBrowserAutomation_DoesNotSetEnv(t *testing.T) {
 	require.NoError(t, sp.setupBrowserAutomation())
 	// Auto-download reaches the library through LoginDetails.DownloadBrowser, not the environment.
 	assert.Empty(t, os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"))
-	assert.True(t, sp.createLoginDetails().DownloadBrowser)
+	assert.True(t, sp.createLoginDetails(sp.getDriver()).DownloadBrowser)
 }
 
 func TestSAMLProvider_Authenticate_RequiresRoleHint(t *testing.T) {
@@ -375,12 +375,12 @@ func TestSAMLProvider_createSAMLConfig_LoginDetails(t *testing.T) {
 	require.NoError(t, err)
 	sp := p.(*samlProvider)
 
-	cfg := sp.createSAMLConfig()
+	cfg := sp.createSAMLConfig(sp.getDriver())
 	assert.Equal(t, "https://idp.example.com", cfg.URL)
 	assert.Equal(t, "p", cfg.Profile)
 	assert.Equal(t, "eu-west-1", cfg.Region)
 
-	ld := sp.createLoginDetails()
+	ld := sp.createLoginDetails(sp.getDriver())
 	assert.Equal(t, "https://idp.example.com", ld.URL)
 	assert.Equal(t, "user", ld.Username)
 	assert.Equal(t, "pass", ld.Password)
@@ -393,6 +393,7 @@ func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
 		downloadBrowserDriver bool
 		explicitDriver        string
 		expectedDownload      bool
+		expectedDriver        string                    // Optional: the driver the case must select.
 		setup                 func(t *testing.T) string // Returns home directory.
 	}{
 		{
@@ -424,6 +425,7 @@ func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
 			name:                  "disabled when drivers already installed",
 			downloadBrowserDriver: false,
 			expectedDownload:      false, // Pre-installed drivers → no download needed.
+			expectedDriver:        "Browser",
 			setup: func(t *testing.T) string {
 				// Create a fake Playwright browser where the driver looks for it, using
 				// Playwright's <cache>/chromium-<revision> layout and the revision the
@@ -455,7 +457,13 @@ func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
 			require.NoError(t, err)
 			sp := p.(*samlProvider)
 
-			ld := sp.createLoginDetails()
+			// GoogleApps also never downloads, so a missed cache detection would pass the download
+			// assertion below; check the selected driver to keep the case meaningful.
+			if tt.expectedDriver != "" {
+				require.Equal(t, tt.expectedDriver, sp.getDriver())
+			}
+
+			ld := sp.createLoginDetails(sp.getDriver())
 
 			// Assert against the explicit expected value, not the implementation.
 			assert.Equal(t, tt.expectedDownload, ld.DownloadBrowser,
@@ -656,7 +664,7 @@ func TestSAMLProvider_createSAMLConfig_AllFields(t *testing.T) {
 	require.NoError(t, err)
 	sp := p.(*samlProvider)
 
-	cfg := sp.createSAMLConfig()
+	cfg := sp.createSAMLConfig(sp.getDriver())
 	assert.Equal(t, "https://idp.example.com/saml", cfg.URL)
 	assert.Equal(t, "test-provider", cfg.Profile)
 	assert.Equal(t, "eu-central-1", cfg.Region)
@@ -682,7 +690,7 @@ func TestSAMLProvider_createSAMLConfig_BrowserConfiguration(t *testing.T) {
 	require.NoError(t, err)
 	sp := p.(*samlProvider)
 
-	cfg := sp.createSAMLConfig()
+	cfg := sp.createSAMLConfig(sp.getDriver())
 	assert.Equal(t, "msedge", cfg.BrowserType)
 	assert.Equal(t, filepath.Join("opt", "browsers", "msedge"), cfg.BrowserExecutablePath)
 	assert.Equal(t, "Browser", cfg.Provider)
@@ -699,7 +707,7 @@ func TestSAMLProvider_createLoginDetails_WithPassword(t *testing.T) {
 	require.NoError(t, err)
 	sp := p.(*samlProvider)
 
-	ld := sp.createLoginDetails()
+	ld := sp.createLoginDetails(sp.getDriver())
 	assert.Equal(t, "https://idp.example.com/saml", ld.URL)
 	assert.Equal(t, "testuser", ld.Username)
 	assert.Equal(t, "secretpass", ld.Password)
@@ -716,7 +724,7 @@ func TestSAMLProvider_createLoginDetails_NoPassword(t *testing.T) {
 	require.NoError(t, err)
 	sp := p.(*samlProvider)
 
-	ld := sp.createLoginDetails()
+	ld := sp.createLoginDetails(sp.getDriver())
 	assert.Equal(t, "https://idp.example.com/saml", ld.URL)
 	assert.Equal(t, "testuser", ld.Username)
 	assert.Empty(t, ld.Password) // Should be empty when not provided
@@ -904,7 +912,7 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 				homedir.Reset()
 			}
 
-			result := sp.shouldDownloadBrowser()
+			result := sp.shouldDownloadBrowser(sp.getDriver())
 			assert.Equal(t, tc.expectedResult, result)
 		})
 	}

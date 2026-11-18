@@ -30,6 +30,9 @@ const (
 	DefaultRetryDelay    = time.Duration(1) * time.Second
 	// MaxRetryDelay caps the configured delay between HTTP retries.
 	MaxRetryDelay = 5 * time.Minute
+	// MaxAttemptsCount caps the configured HTTP attempts.
+	// Atmos fork: retry-go v3 allocates an error slice of this length up front, so an absurd count panicked.
+	MaxAttemptsCount = 1000
 	// DefaultRequestTimeout bounds each IdP request, including reading the response body.
 	// Atmos fork: upstream left http.Client.Timeout at zero, so an IdP that accepted a request
 	// and never answered blocked authentication forever. Two minutes is generous for interactive
@@ -100,9 +103,10 @@ func BuildHttpClientOpts(account *cfg.IDPAccount) *HTTPClientOptions {
 	return opts
 }
 
-// atLeastOneAttempt clamps an attempt count to at least one: retry-go v3 runs nothing for zero attempts.
+// atLeastOneAttempt clamps an attempt count to between one and MaxAttemptsCount.
+// retry-go v3 runs nothing for zero attempts and allocates per attempt up front.
 func atLeastOneAttempt(attempts uint) uint {
-	return max(attempts, DefaultAttemptsCount)
+	return min(max(attempts, DefaultAttemptsCount), MaxAttemptsCount)
 }
 
 // NewHTTPClient configure the default http client used by the providers
@@ -219,7 +223,8 @@ func SuccessOrRedirectResponseValidator(req *http.Request, resp *http.Response) 
 		return nil
 	}
 
-	return errors.Errorf("request for url: %s failed status: %s", req.URL.String(), resp.Status)
+	// Atmos fork: the request URL can carry session tokens in its query string, so it is redacted.
+	return errors.Errorf("request for url: %s failed status: %s", RedactURL(req.URL), resp.Status)
 }
 
 // SuccessOrRedirectOrUnauthorizedResponseValidator also allows 401

@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -351,6 +352,8 @@ func (oc *Client) authWithSession(loginDetails *creds.LoginDetails) (string, err
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		logger.Debugf("error reading body for auth with session: %v", err)
+		// The response is unusable; request the app page again, as before.
+		return oc.follow(ctx, req, loginDetails)
 	}
 
 	// This usually happens if using an active session (> 5 mins) but MFA was NOT remembered
@@ -364,7 +367,9 @@ func (oc *Client) authWithSession(loginDetails *creds.LoginDetails) (string, err
 		return oc.Authenticate(loginDetails)
 	}
 
-	return oc.follow(ctx, req, loginDetails)
+	// Atmos fork: upstream requested the app page a second time in follow(). The response already read
+	// above is handled directly, so a valid assertion in it is not lost when the second request fails.
+	return oc.followResponse(ctx, req, res, body, loginDetails)
 }
 
 // getDeviceTokenFromOkta creates a dummy HTTP call to Okta and returns the device token
@@ -563,7 +568,17 @@ func (oc *Client) follow(ctx context.Context, req *http.Request, loginDetails *c
 		return "", errors.Wrap(err, "error following")
 	}
 	defer res.Body.Close()
-	doc, err := goquery.NewDocumentFromReader(res.Body)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		logger.Debug("FAILED TO READ RESP BODY")
+		return "", errors.Wrap(err, "failed to build document from response")
+	}
+	return oc.followResponse(ctx, req, res, body, loginDetails)
+}
+
+// followResponse handles an already fetched response (res, with its body read into body) in the SAML redirect flow.
+func (oc *Client) followResponse(ctx context.Context, req *http.Request, res *http.Response, body []byte, loginDetails *creds.LoginDetails) (string, error) {
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
 		logger.Debug("FAILED TO BUILD DOC FROM RESP")
 		return "", errors.Wrap(err, "failed to build document from response")
@@ -575,9 +590,11 @@ func (oc *Client) follow(ctx context.Context, req *http.Request, loginDetails *c
 
 	var handler func(context.Context, *goquery.Document) (context.Context, *http.Request, error)
 
-	if docIsFormRedirectToTarget(doc, oc.targetURL) {
+	if targetForm := findTargetForm(doc, oc.targetURL); targetForm.Size() > 0 {
 		logger.WithField("type", "saml-response-to-aws").Debug("doc detect")
-		if samlResponse, ok := extractSAMLResponse(doc); ok {
+		// Atmos fork: the assertion is read from the form that posts to the target, not from the first
+		// SAMLResponse input on the page, which could belong to an intermediate form.
+		if samlResponse, ok := extractSAMLResponse(targetForm); ok {
 			decodedSamlResponse, err := base64.StdEncoding.DecodeString(samlResponse)
 			if err != nil {
 				return "", errors.Wrap(err, "failed to decode saml-response")
@@ -606,8 +623,8 @@ func (oc *Client) follow(ctx context.Context, req *http.Request, loginDetails *c
 	}
 
 	if handler == nil {
-		html, _ := doc.Html()
-		logger.WithField("doc", html).Debug("Unknown document type")
+		// Atmos fork: upstream logged the whole page, which can carry state tokens and other secrets.
+		logger.WithField("forms", doc.Find("form").Size()).Debug("Unknown document type")
 		return "", errors.New("unknown document type")
 	}
 
@@ -673,12 +690,26 @@ func parseMfaIdentifer(json string, arrayPosition int) (string, string, string) 
 }
 
 func (oc *Client) handleFormRedirect(ctx context.Context, doc *goquery.Document) (context.Context, *http.Request, error) {
-	form, err := page.NewFormFromDocument(doc, "")
+	form, err := page.NewFormFromDocument(doc, redirectFormSelector(doc))
 	if err != nil {
 		return ctx, nil, errors.Wrap(err, "error extracting redirect form")
 	}
 	req, err := form.BuildRequest()
 	return ctx, req, err
+}
+
+// redirectFormSelector returns a selector for the form that carries the input which made follow() choose
+// handleFormRedirect, in the same order as the dispatch. Atmos fork: upstream always took the first form
+// with an action, which could be an unrelated form. When no form contains the input, the empty selector
+// keeps the upstream behavior.
+func redirectFormSelector(doc *goquery.Document) string {
+	for _, name := range []string{"SAMLRequest", "RelayState", "SAMLResponse"} {
+		selector := fmt.Sprintf("form[action]:has(input[name=\"%s\"])", name)
+		if doc.Find(fmt.Sprintf("input[name=\"%s\"]", name)).Size() == 1 && doc.Find(selector).Size() > 0 {
+			return selector
+		}
+	}
+	return ""
 }
 
 func docIsFormSamlRequest(doc *goquery.Document) bool {
@@ -694,6 +725,12 @@ func docIsFormResume(doc *goquery.Document) bool {
 }
 
 func docIsFormRedirectToTarget(doc *goquery.Document, target string) bool {
+	return findTargetForm(doc, target).Size() > 0
+}
+
+// findTargetForm returns the first form that posts to the target (or to an AWS sign-in endpoint when
+// no target is configured). The selection is empty when there is none.
+func findTargetForm(doc *goquery.Document, target string) *goquery.Selection {
 	var urls []string
 	if target != "" {
 		url := fmt.Sprintf("form[action=\"%s\"]", target)
@@ -707,15 +744,16 @@ func docIsFormRedirectToTarget(doc *goquery.Document, target string) bool {
 	}
 
 	for _, value := range urls {
-		if doc.Find(value).Size() > 0 {
-			return true
+		if form := doc.Find(value).First(); form.Size() > 0 {
+			return form
 		}
 	}
-	return false
+	return &goquery.Selection{}
 }
 
-func extractSAMLResponse(doc *goquery.Document) (v string, ok bool) {
-	return doc.Find("input[name=\"SAMLResponse\"]").Attr("value")
+// extractSAMLResponse reads the SAMLResponse input inside the given form selection.
+func extractSAMLResponse(form *goquery.Selection) (v string, ok bool) {
+	return form.Find("input[name=\"SAMLResponse\"]").Attr("value")
 }
 
 func findMfaOption(mfa string, mfaOptions []string, startAtIdx int) int {
@@ -731,6 +769,35 @@ func findMfaOption(mfa string, mfaOptions []string, startAtIdx int) int {
 }
 
 func getMfaChallengeContext(oc *Client, mfaOption int, resp string) (*mfaChallengeContext, error) {
+	return getMfaChallengeContextWithContext(context.Background(), oc, mfaOption, resp)
+}
+
+// sleepUntilDone waits for d, or returns errMFAPollTimeout as soon as ctx ends.
+// Atmos fork: used by the push polling loops so one deadline bounds both the waits and the requests.
+func sleepUntilDone(ctx context.Context, d time.Duration) error {
+	if ctx.Err() != nil {
+		return errMFAPollTimeout
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return errMFAPollTimeout
+	case <-timer.C:
+		return nil
+	}
+}
+
+// pollError reports errMFAPollTimeout when the polling deadline has expired, and err otherwise.
+func pollError(ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return errMFAPollTimeout
+	}
+	return err
+}
+
+// getMfaChallengeContextWithContext is getMfaChallengeContext with the verify request bound to ctx.
+func getMfaChallengeContextWithContext(ctx context.Context, oc *Client, mfaOption int, resp string) (*mfaChallengeContext, error) {
 	stateToken := gjson.Get(resp, "stateToken").String()
 	factorID := gjson.Get(resp, fmt.Sprintf("_embedded.factors.%d.id", mfaOption)).String()
 	oktaVerify := gjson.Get(resp, fmt.Sprintf("_embedded.factors.%d._links.verify.href", mfaOption)).String()
@@ -772,7 +839,7 @@ func getMfaChallengeContext(oc *Client, mfaOption int, resp string) (*mfaChallen
 		return nil, errors.Wrap(err, "error encoding verifyReq")
 	}
 
-	req, err := http.NewRequest("POST", oktaVerify, verifyBody)
+	req, err := http.NewRequestWithContext(ctx, "POST", oktaVerify, verifyBody)
 	if err != nil {
 		return nil, errors.Wrap(err, "error building verify request")
 	}
@@ -895,7 +962,9 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 
 		// loop until success, error, or timeout
 		body := challengeContext.challengeResponseBody
-		pushDeadline := time.Now().Add(mfaPollTimeout)
+		// Atmos fork: one deadline bounds both the waits and the verify requests of the polling loop.
+		pushCtx, cancelPush := context.WithTimeout(context.Background(), mfaPollTimeout)
+		defer cancelPush()
 		for {
 			// on 'success' status
 			if gjson.Get(body, "status").String() == "SUCCESS" {
@@ -908,14 +977,13 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 			switch gjson.Get(body, "factorResult").String() {
 
 			case "WAITING":
-				if time.Now().After(pushDeadline) {
-					return "", errMFAPollTimeout
-				}
-				time.Sleep(pushPollInterval)
-				logger.Debug("Waiting for user to authorize login")
-				updatedContext, err := getMfaChallengeContext(oc, mfaOption, resp)
-				if err != nil {
+				if err := sleepUntilDone(pushCtx, pushPollInterval); err != nil {
 					return "", err
+				}
+				logger.Debug("Waiting for user to authorize login")
+				updatedContext, err := getMfaChallengeContextWithContext(pushCtx, oc, mfaOption, resp)
+				if err != nil {
+					return "", pollError(pushCtx, err)
 				}
 				body = updatedContext.challengeResponseBody
 				if gjson.Get(body, "status").String() == "MFA_CHALLENGE" {
@@ -1245,16 +1313,25 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 
 		}
 
+		// Atmos fork: a terminal failure in the first status response ends the flow; upstream slept and polled again.
+		if duoTxResult == "FAILURE" {
+			return "", errors.New("failed to authenticate device")
+		}
+
 		if duoTxResult != "SUCCESS" {
 			// poll as this is likely a push request
-			duoDeadline := time.Now().Add(mfaPollTimeout)
+			// Atmos fork: one deadline bounds both the waits and the status requests of the polling loop.
+			duoCtx, cancelDuo := context.WithTimeout(context.Background(), mfaPollTimeout)
+			defer cancelDuo()
 			for {
-				if time.Now().After(duoDeadline) {
-					return "", errMFAPollTimeout
+				if err = sleepUntilDone(duoCtx, duoPollInterval); err != nil {
+					return "", err
 				}
-				time.Sleep(duoPollInterval)
 
-				req, err = http.NewRequest("POST", duoSubmitURL, strings.NewReader(duoForm.Encode()))
+				// Atmos fork: send the latest sid; upstream kept posting the sid of the first status request.
+				duoForm.Set("sid", duoSID)
+
+				req, err = http.NewRequestWithContext(duoCtx, "POST", duoSubmitURL, strings.NewReader(duoForm.Encode()))
 				if err != nil {
 					return "", errors.Wrap(err, "error building authentication request")
 				}
@@ -1263,14 +1340,14 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 
 				res, err = oc.client.Do(req)
 				if err != nil {
-					return "", errors.Wrap(err, "error retrieving verify response")
+					return "", pollError(duoCtx, errors.Wrap(err, "error retrieving verify response"))
 				}
 
 				body, err = io.ReadAll(res.Body)
 				// Close inside the polling loop so bodies are not held until the function returns.
 				_ = res.Body.Close()
 				if err != nil {
-					return "", errors.Wrap(err, "error retrieving body from response")
+					return "", pollError(duoCtx, errors.Wrap(err, "error retrieving body from response"))
 				}
 
 				resp := string(body)
@@ -1524,6 +1601,21 @@ func isLoopbackURL(rawURL string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// errCertifierNonLoopbackDial is returned when the unverified certifier connection resolves to a non-loopback address.
+var errCertifierNonLoopbackDial = errors.New("certifier connection resolved to a non-loopback address")
+
+// requireLoopbackDial is a net.Dialer Control function that rejects any non-loopback destination address.
+func requireLoopbackDial(_, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return errors.Wrap(err, "invalid certifier dial address")
+	}
+	if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
+		return errCertifierNonLoopbackDial
+	}
+	return nil
+}
+
 // errCertifierRedirect is returned when the certifier redirects somewhere other than a loopback address.
 var errCertifierRedirect = errors.New("certifier redirected to a non-loopback URL")
 
@@ -1538,6 +1630,14 @@ const maxCertifierRedirects = 10
 func newCertifierClient(base *provider.HTTPClient, certifierURL string) *provider.HTTPClient {
 	certTransport := http.DefaultTransport.(*http.Transport).Clone()
 	certTransport.TLSClientConfig = certifierTLSConfig(certifierURL)
+	// Atmos fork: the unverified connection must never go through a proxy and must only reach a loopback
+	// address. A proxy from the environment is bypassed by Go only for lowercase "localhost" or a loopback IP,
+	// so a mixed-case loopback name could otherwise be sent to the proxy with verification disabled.
+	// A non-loopback certifier keeps full certificate verification and the default proxy handling.
+	if isLoopbackURL(certifierURL) {
+		certTransport.Proxy = nil
+		certTransport.DialContext = (&net.Dialer{Control: requireLoopbackDial}).DialContext
+	}
 
 	client := *base
 	client.Transport = certTransport

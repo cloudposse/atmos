@@ -142,11 +142,17 @@ func TestNewPinentryPrompter(t *testing.T) {
 func TestCliPrompterDisplay(t *testing.T) {
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
+	// Both ends are released even when an assertion fails; closing an already closed end is harmless.
+	t.Cleanup(func() {
+		_ = r.Close()
+		_ = w.Close()
+	})
 	origStderr := os.Stderr
 	os.Stderr = w
 	t.Cleanup(func() { os.Stderr = origStderr })
 
 	NewCli().Display("Open your authenticator app")
+	// Close the write end before reading so the read reaches EOF.
 	require.NoError(t, w.Close())
 	os.Stderr = origStderr
 

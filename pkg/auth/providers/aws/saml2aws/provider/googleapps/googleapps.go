@@ -39,6 +39,9 @@ var errCaptchaAttemptsExceeded = errors.New("captcha still requested after the m
 // errMFATransitionsExceeded is returned when Google keeps sending the user back to a challenge selection page.
 var errMFATransitionsExceeded = errors.New("2-step verification did not complete after the maximum number of challenge transitions")
 
+// errPhoneApprovalFailed is returned when waiting for the phone approval does not succeed.
+var errPhoneApprovalFailed = errors.New("phone approval failed")
+
 // maxMFATransitions bounds how many challenge selection pages one authentication attempt follows.
 const maxMFATransitions = 10
 
@@ -135,64 +138,11 @@ func (kc *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 		return "", errors.Wrap(err, "error loading challenge page")
 	}
 
-	captchaFound, captchaInputId := findCaptcha(responseDoc)
-
-	for attempt := 0; captchaFound != nil && captchaFound.Length() > 0; attempt++ {
-		if attempt >= maxCaptchaAttempts {
-			return "", errCaptchaAttemptsExceeded
-		}
-		// Atmos fork: upstream checked `captchaImgDiv != nil`, which is always true for a
-		// *goquery.Selection, so the legacy .captcha-img markup was never used, and it indexed
-		// Children().Nodes[0] without a length check, which panicked when the container was
-		// missing or empty. The new-style container is now only a fallback, and a missing image
-		// returns an error.
-		captchaImgDiv := responseDoc.Find(".captcha-img")
-		if captchaImgDiv.Length() == 0 {
-			captchaImgDiv = responseDoc.Find("div[data-auto-init='CaptchaInput']")
-			captchaInputId = "ca"
-		}
-		captchaImg := captchaImgDiv.Children().First()
-		if captchaImg.Length() == 0 {
-			return "", errCaptchaImageNotFound
-		}
-		captchaPictureSrc, found := captchaImg.Attr("src")
-
-		if !found {
-			return "", errCaptchaImageNotFound
-		}
-
-		captchaPictureURL, err := generateFullURLIfRelative(captchaPictureSrc, passwordURL)
-		if err != nil {
-			return "", errors.Wrap(err, "error generating captcha image URL")
-		}
-
-		captcha, err := kc.tryDisplayCaptcha(captchaPictureURL)
-		if err != nil {
-			return "", err
-		}
-
-		captchaForm, captchaURL, err := extractInputsByFormID(responseDoc, "gaia_loginform", "challenge")
-		if err != nil {
-			return "", errors.Wrap(err, "error extracting captcha")
-		}
-
-		logger.Debugf("captchaURL: %s", provider.RedactRawURL(captchaURL))
-
-		_, captchaV1 := captchaForm["Passwd"]
-		if captchaV1 {
-			captchaForm.Set("Passwd", loginDetails.Password)
-		}
-		captchaForm.Set(captchaInputId, captcha)
-
-		responseDoc, err = kc.loadChallengePage(withLocale(captchaURL), captchaURL, captchaForm, loginDetails)
-		if err != nil {
-			return "", errors.Wrap(err, "error loading challenge page")
-		}
-
-		// Atmos fork: upstream re-checked only `#<input id>`, but the new-style captcha input
-		// is `name="ca"` with no id, so a rejected answer was never retried and the flow failed
-		// looking for a SAMLResponse on the captcha page. Re-run the same detection instead.
-		captchaFound, captchaInputId = findCaptcha(responseDoc)
+	// Atmos fork: the captcha handling is shared by every response in this flow, with one attempt budget.
+	captchaAttempts := 0
+	responseDoc, err = kc.solveCaptchas(responseDoc, loginDetails, &captchaAttempts)
+	if err != nil {
+		return "", err
 	}
 
 	// New Captcha proceeds back to password page
@@ -208,6 +158,12 @@ func (kc *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 		responseDoc, err = kc.loadChallengePage(withLocale(loginURL), loginURL, loginForm, loginDetails)
 		if err != nil {
 			return "", errors.Wrap(err, "error loading challenge page")
+		}
+
+		// Atmos fork: the resubmitted password can be answered with a captcha as well.
+		responseDoc, err = kc.solveCaptchas(responseDoc, loginDetails, &captchaAttempts)
+		if err != nil {
+			return "", err
 		}
 	}
 
@@ -230,6 +186,79 @@ func (kc *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 	return samlAssertion, nil
 }
 
+// solveCaptchas answers captcha pages until the response no longer asks for one. The attempts counter is
+// shared by all callers in one authentication, so the total number of answers stays bounded.
+func (kc *Client) solveCaptchas(responseDoc *goquery.Document, loginDetails *creds.LoginDetails, attempts *int) (*goquery.Document, error) {
+	captchaFound, captchaInputId := findCaptcha(responseDoc)
+
+	for captchaFound != nil && captchaFound.Length() > 0 {
+		if *attempts >= maxCaptchaAttempts {
+			return nil, errCaptchaAttemptsExceeded
+		}
+		*attempts++
+		// Atmos fork: upstream checked `captchaImgDiv != nil`, which is always true for a
+		// *goquery.Selection, so the legacy .captcha-img markup was never used, and it indexed
+		// Children().Nodes[0] without a length check, which panicked when the container was
+		// missing or empty. The new-style container is now only a fallback, and a missing image
+		// returns an error.
+		captchaImgDiv := responseDoc.Find(".captcha-img")
+		if captchaImgDiv.Length() == 0 {
+			captchaImgDiv = responseDoc.Find("div[data-auto-init='CaptchaInput']")
+			captchaInputId = "ca"
+		}
+		captchaImg := captchaImgDiv.Children().First()
+		if captchaImg.Length() == 0 {
+			return nil, errCaptchaImageNotFound
+		}
+		captchaPictureSrc, found := captchaImg.Attr("src")
+
+		if !found {
+			return nil, errCaptchaImageNotFound
+		}
+
+		// Atmos fork: the image resolves against the page that contains it, which can be on another host
+		// after a redirect, not against the original password page.
+		pageURL := ""
+		if responseDoc.Url != nil {
+			pageURL = responseDoc.Url.String()
+		}
+		captchaPictureURL, err := generateFullURLIfRelative(captchaPictureSrc, pageURL)
+		if err != nil {
+			return nil, errors.Wrap(err, "error generating captcha image URL")
+		}
+
+		captcha, err := kc.tryDisplayCaptcha(captchaPictureURL)
+		if err != nil {
+			return nil, err
+		}
+
+		captchaForm, captchaURL, err := extractInputsByFormID(responseDoc, "gaia_loginform", "challenge")
+		if err != nil {
+			return nil, errors.Wrap(err, "error extracting captcha")
+		}
+
+		logger.Debugf("captchaURL: %s", provider.RedactRawURL(captchaURL))
+
+		_, captchaV1 := captchaForm["Passwd"]
+		if captchaV1 {
+			captchaForm.Set("Passwd", loginDetails.Password)
+		}
+		captchaForm.Set(captchaInputId, captcha)
+
+		responseDoc, err = kc.loadChallengePage(withLocale(captchaURL), captchaURL, captchaForm, loginDetails)
+		if err != nil {
+			return nil, errors.Wrap(err, "error loading challenge page")
+		}
+
+		// Atmos fork: upstream re-checked only `#<input id>`, but the new-style captcha input
+		// is `name="ca"` with no id, so a rejected answer was never retried and the flow failed
+		// looking for a SAMLResponse on the captcha page. Re-run the same detection instead.
+		captchaFound, captchaInputId = findCaptcha(responseDoc)
+	}
+
+	return responseDoc, nil
+}
+
 func isMissing2StepSetup(responseDoc *goquery.Document) error {
 	if responseDoc.Selection.Find("section.aN1Vld ").Text() != "" {
 		return errors.New("Because of your organization settings, you must set-up 2-Step Verification in your account")
@@ -249,7 +278,8 @@ func (kc *Client) tryDisplayCaptcha(captchaPictureURL string) (string, error) {
 }
 
 func (kc *Client) iTermCaptchaPrompt(captchaPictureURL string) (string, error) {
-	log.Printf("Detected iTerm, displaying URL: %s\n", captchaPictureURL)
+	// Atmos fork: the image URL carries a challenge token, so it is not logged; the image is shown inline.
+	log.Println("Detected iTerm, displaying the captcha image inline.")
 	imgResp, err := kc.client.Get(captchaPictureURL)
 	if err != nil {
 		return "", errors.Wrap(err, "unable to fetch captcha image")
@@ -257,8 +287,13 @@ func (kc *Client) iTermCaptchaPrompt(captchaPictureURL string) (string, error) {
 	defer imgResp.Body.Close()
 	var buf bytes.Buffer
 	b64Encoder := b64.NewEncoder(b64.StdEncoding, &buf)
-	_, _ = io.Copy(b64Encoder, imgResp.Body)
-	_ = b64Encoder.Close()
+	// Atmos fork: an interrupted download is an error; a partial image is not shown to the user.
+	if _, err := io.Copy(b64Encoder, imgResp.Body); err != nil {
+		return "", errors.Wrap(err, "unable to read captcha image")
+	}
+	if err := b64Encoder.Close(); err != nil {
+		return "", errors.Wrap(err, "unable to encode captcha image")
+	}
 
 	// Atmos fork: upstream printed the inline image to stdout, which is the caller's data
 	// channel (for example `eval $(atmos auth env)`). It is written to stderr, where the
@@ -502,6 +537,12 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 			}
 			u2fClient, err := NewU2FClient(challengeNonce, appID, facet, data[0], newU2FDeviceFinder())
 			if err != nil {
+				// Atmos fork: without an attached security key, another factor is offered when the page has a
+				// skip form (as after a failure with an attached key). Otherwise the device error is returned.
+				if (errors.Is(err, errNoDeviceFound) || errors.Is(err, errU2FOpenTimeout)) && doc.Find(`form[action$="skip"]`).Length() > 0 {
+					logger.WithError(err).Warn("No usable security key; trying another second factor.")
+					return kc.skipChallengePage(doc, submitURL, secondActionURL, loginDetails)
+				}
 				return nil, errors.Wrap(err, "Failed to prompt for second factor.")
 			}
 
@@ -534,6 +575,11 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 			}
 			// Atmos fork: the response body was never closed, which prevents connection reuse.
 			_ = waitRes.Body.Close()
+			// Atmos fork: the HTTP client returns error statuses as responses, so a failed wait (for example a
+			// 503) must stop the flow instead of submitting the verification form as if the phone approved.
+			if waitRes.StatusCode < http.StatusOK || waitRes.StatusCode >= http.StatusMultipleChoices {
+				return nil, fmt.Errorf("%w: status %s", errPhoneApprovalFailed, waitRes.Status)
+			}
 
 			// responseForm.Set("Pin", token)
 			responseForm.Set("TrustDevice", "on") // Don't ask again on this computer
@@ -629,6 +675,7 @@ func (kc *Client) loadChallengeEntryPage(doc *goquery.Document, submitURL string
 		if strings.Contains(action, "challenge/totp/") ||
 			strings.Contains(action, "challenge/ipp/") ||
 			strings.Contains(action, "challenge/az/") ||
+			strings.Contains(action, "challenge/dp/") ||
 			strings.Contains(action, "challenge/skotp/") {
 
 			challengeEntry, _ = s.Attr("data-challengeentry")
@@ -754,37 +801,56 @@ func extractInputsByFormID(doc *goquery.Document, formID ...string) (url.Values,
 		return formData, actionURL, nil
 	}
 
-	// No form with the given ids exists, so search for any form.
-	formData, actionURL, err := extractInputsByFormQuery(doc, "")
-	if err != nil && actionURL != "" {
-		return formData, actionURL, errors.New("could not find any forms with actions")
-	}
-
-	if len(formData) == 0 {
+	// No form with the given ids exists, so use one form.
+	// Atmos fork: upstream merged the fields of every form and used the action of the last one, so a second
+	// unnamed form (for example account recovery) supplied the action for the first form's fields. The first
+	// form that has an action is used, or the first form when none has, with its own action and fields.
+	forms := doc.Find("form")
+	if forms.Length() == 0 {
 		return nil, "", errors.New("could not find any forms")
 	}
+	chosen := forms.First()
+	forms.EachWithBreak(func(_ int, f *goquery.Selection) bool {
+		if _, ok := f.Attr("action"); ok {
+			chosen = f
+			return false
+		}
+		return true
+	})
 
-	// Fallback in case no forms with actionURL were found
-	return formData, actionURL, err
+	formData, actionURL, err := extractInputsFromForms(doc, chosen)
+	if err != nil || len(formData) == 0 {
+		return nil, "", errors.New("could not find any forms")
+	}
+	return formData, actionURL, nil
 }
 
 func extractInputsByFormQuery(doc *goquery.Document, formQuery string) (url.Values, string, error) {
-	formData := url.Values{}
-	var actionAttr string
-
 	query := fmt.Sprintf("form%s", formQuery)
 
 	// Atmos fork: goquery leaves doc.Url nil for reader-based documents; upstream dereferenced it.
 	if doc.Url == nil {
+		return url.Values{}, "", errors.New("document has no URL")
+	}
+
+	foundForms := doc.Find(query)
+	if len(foundForms.Nodes) == 0 {
+		return url.Values{}, "", fmt.Errorf("could not find form with query %q", query)
+	}
+
+	return extractInputsFromForms(doc, foundForms)
+}
+
+// extractInputsFromForms returns the fields of the given forms and the action URL of the last form that
+// has an action, resolved against the document URL (the document URL itself when no form has an action).
+func extractInputsFromForms(doc *goquery.Document, foundForms *goquery.Selection) (url.Values, string, error) {
+	formData := url.Values{}
+	var actionAttr string
+
+	if doc.Url == nil {
 		return formData, "", errors.New("document has no URL")
 	}
 	currentURL := doc.Url.String()
-
-	// get action url
-	foundForms := doc.Find(query)
-	if len(foundForms.Nodes) == 0 {
-		return formData, "", fmt.Errorf("could not find form with query %q", query)
-	}
 
 	foundForms.Each(func(i int, s *goquery.Selection) {
 		action, ok := s.Attr("action")
@@ -803,10 +869,8 @@ func extractInputsByFormQuery(doc *goquery.Document, formQuery string) (url.Valu
 		return formData, "", errors.Wrap(err, "error getting action URL")
 	}
 
-	query = fmt.Sprintf("form%s", formQuery)
-
 	// extract form data to passthrough
-	doc.Find(query).Find("input").Each(func(i int, s *goquery.Selection) {
+	foundForms.Find("input").Each(func(i int, s *goquery.Selection) {
 		name, ok := s.Attr("name")
 		if !ok {
 			return
@@ -921,16 +985,26 @@ func filterKeyHandleList(list []interface{}, challengeTxt string) (string, []str
 
 func generateFullURLIfRelative(destination, currentPageURL string) (string, error) {
 	// Atmos fork: upstream indexed destination[0] and panicked on forms without an action attribute.
-	if strings.HasPrefix(destination, "/") {
-		currentURLParsed, err := url.Parse(currentPageURL)
-		if err != nil {
-			return "", errors.Wrap(err, "error generating full URL")
-		}
-
-		return fmt.Sprintf("%s://%s%s", currentURLParsed.Scheme, currentURLParsed.Host, destination), nil
-	} else {
+	if destination == "" {
 		return destination, nil
 	}
+
+	// Atmos fork: upstream resolved only root-relative destinations, so a directory-relative action such as
+	// "next" stayed without a scheme and host. Every relative reference is now resolved against the page URL.
+	reference, err := url.Parse(destination)
+	if err != nil || reference.IsAbs() {
+		return destination, nil
+	}
+
+	currentURLParsed, err := url.Parse(currentPageURL)
+	if err != nil {
+		if strings.HasPrefix(destination, "/") {
+			return "", errors.Wrap(err, "error generating full URL")
+		}
+		return destination, nil
+	}
+
+	return currentURLParsed.ResolveReference(reference).String(), nil
 }
 
 func isKeyHandle(key, challengeTxt string) bool {

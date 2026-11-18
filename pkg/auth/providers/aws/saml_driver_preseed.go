@@ -62,10 +62,21 @@ var (
 	preseedHTTPClient = &http.Client{Timeout: preseedDownloadTimeout}
 )
 
+// externalPlaywrightCLI reports whether PLAYWRIGHT_CLI_PATH selects an externally managed driver CLI.
+// playwright-go then neither downloads nor patches the driver, so Atmos must not either.
+func externalPlaywrightCLI() bool {
+	return os.Getenv("PLAYWRIGHT_CLI_PATH") != "" //nolint:forbidigo // Third-party (playwright-go) env var, read the same way the library reads it.
+}
+
 // ensurePlaywrightDriver pre-seeds playwright-go's default driver directory
 // (<cache>/ms-playwright-go/<version>, or PLAYWRIGHT_DRIVER_PATH) with
 // package/cli.js from the playwright-core npm package and a Node.js binary.
-// It is a fast no-op when the driver is already present.
+// It is a fast no-op when the driver is already present. The bundled CLI is not
+// fetched when PLAYWRIGHT_CLI_PATH selects an external CLI, since it would go unused;
+// the Node.js runtime is still prepared because the external CLI runs on it.
+//
+// A failed attempt does not leave a partial driver behind: Playwright treats an existing
+// package/cli.js as a complete driver and would never run its own downloader for it.
 func ensurePlaywrightDriver() error {
 	defer perf.Track(nil, "aws.ensurePlaywrightDriver")()
 
@@ -76,13 +87,46 @@ func ensurePlaywrightDriver() error {
 	}
 	driverDir := opts.DriverDirectory
 
-	if _, err := os.Stat(filepath.Join(driverDir, "package", "cli.js")); err != nil {
-		if err := seedPlaywrightCore(driverDir, driver.Version); err != nil {
-			return err
+	seededCore := false
+	if !externalPlaywrightCLI() {
+		if _, err := os.Stat(filepath.Join(driverDir, "package", "cli.js")); err != nil {
+			seededCore = true
+			if err := seedPlaywrightCore(driverDir, driver.Version); err != nil {
+				removeSeededPackage(driverDir)
+				return err
+			}
 		}
 	}
 
-	return seedNodeBinary(driverDir)
+	if err := seedNodeBinary(driverDir); err != nil {
+		if seededCore {
+			// The driver must be seeded together with its Node.js runtime, or not at all, so Playwright's
+			// own downloader can still run (it is skipped once cli.js exists).
+			removeSeededPackage(driverDir)
+		}
+		return err
+	}
+	return nil
+}
+
+// removeSeededPackage removes the driver package written by a failed seeding attempt. It runs only
+// when package/cli.js did not exist before the attempt, so nothing usable is removed.
+func removeSeededPackage(driverDir string) {
+	if err := os.RemoveAll(filepath.Join(driverDir, "package")); err != nil {
+		log.Debug("Could not remove the partially seeded Playwright driver", "dir", driverDir, "error", err)
+	}
+}
+
+// playwrightBundleReplacements are the compatibility patches playwright-go v0.6401 applies to
+// package/lib/coreBundle.js after a driver download. Keep them in sync with playwright-go's
+// patchDriverBundle when upgrading it.
+var playwrightBundleReplacements = []struct {
+	original string
+	patched  string
+}{
+	{"pageError.location.url", `pageError.location?.url || ""`},
+	{"pageError.location.lineNumber", "pageError.location?.lineNumber || 0"},
+	{"pageError.location.columnNumber", "pageError.location?.columnNumber || 0"},
 }
 
 // patchPlaywrightDriver applies playwright-go's compatibility patches to the driver
@@ -90,26 +134,91 @@ func ensurePlaywrightDriver() error {
 // DownloadDriver, which Install calls but Run does not. A pre-seeded driver is
 // therefore unpatched until a browser download runs, and that never happens when
 // the required browser is already installed or a custom browser is configured.
-// It is a no-op without a driver in the driver directory, so DownloadDriver can
-// never fall back to downloading an unverified driver from here.
+//
+// The patch is applied here instead of through DownloadDriver: playwright-go rewrites
+// the bundle in place, so a failed write would truncate the live copy, and DownloadDriver
+// downloads an unverified driver if the cache entry disappears in the meantime. This
+// version writes a staged copy and renames it over the bundle, and never downloads.
+// It is a no-op without a driver in the driver directory.
 func patchPlaywrightDriver() error {
 	defer perf.Track(nil, "aws.patchPlaywrightDriver")()
 
-	if os.Getenv("PLAYWRIGHT_CLI_PATH") != "" { //nolint:forbidigo // Third-party (playwright-go) env var, read the same way the library reads it.
+	if externalPlaywrightCLI() {
 		// playwright-go never patches an external driver.
 		return nil
 	}
 
 	opts := &playwright.RunOptions{}
-	driver, err := playwright.NewDriver(opts)
-	if err != nil {
+	if _, err := playwright.NewDriver(opts); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrPlaywrightDriverSeed, err)
 	}
 	if _, err := os.Stat(filepath.Join(opts.DriverDirectory, "package", "cli.js")); err != nil {
 		return nil
 	}
-	if err := driver.DownloadDriver(); err != nil {
+	if err := patchDriverBundle(filepath.Join(opts.DriverDirectory, "package", "lib", "coreBundle.js")); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrPlaywrightDriverSeed, err)
+	}
+	return nil
+}
+
+// patchDriverBundle applies playwrightBundleReplacements to the bundle at bundlePath. An already
+// patched bundle is left untouched, and a bundle without the expected code is rejected.
+// The patched content is published with an atomic rename of a staged file in the same directory,
+// so concurrent readers and a failed write never see a truncated bundle.
+func patchDriverBundle(bundlePath string) error {
+	data, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return fmt.Errorf("could not read driver bundle: %w", err)
+	}
+	info, err := os.Stat(bundlePath)
+	if err != nil {
+		return fmt.Errorf("could not stat driver bundle: %w", err)
+	}
+
+	changed := false
+	for _, replacement := range playwrightBundleReplacements {
+		original := []byte(replacement.original)
+		patched := []byte(replacement.patched)
+		if !bytes.Contains(data, original) && !bytes.Contains(data, patched) {
+			return fmt.Errorf("could not patch driver bundle: expected pageError location pattern %q or %q", replacement.original, replacement.patched)
+		}
+		if bytes.Contains(data, original) {
+			data = bytes.ReplaceAll(data, original, patched)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+
+	staged, err := os.CreateTemp(filepath.Dir(bundlePath), ".coreBundle-*.tmp")
+	if err != nil {
+		return fmt.Errorf("could not stage the patched driver bundle: %w", err)
+	}
+	stagedPath := staged.Name()
+	if err := writeStagedBundle(staged, data, info.Mode().Perm()); err != nil {
+		os.Remove(stagedPath)
+		return err
+	}
+	if err := os.Rename(stagedPath, bundlePath); err != nil {
+		os.Remove(stagedPath)
+		return fmt.Errorf("could not publish the patched driver bundle: %w", err)
+	}
+	return nil
+}
+
+// writeStagedBundle writes data to the staged file, applies mode and closes it.
+func writeStagedBundle(staged *os.File, data []byte, mode os.FileMode) error {
+	if _, err := staged.Write(data); err != nil {
+		staged.Close()
+		return fmt.Errorf("could not write the patched driver bundle: %w", err)
+	}
+	if err := staged.Chmod(mode); err != nil {
+		staged.Close()
+		return fmt.Errorf("could not set the patched driver bundle mode: %w", err)
+	}
+	if err := staged.Close(); err != nil {
+		return fmt.Errorf("could not write the patched driver bundle: %w", err)
 	}
 	return nil
 }
@@ -446,6 +555,8 @@ func writePreseedFile(root *os.Root, relPath string, reader io.Reader, mode os.F
 	}
 	if _, err := io.Copy(outFile, reader); err != nil {
 		outFile.Close()
+		// A half-written file must not look like a finished one (a truncated Node.js binary is skipped as present).
+		_ = root.Remove(relPath)
 		return fmt.Errorf("could not write file: %w", err)
 	}
 	return outFile.Close()

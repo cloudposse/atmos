@@ -11,20 +11,27 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"testing/iotest"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/cfg"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
-	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
-	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/prompter"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/provider"
 )
+
+// redirectStdLog sends the standard logger output to w and restores the previous writer when the test ends.
+func redirectStdLog(t *testing.T, w io.Writer) {
+	t.Helper()
+
+	orig := log.Writer()
+	log.SetOutput(w)
+	t.Cleanup(func() { log.SetOutput(orig) })
+}
 
 type stateTokenTests struct {
 	title      string
@@ -56,7 +63,7 @@ func TestGetStateTokenFromOktaPageBody(t *testing.T) {
 		},
 		{
 			title:      "State token with hyphen handled correctly",
-			body:       "someJavascriptCode();\nvar stateToken = '12345\x2D6789';\nsomeOtherJavaScriptCode();",
+			body:       "someJavascriptCode();\nvar stateToken = '12345\\x2D6789';\nsomeOtherJavaScriptCode();", // gitleaks:allow -- Fake state token in a test fixture.
 			stateToken: "12345-6789",
 			err:        nil,
 		},
@@ -72,9 +79,10 @@ func TestGetStateTokenFromOktaPageBody(t *testing.T) {
 			stateToken, err := getStateTokenFromOktaPageBody(test.body)
 			assert.Equal(t, test.stateToken, stateToken)
 			if test.err != nil {
-				assert.NotNil(t, err)
-				assert.Equal(t, test.err.Error(), err.Error())
+				require.EqualError(t, err, test.err.Error())
+				return
 			}
+			require.NoError(t, err)
 		})
 	}
 }
@@ -244,7 +252,7 @@ func TestVerifyMfa(t *testing.T) {
 		assert.Nil(t, err)
 
 		var out bytes.Buffer
-		log.SetOutput(&out)
+		redirectStdLog(t, &out)
 		context, err := verifyMfa(oc, "", &creds.LoginDetails{}, fmt.Sprintf(`{
 			"stateToken": "TOKEN_1",
 			"_embedded": {
@@ -260,7 +268,6 @@ func TestVerifyMfa(t *testing.T) {
 				]
 			}
 		}`, ts.URL))
-		log.SetOutput(os.Stderr)
 		assert.Nil(t, err)
 		assert.Contains(t, out.String(), "Correct Answer: 92")
 
@@ -291,7 +298,7 @@ func TestVerifyMfa_Email(t *testing.T) {
 		assert.Nil(t, err)
 
 		var out bytes.Buffer
-		log.SetOutput(&out)
+		redirectStdLog(t, &out)
 		context, err := verifyMfa(oc, "", &creds.LoginDetails{
 			MFAToken: "123456",
 		}, fmt.Sprintf(`{
@@ -309,7 +316,6 @@ func TestVerifyMfa_Email(t *testing.T) {
 				]
 			}
 		}`, ts.URL))
-		log.SetOutput(os.Stderr)
 		assert.Nil(t, err)
 		assert.Equal(t, context, "TOKEN_3")
 	})
@@ -326,7 +332,7 @@ func TestVerifyMfa_Duo(t *testing.T) {
 		assert.Nil(t, err)
 
 		var out bytes.Buffer
-		log.SetOutput(&out)
+		redirectStdLog(t, &out)
 		context, err := verifyMfa(oc, "host-from-argument", &creds.LoginDetails{DuoMFAOption: "Duo Push"}, fmt.Sprintf(`{
 			"stateToken": "TOKEN_1",
 			"status": "MFA_REQUIRED",
@@ -350,7 +356,6 @@ func TestVerifyMfa_Duo(t *testing.T) {
 				]
 			}
 		}`, ts.URL))
-		log.SetOutput(os.Stderr)
 		assert.Nil(t, err)
 		assert.Equal(t, "session-token-fffffff", context)
 	})
@@ -363,12 +368,11 @@ func TestVerifyMfa_Duo(t *testing.T) {
 		err := oc.setDeviceTokenCookie(loginDetails)
 		assert.Nil(t, err)
 
-		pr := &mocks.Prompter{}
-		prompter.SetPrompter(pr)
+		pr := withMockPrompter(t)
 		pr.Mock.On("StringRequired", "Enter passcode").Return("000000")
 
 		var out bytes.Buffer
-		log.SetOutput(&out)
+		redirectStdLog(t, &out)
 		context, err := verifyMfa(oc, "host-from-argument", &creds.LoginDetails{DuoMFAOption: "Passcode"}, fmt.Sprintf(`{
 			"stateToken": "TOKEN_1",
 			"status": "MFA_REQUIRED",
@@ -392,7 +396,6 @@ func TestVerifyMfa_Duo(t *testing.T) {
 				]
 			}
 		}`, ts.URL))
-		log.SetOutput(os.Stderr)
 		assert.Nil(t, err)
 		assert.Equal(t, "session-token-fffffff", context)
 	})
@@ -412,6 +415,13 @@ func setupTestClient(t *testing.T, ts *httptest.Server, mfa string) (*Client, *c
 	}
 	loginDetails := &creds.LoginDetails{URL: ts.URL, Username: "user@example.com", Password: "test123"}
 	return ac, loginDetails
+}
+
+// withProductionStatusValidator installs the response validator that New installs, so non-success statuses
+// fail in HTTPClient.Do exactly as they do in production.
+func withProductionStatusValidator(oc *Client) *Client {
+	oc.client.CheckResponseStatus = provider.SuccessOrRedirectResponseValidator
+	return oc
 }
 
 func setupTestDuoHttpServer(t *testing.T, duoFactor string) *httptest.Server {
@@ -703,13 +713,15 @@ func TestOktaCfgFlagsCustomState(t *testing.T) {
 	assert.False(t, oc.disableSessions, fmt.Errorf("disableSessions should be false by default"))
 	assert.False(t, oc.rememberDevice, fmt.Errorf("DisableRememberDevice was set to true, so rememberDevice should be false"))
 
+	// Sessions are disabled on their own: rememberDevice must still be forced off by DisableSessions alone.
+	idpAccount.DisableRememberDevice = false
 	idpAccount.DisableSessions = true
 
 	oc, err = New(idpAccount)
 	assert.Nil(t, err)
 
 	assert.True(t, oc.disableSessions, fmt.Errorf("DisableSessions was set to true so disableSessions should be true"))
-	assert.False(t, oc.rememberDevice, fmt.Errorf("DisablDisableSessionseRememberDevice was set to true, so rememberDevice should be false"))
+	assert.False(t, oc.rememberDevice, fmt.Errorf("DisableSessions was set to true, so rememberDevice should be false"))
 }
 
 func TestOktaParseMfaIdentifer(t *testing.T) {

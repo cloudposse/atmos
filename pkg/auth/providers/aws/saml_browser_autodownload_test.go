@@ -45,6 +45,11 @@ func useFakeDriverManifest(t *testing.T, hostPlatform string) string {
 	return cacheDir
 }
 
+// shouldDownloadBrowserFor evaluates the download decision for the driver the provider selects.
+func shouldDownloadBrowserFor(p *samlProvider) bool {
+	return p.shouldDownloadBrowser(p.getDriver())
+}
+
 func newBrowserTypeProvider(t *testing.T, browserType string) *samlProvider {
 	t.Helper()
 	p, err := NewSAMLProvider("test", &schema.Provider{
@@ -94,7 +99,7 @@ func TestShouldDownloadBrowser_PlaywrightManagedBrowserTypes(t *testing.T) {
 				installFakeBrowser(t, cacheDir, dir)
 			}
 
-			assert.Equal(t, tt.want, newBrowserTypeProvider(t, tt.browserType).shouldDownloadBrowser())
+			assert.Equal(t, tt.want, shouldDownloadBrowserFor(newBrowserTypeProvider(t, tt.browserType)))
 		})
 	}
 }
@@ -106,14 +111,14 @@ func TestShouldDownloadBrowser_WebKitRevisionOverride(t *testing.T) {
 		cacheDir := useFakeDriverManifest(t, testHostPlatform)
 		installFakeBrowser(t, cacheDir, "webkit_mac14_arm64_special-2251")
 
-		assert.False(t, newBrowserTypeProvider(t, "webkit").shouldDownloadBrowser())
+		assert.False(t, shouldDownloadBrowserFor(newBrowserTypeProvider(t, "webkit")))
 	})
 
 	t.Run("only the default revision installed", func(t *testing.T) {
 		cacheDir := useFakeDriverManifest(t, testHostPlatform)
 		installFakeBrowser(t, cacheDir, "webkit-2370")
 
-		assert.True(t, newBrowserTypeProvider(t, "webkit").shouldDownloadBrowser())
+		assert.True(t, shouldDownloadBrowserFor(newBrowserTypeProvider(t, "webkit")))
 	})
 }
 
@@ -123,7 +128,7 @@ func TestShouldDownloadBrowser_ExecutablePathNeverDownloads(t *testing.T) {
 	p := newBrowserTypeProvider(t, "firefox")
 	p.config.BrowserExecutablePath = filepath.Join(t.TempDir(), "firefox")
 
-	assert.False(t, p.shouldDownloadBrowser())
+	assert.False(t, p.shouldDownloadBrowser(p.getDriver()))
 }
 
 // Regression: SAML2AWS_AUTO_BROWSER_DOWNLOAD is only read by the saml2aws CLI, which Atmos does not

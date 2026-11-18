@@ -39,10 +39,13 @@ func (_m *Prompter) ChooseWithDefault(_a0 string, _a1 string, _a2 []string) (str
 		r0 = ret.Get(0).(string)
 	}
 
-	if rf, ok := ret.Get(1).(func(string, string, []string) error); ok {
-		r1 = rf(_a0, _a1, _a2)
-	} else {
-		r1 = ret.Error(1)
+	// Atmos fork: a missing error return value means nil, as for the other methods.
+	if len(ret) > 1 {
+		if rf, ok := ret.Get(1).(func(string, string, []string) error); ok {
+			r1 = rf(_a0, _a1, _a2)
+		} else {
+			r1 = ret.Error(1)
+		}
 	}
 
 	return r0, r1

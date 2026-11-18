@@ -123,23 +123,68 @@ func TestClientDoWithRetry_BodylessRequestStillRetried(t *testing.T) {
 	assert.Equal(t, int32(2), tr.calls.Load())
 }
 
+// cancelingTransport cancels the request context on its first call and fails every call, so the
+// cancellation lands exactly when the first failed attempt reaches the retry delay.
+type cancelingTransport struct {
+	cancel context.CancelFunc
+	calls  atomic.Int32
+}
+
+func (c *cancelingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	if c.calls.Add(1) == 1 {
+		c.cancel()
+	}
+	return nil, errTransport
+}
+
 // Regression: cancelling the request context stops the retry backoff instead of waiting it out.
 func TestClientDoWithRetry_StopsOnCancelledContext(t *testing.T) {
-	tr := &flakyTransport{failures: 10, next: http.DefaultTransport}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tr := &cancelingTransport{cancel: cancel}
 	hc, err := NewHTTPClient(tr, &HTTPClientOptions{IsWithRetries: true, AttemptsCount: 5, RetryDelay: time.Minute})
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://idp.example.com/", nil)
 	require.NoError(t, err)
 
-	start := time.Now()
-	resp, err := hc.Do(req)
-	if resp != nil {
-		_ = resp.Body.Close()
+	type result struct {
+		resp *http.Response
+		err  error
 	}
-	require.Error(t, err)
-	assert.Less(t, time.Since(start), 10*time.Second)
+	done := make(chan result, 1)
+	go func() {
+		resp, doErr := hc.Do(req)
+		done <- result{resp, doErr}
+	}()
+
+	// The watchdog only guards against a hang; cancellation itself is triggered by the first attempt.
+	select {
+	case res := <-done:
+		if res.resp != nil {
+			_ = res.resp.Body.Close()
+		}
+		require.Error(t, res.err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the retry wait ignored the cancelled context")
+	}
 	assert.Equal(t, int32(1), tr.calls.Load())
+}
+
+// Regression: an absurd attempt count made retry-go allocate an error slice of that length and panic.
+func TestAtLeastOneAttemptBounds(t *testing.T) {
+	assert.Equal(t, uint(1), atLeastOneAttempt(0))
+	assert.Equal(t, uint(7), atLeastOneAttempt(7))
+	assert.Equal(t, uint(MaxAttemptsCount), atLeastOneAttempt(MaxAttemptsCount+1))
+	assert.Equal(t, uint(MaxAttemptsCount), atLeastOneAttempt(^uint(0)))
+
+	hc, err := NewHTTPClient(&flakyTransport{next: http.DefaultTransport}, &HTTPClientOptions{IsWithRetries: true, AttemptsCount: ^uint(0), RetryDelay: time.Millisecond})
+	require.NoError(t, err)
+	ts := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer ts.Close()
+	req, err := http.NewRequest(http.MethodGet, ts.URL, http.NoBody)
+	require.NoError(t, err)
+	resp, err := hc.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
 }

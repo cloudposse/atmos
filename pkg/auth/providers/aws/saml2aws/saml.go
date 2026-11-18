@@ -52,12 +52,10 @@ func ExtractSessionDuration(data []byte) (int64, error) {
 	// log.Printf("tag: %s", assertionElement.Tag)
 
 	// Get the actual assertion attributes
-	attributeStatement := firstChild(assertionElement, assertionElement, attributeStatementTag)
-	if attributeStatement == nil {
-		return 0, ErrMissingElement{Tag: attributeStatementTag}
+	attributes, err := assertionAttributes(assertionElement)
+	if err != nil {
+		return 0, err
 	}
-
-	attributes := childElements(assertionElement, attributeStatement, attributeTag)
 
 	for _, attribute := range attributes {
 		if attribute.SelectAttrValue("Name", "") != "https://aws.amazon.com/SAML/Attributes/SessionDuration" {
@@ -150,14 +148,11 @@ func ExtractAwsRoles(data []byte) ([]string, error) {
 	// log.Printf("tag: %s", assertionElement.Tag)
 
 	// Get the actual assertion attributes
-	attributeStatement := firstChild(assertionElement, assertionElement, attributeStatementTag)
-	if attributeStatement == nil {
-		return nil, ErrMissingElement{Tag: attributeStatementTag}
+	attributes, err := assertionAttributes(assertionElement)
+	if err != nil {
+		return nil, err
 	}
 
-	// log.Printf("tag: %s", attributeStatement.Tag)
-
-	attributes := childElements(assertionElement, attributeStatement, attributeTag)
 	for _, attribute := range attributes {
 		if attribute.SelectAttrValue("Name", "") != "https://aws.amazon.com/SAML/Attributes/Role" {
 			continue
@@ -189,10 +184,19 @@ func childElements(assertion, parent *etree.Element, tag string) []*etree.Elemen
 	return matches
 }
 
-// firstChild returns the first direct child matched by childElements, or nil.
-func firstChild(assertion, parent *etree.Element, tag string) *etree.Element {
-	if matches := childElements(assertion, parent, tag); len(matches) > 0 {
-		return matches[0]
+// assertionAttributes returns the Attribute elements of every AttributeStatement of the assertion, in document order.
+//
+// Atmos fork: SAML 2.0 permits several AttributeStatement elements, and upstream read only the first, so a Role
+// attribute in a later statement was never found. ErrMissingElement is returned when there is no statement at all.
+func assertionAttributes(assertion *etree.Element) ([]*etree.Element, error) {
+	statements := childElements(assertion, assertion, attributeStatementTag)
+	if len(statements) == 0 {
+		return nil, ErrMissingElement{Tag: attributeStatementTag}
 	}
-	return nil
+
+	var attributes []*etree.Element
+	for _, statement := range statements {
+		attributes = append(attributes, childElements(assertion, statement, attributeTag)...)
+	}
+	return attributes, nil
 }
