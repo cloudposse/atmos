@@ -389,9 +389,15 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() er
 			if s.execCtx.planPolicy != nil {
 				writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
 			}
-			if digest, digestErr := fileDigest(writtenPath); digestErr == nil {
-				after.planDigest = digest
+			if runErr != nil && (!detailedExitCodeEnabled(phaseArgs) || resolveExitCode(runErr) != detailedExitCodeChangesDetected) {
+				return runErr
 			}
+			digest, digestErr := fileDigest(writtenPath)
+			if digestErr != nil {
+				s.err = digestErr
+				return digestErr
+			}
+			after.planDigest = digest
 			s.result = after
 		}
 		return runErr
