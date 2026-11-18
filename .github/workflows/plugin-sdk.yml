@@ -103,10 +103,11 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      # Restore the shared warmup cache without a multi-GB post-job upload.
+      # setup-go defaults to the runner architecture; verify the target below.
+      - uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: go.mod
-          architecture: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
           cache-dependency-path: |
             go.sum
             sdk/go.sum

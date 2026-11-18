@@ -274,15 +274,24 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	if err != nil {
 		return nil, err
 	}
+	stored, err := reviewedPlanConfiguration(execCtx.preparedConfiguration, snapshot.publicFiles)
+	if err != nil {
+		return nil, err
+	}
+	return &configurationPlan{WorkingDigest: snapshot.workingDigest, SensitiveDigest: snapshot.sensitiveDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, Prepared: stored}, nil
+}
+
+// reviewedPlanConfiguration keeps reviewed public bytes while omitting inputs and secrets.
+func reviewedPlanConfiguration(prepared *schema.PreparedComponentConfiguration, publicFiles string) (*schema.PreparedComponentConfiguration, error) {
 	// Inputs and backend values stay out of the record; see configurationPlan. Sensitive generated
 	// files, such as a backend file with credentials, keep only their place: apply reads their bytes
 	// back from the retained workdir, whose digest proves they are the reviewed ones.
-	stored := *execCtx.preparedConfiguration
+	stored := *prepared
 	stored.Inputs, stored.Backend = nil, nil
 	stored.Files = withoutSensitiveContent(stored.Files)
-	if snapshot.publicFiles != "" {
+	if publicFiles != "" {
 		var observed map[string][]byte
-		if err := json.Unmarshal([]byte(snapshot.publicFiles), &observed); err != nil {
+		if err := json.Unmarshal([]byte(publicFiles), &observed); err != nil {
 			return nil, err
 		}
 		for i := range stored.Files {
@@ -291,7 +300,7 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 			}
 		}
 	}
-	return &configurationPlan{WorkingDigest: snapshot.workingDigest, SensitiveDigest: snapshot.sensitiveDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, Prepared: &stored}, nil
+	return &stored, nil
 }
 
 // backendIdentityDigest hashes the canonical JSON form of backend settings, which only ever need equality.
