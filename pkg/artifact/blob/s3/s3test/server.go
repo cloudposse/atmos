@@ -115,6 +115,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.rec.update(index, func(rr *Request) { rr.Faulted = true })
 	}
 	if fault != nil && fault.Action == Gate {
+		defer close(fault.Done)
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "IncompleteBody", err.Error())
@@ -123,7 +124,6 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		r.Body = io.NopCloser(bytes.NewReader(body))
 		close(fault.Entered)
 		<-fault.Release
-		defer close(fault.Done)
 	}
 	rw := &statusWriter{ResponseWriter: w}
 	if fault != nil && s.applyEarlyFault(rw, r, fault) {

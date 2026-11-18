@@ -439,3 +439,26 @@ func TestAttributesWrapTagFailuresWithSharedSentinels(t *testing.T) {
 		})
 	}
 }
+
+// A Gate applies to one request even when Times asks for more, so its channels close once.
+func TestGateAppliesToExactlyOneRequest(t *testing.T) {
+	srv := NewServer(t)
+	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	srv.Inject(Fault{Op: OpPutObject, Action: Gate, Times: -1, Entered: entered, Release: release, Done: done})
+	client := noRetryClient(srv)
+	first := make(chan error, 1)
+	go func() {
+		_, err := putObject(t, client, srv, "gated", "x")
+		first <- err
+	}()
+	<-entered
+	_, err := putObject(t, client, srv, "ungated", "y")
+	require.NoError(t, err, "a second matching request is not gated")
+	close(release)
+	require.NoError(t, <-first)
+	<-done
+	for _, key := range []string{"gated", "ungated"} {
+		_, ok := srv.Object(key)
+		assert.True(t, ok, key)
+	}
+}

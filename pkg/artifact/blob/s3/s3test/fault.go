@@ -55,6 +55,8 @@ type Fault struct {
 	Code   string
 
 	// Entered and Release synchronize a [Gate]; Done closes after the handler finishes.
+	// A Gate applies to exactly one request: [Server.Inject] ignores Times for it, so the channels
+	// are closed at most once.
 	Entered chan<- struct{}
 	Release <-chan struct{}
 	Done    chan<- struct{}
@@ -135,6 +137,9 @@ func (f *Fault) status() (int, string) {
 func (s *Server) Inject(fault Fault) {
 	defer perf.Track(nil, "s3test.Server.Inject")()
 
+	if fault.Action == Gate {
+		fault.Times = 1
+	}
 	s.faults.add(&fault)
 }
 
