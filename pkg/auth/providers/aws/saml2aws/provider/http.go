@@ -30,6 +30,11 @@ const (
 	DefaultRetryDelay    = time.Duration(1) * time.Second
 	// MaxRetryDelay caps the configured delay between HTTP retries.
 	MaxRetryDelay = 5 * time.Minute
+	// DefaultRequestTimeout bounds each IdP request, including reading the response body.
+	// Atmos fork: upstream left http.Client.Timeout at zero, so an IdP that accepted a request
+	// and never answered blocked authentication forever. Two minutes is generous for interactive
+	// IdP pages; the MFA push/poll flows repeat short requests, so each one stays well inside it.
+	DefaultRequestTimeout = 2 * time.Minute
 )
 
 type HTTPClientOptions struct {
@@ -108,7 +113,7 @@ func NewHTTPClient(tr http.RoundTripper, opts *HTTPClientOptions) (*HTTPClient, 
 		return nil, err
 	}
 
-	client := http.Client{Transport: tr, Jar: jar}
+	client := http.Client{Transport: tr, Jar: jar, Timeout: DefaultRequestTimeout}
 
 	return &HTTPClient{client, nil, opts}, nil
 }

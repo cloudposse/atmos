@@ -14,6 +14,20 @@ import (
 const (
 	MaxOpenRetries = 10
 	RetryDelay     = 200 * time.Millisecond
+
+	// systemWebAuthnTimeoutMillis is the time the system WebAuthn prompt (Windows Hello) stays open.
+	// Atmos fork: upstream passed 2000, which the library reads as milliseconds, so the user had two
+	// seconds to complete a PIN or biometric prompt. 60 seconds covers an interactive prompt and is
+	// longer than the 25 second USB touch timeout.
+	systemWebAuthnTimeoutMillis = 60000
+)
+
+// Variables so tests can shorten them.
+var (
+	// u2fAuthTimeout bounds how long ChallengeU2F waits for a touch.
+	u2fAuthTimeout = 25 * time.Second
+	// u2fPollInterval is the delay between Authenticate attempts.
+	u2fPollInterval = 250 * time.Millisecond
 )
 
 var errNoDeviceFound = fmt.Errorf("no U2F devices found. device might not be plugged in")
@@ -77,6 +91,25 @@ func NewFidoClient(challengeNonce, appID, version, keyHandle, stateToken string,
 	return FidoClient{}, fmt.Errorf("failed to create client: %w. exceeded max retries of %d", err, MaxOpenRetries)
 }
 
+// u2fAuthResult carries the outcome of one blocking Device.Authenticate call.
+type u2fAuthResult struct {
+	response *u2fhost.AuthenticateResponse
+	err      error
+}
+
+// authenticateAsync runs one blocking Device.Authenticate call in its own goroutine.
+// Atmos fork: go-u2fhost reads from the HID device without a deadline, so a device that stops answering
+// blocked ChallengeU2F forever and the timeout below could never fire. The result channel is buffered
+// and never closed, so the goroutine can always deliver its result and exit, even after the caller stopped waiting.
+func (d *FidoClient) authenticateAsync(request *u2fhost.AuthenticateRequest) <-chan u2fAuthResult {
+	resultCh := make(chan u2fAuthResult, 1)
+	go func() {
+		response, err := d.Device.Authenticate(request)
+		resultCh <- u2fAuthResult{response: response, err: err}
+	}()
+	return resultCh
+}
+
 // ChallengeU2F takes a FidoClient and returns a signed assertion to send to Okta
 func (d *FidoClient) ChallengeU2F() (*SignedAssertion, error) {
 	if d.Device == nil {
@@ -91,20 +124,38 @@ func (d *FidoClient) ChallengeU2F() (*SignedAssertion, error) {
 	}
 	// do the change
 	prompted := false
-	timeout := time.After(time.Second * 25)
-	interval := time.NewTicker(time.Millisecond * 250)
+	timeout := time.After(u2fAuthTimeout)
+	interval := time.NewTicker(u2fPollInterval)
 	var responsePayload *SignedAssertion
 
+	// The device is closed on return, except when a blocked Authenticate call is abandoned on timeout:
+	// closing a HID handle while another goroutine is reading from it is unsafe, so the abandoned call
+	// closes the device itself once its read returns.
+	closeDevice := true
 	defer func() {
-		d.Device.Close()
+		if closeDevice {
+			d.Device.Close()
+		}
 	}()
 	defer interval.Stop()
 	for {
 		select {
 		case <-timeout:
-			return nil, errors.New("failed to get authentication response after 25 seconds")
+			return nil, fmt.Errorf("failed to get authentication response after %d seconds", int(u2fAuthTimeout/time.Second))
 		case <-interval.C:
-			response, err := d.Device.Authenticate(request)
+			pending := d.authenticateAsync(request)
+			var result u2fAuthResult
+			select {
+			case result = <-pending:
+			case <-timeout:
+				closeDevice = false
+				go func() {
+					<-pending
+					d.Device.Close()
+				}()
+				return nil, fmt.Errorf("failed to get authentication response after %d seconds", int(u2fAuthTimeout/time.Second))
+			}
+			response, err := result.response, result.err
 			if err == nil {
 				responsePayload = &SignedAssertion{
 					StateToken:        d.StateToken,
@@ -164,7 +215,7 @@ func (*U2FDeviceFinder) findDevice() (u2fhost.Device, error) {
 func ChallengeSystemWebAuthn(challengeNonce, appID, stateToken string) (*SignedAssertion, error) {
 	var responsePayload *SignedAssertion
 
-	response, err := webauthn.Authenticate(challengeNonce, appID, 2000)
+	response, err := webauthn.Authenticate(challengeNonce, appID, systemWebAuthnTimeoutMillis)
 	if err != nil {
 		return nil, err
 	}

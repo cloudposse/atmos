@@ -398,3 +398,46 @@ func TestRedactURL(t *testing.T) {
 
 	assert.Empty(t, RedactURL(nil))
 }
+
+// Regression: the shared client must carry a finite timeout (zero means wait forever), and a
+// response that completes within it must still succeed.
+func TestNewHTTPClientHasFiniteTimeout(t *testing.T) {
+	client, err := NewHTTPClient(http.DefaultTransport, &HTTPClientOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, DefaultRequestTimeout, client.Timeout)
+	assert.Positive(t, client.Timeout)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer server.Close()
+	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", string(body))
+}
+
+// The client timeout covers a server that accepts the request but never answers.
+func TestNewHTTPClientTimeoutBoundsUnresponsiveServer(t *testing.T) {
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		<-release
+	}))
+	defer server.Close()
+	defer close(release)
+
+	client, err := NewHTTPClient(http.DefaultTransport, &HTTPClientOptions{})
+	require.NoError(t, err)
+	client.Timeout = 50 * time.Millisecond
+	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	if err == nil {
+		resp.Body.Close()
+	}
+	require.Error(t, err)
+}

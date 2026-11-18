@@ -386,6 +386,11 @@ func TestAuthenticateMFAPrompt(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, testSAMLAssertion, assertion)
 
+			// The OTP form is submitted to its own action, not the login form's.
+			require.Len(t, fake.paths, 2)
+			assert.Equal(t, "/adfs/ls/", fake.paths[0])
+			assert.Equal(t, "/adfs/ls/mfa", fake.paths[1])
+
 			posts := fake.postedForms()
 			require.Len(t, posts, 2)
 			mfaForm := posts[1]
@@ -415,6 +420,8 @@ func TestAuthenticateMFAPromptsWhenTokenMissingOrConsumed(t *testing.T) {
 	assertion, err := newTestClient(t).Authenticate(loginDetails(ts.URL, "111111"))
 	require.NoError(t, err)
 	assert.Equal(t, testSAMLAssertion, assertion)
+
+	assert.Equal(t, []string{"/adfs/ls/", "/adfs/ls/mfa", "/adfs/ls/mfa"}, fake.paths)
 
 	posts := fake.postedForms()
 	require.Len(t, posts, 3)
@@ -579,4 +586,33 @@ func TestUpdateOTPFormDataIgnoresUnnamedInputs(t *testing.T) {
 		updateOTPFormData(got, s, "123456")
 	})
 	assert.Empty(t, got)
+}
+
+// Regression: each MFA form is submitted to its own action resolved against the response URL, and a
+// challenge form without an action keeps using the login form's action.
+func TestChallengeSubmitURL(t *testing.T) {
+	base, err := url.Parse("https://idp.example.com/adfs/ls/")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		html string
+		url  *url.URL
+		want string
+	}{
+		{name: "absolute path action", html: `<form action="/adfs/ls/mfa"></form>`, url: base, want: "https://idp.example.com/adfs/ls/mfa"},
+		{name: "relative action", html: `<form action="mfa?x=1"></form>`, url: base, want: "https://idp.example.com/adfs/ls/mfa?x=1"},
+		{name: "absolute URL action", html: `<form action="https://other.example.com/m"></form>`, url: base, want: "https://other.example.com/m"},
+		{name: "no action keeps fallback", html: `<form></form>`, url: base, want: "https://fallback.example.com/login"},
+		{name: "no form keeps fallback", html: `<p>hi</p>`, url: base, want: "https://fallback.example.com/login"},
+		{name: "no document URL keeps fallback", html: `<form action="/adfs/ls/mfa"></form>`, url: nil, want: "https://fallback.example.com/login"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := goquery.NewDocumentFromReader(strings.NewReader(tt.html))
+			require.NoError(t, err)
+			doc.Url = tt.url
+			assert.Equal(t, tt.want, challengeSubmitURL(doc, "https://fallback.example.com/login"))
+		})
+	}
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -719,4 +720,54 @@ func TestNodePlatformSuffixFor_UnsupportedPlatformsRequireNodePath(t *testing.T)
 			assert.Contains(t, err.Error(), tt.wantText)
 		})
 	}
+}
+
+// Regression: an npm integrity failure must propagate out of prepareBrowserDriver instead of being
+// downgraded to a warning, which would let playwright-go's unverified downloader fetch the rejected tarball.
+func TestPrepareBrowserDriver_IntegrityMismatchIsFatal(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	driverDir := t.TempDir()
+	t.Setenv("PLAYWRIGHT_DRIVER_PATH", driverDir)
+	t.Setenv("PLAYWRIGHT_NODEJS_PATH", "preinstalled-node")
+
+	tgz := makeTgz(t, map[string]string{"package/cli.js": "cli"})
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	mux.HandleFunc("/playwright-core/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `{"dist":{"tarball":%q,"integrity":"sha512-tampered"}}`, server.URL+"/tarball.tgz")
+	})
+	mux.HandleFunc("/tarball.tgz", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(tgz)
+	})
+	overridePreseedHosts(t, server.URL, server.URL)
+
+	p := &samlProvider{config: &schema.Provider{}}
+	err := p.prepareBrowserDriver("Browser")
+	require.ErrorIs(t, err, errUtils.ErrPlaywrightDriverIntegrity)
+	assert.NoFileExists(t, filepath.Join(driverDir, "package", "cli.js"))
+}
+
+// Negative path: a non-integrity seed failure (registry unreachable) stays best-effort, so an
+// already-installed driver keeps working offline.
+func TestPrepareBrowserDriver_NonIntegritySeedFailureIsNotFatal(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("PLAYWRIGHT_DRIVER_PATH", t.TempDir())
+	t.Setenv("PLAYWRIGHT_NODEJS_PATH", "preinstalled-node")
+
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	overridePreseedHosts(t, server.URL, server.URL)
+
+	p := &samlProvider{config: &schema.Provider{}}
+	require.NoError(t, p.prepareBrowserDriver("Browser"))
+}
+
+func TestVerifyNpmIntegrity_WrapsIntegritySentinel(t *testing.T) {
+	assert.ErrorIs(t, verifyNpmIntegrity([]byte("x"), "sha512-bad"), errUtils.ErrPlaywrightDriverIntegrity)
+	assert.ErrorIs(t, verifyNpmIntegrity([]byte("x"), ""), errUtils.ErrPlaywrightDriverIntegrity)
 }

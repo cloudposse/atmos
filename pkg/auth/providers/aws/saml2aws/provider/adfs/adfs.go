@@ -164,7 +164,7 @@ func (ac *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 			doc.Find("input").Each(func(i int, s *goquery.Selection) {
 				updateOTPFormData(otpForm, s, mfaToken)
 			})
-			doc, err = ac.submit(authSubmitURL, otpForm)
+			doc, err = ac.submit(challengeSubmitURL(doc, authSubmitURL), otpForm)
 			if err != nil {
 				return samlAssertion, errors.Wrap(err, "error retrieving mfa form results")
 			}
@@ -196,7 +196,7 @@ func (ac *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 				}
 			}
 			time.Sleep(azureMFAPollInterval)
-			doc, err = ac.submit(authSubmitURL, azureForm)
+			doc, err = ac.submit(challengeSubmitURL(doc, authSubmitURL), azureForm)
 			if err != nil {
 				return samlAssertion, errors.Wrap(err, "error retrieving mfa form results")
 			}
@@ -223,6 +223,7 @@ func (ac *Client) get(url string) (*goquery.Document, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build document from response")
 	}
+	setDocumentURL(doc, res)
 	return doc, nil
 }
 
@@ -244,7 +245,39 @@ func (ac *Client) submit(url string, form url.Values) (*goquery.Document, error)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build document from response")
 	}
+	setDocumentURL(doc, res)
 	return doc, nil
+}
+
+// setDocumentURL records the final request URL (after redirects) on a reader-based document.
+// Atmos fork: goquery leaves Document.Url nil for documents built from a reader, and form actions
+// must be resolved against the URL of the response that contained the form.
+func setDocumentURL(doc *goquery.Document, res *http.Response) {
+	if doc.Url == nil && res.Request != nil {
+		doc.Url = res.Request.URL
+	}
+}
+
+// challengeSubmitURL returns the URL an MFA challenge form must be submitted to: the form's own
+// action resolved against the URL of the response that contained it.
+// Atmos fork: upstream posted every MFA form to the initial login form's action, which fails when the
+// IdP routes the challenge to a different endpoint (such as /adfs/ls/mfa). When the form has no action,
+// or it cannot be resolved, the fallback (the login form's action) is used, as before.
+func challengeSubmitURL(doc *goquery.Document, fallback string) string {
+	var action string
+	doc.Find("form").Each(func(_ int, s *goquery.Selection) {
+		if val, ok := s.Attr("action"); ok {
+			action = val
+		}
+	})
+	if action == "" || doc.Url == nil {
+		return fallback
+	}
+	parsed, err := url.Parse(action)
+	if err != nil {
+		return fallback
+	}
+	return doc.Url.ResolveReference(parsed).String()
 }
 
 func checkResponse(doc *goquery.Document) (AuthResponseType, string, error) {

@@ -86,7 +86,14 @@ identity provider and read the AWS roles from the SAML assertion.
     resets an earlier pinentry choice.
   - `provider/http.go` resends the request body on retries, binds retry waits to the request context, and closes
     the body of a response rejected by the status validator.
-  - ADFS resolves every relative form action against the login page URL.
+  - ADFS resolves every relative form action against the login page URL, and submits each MFA challenge form to its
+    own action (resolved against the response that contained it) instead of the login form's action.
+  - `provider/http.go` gives the shared HTTP client a finite `DefaultRequestTimeout` (2 minutes, including the
+    response body), so an IdP that never answers can no longer block authentication forever.
+  - Google Apps: debug logs record form input and challenge attribute names only, never their values.
+  - Okta: `ChallengeU2F` runs the blocking `Authenticate` read in a goroutine so its 25 second timeout can fire (a
+    hung device is closed once the abandoned read returns, never while it is in flight), and the system WebAuthn
+    (Windows Hello) prompt stays open 60 seconds instead of 2.
   - Browser: the storage state is saved through a private temporary file, and a captured SAMLResponse is not
     replaced by a later request without one.
   - Google Apps: locale parameters are set in the query, challenge selection pages are followed at most 10 times

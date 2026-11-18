@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -512,7 +514,8 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 
 			dataAttrs := extractDataAttributes(doc, "div[data-context]", []string{"data-context", "data-gapi-url", "data-tx-id", "data-api-key", "data-tx-lifetime"})
 
-			logger.Debugf("prompt with data values: %+v", dataAttrs)
+			// Atmos fork: log the attribute names only; the values include a transaction id and an API key.
+			logger.Debugf("prompt with data attributes: %v", slices.Sorted(maps.Keys(dataAttrs)))
 
 			waitValues := map[string]string{
 				"txId": dataAttrs["data-tx-id"],
@@ -809,7 +812,8 @@ func extractInputsByFormQuery(doc *goquery.Document, formQuery string) (url.Valu
 		if !ok {
 			return
 		}
-		logger.Debugf("name: %s value: %s", name, val)
+		// Atmos fork: log the field name only; values carry authentication state and can hold secrets.
+		logger.Debugf("form input: %s", name)
 		formData.Add(name, val)
 	})
 
