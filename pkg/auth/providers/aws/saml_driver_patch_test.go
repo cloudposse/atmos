@@ -116,13 +116,11 @@ func TestPatchPlaywrightDriver_UnexpectedBundleFails(t *testing.T) {
 // file, so the patched bundle is a different file than the one that was patched.
 func TestPatchPlaywrightDriver_PublishesAtomically(t *testing.T) {
 	bundlePath := seedFakePlaywrightDriver(t)
-	before, err := os.Stat(bundlePath)
-	require.NoError(t, err)
+	before := statFileIdentity(t, bundlePath)
 
 	require.NoError(t, patchPlaywrightDriver())
 
-	after, err := os.Stat(bundlePath)
-	require.NoError(t, err)
+	after := statFileIdentity(t, bundlePath)
 	assert.False(t, os.SameFile(before, after), "the bundle must be replaced, not rewritten in place")
 	assert.Equal(t, before.Mode().Perm(), after.Mode().Perm(), "the bundle keeps its file mode")
 	assertNoStagedBundles(t, filepath.Dir(bundlePath))
@@ -132,14 +130,23 @@ func TestPatchPlaywrightDriver_PublishesAtomically(t *testing.T) {
 func TestPatchPlaywrightDriver_PatchedBundleIsNotRewritten(t *testing.T) {
 	bundlePath := seedFakePlaywrightDriver(t)
 	require.NoError(t, patchPlaywrightDriver())
-	before, err := os.Stat(bundlePath)
-	require.NoError(t, err)
+	before := statFileIdentity(t, bundlePath)
 
 	require.NoError(t, patchPlaywrightDriver())
 
-	after, err := os.Stat(bundlePath)
-	require.NoError(t, err)
+	after := statFileIdentity(t, bundlePath)
 	assert.True(t, os.SameFile(before, after))
+}
+
+// statFileIdentity stats path and captures the file's identity immediately. On Windows, os.Stat
+// does not record the file ID; os.SameFile loads it from the path on its first call. Comparing a
+// stat taken before a file was replaced would then read the replacement's ID for both sides.
+func statFileIdentity(t *testing.T, path string) os.FileInfo {
+	t.Helper()
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.True(t, os.SameFile(info, info), "the file ID of %s must be readable", path)
+	return info
 }
 
 // A missing bundle next to a seeded CLI is reported, and nothing is created.
