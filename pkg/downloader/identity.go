@@ -26,6 +26,8 @@ type IdentityEnvironmentResolver func(ctx context.Context, atmosConfig *schema.A
 
 type identityOverrideKey struct{}
 
+type identityNameKey struct{}
+
 var (
 	identityResolverMu sync.RWMutex
 	identityResolver   IdentityEnvironmentResolver
@@ -77,7 +79,11 @@ func ResolveIdentityName(ctx context.Context, entry, sectionDefault string) stri
 
 // WithIdentity resolves which identity (if any) applies to one remote read, turns it into an
 // environment through the registered resolver, and returns a context whose fetches run with that
-// environment (see WithEnvironment). When no identity applies it returns ctx unchanged.
+// environment (see WithEnvironment) and are attributed to that identity (see IdentityFromContext).
+// When no identity applies it returns ctx unchanged.
+//
+// Prefer WithIdentityForSource when the source is known: an identity only applies to the
+// transports that can use it.
 func WithIdentity(ctx context.Context, atmosConfig *schema.AtmosConfiguration, entry, sectionDefault string) (context.Context, error) {
 	defer perf.Track(atmosConfig, "downloader.WithIdentity")()
 
@@ -100,5 +106,76 @@ func WithIdentity(ctx context.Context, atmosConfig *schema.AtmosConfiguration, e
 	if err != nil {
 		return ctx, err
 	}
-	return WithEnvironment(ctx, env), nil
+	return WithEnvironment(context.WithValue(ctx, identityNameKey{}, name), env), nil
+}
+
+// WithIdentityForSource is WithIdentity for one known source. The identity is resolved only when
+// the source's transport can use it (see SourceUsesIdentity). For any other source it returns ctx
+// unchanged, so a registry, bucket, or local read is never refused because an identity it would
+// not have used has no session.
+func WithIdentityForSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, src, entry, sectionDefault string) (context.Context, error) {
+	defer perf.Track(atmosConfig, "downloader.WithIdentityForSource")()
+
+	if !SourceUsesIdentity(src) {
+		return ctx, nil
+	}
+	return WithIdentity(ctx, atmosConfig, entry, sectionDefault)
+}
+
+// IdentityFromContext returns the name of the Atmos Auth identity the fetches made with ctx run as
+// (set by WithIdentity), or "" when they name none and ambient credentials apply.
+func IdentityFromContext(ctx context.Context) string {
+	defer perf.Track(nil, "downloader.IdentityFromContext")()
+
+	if ctx == nil {
+		return ""
+	}
+	name, _ := ctx.Value(identityNameKey{}).(string)
+	return name
+}
+
+// FetchUsesIdentity reports whether the fetches made with ctx run with a named identity or a
+// per-fetch environment of their own, as opposed to ambient credentials.
+func FetchUsesIdentity(ctx context.Context) bool {
+	defer perf.Track(nil, "downloader.FetchUsesIdentity")()
+
+	return IdentityFromContext(ctx) != "" || len(EnvironmentFromContext(ctx)) > 0
+}
+
+// identitySkippedPrefixes are the source forms whose getters authenticate through their own
+// credential chain (a registry keychain, a cloud SDK) or need no credentials at all. An identity
+// environment never reaches them.
+var identitySkippedPrefixes = []string{
+	"oci://", "oci::",
+	"s3://", "s3::",
+	"gcs::", "gs://",
+	"file://", "file::",
+}
+
+// identitySkippedHosts mark the scheme-less bucket URLs go-getter's own detectors turn into S3 and
+// GCS sources.
+var identitySkippedHosts = []string{".amazonaws.com/", "googleapis.com/"}
+
+// SourceUsesIdentity reports whether an identity named for src can take part in fetching it. An
+// identity is delivered as an environment for the fetch, which Git subprocesses run with. Sources
+// fetched from an OCI registry, an S3 or GCS bucket, or the local filesystem authenticate on their
+// own and report false. Everything else (Git in any form, and HTTP) reports true, so an identity
+// named for it must resolve.
+func SourceUsesIdentity(src string) bool {
+	defer perf.Track(nil, "downloader.SourceUsesIdentity")()
+
+	lowered := strings.ToLower(strings.TrimSpace(src))
+	for _, prefix := range identitySkippedPrefixes {
+		if strings.HasPrefix(lowered, prefix) {
+			return false
+		}
+	}
+	if !strings.Contains(lowered, schemeSeparator) && !strings.HasPrefix(lowered, strings.ToLower(GitPrefix)) {
+		for _, host := range identitySkippedHosts {
+			if strings.Contains(lowered, host) {
+				return false
+			}
+		}
+	}
+	return true
 }

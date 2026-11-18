@@ -232,12 +232,14 @@ func VendorSource(
 // protocols.
 func downloadSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
 	// The source's own identity, then vendor.identity. The identity's environment is scoped to this
-	// download's context (never the process environment).
+	// download's context (never the process environment). It is resolved only for a transport that
+	// can use it: an OCI or S3 source keeps authenticating through its own credential chain and is
+	// not refused because the identity has no session.
 	sectionDefault := ""
 	if atmosConfig != nil {
 		sectionDefault = atmosConfig.Vendor.Identity
 	}
-	ctx, err := downloader.WithIdentity(ctx, atmosConfig, sourceSpec.Identity, sectionDefault)
+	ctx, err := downloader.WithIdentityForSource(ctx, atmosConfig, uri, sourceSpec.Identity, sectionDefault)
 	if err != nil {
 		return err
 	}

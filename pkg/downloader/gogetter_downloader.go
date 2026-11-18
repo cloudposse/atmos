@@ -79,9 +79,13 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 	// the process env, which the git subprocess this client spawns inherits. Process-once and
 	// gated (CI + configured), so local-only fetches and non-Pro repos pay nothing.
 	remote := f.atmosConfig != nil && isRemoteSource(src)
-	// A source that names an identity carries its own per-fetch environment (see WithEnvironment),
-	// which takes precedence over the ambient broker, so the broker is not consulted for it.
-	if remote && len(EnvironmentFromContext(ctx)) == 0 {
+	// A Git source that names an identity carries its own per-fetch environment (see
+	// WithEnvironment), which takes precedence over the ambient broker, so the broker is not
+	// consulted for it. That holds for Git only: the per-fetch environment reaches Git subprocesses
+	// and nothing else. An HTTP source reads its token from the process environment, which is
+	// where the broker exports to, so it still needs the broker even when an identity is named.
+	identityCoversFetch := FetchUsesIdentity(ctx) && isGitSource(src)
+	if remote && !identityCoversFetch {
 		broker.EnsureCredentials(ctx, f.atmosConfig)
 	}
 
@@ -177,6 +181,23 @@ func isRemoteSource(src string) bool {
 	// isSupportedHost parameters here.
 	lowerHost := strings.ToLower(host)
 	return isSupportedHost(lowerHost, lowerHost)
+}
+
+// isGitSource reports whether a go-getter source is fetched by the Git getter, and so runs Git
+// subprocesses that receive the per-fetch environment. It recognizes a "git::"-forced source, an
+// explicit ssh:// or git:// URL, an SCP-style URL (git@github.com:org/repo), and the scheme-less
+// shorthand for a supported host (github.com/org/repo), which CustomGitDetector turns into a Git
+// source. An explicit http(s):// URL without "git::" is fetched by the HTTP getter and reports false.
+func isGitSource(src string) bool {
+	if strings.HasPrefix(src, GitPrefix) {
+		return true
+	}
+	if i := strings.Index(src, schemeSeparator); i >= 0 {
+		scheme := strings.ToLower(src[:i])
+		return scheme == "ssh" || scheme == "git"
+	}
+	// No scheme: SCP-style and supported-host shorthand are Git; anything else is local.
+	return isRemoteSource(src)
 }
 
 // applyForcedGitDetection re-runs CustomGitDetector against a "git::"-forced source whose inner

@@ -74,7 +74,7 @@ type fetchOptions struct {
 func fetchToTempDir(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri string, pType PkgType, tempDir string, opts fetchOptions) (string, downloader.FetchMetadata, error) {
 	switch pType {
 	case PkgTypeRemote:
-		identityCtx, err := withSourceIdentity(ctx, atmosConfig, opts.Identity)
+		identityCtx, err := withSourceIdentity(ctx, atmosConfig, uri, opts.Identity)
 		if err != nil {
 			return "", downloader.FetchMetadata{}, err
 		}
@@ -102,13 +102,14 @@ func fetchToTempDir(ctx context.Context, atmosConfig *schema.AtmosConfiguration,
 // flag, then the source's own identity, then vendor.identity. Fetches made with the returned context
 // run their Git subprocesses with that identity's environment and nothing is written to the process
 // environment, so sources fetched concurrently can use different identities. A source with no
-// identity gets ctx back unchanged, so it behaves exactly as before.
-func withSourceIdentity(ctx context.Context, atmosConfig *schema.AtmosConfiguration, entry string) (context.Context, error) {
+// identity, or one whose transport an identity cannot serve (see downloader.SourceUsesIdentity),
+// gets ctx back unchanged, so it behaves exactly as before.
+func withSourceIdentity(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, entry string) (context.Context, error) {
 	sectionDefault := ""
 	if atmosConfig != nil {
 		sectionDefault = atmosConfig.Vendor.Identity
 	}
-	return downloader.WithIdentity(ctx, atmosConfig, entry, sectionDefault)
+	return downloader.WithIdentityForSource(ctx, atmosConfig, uri, entry, sectionDefault)
 }
 
 func fetchRemote(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, tempDir string, opts fetchOptions) (string, downloader.FetchMetadata, error) {
@@ -213,9 +214,22 @@ func needsCustomDetection(src string) bool {
 
 // detectIfNeeded runs the custom Git detector against uri only when needsCustomDetection reports
 // it's required, matching the pre-unification dry-run behavior for both installer types.
-func detectIfNeeded(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri string) error {
+//
+// The detector decides how the source would be fetched from the identity in effect: a named
+// identity's `insteadOf` rewrites reach it through the per-fetch environment, and it leaves the
+// URL alone instead of injecting an ambient token. So the identity is resolved here exactly as
+// fetchToTempDir resolves it (for a PkgTypeRemote source only), and a dry run reports what the
+// real fetch would do.
+func detectIfNeeded(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri string, pType PkgType, identity string) error {
 	if !needsCustomDetection(uri) {
 		return nil
+	}
+	if pType == PkgTypeRemote {
+		identityCtx, err := withSourceIdentity(ctx, atmosConfig, uri, identity)
+		if err != nil {
+			return err
+		}
+		ctx = identityCtx
 	}
 	detector := downloader.NewCustomGitDetectorContext(ctx, atmosConfig, "")
 	_, _, err := detector.Detect(uri, "")

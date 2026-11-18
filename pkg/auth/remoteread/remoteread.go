@@ -10,9 +10,13 @@ package remoteread
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
+
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -49,32 +53,39 @@ func WithCIDetector(inCI func() bool) Option {
 	return func(r *Resolver) { r.inCI = inCI }
 }
 
-// Resolver turns identity names into per-fetch environments. Each identity is resolved at most once
-// per Resolver, however many sources name it and however concurrently they are fetched.
+// Resolver turns identity names into per-fetch environments. A successful resolution is kept for
+// the life of the Resolver, so an identity is resolved once however many sources name it and
+// however concurrently they are fetched. A failed resolution is not kept: the next fetch that names
+// the identity tries again, so one transient error does not fail every later source.
+//
+// Resolutions are scoped to the auth configuration they were made under (see scopeKey). An
+// identity name resolved for one configuration is never served to another, and each configuration
+// gets its own auth manager.
 type Resolver struct {
 	newManager func(*schema.AtmosConfiguration) (identityManager, error)
 	inCI       func() bool
 
-	managerOnce sync.Once
-	manager     identityManager
-	managerErr  error
-
-	mu      sync.Mutex
-	results map[string]*resolution
+	mu     sync.Mutex
+	scopes map[string]*scope
 }
 
-type resolution struct {
-	once sync.Once
-	env  []string
-	err  error
+// scope holds what was resolved under one auth configuration.
+type scope struct {
+	// The mu mutex serializes every use of manager. The Atmos Auth manager keeps the chain it is
+	// authenticating in a field, so two identities must not be resolved through it at once.
+	mu      sync.Mutex
+	manager identityManager
+	envs    map[string][]string
 }
 
 // NewResolver creates a Resolver backed by the Atmos Auth manager built from atmos.yaml.
 func NewResolver(opts ...Option) *Resolver {
+	defer perf.Track(nil, "remoteread.NewResolver")()
+
 	r := &Resolver{
 		newManager: defaultManager,
 		inCI:       telemetry.IsCI,
-		results:    map[string]*resolution{},
+		scopes:     map[string]*scope{},
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -93,33 +104,74 @@ func defaultManager(atmosConfig *schema.AtmosConfiguration) (identityManager, er
 func (r *Resolver) Resolve(ctx context.Context, atmosConfig *schema.AtmosConfiguration, identity string) ([]string, error) {
 	defer perf.Track(atmosConfig, "remoteread.Resolver.Resolve")()
 
-	r.mu.Lock()
-	res, ok := r.results[identity]
-	if !ok {
-		res = &resolution{}
-		r.results[identity] = res
-	}
-	r.mu.Unlock()
+	sc := r.scopeFor(atmosConfig)
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
 
-	res.once.Do(func() {
-		res.env, res.err = r.compose(ctx, atmosConfig, identity)
-	})
-	if res.err != nil {
-		return nil, res.err
+	if env, ok := sc.envs[identity]; ok {
+		return append([]string(nil), env...), nil
 	}
-	return append([]string(nil), res.env...), nil
+
+	env, err := r.compose(ctx, sc, atmosConfig, identity)
+	if err != nil {
+		return nil, err
+	}
+	sc.envs[identity] = env
+	return append([]string(nil), env...), nil
 }
 
-func (r *Resolver) compose(ctx context.Context, atmosConfig *schema.AtmosConfiguration, identity string) ([]string, error) {
-	r.managerOnce.Do(func() {
-		r.manager, r.managerErr = r.newManager(atmosConfig)
-	})
-	if r.managerErr != nil {
-		return nil, fmt.Errorf("%w: creating the auth manager for identity %q: %w", errUtils.ErrAuthManager, identity, r.managerErr)
+// scopeFor returns the scope for the auth configuration of atmosConfig, creating it on first use.
+// A configuration that cannot be keyed gets a scope of its own that is not kept, so it is resolved
+// afresh every time and never shares a manager or an environment with another configuration.
+func (r *Resolver) scopeFor(atmosConfig *schema.AtmosConfiguration) *scope {
+	key, ok := scopeKey(atmosConfig)
+	if !ok {
+		return &scope{envs: map[string][]string{}}
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	sc, found := r.scopes[key]
+	if !found {
+		sc = &scope{envs: map[string][]string{}}
+		r.scopes[key] = sc
+	}
+	return sc
+}
+
+// scopeKey identifies the auth configuration a resolution belongs to: the `auth` section (which
+// carries the realm, providers, and identities) and the directory of the atmos.yaml it came from
+// (which the default realm and the profile fallback are derived from). These are exactly the inputs
+// the auth manager is built from.
+func scopeKey(atmosConfig *schema.AtmosConfiguration) (string, bool) {
+	if atmosConfig == nil {
+		return "", false
+	}
+	authSection, err := yaml.Marshal(&atmosConfig.Auth)
+	if err != nil {
+		return "", false
+	}
+	digest := sha256.New()
+	digest.Write(authSection)
+	digest.Write([]byte{0})
+	digest.Write([]byte(atmosConfig.Auth.RealmSource))
+	digest.Write([]byte{0})
+	digest.Write([]byte(atmosConfig.CliConfigPath))
+	return hex.EncodeToString(digest.Sum(nil)), true
+}
+
+// compose resolves identity through the scope's manager. The caller holds sc.mu.
+func (r *Resolver) compose(ctx context.Context, sc *scope, atmosConfig *schema.AtmosConfiguration, identity string) ([]string, error) {
+	if sc.manager == nil {
+		manager, err := r.newManager(atmosConfig)
+		if err != nil {
+			return nil, fmt.Errorf("%w: creating the auth manager for identity %q: %w", errUtils.ErrAuthManager, identity, err)
+		}
+		sc.manager = manager
 	}
 	// A nil base keeps the process environment out of the overlay: the downloader applies the
 	// overlay to the process environment itself, per subprocess.
-	return atmosgit.ComposeEnvironment(ctx, nil, identity, &noPromptProvider{manager: r.manager, inCI: r.inCI})
+	return atmosgit.ComposeEnvironment(ctx, nil, identity, &noPromptProvider{manager: sc.manager, inCI: r.inCI})
 }
 
 // noPromptProvider guards identity resolution so a remote read never prompts mid-fetch. Locally an

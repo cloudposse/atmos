@@ -301,6 +301,16 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host, rawHost string
 		return
 	}
 
+	// A fetch that names an Atmos Auth identity authenticates as that identity. URL userinfo takes
+	// precedence over everything Git would otherwise use (an askpass helper, a credential helper,
+	// an SSH key), so injecting the ambient token here would silently replace the identity the
+	// source asked for.
+	if identity := IdentityFromContext(d.ctx); identity != "" {
+		maskedURL, _ := maskBasicAuth(parsedURL.String())
+		log.Debug("Skipping token injection: the fetch names an identity", "identity", identity, keyURL, maskedURL)
+		return
+	}
+
 	token, tokenSource := d.resolveToken(host, rawHost)
 	if token != "" {
 		defaultUsername := d.getDefaultUsername(host, rawHost)

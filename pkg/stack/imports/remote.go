@@ -200,20 +200,23 @@ func (r *RemoteImporter) downloadUnguarded(ctx context.Context, uri string) (res
 		ttl = r.atmosConfig.Imports.TTL
 	}
 
-	if cachedPath := r.cachedDownload(uri); cachedPath != "" {
+	// Every cache below is keyed by the identity the fetch runs as (see scopedKey).
+	key := scopedKey(ctx, uri)
+
+	if cachedPath := r.cachedDownload(key); cachedPath != "" {
 		return cachedPath, nil
 	}
 
 	// A ttl is configured but the cached content (if any) is stale: evict it so
 	// GetOrFetch below treats this as a miss instead of reusing stale content.
-	if ttl != "" && !r.downloadCacheFresh(uri, ttl) {
-		_ = r.cache.Delete(uri)
+	if ttl != "" && !r.downloadCacheFresh(key, ttl) {
+		_ = r.cache.Delete(key)
 	}
 
 	// Use GetOrFetch to properly handle file locking and atomic writes.
 	// This ensures safe concurrent access across multiple atmos processes.
 	fetched := false
-	_, err := r.cache.GetOrFetch(uri, func() ([]byte, error) {
+	_, err := r.cache.GetOrFetch(key, func() ([]byte, error) {
 		fetched = true
 		return r.fetchDownloadBytes(ctx, uri)
 	})
@@ -228,15 +231,15 @@ func (r *RemoteImporter) downloadUnguarded(ctx context.Context, uri string) (res
 	// Record freshness only when a real fetch just happened, matching fetchSourceDir's
 	// write-only-on-fetch semantics (not sliding expiration on every cache hit).
 	if fetched && ttl != "" {
-		r.writeDownloadMeta(uri)
+		r.writeDownloadMeta(key)
 	}
 
 	// Get the final cached path.
-	destPath, _ := r.cache.GetPath(uri)
+	destPath, _ := r.cache.GetPath(key)
 
 	// Add to memory cache.
 	r.memMu.Lock()
-	r.memCache[uri] = destPath
+	r.memCache[key] = destPath
 	r.memMu.Unlock()
 
 	return destPath, nil
@@ -291,7 +294,7 @@ func (r *RemoteImporter) resolveUnguarded(ctx context.Context, uri, ttl string) 
 			Err()
 	}
 
-	if matches, ok := r.cachedMatches(uri); ok {
+	if matches, ok := r.cachedMatches(ctx, uri); ok {
 		return matches, nil
 	}
 
@@ -317,7 +320,7 @@ func (r *RemoteImporter) resolveUnguarded(ctx context.Context, uri, ttl string) 
 	if err != nil {
 		return nil, err
 	}
-	r.storeMatches(uri, matches)
+	r.storeMatches(ctx, uri, matches)
 	return matches, nil
 }
 
@@ -328,13 +331,15 @@ func (r *RemoteImporter) downloadMatches(ctx context.Context, uri string) ([]Rem
 		return nil, err
 	}
 	matches := []RemoteImportMatch{{Path: path, Key: uri}}
-	r.storeMatches(uri, matches)
+	r.storeMatches(ctx, uri, matches)
 	return matches, nil
 }
 
-func (r *RemoteImporter) cachedMatches(uri string) ([]RemoteImportMatch, bool) {
+// cachedMatches returns the matches stored for uri by a fetch made as the same identity as ctx.
+func (r *RemoteImporter) cachedMatches(ctx context.Context, uri string) ([]RemoteImportMatch, bool) {
+	key := scopedKey(ctx, uri)
 	r.memMu.RLock()
-	cached, ok := r.matchCache[uri]
+	cached, ok := r.matchCache[key]
 	r.memMu.RUnlock()
 	if !ok {
 		return nil, false
@@ -344,9 +349,9 @@ func (r *RemoteImporter) cachedMatches(uri string) ([]RemoteImportMatch, bool) {
 			continue
 		}
 		r.memMu.Lock()
-		delete(r.matchCache, uri)
+		delete(r.matchCache, key)
 		for _, stale := range cached {
-			delete(r.memCache, stale.Key)
+			delete(r.memCache, scopedKey(ctx, stale.Key))
 		}
 		r.memMu.Unlock()
 		return nil, false
@@ -354,11 +359,12 @@ func (r *RemoteImporter) cachedMatches(uri string) ([]RemoteImportMatch, bool) {
 	return cloneMatches(cached), true
 }
 
-func (r *RemoteImporter) storeMatches(uri string, matches []RemoteImportMatch) {
+// storeMatches records the matches for uri under the identity ctx fetched them as.
+func (r *RemoteImporter) storeMatches(ctx context.Context, uri string, matches []RemoteImportMatch) {
 	r.memMu.Lock()
 	defer r.memMu.Unlock()
 
-	r.matchCache[uri] = cloneMatches(matches)
+	r.matchCache[scopedKey(ctx, uri)] = cloneMatches(matches)
 }
 
 func cloneMatches(matches []RemoteImportMatch) []RemoteImportMatch {
@@ -394,7 +400,7 @@ func (r *RemoteImporter) resolveSourceSubdir(ctx context.Context, originalURI, s
 			return nil, err
 		}
 		key := originalURI + "#" + filepath.ToSlash(rel)
-		cachedPath, err := r.cacheFile(key, file)
+		cachedPath, err := r.cacheFile(scopedKey(ctx, key), file)
 		if err != nil {
 			return nil, err
 		}
@@ -660,7 +666,7 @@ func (r *RemoteImporter) cachedDownload(uri string) string {
 
 func (r *RemoteImporter) fetchDownloadBytes(ctx context.Context, uri string) ([]byte, error) {
 	// The cache owns locking and the final atomic write.
-	tempPath := filepath.Join(r.cache.BaseDir(), uriToTempName(uri))
+	tempPath := filepath.Join(r.cache.BaseDir(), uriToTempName(scopedKey(ctx, uri)))
 	defer os.Remove(tempPath)
 	if err := r.fetch(ctx, uri, tempPath, downloader.ClientModeFile); err != nil {
 		return nil, err

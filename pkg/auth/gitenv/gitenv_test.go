@@ -7,31 +7,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-type fakeManager struct {
-	envs       map[string]map[string]string
-	ensured    []string
-	defaultID  string
-	defaultErr error
-	ensureErr  error
-}
-
-func (f *fakeManager) GetDefaultIdentity(bool) (string, error) { return f.defaultID, f.defaultErr }
-
-func (f *fakeManager) EnsureIdentityEnvironment(_ context.Context, identity string) (map[string]string, error) {
-	f.ensured = append(f.ensured, identity)
-	if f.ensureErr != nil {
-		return nil, f.ensureErr
-	}
-	return f.envs[identity], nil
-}
-
-func composerFor(m *fakeManager) *Composer {
+// composerFor returns a Composer whose auth manager is the given mock.
+func composerFor(m *MockIdentityManager) *Composer {
 	return NewComposer(WithManagerFactory(func(*schema.AtmosConfiguration) (IdentityManager, error) { return m, nil }))
 }
 
@@ -69,11 +53,20 @@ func TestCompose(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := &fakeManager{envs: envs, defaultID: tt.defaultID}
+			// The mock fails the test on any call that is not expected, so these expectations also
+			// assert which identity is authenticated, and that none is when no identity applies.
+			m := NewMockIdentityManager(gomock.NewController(t))
+			if tt.defaultID != "" {
+				m.EXPECT().GetDefaultIdentity(true).Return(tt.defaultID, nil).Times(1)
+			}
+			for _, identity := range tt.wantEnsured {
+				m.EXPECT().EnsureIdentityEnvironment(gomock.Any(), identity).Return(envs[identity], nil).Times(1)
+			}
+
 			got, err := composerFor(m).Compose(context.Background(), &schema.AtmosConfiguration{}, base, tt.flag, tt.repo)
+
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantEnv, got)
-			assert.Equal(t, tt.wantEnsured, m.ensured)
 		})
 	}
 }
@@ -81,12 +74,14 @@ func TestCompose(t *testing.T) {
 func TestCompose_Errors(t *testing.T) {
 	t.Run("authentication failure is returned", func(t *testing.T) {
 		boom := errors.New("boom")
-		m := &fakeManager{ensureErr: boom}
+		m := NewMockIdentityManager(gomock.NewController(t))
+		m.EXPECT().EnsureIdentityEnvironment(gomock.Any(), "repo-id").Return(nil, boom)
 		_, err := composerFor(m).Compose(context.Background(), &schema.AtmosConfiguration{}, nil, "", "repo-id")
 		require.ErrorIs(t, err, boom)
 	})
 	t.Run("no default identity", func(t *testing.T) {
-		m := &fakeManager{defaultErr: errors.New("none")}
+		m := NewMockIdentityManager(gomock.NewController(t))
+		m.EXPECT().GetDefaultIdentity(true).Return("", errors.New("none"))
 		_, err := composerFor(m).Compose(context.Background(), &schema.AtmosConfiguration{}, nil, cfg.IdentityFlagSelectValue, "")
 		require.ErrorIs(t, err, errUtils.ErrNoDefaultIdentity)
 	})

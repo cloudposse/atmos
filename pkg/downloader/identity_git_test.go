@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests/testhelpers/gitscrub"
 )
 
 const (
@@ -37,6 +38,9 @@ func gitTestRepo(t *testing.T, owner string) string {
 		t.Helper()
 		cmd := exec.Command(gitCommand, args...)
 		cmd.Dir = dir
+		// A caller's GIT_DIR, GIT_WORK_TREE, or GIT_INDEX_FILE would point these commands at the
+		// caller's repository instead of the temporary one, despite cmd.Dir.
+		cmd.Env = gitscrub.Environ()
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, string(out))
 	}
@@ -62,12 +66,18 @@ func identityEnv(repoURL string) []string {
 	}
 }
 
-// isolateGitConfig keeps the developer's own git config out of the fetch.
+// gitConfigBaseline is the GIT_CONFIG_COUNT every fetch test starts from: no inherited entries.
+const gitConfigBaseline = "0"
+
+// isolateGitConfig keeps the developer's own git config out of the fetch. It also pins
+// GIT_CONFIG_COUNT to a known baseline, so rewrite entries inherited from the caller cannot reach
+// the fetches and a test can assert the process environment ended as it began.
 func isolateGitConfig(t *testing.T) {
 	t.Helper()
 	t.Setenv("GIT_CONFIG_GLOBAL", filepath.Join(t.TempDir(), "gitconfig"))
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	t.Setenv("GIT_TERMINAL_PROMPT", "0")
+	t.Setenv("GIT_CONFIG_COUNT", gitConfigBaseline)
 }
 
 func fetchGit(ctx context.Context, dest string) error {
@@ -96,8 +106,8 @@ func TestCustomGitGetter_PerFetchEnvironmentReachesGitSubprocess(t *testing.T) {
 	})
 
 	t.Run("the process environment is never modified", func(t *testing.T) {
-		_, hasCount := os.LookupEnv("GIT_CONFIG_COUNT")
-		assert.False(t, hasCount, "GIT_CONFIG_COUNT must not leak into the process environment")
+		assert.Equal(t, gitConfigBaseline, os.Getenv("GIT_CONFIG_COUNT"),
+			"the identity's GIT_CONFIG_COUNT must not replace the process environment's")
 	})
 }
 

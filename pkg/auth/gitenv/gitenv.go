@@ -9,6 +9,8 @@
 // pkg/auth/remoteread) it may authenticate interactively when the identity has no session.
 package gitenv
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_gitenv.go -package=$GOPACKAGE
+
 import (
 	"context"
 	"fmt"

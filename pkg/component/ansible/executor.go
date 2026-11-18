@@ -240,7 +240,8 @@ func ExecutePlaybook(
 	if err != nil {
 		return err
 	}
-	log.Debug("Using ENV", "variables", envVars)
+	// Names only: the list carries the identity's environment, which can hold credentials.
+	log.Debug("Using ENV", "variables", envVarNames(envVars))
 
 	// In dry-run mode, print the command that would be executed.
 	if info.DryRun {
@@ -635,4 +636,15 @@ func prepareEnvVars(atmosConfig *schema.AtmosConfiguration, envList []string) ([
 
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
 	return envVars, nil
+}
+
+// envVarNames returns the variable names of "KEY=value" entries, for logging an environment
+// without its values.
+func envVarNames(envVars []string) []string {
+	names := make([]string, 0, len(envVars))
+	for _, entry := range envVars {
+		name, _, _ := strings.Cut(entry, "=")
+		names = append(names, name)
+	}
+	return names
 }
