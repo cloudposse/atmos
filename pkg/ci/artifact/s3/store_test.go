@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/artifact/blob/s3/s3test"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -224,6 +225,7 @@ func (f *fakeAuthContextResolver) ResolveGCPAuthContext(_ context.Context, _ str
 // TestNewStore_DeferredInitWhenIdentitySet verifies the client is not
 // initialized at construction time when an identity is configured.
 func TestNewStore_DeferredInitWhenIdentitySet(t *testing.T) {
+	s3test.IsolateAWSConfig(t)
 	backend, err := NewStore(artifact.StoreOptions{
 		Identity: "deploy",
 		Options: map[string]any{
@@ -245,6 +247,7 @@ func TestNewStore_DeferredInitWhenIdentitySet(t *testing.T) {
 // at construction time when no identity is configured. Pin AWS env vars so
 // LoadDefaultConfig takes the success path regardless of host credentials.
 func TestNewStore_EagerInitWithoutIdentity(t *testing.T) {
+	s3test.IsolateAWSConfig(t)
 	t.Setenv("AWS_REGION", "us-east-1")
 	t.Setenv("AWS_ACCESS_KEY_ID", "")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
@@ -414,6 +417,7 @@ func TestStore_BuildClientOptFns(t *testing.T) {
 // identity-configured backend without an injected resolver falls back to
 // the default credential chain rather than failing.
 func TestStore_InitIdentityClient_FallsBackWhenNoResolver(t *testing.T) {
+	s3test.IsolateAWSConfig(t)
 	s := &Store{
 		bucket:       "test-bucket",
 		region:       "us-east-1",
@@ -428,6 +432,7 @@ func TestStore_InitIdentityClient_FallsBackWhenNoResolver(t *testing.T) {
 // TestStore_InitIdentityClient_PropagatesResolverError verifies resolver
 // errors surface through ensureClient with the expected error sentinel.
 func TestStore_InitIdentityClient_PropagatesResolverError(t *testing.T) {
+	s3test.IsolateAWSConfig(t)
 	resolver := &fakeAuthContextResolver{
 		awsErr: errors.New("identity chain failed"),
 	}
@@ -449,6 +454,7 @@ func TestStore_InitIdentityClient_PropagatesResolverError(t *testing.T) {
 // TestStore_EnsureClient_CallsResolverOnceAcrossOperations verifies the
 // sync.Once gate: the resolver is invoked once per backend instance.
 func TestStore_EnsureClient_CallsResolverOnceAcrossOperations(t *testing.T) {
+	s3test.IsolateAWSConfig(t)
 	resolver := &fakeAuthContextResolver{
 		awsResult: &artifact.AWSAuthConfig{
 			Region: "us-east-1",
@@ -502,7 +508,7 @@ func TestStore_QueryToPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := store.queryToPrefix(tt.query)
+			result := store.queryToPrefix(&tt.query)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

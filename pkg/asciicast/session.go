@@ -29,14 +29,9 @@ const (
 	defaultTeardownQuietPeriod = 500 * time.Millisecond
 	defaultTeardownMaxWait     = 2 * time.Second
 	defaultProcessExitMaxWait  = 2 * time.Second
-	// Fallback safety valve for finishSession when a shell never signals
-	// exit via its output stream (the `done` channel) or the caller's
-	// context. Real interactive shells -- notably bash with
-	// profile-loading overhead (.bashrc/.bash_profile, history flushing
-	// on exit) -- can legitimately take longer than a couple of seconds
-	// to fully process EOT and exit, especially on first startup; too
-	// tight a value here forcibly kills a shell that was about to exit
-	// cleanly on its own, discarding an otherwise-successful recording.
+	// Fallback for callers without a deadline. A caller-supplied deadline governs
+	// the whole session, including a shell still starting when actions finish;
+	// a separate teardown deadline must not cut that budget short.
 	defaultSessionExitMaxWait = 5 * time.Second
 	// The shell is ready for input once its startup output (banner, prompt) goes
 	// quiet. Typing before then would echo the first characters ahead of the
@@ -104,6 +99,10 @@ type SessionOptions struct {
 	KeyInterval time.Duration
 	Actions     []SessionAction
 	Recorder    *Recorder
+	// BeforeActions can wait for externally observed shell readiness before action deadlines start.
+	// Its predicate reports whether captured output contains text without consuming it.
+	// It must return on context cancellation; a failure stops and reaps the shell.
+	BeforeActions func(context.Context, func(string) bool) error
 	// ScopedWaits consumes matched output between waits for declarative recordings.
 	ScopedWaits bool
 	// Observe runs after an action and its output have reached the recorder. It runs
@@ -115,6 +114,9 @@ type SessionOptions struct {
 }
 
 // RunSession executes scripted session actions against an interactive shell.
+// A context deadline bounds the entire session, including shell completion. Without
+// one, teardown uses a bounded fallback after submitting EOF. Startup quiet is a
+// recording heuristic, not proof that the shell has finished initializing.
 func RunSession(ctx context.Context, opts *SessionOptions) error {
 	defer perf.Track(nil, "asciicast.RunSession")()
 
@@ -149,6 +151,17 @@ func RunSession(ctx context.Context, opts *SessionOptions) error {
 	state.echo.disabled = !echoTrackingSupported()
 	state.mu.Unlock()
 
+	if opts.BeforeActions != nil {
+		containsOutput := func(text string) bool {
+			state.mu.Lock()
+			defer state.mu.Unlock()
+			return strings.Contains(state.output.String(), text)
+		}
+		if err := opts.BeforeActions(ctx, containsOutput); err != nil {
+			proc.kill()
+			return errors.Join(err, reapKilledSessionProcess(proc))
+		}
+	}
 	waitForSessionQuiet(ctx, state, sessionReadyQuietPeriod, sessionReadyMaxWait)
 	if err := sessionShellExitedError(state, proc, opts.Shell); err != nil {
 		return err
@@ -540,6 +553,12 @@ func isExpectedSessionReadError(err error) bool {
 }
 
 func finishSession(ctx context.Context, proc *sessionProcess, done <-chan error) error {
+	var fallback <-chan time.Time
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		timer := time.NewTimer(defaultSessionExitMaxWait)
+		defer timer.Stop()
+		fallback = timer.C
+	}
 	// Send EOT so interactive shells exit without echoing an artificial
 	// "exit" command into the recording.
 	_, _ = proc.input.Write([]byte{4})
@@ -549,6 +568,11 @@ func finishSession(ctx context.Context, proc *sessionProcess, done <-chan error)
 	select {
 	case err := <-done:
 		waitErr := waitForSessionProcess(proc, defaultProcessExitMaxWait)
+		// Completion can win when cancellation is also ready, or the deadline
+		// can expire while reaping. Preserve that cause in either case.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return errors.Join(ctxErr, err, waitErr)
+		}
 		if err == nil {
 			return waitErr
 		}
@@ -559,7 +583,7 @@ func finishSession(ctx context.Context, proc *sessionProcess, done <-chan error)
 	case <-ctx.Done():
 		proc.kill()
 		return errors.Join(ctx.Err(), waitForSessionProcess(proc, defaultProcessExitMaxWait))
-	case <-time.After(defaultSessionExitMaxWait):
+	case <-fallback:
 		proc.kill()
 		return waitForSessionProcess(proc, defaultProcessExitMaxWait)
 	}

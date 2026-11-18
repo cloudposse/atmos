@@ -295,9 +295,10 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 
 	forceCIMode := resolveCIMode(cmd_.Flags())
 
-	// Extract the exit code from the command error. errUtils.GetExitCode unwraps
+	// The outcome's exit code comes from errUtils.GetExitCode, which unwraps
 	// the error chain (exec.ExitError, ExecError, exitCoder, etc.) and returns 1
 	// by default for non-nil errors with no attached code (e.g., auth failures).
+	// Normalize failed plan exit 2 for CI without changing the command error.
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
 		Event:        event,
 		AtmosConfig:  &hctx.atmosConfig,
@@ -305,7 +306,7 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 		Output:       output,
 		ForceCIMode:  forceCIMode,
 		CommandError: cmdErr,
-		ExitCode:     errUtils.GetExitCode(cmdErr),
+		ExitCode:     terraformCIExitCode(event, outcome),
 	}); err != nil {
 		log.Warn(ciHookFailedMsg, "error", err)
 	}
@@ -333,6 +334,15 @@ func terraformHookOutcome(event h.HookEvent, commandErr error) h.Outcome {
 		}
 	}
 	return h.Outcome{Status: h.RunSuccess, ExitCode: outcome.ExitCode}
+}
+
+// terraformCIExitCode reserves plan exit 2 for changes, not prerequisite or policy failures.
+// Normalize only the CI status; callers retain the original error and scheduler exit code.
+func terraformCIExitCode(event h.HookEvent, outcome h.Outcome) int {
+	if event.Normalize() == h.AfterTerraformPlan && outcome.ExitCode == 2 && outcome.Status == h.RunFailure {
+		return 1
+	}
+	return outcome.ExitCode
 }
 
 // hookContext bundles the fully-resolved component info and Atmos config shared
@@ -1318,12 +1328,6 @@ func (n *terraformNodeHooks) runUserHooksForNodeWithWriters(atmosConfig *schema.
 func (n *terraformNodeHooks) runCIHooksForNode(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
 	forceCIMode := resolveCIMode(n.cmd.Flags())
 	outcome := terraformHookOutcome(n.afterEvent, execErr)
-	exitCode := outcome.ExitCode
-	if n.afterEvent.Normalize() == h.AfterTerraformPlan && exitCode == 2 && outcome.Status == h.RunFailure {
-		// CI reserves plan exit 2 for changes, not prerequisite or policy failures.
-		// Normalize only the CI status; retain the original error and scheduler exit code.
-		exitCode = 1
-	}
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
 		Event:        n.afterEvent,
@@ -1332,7 +1336,7 @@ func (n *terraformNodeHooks) runCIHooksForNode(atmosConfig *schema.AtmosConfigur
 		Output:       ansi.Strip(rawOutput),
 		ForceCIMode:  forceCIMode,
 		CommandError: execErr,
-		ExitCode:     exitCode,
+		ExitCode:     terraformCIExitCode(n.afterEvent, outcome),
 	}); err != nil {
 		log.Warn(ciHookFailedMsg, logKeyComponent, info.Component, "error", err)
 	}
