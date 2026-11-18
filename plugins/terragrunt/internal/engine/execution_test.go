@@ -148,7 +148,7 @@ func TestExecutionRejectsEmptyExecute(t *testing.T) {
     commands = ["plan"]
     execute  = []
   }`))
-	require.ErrorContains(t, err, "execute")
+	requireCauseContains(t, err, "execute")
 }
 
 func TestExecutionIsNotEvaluatedForBackendIdentity(t *testing.T) {

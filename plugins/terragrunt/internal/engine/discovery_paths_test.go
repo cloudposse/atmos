@@ -54,6 +54,29 @@ func TestDiscoveryRejectsOutsideSymlink(t *testing.T) {
 	require.ErrorContains(t, err, "outside the Atmos base path")
 }
 
+// A pattern whose literal prefix runs through a symlinked directory is not walked: the link is
+// reported once, and the units behind it are not discovered under the link's path.
+func TestDiscoveryRejectsSymlinkedAncestorOfAScopedWalk(t *testing.T) {
+	root := scanTree(t, "live/prod/vpc/terragrunt.hcl")
+	if err := os.Symlink("prod", filepath.Join(root, "live", "linked")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	for _, pattern := range []string{"live/linked/**", "live/linked/vpc/**", "live/linked"} {
+		scan, err := discoveryPaths(root, []string{pattern}, nil)
+		require.NoError(t, err, pattern)
+		require.Empty(t, scan.Units, pattern)
+		require.Len(t, scan.Warnings, 2, pattern)
+		var linked []string
+		for _, warning := range scan.Warnings {
+			linked = append(linked, warning.Code+":"+warning.Path)
+		}
+		require.Contains(t, linked, model.WarningSymlinkedDirectory+":live/linked", pattern)
+	}
+	scan, err := discoveryPaths(root, []string{"live/prod/**"}, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/prod/vpc/terragrunt.hcl"}, relativeUnits(t, root, scan), "an ordinary directory is still walked")
+}
+
 func TestDiscoveryDistinguishesIncludesFromInlineModules(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "terragrunt.hcl")

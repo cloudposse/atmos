@@ -65,7 +65,7 @@ func problemFor(err error, file string) error {
 	}
 	// Other evaluator errors can contain evaluated values, so their text stays out of the safe fields.
 	return &model.Problem{
-		Code: model.CodeEvaluationError, Summary: "Terragrunt could not evaluate the configuration", Detail: err.Error(), File: file, Err: err,
+		Code: model.CodeEvaluationError, Summary: "Terragrunt could not evaluate the configuration", File: file, Err: err,
 		Hints: []string{"Check the unit's configuration."},
 	}
 }

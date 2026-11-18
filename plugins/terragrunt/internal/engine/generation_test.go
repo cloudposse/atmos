@@ -106,7 +106,7 @@ func TestPreventDestroyUsesCommandAndBooleanArguments(t *testing.T) {
 			_, err := Resolve(t.Context(), request)
 			if test.blocked {
 				require.ErrorIs(t, err, ErrPreventDestroy)
-				require.ErrorContains(t, err, "protected by prevent_destroy")
+				requireCauseContains(t, err, "protected by prevent_destroy")
 			} else {
 				require.NoError(t, err)
 			}
@@ -330,7 +330,7 @@ func TestPreventDestroyMalformedEnvironmentFailsClosed(t *testing.T) {
 	request.Command = "apply"
 	request.Environment["TF_CLI_ARGS_apply"] = "\"-destroy"
 	_, err := Resolve(t.Context(), request)
-	require.ErrorContains(t, err, "invalid TF_CLI_ARGS_apply")
+	requireCauseContains(t, err, "invalid TF_CLI_ARGS_apply")
 }
 
 func TestImplicitUnitLockHonorsCopyExclusion(t *testing.T) {

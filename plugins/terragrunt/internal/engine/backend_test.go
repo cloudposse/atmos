@@ -233,8 +233,58 @@ func TestBackendGenerationPartialParseInspectsAutoIncludes(t *testing.T) {
  contents = "terraform {\n backend \"local\" {}\n}"
 }`), 0o600))
 	result, err := Resolve(t.Context(), request)
-	require.ErrorContains(t, err, "Cannot verify backend identity from an automatic include")
+	require.ErrorContains(t, err, "Cannot verify the backend identity")
+	require.ErrorIs(t, err, ErrUnsupportedExecution)
 	require.Nil(t, result)
+}
+
+// An automatic include does not block a state read by existing: only what it generates matters.
+func TestBackendGenerationAcceptsAutoIncludeWithoutBackendGeneration(t *testing.T) {
+	request := nativeUnit(t, "")
+	request.Phase = "backend"
+	auto := filepath.Join(filepath.Dir(request.Path), "terragrunt.autoinclude.hcl")
+	require.NoError(t, os.WriteFile(auto, []byte("inputs = {\n  extra = \"value\"\n}\n"), 0o600))
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	require.NoError(t, os.WriteFile(auto, []byte("generate \"extra\" {\n path = \"extra.txt\"\n if_exists = \"overwrite\"\n contents = \"data\"\n}\n"), 0o600))
+	_, err = Resolve(t.Context(), request)
+	require.NoError(t, err, "a literal file that cannot declare a backend is verified")
+
+	require.NoError(t, os.WriteFile(auto, []byte("generate \"extra\" {\n path = get_env(\"TARGET\")\n if_exists = \"overwrite\"\n contents = \"data\"\n}\n"), 0o600))
+	request.Environment["TARGET"] = "extra.txt"
+	_, err = Resolve(t.Context(), request)
+	require.ErrorIs(t, err, ErrUnsupportedExecution, "a target that needs evaluation cannot be verified")
+}
+
+// A literal generate map gets the same checks as named generate blocks instead of being rejected.
+func TestBackendGenerationChecksLiteralGenerateMaps(t *testing.T) {
+	tests := []struct {
+		name, attribute string
+		rejected        bool
+	}{
+		{name: "non-terraform file", attribute: `generate = { notes = { path = "notes.txt", if_exists = "overwrite", contents = "backend" } }`},
+		{name: "terraform file without a backend", attribute: `generate = { vars = { path = "vars.tf", if_exists = "overwrite", contents = "variable \"a\" {}" } }`},
+		{name: "disabled entry", attribute: `generate = { backend = { path = "backend.tf", disable = true, contents = "terraform { backend \"local\" {} }" } }`},
+		{name: "declares a backend", attribute: `generate = { backend = { path = "backend.tf", if_exists = "overwrite", contents = "terraform {\n backend \"local\" {}\n}" } }`, rejected: true},
+		{name: "dynamic path", attribute: `generate = { backend = { path = get_env("TARGET"), if_exists = "overwrite", contents = "x" } }`, rejected: true},
+		{name: "dynamic contents", attribute: `generate = { backend = { path = "backend.tf", if_exists = "overwrite", contents = get_env("BODY") } }`, rejected: true},
+		{name: "dynamic map", attribute: `generate = get_env("MAP")`, rejected: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := nativeUnit(t, test.attribute)
+			request.Phase = "backend"
+			request.Environment["TARGET"], request.Environment["BODY"], request.Environment["MAP"] = "backend.tf", "x", "{}"
+			_, err := Resolve(t.Context(), request)
+			if test.rejected {
+				require.ErrorIs(t, err, ErrUnsupportedExecution)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestBackendGenerationIgnoresDataWatches(t *testing.T) {
