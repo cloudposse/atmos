@@ -695,6 +695,28 @@ hooks:
       destination: handler.zip
 ```
 
+The [`artifact` step type](/steps/type/artifact) publishes a build output to a configured artifact
+repository after an apply. A hook that sets `retry:` keeps one operation identity across its
+attempts, so the publication's creation time does not change on every retry. This example uses the GitHub Actions run ID,
+which stays stable across retries of the same run:
+
+```yaml
+hooks:
+  backup-output:
+    kind: step
+    type: artifact
+    events: [after.terraform.apply]
+    on_failure: fail
+    retry:
+      max_attempts: 3
+    with:
+      action: publish
+      source: ./dist
+      repository: backups
+      artifact_name: backups/app
+      version: 'build-{{ env "GITHUB_RUN_ID" }}'
+```
+
 #### Working directory
 
 A step's relative paths (`source`, `destination`, `path`, `files`, `context`, and similar

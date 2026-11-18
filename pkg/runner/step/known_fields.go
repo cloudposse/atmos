@@ -71,8 +71,14 @@ func knownFields(fields []string) []string {
 }
 
 var (
-	alertFields    = stepYAMLFields(contentField)
-	archiveFields  = stepYAMLFields("Action", "Source", "Destination", "Format", "Subpath", "Include", "Exclude", "Mtime")
+	alertFields   = stepYAMLFields(contentField)
+	archiveFields = stepYAMLFields("Action", "Source", "Destination", "Format", "Subpath", "Include", "Exclude", "Mtime")
+	// The artifact step reads these fields. The search text is the scalar form of the polymorphic
+	// `query` key, which has no YAML tag of its own, so it is listed explicitly.
+	artifactFields = append(stepYAMLFields(
+		"Action", "Source", "Repository", "ArtifactName", "Version", "ArtifactKind", "Force", "ArtifactDryRun",
+		"Metadata", "Labels", "Readme", "Changelog", "Ref", "Destination", "From", "To", "Document", "Refresh",
+	), "query")
 	atmosFields    = stepYAMLFields("Command", "Stack", "Viewport")
 	chooseFields   = stepYAMLFields("Prompt", "Options", "Default")
 	confirmFields  = stepYAMLFields("Prompt", "Default")
@@ -113,6 +119,13 @@ func (h *ArchiveHandler) KnownFields() []string {
 	defer perf.Track(nil, "step.ArchiveHandler.KnownFields")()
 
 	return knownFields(archiveFields)
+}
+
+// KnownFields lists the fields the artifact step reads.
+func (h *ArtifactHandler) KnownFields() []string {
+	defer perf.Track(nil, "step.ArtifactHandler.KnownFields")()
+
+	return knownFields(artifactFields)
 }
 
 // KnownFields lists the fields the atmos step reads.

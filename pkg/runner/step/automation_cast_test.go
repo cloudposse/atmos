@@ -97,6 +97,7 @@ rec.generate()`), "policy refused")
 }
 
 func TestDeclarativeCastTerminal(t *testing.T) {
+	installSessionReadyGate(t)
 	initShellTestIO(t)
 	dir := t.TempDir()
 	exe, err := os.Executable()
@@ -119,6 +120,7 @@ rec.generate()`, exe)
 // re-enable recording until the hidden command has really finished, or its
 // output is published in the cast.
 func TestDeclarativeCastTerminalHiddenCommandDoesNotLeak(t *testing.T) {
+	installSessionReadyGate(t)
 	initShellTestIO(t)
 	dir := t.TempDir()
 	exe, err := os.Executable()
