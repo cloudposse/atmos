@@ -90,6 +90,11 @@ const (
 	// which reuses this same Hook vocabulary and MatchesEvent/RunsWhenE.
 	BeforeScaffoldGenerate HookEvent = "before.scaffold.generate"
 	AfterScaffoldGenerate  HookEvent = "after.scaffold.generate"
+	// BeforeDocsGenerate and AfterDocsGenerate fire around atmos docs generate.
+	// Like the scaffold events they are repo-level (no stack or component), and
+	// hooks are declared under docs.generate.<doc-type>.hooks in atmos.yaml.
+	BeforeDocsGenerate HookEvent = "before.docs.generate"
+	AfterDocsGenerate  HookEvent = "after.docs.generate"
 )
 
 // Normalize returns the canonical form of a HookEvent, collapsing command

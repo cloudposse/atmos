@@ -582,6 +582,7 @@ func TestReporter_Comment(t *testing.T) {
 			Marker:   "<!-- atmos:ci:plan -->",
 			Body:     "<!-- atmos:ci:plan -->\nhello",
 			Behavior: CommentBehaviorUpsert,
+			RunURL:   "https://ci.example/run/1",
 		}).Return(want, nil)
 
 		rc, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "hello", Key: "plan"})
@@ -621,6 +622,7 @@ func TestReporter_Comment(t *testing.T) {
 			PRNumber: 42,
 			Body:     "plain",
 			Behavior: CommentBehaviorCreate,
+			RunURL:   "https://ci.example/run/1",
 		}).Return(&Comment{}, nil)
 
 		_, err := NewReporter(ciConfig(commentsOn)).Comment(ctx, CommentRequest{Body: "plain"})

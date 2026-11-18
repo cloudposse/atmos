@@ -19,6 +19,7 @@ func TestRegisteredEvents(t *testing.T) {
 		"before.aws/cloudformation.changeset-create", "after.aws/cloudformation.drift-detect",
 		"before.scaffold.generate", "after.scaffold.generate", "after.helm.apply.aggregate",
 		"before.terraform.destroy", "after.terraform.destroy",
+		"before.docs.generate", "after.docs.generate",
 	} {
 		t.Run(event, func(t *testing.T) {
 			require.True(t, DefaultRegistry.Contains(event))
