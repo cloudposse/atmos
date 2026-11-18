@@ -18,7 +18,8 @@ const (
 	errorFormat       = "%w: %v %v error %w"
 	failedToProcess   = "failed to process"
 	emptyValueWarning = "execute returned empty value"
-	includeDataKey    = "include_data"
+	// The includeDataKey mapping key preserves the type of an evaluated include value.
+	includeDataKey = "include_data"
 )
 
 var ErrExecuteYamlFunctions = errors.New("failed to execute yaml function")

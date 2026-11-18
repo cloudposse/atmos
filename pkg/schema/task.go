@@ -290,6 +290,28 @@ type Task struct {
 	// permission bits. See docs/prd/archive-step.md.
 	Mtime string `yaml:"mtime,omitempty" json:"mtime,omitempty" mapstructure:"mtime"`
 
+	// Artifact step fields (type: artifact). Action, Source, and Destination reuse the container,
+	// workdir/archive, and archive fields; Source must be a plain string path for this step. The
+	// step's own Name, Output, and Artifacts keep their runner meaning: the artifact's name is
+	// ArtifactName, its kind ArtifactKind. A list or search step's scalar `query:` is SearchQuery.
+
+	Repository     string                `yaml:"repository,omitempty" json:"repository,omitempty" mapstructure:"repository"`                                 // Configured artifact repository alias.
+	ArtifactName   string                `yaml:"artifact_name,omitempty" json:"artifact_name,omitempty" mapstructure:"artifact_name"`                        // Artifact name (publish; list restricts to one name).
+	Version        string                `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`                                          // Artifact version (publish).
+	ArtifactKind   string                `yaml:"artifact_kind,omitempty" json:"artifact_kind,omitempty" mapstructure:"artifact_kind"`                        // Artifact kind (publish); defaults to files.
+	Force          bool                  `yaml:"force,omitempty" json:"force,omitempty" mapstructure:"force"`                                                // Replace conflicting state (publish, pull, copy).
+	ArtifactDryRun bool                  `yaml:"dry_run,omitempty" json:"dry_run,omitempty" mapstructure:"dry_run"`                                          // Validate and plan a publication without writing. Distinct from DryRun, which executors set.
+	Metadata       *ArtifactStepMetadata `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`                                       // Publish metadata (labels).
+	Labels         any                   `yaml:"labels,omitempty" json:"labels,omitempty" mapstructure:"labels" jsonschema:"oneof_type=string;array;object"` // List and search label selectors: a key=value string, a list of them, or a mapping.
+	Readme         string                `yaml:"readme,omitempty" json:"readme,omitempty" mapstructure:"readme"`                                             // README path, relative to the publish source directory.
+	Changelog      string                `yaml:"changelog,omitempty" json:"changelog,omitempty" mapstructure:"changelog"`                                    // CHANGELOG path, relative to the publish source directory.
+	Ref            string                `yaml:"ref,omitempty" json:"ref,omitempty" mapstructure:"ref"`                                                      // Artifact reference: name:version or name@sha256:<digest>.
+	From           string                `yaml:"from,omitempty" json:"from,omitempty" mapstructure:"from"`                                                   // Copy source repository alias.
+	To             string                `yaml:"to,omitempty" json:"to,omitempty" mapstructure:"to"`                                                         // Copy destination repository alias.
+	Document       string                `yaml:"document,omitempty" json:"document,omitempty" mapstructure:"document"`                                       // Document to show: readme or changelog.
+	SearchQuery    string                `yaml:"-" json:"search_query,omitempty" mapstructure:"search_query"`                                                // Search text, decoded from a scalar `query:`.
+	Refresh        bool                  `yaml:"refresh,omitempty" json:"refresh,omitempty" mapstructure:"refresh"`                                          // Bypass cached discovery snapshots (list, search).
+
 	// Require step type fields (type: require; also accepts the alias type: assert).
 	// The step is a read-only preconditions gate: it never mutates PATH or the environment.
 	Tools []string `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"` // Executables that must be found on PATH (supports templates).
@@ -368,6 +390,8 @@ func (task *Task) UnmarshalYAML(value *yaml.Node) error {
 		color:     &task.Background,
 		forList:   &task.For,
 		steps:     &task.Steps,
+		query:     &task.Query,
+		search:    &task.SearchQuery,
 		generic:   &task.With,
 		container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
 	})
@@ -573,6 +597,24 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		Exclude:     task.Exclude,
 		Mtime:       task.Mtime,
 
+		// Artifact step fields.
+		Repository:     task.Repository,
+		ArtifactName:   task.ArtifactName,
+		Version:        task.Version,
+		ArtifactKind:   task.ArtifactKind,
+		Force:          task.Force,
+		ArtifactDryRun: task.ArtifactDryRun,
+		Metadata:       task.Metadata,
+		Labels:         task.Labels,
+		Readme:         task.Readme,
+		Changelog:      task.Changelog,
+		Ref:            task.Ref,
+		From:           task.From,
+		To:             task.To,
+		Document:       task.Document,
+		SearchQuery:    task.SearchQuery,
+		Refresh:        task.Refresh,
+
 		// S3 upload step fields.
 		Target: task.Target,
 
@@ -738,6 +780,24 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		Include:     step.Include,
 		Exclude:     step.Exclude,
 		Mtime:       step.Mtime,
+
+		// Artifact step fields.
+		Repository:     step.Repository,
+		ArtifactName:   step.ArtifactName,
+		Version:        step.Version,
+		ArtifactKind:   step.ArtifactKind,
+		Force:          step.Force,
+		ArtifactDryRun: step.ArtifactDryRun,
+		Metadata:       step.Metadata,
+		Labels:         step.Labels,
+		Readme:         step.Readme,
+		Changelog:      step.Changelog,
+		Ref:            step.Ref,
+		From:           step.From,
+		To:             step.To,
+		Document:       step.Document,
+		SearchQuery:    step.SearchQuery,
+		Refresh:        step.Refresh,
 
 		// S3 upload step fields.
 		Target: step.Target,
@@ -951,6 +1011,7 @@ func applyTaskPolymorphicMap(m map[string]any, task *Task, index int) error {
 
 // normalizeTaskMap prepares structured output, prompts, and nested steps.
 func normalizeTaskMap(m map[string]any, task *Task, index int) (map[string]any, error) {
+	m = normalizeSearchQueryMap(m)
 	m, err := normalizeTaskOutputMap(m, task)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode task output at index %d: %w", index, err)
@@ -1111,7 +1172,7 @@ func stringifyTaskMap(item any) (map[string]any, bool) {
 
 func normalizeWorkflowStepMap(m map[string]any) (map[string]any, error) {
 	copied := make(map[string]any, len(m))
-	for key, val := range m {
+	for key, val := range normalizeSearchQueryMap(m) {
 		copied[key] = val
 	}
 	if mapHasKey(copied, "cursor") {
