@@ -846,12 +846,12 @@ providers:
 
 **Environment Variables:**
 
-- `SAML2AWS_AUTO_BROWSER_DOWNLOAD=true` - Auto-download Playwright browser drivers
 - `SAML_PASSWORD` - SAML password (if not provided in config)
 
 **Usage Notes:**
 
 - First run will download Playwright browser drivers automatically if `download_browser_driver: true`
+  (`SAML2AWS_AUTO_BROWSER_DOWNLOAD` is not read by Atmos and does not force a download)
 - Browser automation handles MFA challenges automatically
 - Supports headless browser operation for CI/CD environments
 - SAML assertions are cached for session duration to reduce authentication frequency

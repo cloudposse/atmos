@@ -16,12 +16,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/spf13/viper"
-	"github.com/versent/saml2aws/v2"
-	"github.com/versent/saml2aws/v2/pkg/cfg"
-	"github.com/versent/saml2aws/v2/pkg/creds"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws"
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/cfg"
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/duration"
@@ -121,6 +121,10 @@ func (p *samlProvider) PreAuthenticate(manager types.AuthManager) error {
 
 // Authenticate performs SAML authentication using saml2aws.
 func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, error) {
+	if err := p.validateDriver(); err != nil {
+		return nil, err
+	}
+
 	samlDriver := p.getDriver()
 	downloadBrowser := p.shouldDownloadBrowser()
 
@@ -146,6 +150,8 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		// Best-effort — an already-installed driver keeps working offline.
 		if err := ensurePlaywrightDriver(); err != nil {
 			log.Warn("Could not pre-seed the Playwright driver; browser authentication may fail to download it", "error", err)
+		} else if err := patchPlaywrightDriver(); err != nil {
+			log.Debug("Could not patch the Playwright driver", "error", err)
 		}
 	}
 
@@ -212,7 +218,6 @@ func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
 		SessionDuration:       samlDefaultSessionSec, // 1 hour default.
 		Profile:               p.name,
 		Region:                p.region,
-		DownloadBrowser:       p.shouldDownloadBrowser(), // Intelligently enable based on driver availability.
 		BrowserType:           p.config.BrowserType,
 		BrowserExecutablePath: p.config.BrowserExecutablePath,
 		Headless:              false, // Force non-headless for interactive auth.
@@ -237,13 +242,9 @@ func (p *samlProvider) createLoginDetails() *creds.LoginDetails {
 
 // authenticateAndGetAssertion authenticates and gets the SAML assertion.
 //
-// IMPORTANT: This function calls saml2aws.SAMLClient.Authenticate() which may panic
-// due to a bug in saml2aws browser provider (v2.36.19):
-// - When browser timeout occurs, ExpectRequest() returns (nil, error)
-// - The code then calls nil.PostData() causing a nil pointer dereference
-// - Location: browser.go:191 in saml2aws
-// - Workaround: Ensure browser authentication completes before timeout (default 5 minutes)
-// - User should not close the browser window manually during authentication.
+// Upstream saml2aws v2.36.19 panicked here when the browser flow timed out
+// (nil request dereference in its browser provider). Atmos's vendored copy in
+// pkg/auth/providers/aws/saml2aws returns an error instead.
 func (p *samlProvider) authenticateAndGetAssertion(samlClient saml2aws.SAMLClient, loginDetails *creds.LoginDetails) (string, error) {
 	samlAssertion, err := samlClient.Authenticate(loginDetails)
 	if err != nil {
@@ -389,6 +390,21 @@ func (p *samlProvider) getDriver() string {
 	return "Browser"
 }
 
+// validateDriver rejects an explicit driver that the vendored saml2aws copy does not support.
+// It runs when this provider authenticates, not in Validate: the auth manager validates every
+// configured provider up front, so a stale driver on one unused SAML provider must not break
+// authentication for every other identity.
+func (p *samlProvider) validateDriver() error {
+	if p.config.Driver == "" {
+		return nil
+	}
+	if _, ok := saml2aws.MFAsByProvider[p.config.Driver]; ok {
+		return nil
+	}
+	return fmt.Errorf("%w: provider %q: unsupported SAML driver %q, supported drivers are %s",
+		errUtils.ErrInvalidProviderConfig, p.name, p.config.Driver, strings.Join(saml2aws.MFAsByProvider.Names(), ", "))
+}
+
 // Validate validates the provider configuration.
 func (p *samlProvider) Validate() error {
 	defer perf.Track(nil, "aws.samlProvider.Validate")()
@@ -423,10 +439,8 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 	env["AWS_DEFAULT_REGION"] = p.region
 	env["AWS_REGION"] = p.region
 
-	// Set saml2aws specific environment variables if needed.
-	if p.config.DownloadBrowserDriver {
-		env["SAML2AWS_AUTO_BROWSER_DOWNLOAD"] = "true"
-	}
+	// SAML2AWS_AUTO_BROWSER_DOWNLOAD is not exported: only the saml2aws CLI read it, and the vendored
+	// library installs browsers from LoginDetails.DownloadBrowser (see createLoginDetails).
 
 	return env, nil
 }
@@ -500,15 +514,36 @@ func (p *samlProvider) PrepareEnvironment(_ context.Context, environ map[string]
 // playwrightDriversInstalled checks if valid Playwright drivers are installed in standard locations.
 // Returns true if drivers are found, false if not found or home directory cannot be determined.
 func (p *samlProvider) playwrightDriversInstalled() bool {
+	playwrightPaths := p.playwrightBrowserPaths()
+
+	for _, path := range playwrightPaths {
+		if p.hasValidPlaywrightDrivers(path) {
+			log.Debug("Found valid Playwright drivers", "path", path)
+			return true
+		}
+	}
+
+	log.Debug("No valid Playwright drivers found", "checked_paths", playwrightPaths)
+	return false
+}
+
+// playwrightBrowserPaths returns the directories where Playwright browsers may be installed.
+func (p *samlProvider) playwrightBrowserPaths() []string {
 	var playwrightPaths []string
 
-	// Check Atmos XDG cache directory first (allows users to consolidate all Atmos data).
+	// Check the directory the Playwright driver itself uses first (honors
+	// PLAYWRIGHT_BROWSERS_PATH, and XDG_CACHE_HOME on Linux).
+	if registryDir, err := playwrightRegistryDir(); err == nil {
+		playwrightPaths = append(playwrightPaths, registryDir)
+	}
+
+	// Check Atmos XDG cache directory (allows users to consolidate all Atmos data).
 	if xdgCacheDir, err := xdg.GetXDGCacheDir(playwrightCacheDir, playwrightCacheDirPermissions); err == nil {
 		playwrightPaths = append(playwrightPaths, xdgCacheDir)
 	}
 
-	// Check playwright-go's hardcoded cache locations.
-	// Note: playwright-go does NOT respect XDG_CACHE_HOME, it uses its own hardcoded paths.
+	// Check the home-based default browser locations of every OS.
+	// Note: these ignore XDG_CACHE_HOME; the registry directory above covers it on Linux.
 	homeDir, err := homedir.Dir()
 	if err == nil {
 		playwrightPaths = append(
@@ -532,15 +567,7 @@ func (p *samlProvider) playwrightDriversInstalled() bool {
 		}
 	}
 
-	for _, path := range playwrightPaths {
-		if p.hasValidPlaywrightDrivers(path) {
-			log.Debug("Found valid Playwright drivers", "path", path)
-			return true
-		}
-	}
-
-	log.Debug("No valid Playwright drivers found", "checked_paths", playwrightPaths)
-	return false
+	return playwrightPaths
 }
 
 // hasPlaywrightDriversOrCanDownload checks if Playwright drivers are available or can be downloaded.
@@ -599,8 +626,10 @@ func (p *samlProvider) hasValidPlaywrightDrivers(path string) bool {
 
 // shouldDownloadBrowser determines if browser drivers should be auto-downloaded.
 // It checks if the user explicitly configured download_browser_driver, otherwise
-// it intelligently enables auto-download for "Browser" driver if drivers aren't found
-// and the user hasn't specified a custom browser.
+// it enables auto-download for the "Browser" driver when the Playwright-managed browser
+// that will be launched (Chromium by default, or the configured chromium, firefox or webkit
+// browser_type) is not installed. A system browser channel (chrome*, msedge*) or a
+// browser_executable_path is the user's own browser and is never downloaded.
 func (p *samlProvider) shouldDownloadBrowser() bool {
 	// If user explicitly set download_browser_driver, respect their choice.
 	if p.config.DownloadBrowserDriver {
@@ -616,23 +645,32 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 		return false
 	}
 
-	// If user specified a custom browser type or executable path, don't auto-download.
-	// They're using their own browser installation.
-	if p.config.BrowserType != "" || p.config.BrowserExecutablePath != "" {
-		log.Debug("Custom browser configured, skipping auto-download",
-			"browser_type", p.config.BrowserType,
+	// A custom executable path is the user's own browser installation.
+	if p.config.BrowserExecutablePath != "" {
+		log.Debug("Custom browser executable configured, skipping auto-download",
 			"browser_executable_path", p.config.BrowserExecutablePath)
 		return false
 	}
 
-	// Check if Playwright drivers are already installed.
-	if p.playwrightDriversInstalled() {
-		log.Debug("Found valid Playwright drivers, auto-download disabled")
+	// Only Chromium, Firefox and WebKit are installed by Playwright. System channels
+	// (chrome*, msedge*) use the browser installed on the system.
+	browserName, managed := playwrightManagedBrowser(p.config.BrowserType)
+	if !managed {
+		log.Debug("Browser type is not installed by Playwright, skipping auto-download",
+			"browser_type", p.config.BrowserType)
 		return false
 	}
 
-	// No valid drivers found and no custom browser configured, enable auto-download.
-	log.Debug("No valid Playwright drivers found, enabling auto-download for Browser driver")
+	// Check if the revision of the launched browser required by the bundled Playwright
+	// driver is installed. Any installed browser is not enough: after a Playwright upgrade
+	// the previous revision stays on disk but cannot be launched by the new driver, and
+	// an installed Chromium does not satisfy Firefox or WebKit.
+	if p.requiredBrowserInstalled(browserName) {
+		log.Debug("Required browser revision is installed, auto-download disabled", "browser", browserName)
+		return false
+	}
+
+	log.Debug("Required browser revision not found, enabling auto-download for Browser driver", "browser", browserName)
 	return true
 }
 
@@ -654,15 +692,9 @@ func (p *samlProvider) setupBrowserAutomation() error {
 		}
 	}
 
-	// Set environment variables for browser automation.
-	// Clear/set explicitly on every call to avoid leaking state from a
-	// previous auth flow in the same process (e.g. MCP server, workflows).
-	if p.shouldDownloadBrowser() {
-		os.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
-		log.Debug("Browser driver auto-download enabled", logFieldDriver, p.getDriver())
-	} else {
-		_ = os.Unsetenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD")
-	}
+	// Browser auto-download is passed to the vendored saml2aws library through
+	// LoginDetails.DownloadBrowser (see createLoginDetails). The process environment is
+	// not touched: SAML2AWS_AUTO_BROWSER_DOWNLOAD was only read by the saml2aws CLI.
 
 	// Ensure the storage directory that saml2aws expects exists.
 	// saml2aws hardcodes ~/.aws/saml2aws/storageState.json for browser state.
@@ -713,11 +745,10 @@ func (p *samlProvider) validateBrowserExecutable() error {
 }
 
 // setupBrowserStorageDir ensures the directory that saml2aws uses for browser
-// storage state exists. The path is hardcoded upstream as
-// `~/.aws/saml2aws/storageState.json` (using fmt.Sprintf with forward slashes,
-// which produces mixed-separator paths on Windows). We cannot redirect this
-// path to an XDG location because saml2aws does not expose a configurable
-// storage path.
+// storage state exists. The path is `~/.aws/saml2aws/storageState.json`
+// (see storageStatePath in the vendored saml2aws browser provider, which now
+// builds it with filepath.Join). It is kept at the upstream location so existing
+// browser sessions keep working after the move to the vendored copy.
 //
 // The fix: create `~/.aws/saml2aws/` as a plain directory using filepath.Join
 // (correct separators on all platforms) and os.MkdirAll (no privilege
@@ -738,7 +769,7 @@ func (p *samlProvider) setupBrowserStorageDir() error {
 	}
 
 	// Create ~/.aws/saml2aws/ as a real directory (not a symlink).
-	// saml2aws hardcodes this path in pkg/provider/browser/browser.go:118.
+	// The vendored saml2aws browser provider reads and writes storage state here.
 	saml2awsDir := filepath.Join(homeDir, awsDir, saml2awsSubdir)
 
 	// Migrate legacy symlink left by previous Atmos versions. os.MkdirAll

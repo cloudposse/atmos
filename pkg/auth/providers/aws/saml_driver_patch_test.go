@@ -1,0 +1,105 @@
+package aws
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/mxschmitt/playwright-go"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+)
+
+// unpatchedCoreBundle is the driver bundle code playwright-go rewrites in DownloadDriver.
+const unpatchedCoreBundle = `location: {
+  url: pageError.location.url,
+  line: pageError.location.lineNumber,
+  column: pageError.location.columnNumber
+}`
+
+// seedFakePlaywrightDriver creates a driver directory with cli.js and an unpatched bundle,
+// and makes the test binary act as its Node.js runtime. It returns the bundle path.
+func seedFakePlaywrightDriver(t *testing.T) string {
+	t.Helper()
+	driverDir := t.TempDir()
+	t.Setenv("PLAYWRIGHT_DRIVER_PATH", driverDir)
+	t.Setenv("PLAYWRIGHT_CLI_PATH", "")
+
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	t.Setenv("PLAYWRIGHT_NODEJS_PATH", exe)
+	driver, err := playwright.NewDriver(&playwright.RunOptions{DriverDirectory: driverDir})
+	require.NoError(t, err)
+	t.Setenv(fakePlaywrightNodeEnv, driver.Version)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(driverDir, "package", "lib"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(driverDir, "package", "cli.js"), []byte("cli"), 0o644))
+	bundlePath := filepath.Join(driverDir, "package", "lib", "coreBundle.js")
+	require.NoError(t, os.WriteFile(bundlePath, []byte(unpatchedCoreBundle), 0o644))
+	return bundlePath
+}
+
+// Prerequisite: the test binary answers the driver's --version check, so the patch test below
+// exercises playwright-go's real up-to-date check instead of failing on a missing Node.js.
+func TestFakePlaywrightNodeAnswersVersionCheck(t *testing.T) {
+	seedFakePlaywrightDriver(t)
+
+	driver, err := playwright.NewDriver(&playwright.RunOptions{})
+	require.NoError(t, err)
+	out, err := driver.Command("--version").Output()
+	require.NoError(t, err)
+	assert.Contains(t, string(out), driver.Version)
+}
+
+// Regression: playwright-go patches the driver bundle only in DownloadDriver (called by
+// Install), never in Run. A pre-seeded driver whose browser download is skipped (browser
+// already installed, or a custom browser_type) ran unpatched.
+func TestPatchPlaywrightDriver_PatchesSeededBundle(t *testing.T) {
+	bundlePath := seedFakePlaywrightDriver(t)
+
+	require.NoError(t, patchPlaywrightDriver())
+
+	data, err := os.ReadFile(bundlePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `pageError.location?.url || ""`)
+	assert.Contains(t, string(data), "pageError.location?.lineNumber || 0")
+	assert.Contains(t, string(data), "pageError.location?.columnNumber || 0")
+
+	// Patching is idempotent.
+	require.NoError(t, patchPlaywrightDriver())
+}
+
+// Without a driver, nothing is patched and nothing is downloaded.
+func TestPatchPlaywrightDriver_NoDriverIsNoop(t *testing.T) {
+	driverDir := t.TempDir()
+	t.Setenv("PLAYWRIGHT_DRIVER_PATH", driverDir)
+	t.Setenv("PLAYWRIGHT_CLI_PATH", "")
+	// An unreachable registry proves no download is attempted.
+	t.Setenv("PLAYWRIGHT_GO_NPM_REGISTRY", "http://127.0.0.1:1")
+
+	require.NoError(t, patchPlaywrightDriver())
+	assert.NoFileExists(t, filepath.Join(driverDir, "package", "cli.js"))
+}
+
+// An external PLAYWRIGHT_CLI_PATH driver is left alone, matching playwright-go.
+func TestPatchPlaywrightDriver_ExternalCLIIsNoop(t *testing.T) {
+	bundlePath := seedFakePlaywrightDriver(t)
+	t.Setenv("PLAYWRIGHT_CLI_PATH", filepath.Join(t.TempDir(), "cli.js"))
+
+	require.NoError(t, patchPlaywrightDriver())
+
+	data, err := os.ReadFile(bundlePath)
+	require.NoError(t, err)
+	assert.Equal(t, unpatchedCoreBundle, string(data))
+}
+
+// A driver that cannot run reports a seed error instead of being silently accepted.
+func TestPatchPlaywrightDriver_BrokenDriverFails(t *testing.T) {
+	seedFakePlaywrightDriver(t)
+	t.Setenv(fakePlaywrightNodeEnv, "0.0.0-mismatch")
+
+	err := patchPlaywrightDriver()
+	require.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+}

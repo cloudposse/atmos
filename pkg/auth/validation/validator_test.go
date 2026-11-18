@@ -103,6 +103,24 @@ func TestValidateAuthConfig(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// A SAML provider whose driver the vendored saml2aws copy no longer supports must not fail
+// whole-config validation. The manager validates every provider up front, so failing here
+// would break authentication for every identity, not just the ones using that provider.
+func TestValidateAuthConfig_UnsupportedSAMLDriverDoesNotBreakOtherProviders(t *testing.T) {
+	v := NewValidator()
+	cfg := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"aws-sso":    {Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://example.awsapps.com/start"},
+			"stale-saml": {Kind: "aws/saml", URL: "https://idp.example.com/saml", Region: "us-east-1", Driver: "KeyCloak"},
+		},
+		Identities: map[string]schema.Identity{
+			"dev": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{"name": "DevAccess", "account": map[string]any{"name": "dev"}}},
+		},
+	}
+
+	assert.NoError(t, v.ValidateAuthConfig(cfg))
+}
+
 func TestValidateProvider_ErrorCases(t *testing.T) {
 	v := NewValidator()
 

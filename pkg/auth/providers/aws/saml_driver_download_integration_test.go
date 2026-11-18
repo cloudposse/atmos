@@ -14,9 +14,9 @@ import (
 	"github.com/mxschmitt/playwright-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/versent/saml2aws/v2/pkg/cfg"
-	"github.com/versent/saml2aws/v2/pkg/creds"
 
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/cfg"
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -87,11 +87,7 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 	shouldDownload := sp.shouldDownloadBrowser()
 	assert.True(t, shouldDownload, "shouldDownloadBrowser should return true when DownloadBrowserDriver is enabled")
 
-	// Create SAML config.
-	samlConfig := sp.createSAMLConfig()
-	assert.True(t, samlConfig.DownloadBrowser, "SAML config should have DownloadBrowser enabled")
-
-	// Create LoginDetails.
+	// Create LoginDetails (the browser driver installs browsers when LoginDetails.DownloadBrowser is set).
 	loginDetails := sp.createLoginDetails()
 	assert.True(t, loginDetails.DownloadBrowser, "LoginDetails should have DownloadBrowser enabled")
 
@@ -312,8 +308,7 @@ func TestPlaywrightDriverDownload_WithSAML2AWS(t *testing.T) {
 	samlConfig := sp.createSAMLConfig()
 	loginDetails := sp.createLoginDetails()
 
-	// Verify both have DownloadBrowser set.
-	assert.True(t, samlConfig.DownloadBrowser, "IDPAccount config should have DownloadBrowser enabled")
+	// The browser driver installs browsers when LoginDetails.DownloadBrowser is set.
 	assert.True(t, loginDetails.DownloadBrowser, "LoginDetails should have DownloadBrowser enabled")
 
 	// Verify the config matches what saml2aws expects.
@@ -329,8 +324,8 @@ func TestPlaywrightDriverDownload_WithSAML2AWS(t *testing.T) {
 	t.Log("saml2aws configuration validated successfully")
 }
 
-// TestPlaywrightDriverDownload_ConsistentBehavior validates that DownloadBrowser is consistently
-// set across IDPAccount config and LoginDetails.
+// TestPlaywrightDriverDownload_ConsistentBehavior validates that LoginDetails.DownloadBrowser, which
+// the browser driver reads, follows the configuration and the installed browsers.
 func TestPlaywrightDriverDownload_ConsistentBehavior(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -378,35 +373,15 @@ func TestPlaywrightDriverDownload_ConsistentBehavior(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			testHomeDir := t.TempDir()
-			t.Setenv("HOME", testHomeDir)
-			t.Setenv("USERPROFILE", testHomeDir)
-			homedir.Reset()
-
-			// Windows: playwright-go checks LOCALAPPDATA for cache directory.
-			if runtime.GOOS == "windows" {
-				t.Setenv("LOCALAPPDATA", filepath.Join(testHomeDir, "AppData", "Local"))
-			}
+			// Isolate HOME and the Playwright browser directory for the current OS.
+			_, cacheDir := isolatedBrowserCacheDir(t)
 
 			// Optionally pre-install drivers.
 			if tt.setupDrivers {
-				var cacheDir string
-				switch runtime.GOOS {
-				case "darwin":
-					cacheDir = filepath.Join(testHomeDir, "Library", "Caches", "ms-playwright")
-				case "linux":
-					cacheDir = filepath.Join(testHomeDir, ".cache", "ms-playwright")
-				default:
-					cacheDir = filepath.Join(testHomeDir, "AppData", "Local", "ms-playwright")
-				}
-
-				versionDir := filepath.Join(cacheDir, "1.47.2")
-				require.NoError(t, os.MkdirAll(versionDir, 0o755))
-				// Create a realistic browser directory with a nested binary file
-				// so hasValidPlaywrightDrivers treats this as a complete install.
-				browserDir := filepath.Join(versionDir, "chromium-1234")
-				require.NoError(t, os.MkdirAll(browserDir, 0o755))
-				require.NoError(t, os.WriteFile(filepath.Join(browserDir, "chrome"), []byte("fake"), 0o755))
+				// Create a realistic, fully installed browser directory (Playwright's
+				// <cache>/chromium-<revision> layout), matching the revision the driver requires.
+				stubRequiredChromiumRevision(t, "1234")
+				installFakeBrowser(t, cacheDir, "chromium-1234")
 			}
 
 			// Create provider.
@@ -420,17 +395,9 @@ func TestPlaywrightDriverDownload_ConsistentBehavior(t *testing.T) {
 			require.NoError(t, err)
 			sp := provider.(*samlProvider)
 
-			// Get configurations.
-			samlConfig := sp.createSAMLConfig()
 			loginDetails := sp.createLoginDetails()
-
-			// Both should have consistent DownloadBrowser value.
-			assert.Equal(t, tt.expectedDownload, samlConfig.DownloadBrowser,
-				"IDPAccount.DownloadBrowser mismatch")
 			assert.Equal(t, tt.expectedDownload, loginDetails.DownloadBrowser,
 				"LoginDetails.DownloadBrowser mismatch")
-			assert.Equal(t, samlConfig.DownloadBrowser, loginDetails.DownloadBrowser,
-				"IDPAccount and LoginDetails should have same DownloadBrowser value")
 		})
 	}
 }
@@ -463,7 +430,6 @@ func TestPlaywrightDriverDownload_ConfigMapping(t *testing.T) {
 	assert.Equal(t, "Browser", samlConfig.Provider)
 	assert.Equal(t, "prod-saml", samlConfig.Profile)
 	assert.Equal(t, "eu-west-1", samlConfig.Region)
-	assert.True(t, samlConfig.DownloadBrowser)
 	assert.False(t, samlConfig.Headless)              // Should always be false for interactive auth.
 	assert.Equal(t, 3600, samlConfig.SessionDuration) // Always 1 hour (samlDefaultSessionSec).
 

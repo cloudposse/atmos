@@ -37,6 +37,9 @@ func (*providerFixture) Authenticate(request *pluginv1.ProviderRequest, stream g
 	if request.Name == authDeadlineFixtureName {
 		return hangUntilAuthDeadline(stream.Context(), request.Invocation)
 	}
+	if fields, ok := deviceFixtureFields[request.Name]; ok {
+		return sendDeviceThenCredentials(stream, fields)
+	}
 	if request.Name != "corporate" || request.Kind != "plugin/test" || request.Realm != "fixture" {
 		return status.Error(codes.InvalidArgument, "provider configuration was not forwarded")
 	}

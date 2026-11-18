@@ -1142,6 +1142,7 @@ var (
 	ErrAwsUserKeyringReadFailed     = errors.New("failed to read AWS user credentials from keyring")
 	ErrAwsSAMLDecodeFailed          = errors.New("aws saml decode failed")
 	ErrPlaywrightDriverSeed         = errors.New("failed to pre-seed the Playwright driver")
+	ErrPlaywrightBrowserManifest    = errors.New("cannot read the Playwright browser manifest")
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrIdentityNotAWS               = errors.New("identity does not produce AWS credentials")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")

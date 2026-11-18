@@ -1018,10 +1018,6 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: https://github.com/go-git/gcfg/blob/3a3c6141e376/LICENSE
 
-  - github.com/go-jose/go-jose/v3/json
-    License: BSD-3-Clause
-    URL: https://github.com/go-jose/go-jose/blob/v3.0.5/json/LICENSE
-
   - github.com/go-jose/go-jose/v4/json
     License: BSD-3-Clause
     URL: https://github.com/go-jose/go-jose/blob/v4.1.6/json/LICENSE
@@ -1524,10 +1520,6 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/Azure/azure-sdk-for-go/blob/sdk/storage/azblob/v1.7.0/sdk/storage/azblob/LICENSE.txt
 
-  - github.com/Azure/go-ntlmssp
-    License: MIT
-    URL: https://github.com/Azure/go-ntlmssp/blob/v0.1.1/LICENSE
-
   - github.com/AzureAD/microsoft-authentication-library-for-go/apps
     License: MIT
     URL: https://github.com/AzureAD/microsoft-authentication-library-for-go/blob/v1.7.2/LICENSE
@@ -1719,6 +1711,10 @@ MIT LICENSED DEPENDENCIES
   - github.com/clipperhouse/uax29/v2/graphemes
     License: MIT
     URL: https://github.com/clipperhouse/uax29/blob/v2.7.0/LICENSE
+
+  - github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws
+    License: MIT
+    URL: https://github.com/cloudposse/atmos/blob/HEAD/pkg/auth/providers/aws/saml2aws/LICENSE.md
 
   - github.com/cloudposse/atmos/pkg/config/homedir
     License: MIT
@@ -2168,6 +2164,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/muesli/termenv/blob/v0.16.0/LICENSE
 
+  - github.com/mxschmitt/playwright-go
+    License: MIT
+    URL: https://github.com/mxschmitt/playwright-go/blob/v0.6401.0/LICENSE
+
   - github.com/otiai10/copy
     License: MIT
     URL: https://github.com/otiai10/copy/blob/v1.14.1/LICENSE
@@ -2179,10 +2179,6 @@ MIT LICENSED DEPENDENCIES
   - github.com/peterbourgon/diskv
     License: MIT
     URL: https://github.com/peterbourgon/diskv/blob/v2.0.1/LICENSE
-
-  - github.com/playwright-community/playwright-go
-    License: MIT
-    URL: https://github.com/playwright-community/playwright-go/blob/v0.5700.1/LICENSE
 
   - github.com/posthog/posthog-go
     License: MIT
@@ -2319,10 +2315,6 @@ MIT LICENSED DEPENDENCIES
   - github.com/vektah/gqlparser/v2
     License: MIT
     URL: https://github.com/vektah/gqlparser/blob/v2.5.33/LICENSE
-
-  - github.com/versent/saml2aws/v2
-    License: MIT
-    URL: https://github.com/versent/saml2aws/blob/v2.36.19/LICENSE.md
 
   - github.com/wlynxg/chardet
     License: MIT
