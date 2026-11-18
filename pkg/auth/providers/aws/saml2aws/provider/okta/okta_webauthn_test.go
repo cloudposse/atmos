@@ -3,10 +3,12 @@ package okta
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	u2fhost "github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
 )
@@ -160,4 +162,63 @@ func TestFidoClientChallengeU2F_Behavior(t *testing.T) {
 		assert.Nil(t, got)
 		device.AssertExpectations(t)
 	})
+}
+
+// Regression: a device whose Authenticate read never returns must not block ChallengeU2F past its timeout,
+// and the device must not be closed while that read is still in flight.
+func TestFidoClientChallengeU2F_HungDeviceTimesOut(t *testing.T) {
+	origTimeout, origInterval := u2fAuthTimeout, u2fPollInterval
+	u2fAuthTimeout, u2fPollInterval = 100*time.Millisecond, 5*time.Millisecond
+	t.Cleanup(func() { u2fAuthTimeout, u2fPollInterval = origTimeout, origInterval })
+
+	release := make(chan struct{})
+	closed := make(chan struct{})
+	device := &mocks.U2FDevice{}
+	device.On("Authenticate", mock.Anything).Run(func(mock.Arguments) { <-release }).Return(nil, fmt.Errorf("device unplugged")).Once()
+	device.On("Close").Run(func(mock.Arguments) { close(closed) }).Return().Once()
+
+	client := &FidoClient{Device: device}
+	start := time.Now()
+	got, err := client.ChallengeU2F()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get authentication response")
+	assert.Nil(t, got)
+	assert.Less(t, time.Since(start), 5*time.Second)
+
+	select {
+	case <-closed:
+		t.Fatal("device was closed while its Authenticate read was still in flight")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	// Once the blocked read returns, the abandoned call closes the device exactly once.
+	close(release)
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("device was never closed after the blocked read returned")
+	}
+	device.AssertExpectations(t)
+}
+
+// Negative path: a device that answers in time is closed by ChallengeU2F itself and the call does not time out.
+func TestFidoClientChallengeU2F_ResponsiveDeviceDoesNotTimeOut(t *testing.T) {
+	origInterval := u2fPollInterval
+	u2fPollInterval = time.Millisecond
+	t.Cleanup(func() { u2fPollInterval = origInterval })
+
+	device := &mocks.U2FDevice{}
+	device.On("Authenticate", mock.Anything).Return(&u2fhost.AuthenticateResponse{ClientData: "cd"}, nil).Once()
+	device.On("Close").Return().Once()
+
+	got, err := (&FidoClient{Device: device, StateToken: "st"}).ChallengeU2F()
+	require.NoError(t, err)
+	assert.Equal(t, "cd", got.ClientData)
+	device.AssertExpectations(t)
+}
+
+// Regression: the system WebAuthn timeout is in milliseconds; two seconds was too short for a PIN or
+// biometric prompt, so it must outlast the USB touch timeout.
+func TestSystemWebAuthnTimeoutOutlastsUSBTimeout(t *testing.T) {
+	assert.GreaterOrEqual(t, int64(systemWebAuthnTimeoutMillis), int64(25*time.Second/time.Millisecond))
 }

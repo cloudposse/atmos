@@ -602,7 +602,7 @@ func (oc *Client) follow(ctx context.Context, req *http.Request, loginDetails *c
 	if handler == nil {
 		html, _ := doc.Selection.Html()
 		logger.WithField("doc", html).Debug("Unknown document type")
-		return "", fmt.Errorf("Unknown document type")
+		return "", fmt.Errorf("unknown document type")
 	}
 
 	ctx, req, err = handler(ctx, doc)

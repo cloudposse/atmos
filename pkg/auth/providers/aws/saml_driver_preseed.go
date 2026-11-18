@@ -163,11 +163,11 @@ func npmPackageDist(name, version string) (tarballURL, integrity string, err err
 func verifyNpmIntegrity(body []byte, integrity string) error {
 	digest, ok := strings.CutPrefix(integrity, "sha512-")
 	if !ok {
-		return fmt.Errorf("%w: unsupported npm integrity value %q", errUtils.ErrPlaywrightDriverSeed, integrity)
+		return fmt.Errorf("%w: %w: unsupported npm integrity value %q", errUtils.ErrPlaywrightDriverSeed, errUtils.ErrPlaywrightDriverIntegrity, integrity)
 	}
 	sum := sha512.Sum512(body)
 	if base64.StdEncoding.EncodeToString(sum[:]) != digest {
-		return fmt.Errorf("%w: npm tarball integrity mismatch (expected %s)", errUtils.ErrPlaywrightDriverSeed, integrity)
+		return fmt.Errorf("%w: %w: npm tarball integrity mismatch (expected %s)", errUtils.ErrPlaywrightDriverSeed, errUtils.ErrPlaywrightDriverIntegrity, integrity)
 	}
 	return nil
 }
@@ -283,7 +283,7 @@ func verifyNodeChecksum(body []byte, archiveName string) error {
 		if len(fields) == 2 && fields[1] == archiveName {
 			sum := sha256.Sum256(body)
 			if hex.EncodeToString(sum[:]) != fields[0] {
-				return fmt.Errorf("%w: checksum mismatch for %s", errUtils.ErrPlaywrightDriverSeed, archiveName)
+				return fmt.Errorf("%w: %w: checksum mismatch for %s", errUtils.ErrPlaywrightDriverSeed, errUtils.ErrPlaywrightDriverIntegrity, archiveName)
 			}
 			return nil
 		}

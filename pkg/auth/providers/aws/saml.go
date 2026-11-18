@@ -199,8 +199,13 @@ func (p *samlProvider) prepareBrowserDriver(samlDriver string) error {
 	}
 	// Pre-seed the Playwright driver from official registries: the download
 	// built into playwright-go/saml2aws points at a retired CDN and 404s.
-	// Best-effort — an already-installed driver keeps working offline.
+	// Best-effort — an already-installed driver keeps working offline. An integrity
+	// failure is fatal, though: falling through would let playwright-go's own
+	// (unverified) downloader fetch and run the artifact that was just rejected.
 	if err := ensurePlaywrightDriver(); err != nil {
+		if errors.Is(err, errUtils.ErrPlaywrightDriverIntegrity) {
+			return err
+		}
 		log.Warn("Could not pre-seed the Playwright driver; browser authentication may fail to download it", "error", err)
 	} else if err := patchPlaywrightDriver(); err != nil {
 		log.Debug("Could not patch the Playwright driver", "error", err)
