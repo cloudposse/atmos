@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"math"
+	"time"
 
 	"google.golang.org/genai"
 
@@ -56,8 +57,10 @@ func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Cl
 	}
 
 	// Create Gemini client.
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey: apiKey,
+	timeout := requestTimeout(atmosConfig)
+	client, err := newGenaiClient(ctx, &genai.ClientConfig{
+		APIKey:      apiKey,
+		HTTPOptions: genai.HTTPOptions{Timeout: &timeout},
 	})
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrAIClientCreation).
@@ -70,6 +73,17 @@ func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Cl
 		client: client,
 		config: config,
 	}, nil
+}
+
+// newGenaiClient creates the SDK client. It is a variable so tests can capture the config passed to it.
+var newGenaiClient = genai.NewClient
+
+// requestTimeout returns the HTTP request timeout, honoring ai.timeout_seconds.
+func requestTimeout(atmosConfig *schema.AtmosConfiguration) time.Duration {
+	if atmosConfig != nil && atmosConfig.AI.TimeoutSeconds > 0 {
+		return time.Duration(atmosConfig.AI.TimeoutSeconds) * time.Second
+	}
+	return base.DefaultRequestTimeout
 }
 
 // generateContentConfig builds the request config shared by every send method.
