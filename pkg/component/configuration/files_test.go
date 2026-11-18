@@ -341,3 +341,83 @@ func TestUnchangedGeneratedFilePinsPermissionUpdates(t *testing.T) {
 	file.Path = "alias.tf"
 	require.ErrorIs(t, ensureMode(root, file), errUtils.ErrPluginInvalidConfig)
 }
+
+func TestManifestMetadataRejectsAliases(t *testing.T) {
+	for _, alias := range []string{"parent", "leaf", "dangling-parent", "dangling-leaf", "directory"} {
+		t.Run(alias, func(t *testing.T) {
+			directory := t.TempDir()
+			original := `{"files":{"authored.tf":"` + contentDigest([]byte("authored")) + `"}}`
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "authored.tf"), []byte("authored"), 0o600))
+			metadataAliasFixture(t, directory, alias, original)
+			root, err := os.OpenRoot(directory)
+			require.NoError(t, err)
+			defer root.Close()
+			require.Empty(t, readManifest(root), "aliased metadata cannot grant ownership")
+			require.Error(t, writeManifest(root, map[string]string{"new.tf": "digest"}))
+			require.Error(t, writeManifest(root, nil), "metadata removal rejects aliases too")
+			require.Error(t, WriteFiles(directory, nil), "empty batches must not bypass alias validation")
+			require.Error(t, WriteFiles(directory, []schema.ComponentConfigurationFile{generated("new.tf", "new", "overwrite")}))
+			require.NoFileExists(t, filepath.Join(directory, "new.tf"))
+			require.Equal(t, "authored", read(t, directory, "authored.tf"))
+			require.Equal(t, original, read(t, directory, filepath.Join("retained", "generated-files.json")))
+			info, err := os.Lstat(filepath.Join(directory, filepath.FromSlash(manifestName)))
+			if alias == "dangling-parent" {
+				require.ErrorIs(t, err, os.ErrNotExist)
+			} else {
+				require.NoError(t, err, "the rejected metadata entry is preserved")
+				require.NotNil(t, info)
+			}
+		})
+	}
+}
+
+func metadataAliasFixture(t *testing.T, directory, alias, original string) {
+	t.Helper()
+	require.NoError(t, os.Mkdir(filepath.Join(directory, "retained"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "retained", "generated-files.json"), []byte(original), 0o600))
+	name, target := ".atmos", "retained"
+	if alias == "dangling-parent" {
+		target = "missing"
+	} else if alias != "parent" {
+		require.NoError(t, os.Mkdir(filepath.Join(directory, ".atmos"), 0o755))
+		name, target = manifestName, filepath.Join("..", "retained", "generated-files.json")
+	}
+	if alias == "directory" {
+		require.NoError(t, os.Mkdir(filepath.Join(directory, filepath.FromSlash(name)), 0o755))
+		return
+	}
+	if alias == "dangling-leaf" {
+		target = "missing"
+	}
+	if err := os.Symlink(target, filepath.Join(directory, filepath.FromSlash(name))); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+}
+
+func TestManifestMetadataHardLinkIsolation(t *testing.T) {
+	directory := t.TempDir()
+	files := []schema.ComponentConfigurationFile{generated("generated.tf", "before", "overwrite")}
+	require.NoError(t, WriteFiles(directory, files))
+	metadata := filepath.Join(directory, filepath.FromSlash(manifestName))
+	require.NoError(t, os.Chmod(metadata, 0o640))
+	retained := filepath.Join(directory, "retained.json")
+	if err := os.Link(metadata, retained); err != nil {
+		t.Skipf("hard links unavailable: %v", err)
+	}
+	original := read(t, directory, "retained.json")
+	files[0].Content = []byte("after")
+	require.NoError(t, WriteFiles(directory, files))
+	require.Equal(t, original, read(t, directory, "retained.json"))
+	require.NotEqual(t, original, read(t, directory, manifestName))
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(metadata)
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0o640), info.Mode().Perm())
+	}
+	require.NoError(t, WriteFiles(directory, nil))
+	require.Equal(t, original, read(t, directory, "retained.json"))
+	require.NoFileExists(t, metadata)
+	entries, err := os.ReadDir(filepath.Join(directory, ".atmos"))
+	require.NoError(t, err)
+	require.Empty(t, entries, "no temporary metadata remains")
+}

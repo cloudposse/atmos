@@ -95,6 +95,9 @@ func keepRecordsAfterFailure(root *os.Root, previous, current map[string]string,
 
 // validateFiles checks every destination before the batch performs its first mutation.
 func validateFiles(root *os.Root, files []schema.ComponentConfigurationFile) error {
+	if err := validateDestination(root, manifestName); err != nil {
+		return generatedFileError(manifestName, err)
+	}
 	for _, file := range files {
 		if err := validateFile(file); err != nil {
 			return err
@@ -341,6 +344,11 @@ func openDestinationChild(root *os.Root, name string, create bool) (*os.Root, er
 // openExistingGeneratedFile pins an ordinary file for permission updates without
 // creating or truncating it. Replacement writes use exclusive temporary files.
 func openExistingGeneratedFile(root *os.Root, name string) (*os.File, error) {
+	return openExistingRegularFile(root, name, os.O_RDONLY)
+}
+
+// openExistingRegularFile verifies identity before returning a non-truncating handle.
+func openExistingRegularFile(root *os.Root, name string, flags int) (*os.File, error) {
 	before, err := root.Lstat(name)
 	if err != nil {
 		return nil, err
@@ -348,7 +356,7 @@ func openExistingGeneratedFile(root *os.Root, name string) (*os.File, error) {
 	if !before.Mode().IsRegular() {
 		return nil, errUtils.ErrPluginInvalidConfig
 	}
-	output, err := root.Open(name)
+	output, err := root.OpenFile(name, flags, 0)
 	if err != nil {
 		return nil, err
 	}

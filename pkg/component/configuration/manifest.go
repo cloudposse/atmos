@@ -15,6 +15,7 @@ import (
 	"slices"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // manifestName records, per working directory, the files this host generated and the digest of
@@ -35,7 +36,12 @@ type manifest struct {
 // readManifest returns the recorded digests, or none when the manifest is absent or unreadable.
 // An unreadable manifest only costs stale-file cleanup for one run, so it is never an error.
 func readManifest(root *os.Root) map[string]string {
-	file, err := root.Open(manifestName)
+	directory, err := destinationDirectory(root, filepath.Dir(manifestName), false)
+	if err != nil {
+		return map[string]string{}
+	}
+	defer directory.Close()
+	file, err := openExistingGeneratedFile(directory, filepath.Base(manifestName))
 	if err != nil {
 		return map[string]string{}
 	}
@@ -57,27 +63,61 @@ func readManifest(root *os.Root) map[string]string {
 }
 
 func writeManifest(root *os.Root, files map[string]string) error {
-	if len(files) == 0 {
-		err := root.Remove(manifestName)
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
+	directory, err := destinationDirectory(root, filepath.Dir(manifestName), len(files) != 0)
+	if len(files) == 0 && errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
 		return err
+	}
+	defer directory.Close()
+	leaf := filepath.Base(manifestName)
+	if err := validateDestination(directory, leaf); err != nil {
+		return err
+	}
+	if len(files) == 0 {
+		return removeFile(directory, leaf)
 	}
 	data, err := json.MarshalIndent(manifest{Files: files}, "", "  ")
 	if err != nil {
 		return err
 	}
-	if err := root.MkdirAll(filepath.Dir(manifestName), directoryMode); err != nil {
-		return err
-	}
-	return root.WriteFile(manifestName, data, fileMode)
+	return writeManifestContents(directory, leaf, data)
 }
 
-// manifestExists reports whether the working directory has a manifest, without opening a root.
+// writeManifestContents checks write access without truncating the existing file. Replacing
+// its directory entry then isolates hard links, while a read-only manifest still fails and
+// triggers generated-file rollback. The verified handle supplies the original permissions.
+func writeManifestContents(directory *os.Root, leaf string, data []byte) error {
+	file, err := openExistingRegularFile(directory, leaf, os.O_WRONLY)
+	if errors.Is(err, os.ErrNotExist) {
+		return createFile(directory, leaf, schema.ComponentConfigurationFile{Content: data})
+	}
+	if err != nil {
+		return err
+	}
+	info, statErr := file.Stat()
+	if err := errors.Join(statErr, file.Close()); err != nil {
+		return err
+	}
+	return restoreContents(directory, leaf, &fileState{content: data, mode: info.Mode().Perm()})
+}
+
+// manifestExists also reports invalid metadata destinations so an empty batch still
+// validates them. Missing metadata keeps the historical no-op behavior.
 func manifestExists(directory string) bool {
-	_, err := os.Stat(filepath.Join(directory, filepath.FromSlash(manifestName)))
-	return err == nil
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return !errors.Is(err, os.ErrNotExist)
+	}
+	defer root.Close()
+	parent, err := destinationDirectory(root, filepath.Dir(manifestName), false)
+	if err != nil {
+		return !errors.Is(err, os.ErrNotExist)
+	}
+	defer parent.Close()
+	_, err = parent.Lstat(filepath.Base(manifestName))
+	return !errors.Is(err, os.ErrNotExist)
 }
 
 func contentDigest(content []byte) string {
