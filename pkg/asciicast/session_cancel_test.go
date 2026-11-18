@@ -4,14 +4,65 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
 )
+
+func TestFinishSessionPreservesDeadlineWhenBothReady(t *testing.T) {
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	<-ctx.Done()
+	readErr := errors.New("read failed")
+	waitErr := errors.New("process failed")
+	completed := false
+	// Both channels are ready before every select, without timer or goroutine
+	// scheduling. Check either outcome and require coverage of the done branch.
+	for range 128 {
+		done := make(chan error, 1)
+		done <- readErr
+		killed := false
+		proc := &sessionProcess{
+			input: &closeTrackingWriter{Writer: io.Discard},
+			kill:  func() { killed = true },
+			wait:  func() error { return waitErr },
+		}
+		err := finishSession(ctx, proc, done)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorIs(t, err, waitErr)
+		if !killed {
+			completed = true
+			require.ErrorIs(t, err, readErr)
+		}
+	}
+	require.True(t, completed, "must exercise completion with the deadline already exceeded")
+}
+
+func TestFinishSessionPreservesDeadlineDuringProcessWait(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+		done := make(chan error, 1)
+		done <- nil
+		proc := &sessionProcess{
+			input: &closeTrackingWriter{Writer: io.Discard},
+			kill:  func() { t.Error("completion must be selected before the deadline") },
+			wait: func() error {
+				<-ctx.Done()
+				return nil
+			},
+		}
+		// Only done is ready at selection. Virtual time advances to the deadline
+		// while reaping, deterministically exercising cancellation on completion.
+		require.ErrorIs(t, finishSession(ctx, proc, done), context.DeadlineExceeded)
+	})
+}
 
 // cancelAfterFirstWrite cancels the context as soon as the first byte is written,
 // so the pacing sleep that follows must observe the cancellation.
@@ -98,4 +149,21 @@ func TestRunSessionObserveFailureStopsTheSession(t *testing.T) {
 	})
 	require.ErrorIs(t, err, errObserve)
 	require.Equal(t, []int{0, 1}, observed, "actions after the failed checkpoint must not run")
+}
+
+func TestRunSessionBeforeActionsFailureStopsSession(t *testing.T) {
+	require.NoError(t, iolib.Initialize())
+	shell, err := os.Executable()
+	require.NoError(t, err)
+	t.Setenv(asciicastSessionHelperEnv, "1")
+	failure := errors.New("readiness rejected")
+	observed := false
+	err = RunSession(t.Context(), &SessionOptions{
+		Shell:         shell,
+		BeforeActions: func(context.Context, func(string) bool) error { return failure },
+		Actions:       []SessionAction{{Type: "pause", Duration: "1ms"}},
+		Observe:       func(int, *SessionAction) error { observed = true; return nil },
+	})
+	require.ErrorIs(t, err, failure)
+	require.False(t, observed)
 }
