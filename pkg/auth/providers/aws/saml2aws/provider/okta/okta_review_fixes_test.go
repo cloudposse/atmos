@@ -88,6 +88,77 @@ func TestFollow_ReadsAssertionFromTargetForm(t *testing.T) {
 	assert.Equal(t, encodedSAML(), got)
 }
 
+// Regression: when several forms post to the target, the one carrying the assertion is used, and an
+// assertion in a form that posts elsewhere is still never returned.
+func TestFollow_FindsAssertionAmongTargetForms(t *testing.T) {
+	const target = "https://aws.example.com/saml"
+	tests := []struct {
+		name    string
+		page    string
+		want    string
+		wantErr string
+	}{
+		{
+			name: "auxiliary target form before the assertion form",
+			page: fmt.Sprintf(`<html><body><form action="%[1]s"><input name="other" value="x"/></form>`+
+				`<form action="%[1]s"><input name="SAMLResponse" value="%[2]s"/></form></body></html>`, target, encodedSAML()),
+			want: encodedSAML(),
+		},
+		{
+			name: "assertion only in a form that posts elsewhere",
+			page: fmt.Sprintf(`<html><body><form action="%s"><input name="other" value="x"/></form>`+
+				`<form action="https://idp.example.com/other"><input name="SAMLResponse" value="%s"/></form></body></html>`,
+				target, encodedSAML()),
+			wantErr: "unknown document type",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, _, err := followPage(t, tc.page, target)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				assert.Empty(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// Regression: a SAMLRequest form without an action is submitted to the page URL, the form the dispatch
+// chose, instead of a different form that carries RelayState.
+func TestFollow_SubmitsSAMLRequestFormWithoutAction(t *testing.T) {
+	page := `<html><body>` +
+		`<form method="post"><input name="SAMLRequest" value="req"/></form>` +
+		`<form action="/wrong"><input name="RelayState" value="r"/></form>` +
+		`</body></html>`
+	var submitted string
+	handler := newRoutes(map[string]func(int, *http.Request) string{
+		pathApp: func(call int, r *http.Request) string {
+			if call == 1 {
+				return page
+			}
+			assert.Equal(t, http.MethodPost, r.Method)
+			assert.NoError(t, r.ParseForm())
+			submitted = r.PostForm.Get("SAMLRequest")
+			return samlTargetPage("https://aws.example.com/saml", encodedSAML())
+		},
+		"/wrong": static(`<html>wrong form submitted</html>`),
+	})
+	oc := newFaultClient(t, handler, nil)
+	oc.targetURL = "https://aws.example.com/saml"
+	req, err := http.NewRequest(http.MethodGet, faultAppURL, nil)
+	require.NoError(t, err)
+
+	got, err := oc.follow(context.Background(), req, faultLogin())
+	require.NoError(t, err)
+	assert.Equal(t, encodedSAML(), got)
+	assert.Equal(t, "req", submitted)
+	assert.Equal(t, 2, handler.calls(pathApp))
+	assert.Zero(t, handler.calls("/wrong"))
+}
+
 // Regression: authWithSession handles the app response it already read instead of requesting the app again.
 func TestAuthWithSession_DoesNotRequestTheAppPageTwice(t *testing.T) {
 	handler := sessionAPI(map[string]func(int, *http.Request) string{
@@ -188,8 +259,10 @@ func TestVerifyMfa_DuoDeadlineBoundsHungStatusRequest(t *testing.T) {
 		hangStatusFrom: 2,
 		release:        release,
 	}
-	// Cleanups run last-in first-out: release the handler before the server waits for it.
-	t.Cleanup(func() { close(release) })
+	// runDuo registers the server's Close as a cleanup, and Close waits for the blocked handler.
+	// Deferred calls run before any cleanup, even when verifyReturnsWithin calls t.Fatal, so the
+	// handler is released before the server shuts down.
+	defer close(release)
 
 	got, err := verifyReturnsWithin(t, func() (string, error) { return runDuo(t, s, "Duo Push") })
 	require.ErrorIs(t, err, errMFAPollTimeout)

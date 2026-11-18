@@ -1145,6 +1145,7 @@ var (
 	ErrPlaywrightDriverIntegrity    = errors.New("downloaded Playwright driver artifact failed its integrity check")
 	ErrPlaywrightBrowserManifest    = errors.New("cannot read the Playwright browser manifest")
 	ErrPlaywrightDriverBundle       = errors.New("unexpected Playwright driver bundle content")
+	ErrPlaywrightDriverPatch        = errors.New("failed to patch the Playwright driver bundle")
 	ErrAwsMissingEnvVars            = errors.New("missing required AWS environment variables")
 	ErrIdentityNotAWS               = errors.New("identity does not produce AWS credentials")
 	ErrUnsupportedPlatform          = errors.New("unsupported platform")

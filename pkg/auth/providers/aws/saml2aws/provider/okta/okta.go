@@ -700,14 +700,20 @@ func (oc *Client) handleFormRedirect(ctx context.Context, doc *goquery.Document)
 
 // redirectFormSelector returns a selector for the form that carries the input which made follow() choose
 // handleFormRedirect, in the same order as the dispatch. Atmos fork: upstream always took the first form
-// with an action, which could be an unrelated form. When no form contains the input, the empty selector
-// keeps the upstream behavior.
+// with an action, which could be an unrelated form. The selected form may have no action; the form parser
+// then submits it to the document URL. When the input that selected the branch is not inside a form, the
+// empty selector keeps the upstream behavior.
 func redirectFormSelector(doc *goquery.Document) string {
 	for _, name := range []string{"SAMLRequest", "RelayState", "SAMLResponse"} {
-		selector := fmt.Sprintf("form[action]:has(input[name=\"%s\"])", name)
-		if doc.Find(fmt.Sprintf("input[name=\"%s\"]", name)).Size() == 1 && doc.Find(selector).Size() > 0 {
+		if doc.Find(fmt.Sprintf("input[name=\"%s\"]", name)).Size() != 1 {
+			continue
+		}
+		// This is the input the dispatch selected, so no later input may choose a different form.
+		selector := fmt.Sprintf("form:has(input[name=\"%s\"])", name)
+		if doc.Find(selector).Size() > 0 {
 			return selector
 		}
+		return ""
 	}
 	return ""
 }
@@ -728,8 +734,10 @@ func docIsFormRedirectToTarget(doc *goquery.Document, target string) bool {
 	return findTargetForm(doc, target).Size() > 0
 }
 
-// findTargetForm returns the first form that posts to the target (or to an AWS sign-in endpoint when
-// no target is configured). The selection is empty when there is none.
+// findTargetForm returns a form that posts to the target (or to an AWS sign-in endpoint when no target
+// is configured). Atmos fork: among the forms that post there, the first one carrying a SAMLResponse
+// value is preferred, so an auxiliary form with the same action cannot hide the assertion. Without such
+// a form, the first matching form is returned. The selection is empty when no form posts there.
 func findTargetForm(doc *goquery.Document, target string) *goquery.Selection {
 	var urls []string
 	if target != "" {
@@ -743,10 +751,25 @@ func findTargetForm(doc *goquery.Document, target string) *goquery.Selection {
 		}
 	}
 
+	var first *goquery.Selection
 	for _, value := range urls {
-		if form := doc.Find(value).First(); form.Size() > 0 {
-			return form
+		forms := doc.Find(value)
+		if forms.Size() == 0 {
+			continue
 		}
+		if first == nil {
+			first = forms.First()
+		}
+		withAssertion := forms.FilterFunction(func(_ int, form *goquery.Selection) bool {
+			_, ok := extractSAMLResponse(form)
+			return ok
+		})
+		if withAssertion.Size() > 0 {
+			return withAssertion.First()
+		}
+	}
+	if first != nil {
+		return first
 	}
 	return &goquery.Selection{}
 }
@@ -766,6 +789,40 @@ func findMfaOption(mfa string, mfaOptions []string, startAtIdx int) int {
 		}
 	}
 	return 0
+}
+
+// forceRememberDeviceOff sets every rememberDevice query parameter of the factor verify link to false.
+// Atmos fork: upstream kept a rememberDevice value that was already in the link, so a link carrying
+// rememberDevice=true still asked Okta to remember the device when DisableSessions or
+// DisableRememberDevice turned remembering off. The other query parameters are kept. A link that
+// cannot be parsed, or that mentions rememberDevice outside its query, is returned unchanged.
+func forceRememberDeviceOff(link string) string {
+	parsed, err := url.Parse(link)
+	if err != nil {
+		return link
+	}
+	query := parsed.Query()
+	values, ok := query["rememberDevice"]
+	if !ok {
+		return link
+	}
+	if len(values) == 1 && values[0] == "false" {
+		return link
+	}
+	query.Set("rememberDevice", "false")
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
+}
+
+// nextUntriedMfaOption returns the first option, in list order, that matches mfa the way findMfaOption
+// does and is not in tried. It reports false when every matching option was tried.
+func nextUntriedMfaOption(mfa string, mfaOptions []string, tried map[int]bool) (int, bool) {
+	for idx, val := range mfaOptions {
+		if !tried[idx] && strings.HasPrefix(strings.ToUpper(val), mfa) {
+			return idx, true
+		}
+	}
+	return 0, false
 }
 
 func getMfaChallengeContext(oc *Client, mfaOption int, resp string) (*mfaChallengeContext, error) {
@@ -809,6 +866,8 @@ func getMfaChallengeContextWithContext(ctx context.Context, oc *Client, mfaOptio
 			separator = "&"
 		}
 		oktaVerify = oktaVerify + separator + "rememberDevice=" + strconv.FormatBool(oc.rememberDevice)
+	} else if !oc.rememberDevice {
+		oktaVerify = forceRememberDeviceOff(oktaVerify)
 	}
 
 	logger.WithField("factorID", factorID).WithField("oktaVerify", oktaVerify).WithField("mfaIdentifer", mfaIdentifer).Debug("MFA")
@@ -1490,7 +1549,7 @@ func extractSessionToken(r io.Reader) (string, error) {
 func fidoWebAuthn(oc *Client, oktaOrgHost string, challengeContext *mfaChallengeContext, mfaOption int, stateToken string, mfaOptions []string, resp string) (string, error) {
 	var signedAssertion *SignedAssertion
 	challengeResponseBody := challengeContext.challengeResponseBody
-	lastMfaOption := mfaOption
+	tried := map[int]bool{mfaOption: true}
 
 	for {
 		nonce := gjson.Get(challengeResponseBody, "_embedded.factor._embedded.challenge.challenge").String()
@@ -1523,20 +1582,21 @@ func fidoWebAuthn(oc *Client, oktaOrgHost string, challengeContext *mfaChallenge
 			}
 
 			// check if there is another fido device and try that
-			// Atmos fork: search from the option after the one that just failed. Upstream passed
-			// lastMfaOption, and findMfaOption is inclusive of its start index, so it always returned
-			// the failed option again and the "try the next FIDO device" fallback never ran.
+			// Atmos fork: upstream passed the failed option to findMfaOption, which is inclusive of its
+			// start index, so it always returned the failed option again and the "try the next FIDO
+			// device" fallback never ran. Every other matching option is now tried once, including
+			// options listed before the selected one, and the failed options are never tried again.
 			// Atmos fork: with the "Auto" setting no option label starts with "AUTO", so the search
-			// never found a later FIDO option. Search for the FIDO label itself in that case.
+			// never found another FIDO option. Search for the FIDO label itself in that case.
 			fidoPrefix := oc.mfa
 			if strings.EqualFold(oc.mfa, "AUTO") {
 				fidoPrefix = strings.ToUpper(supportedMfaOptions[IdentifierFIDOWebAuthn])
 			}
-			nextMfaOption := findMfaOption(fidoPrefix, mfaOptions, lastMfaOption+1)
-			if nextMfaOption <= lastMfaOption {
+			nextMfaOption, found := nextUntriedMfaOption(fidoPrefix, mfaOptions, tried)
+			if !found {
 				return "", errors.Wrap(err, "tried all MFA options")
 			}
-			lastMfaOption = nextMfaOption
+			tried[nextMfaOption] = true
 
 			nextChallengeContext, err := getMfaChallengeContext(oc, nextMfaOption, resp)
 			if err != nil {
@@ -1790,13 +1850,22 @@ func verifyEndpointHealth(oc *Client, doc *goquery.Document, origURL string, duo
 	var wg sync.WaitGroup
 	wg.Add(1)
 
+	// statusErr records why the status request failed. It is written by the goroutine below and read
+	// only after wg.Wait.
+	var statusErr error
+
 	// check_endpoint_app_status blocks until the healthurl report is queried, so we need to use goroutines.
 	go func(r *http.Request) {
 		defer wg.Done()
 		// Atmos fork: upstream deferred res.Body.Close() on a possibly nil response and panicked on transport errors.
 		res, err := oc.client.Do(r)
-		if err == nil {
-			_ = res.Body.Close()
+		if err != nil {
+			statusErr = err
+			return
+		}
+		_ = res.Body.Close()
+		if res.StatusCode >= http.StatusBadRequest {
+			statusErr = errors.Errorf("unexpected status %s", res.Status)
 		}
 	}(req)
 
@@ -1827,6 +1896,12 @@ func verifyEndpointHealth(oc *Client, doc *goquery.Document, origURL string, duo
 
 	// Wait for check_endpoint_app_status to block
 	wg.Wait()
+	// Atmos fork: upstream discarded the status result. Duo does not document whether the resubmit needs
+	// a successful status check, so the flow still resubmits as before, and the status failure is kept
+	// to explain a failed resubmit.
+	if statusErr != nil {
+		logger.WithError(statusErr).Debug("Duo endpoint status check failed")
+	}
 
 	// Try the call to /v1/frame/auth again
 
@@ -1854,6 +1929,9 @@ func verifyEndpointHealth(oc *Client, doc *goquery.Document, origURL string, duo
 
 	res, err = oc.client.Do(req)
 	if err != nil {
+		if statusErr != nil {
+			return nil, errors.Wrapf(err, "error retrieving verify response (endpoint status check failed: %v)", statusErr)
+		}
 		return nil, errors.Wrap(err, "error retrieving verify response")
 	}
 	defer res.Body.Close()

@@ -27,6 +27,14 @@ var (
 	u2fPollInterval = 250 * time.Millisecond // gitleaks:allow -- Poll interval, not a secret.
 )
 
+// u2fTouchDeadline starts the touch timeout. It returns a channel that fires when the timeout elapses and a
+// function that releases the timer.
+// Atmos fork: a package variable so tests can fire the timeout at a chosen moment. The default is a real timer.
+var u2fTouchDeadline = func() (<-chan time.Time, func()) {
+	timer := time.NewTimer(u2fTouchTimeout)
+	return timer.C, func() { timer.Stop() }
+}
+
 // Atmos fork: HID enumeration goes through a package variable so tests can supply fake devices.
 // The default is the real enumeration.
 var listU2FDevices = func() []u2fhost.Device {
@@ -135,12 +143,12 @@ func (d *U2FClient) ChallengeU2F() (string, error) {
 		done <- outcome{response: response, err: err}
 	}()
 
-	timer := time.NewTimer(u2fTouchTimeout)
-	defer timer.Stop()
+	deadline, release := u2fTouchDeadline()
+	defer release()
 	select {
 	case result := <-done:
 		return result.response, result.err
-	case <-timer.C:
+	case <-deadline:
 		// Tell the worker to stop; it closes the device when its current read returns.
 		close(stop)
 		return "", errU2FTouchTimeout
@@ -157,6 +165,13 @@ func (d *U2FClient) authenticateUntilStopped(request *u2fhost.AuthenticateReques
 		case <-stop:
 			return "", errU2FTouchTimeout
 		case <-interval.C:
+			// Atmos fork: select picks randomly when stop and the ticker are both ready, so stop is checked
+			// again before starting a read that could block and keep the device open after the timeout.
+			select {
+			case <-stop:
+				return "", errU2FTouchTimeout
+			default:
+			}
 			response, err := d.Device.Authenticate(request)
 			if err == nil {
 				responseJSON, err := json.Marshal(response)
@@ -186,6 +201,7 @@ type U2FDeviceFinder struct{}
 
 func (*U2FDeviceFinder) findDevice() (u2fhost.Device, error) {
 	var err error
+	timedOut := false
 	allDevices := listU2FDevices()
 	if len(allDevices) == 0 {
 		return nil, errNoDeviceFound
@@ -194,12 +210,18 @@ func (*U2FDeviceFinder) findDevice() (u2fhost.Device, error) {
 	for i, device := range allDevices {
 		err = openDevice(device, u2fOpenTimeout)
 		if err != nil {
+			timedOut = timedOut || errors.Is(err, errU2FOpenTimeout)
 			continue
 		}
 
 		return allDevices[i], nil
 	}
 
+	// Atmos fork: when any device timed out, the error keeps errU2FOpenTimeout even if a later device failed
+	// differently, so NewU2FClient does not retry discovery and leave more blocked Open calls behind.
+	if timedOut && !errors.Is(err, errU2FOpenTimeout) {
+		return nil, fmt.Errorf("failed to open fido U2F device: %w; %w", errU2FOpenTimeout, err)
+	}
 	return nil, fmt.Errorf("failed to open fido U2F device: %w", err)
 }
 

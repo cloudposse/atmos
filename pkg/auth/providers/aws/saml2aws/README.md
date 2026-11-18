@@ -147,6 +147,20 @@ identity provider and read the AWS roles from the SAML assertion.
   - Prompter: `Choose` returns survey's own row index (correct with duplicate labels), a survey panic on Ctrl+D with
     no matches becomes an error, `Password` rejects blank input, `ParseResults` requires a completed `D` plus `OK`
     pinentry answer, and `Run` stops and reaps pinentry on a parse error.
+  - `provider/http.go`: a request whose context has a deadline is bounded by that deadline instead of
+    `DefaultRequestTimeout`, so the 5-minute Azure MFA wait and the Okta push and Duo polls are not cut off after
+    2 minutes. Each retry sends a fresh clone of the request, so cookies added by a failed attempt are not sent
+    again. Rejected statuses wrap the new `ErrUnexpectedStatus` sentinel with the same message.
+  - URL redaction also covers quoted URLs that contain whitespace, and replaces overlapping or repeated URLs
+    longest first, so no part of a query or fragment survives.
+  - `page.Form`: an empty `action` attribute uses the document URL, as a missing one does.
+  - Google Apps: when no security key opens, the open timeout is kept in the error, so the device search is not
+    retried after it already timed out. Stop is checked again before each new U2F read.
+  - ADFS submits the form that holds the control that identified the MFA page, instead of an earlier options form.
+  - Okta: with remembering off, a `rememberDevice` value already in the verification link is set to `false`. After a
+    bad FIDO key handle, every other FIDO factor is tried once, earlier ones included. A failed Duo endpoint status
+    check is recorded and explained if the resubmit fails. A form redirect submits the form that triggered it even
+    without an `action`, and the assertion is read from the target form that carries a `SAMLResponse`.
 - **Tests:** browser tests use `go.uber.org/mock` mocks of a narrow `samlPage` interface instead of a real browser.
   Real-browser tests are in `browser_integration_test.go` and only run with `RUN_PLAYWRIGHT_INTEGRATION=1`.
 
@@ -154,13 +168,18 @@ identity provider and read the AWS roles from the SAML assertion.
 
 These review suggestions were considered and intentionally not applied:
 
-- **Okta error sentinels stay package-local.** `errMFAPollTimeout`, `errU2FNoDevice` and the exported
-  `ErrU2FAuthTimeout` are defined in the Okta package instead of `errors/errors.go`, so the fork stays a
-  self-contained unit. Callers still match them with `errors.Is`.
+- **Error sentinels stay package-local.** The fork's sentinels (for example `errMFAPollTimeout`, `errU2FNoDevice`
+  and the exported `ErrU2FAuthTimeout` in the Okta package, and the `cookiejar`, `prompter`, `page`, `cfg` and
+  provider sentinels) are defined in their own packages instead of `errors/errors.go`, so the fork stays a
+  self-contained unit. Callers still match them with `errors.Is`. Atmos wraps every error the fork returns with its
+  own sentinels at the boundary in `pkg/auth/providers/aws/saml.go`.
+- **No `perf.Track` calls inside the fork.** The `aws/saml` provider's `Authenticate` method, which runs every call
+  into the fork, is tracked, as are the Playwright driver seeding and patching steps. Tracking each vendored function
+  would tie the fork to Atmos internals without adding information.
 - **A U2F or WebAuthn read that started before the deadline is accepted.** The deadline is checked after each poll
   tick, so no new read starts after it expires. A read that started in time and returns a valid assertion slightly
   after the deadline is kept, because rejecting it would discard a valid credential. The first read always starts,
-  since the device must be asked at least once.
+  since the device must be asked at least once, so the read worker does not check the deadline itself.
 - **Default cookie paths use the unescaped request path.** The `cookiejar` package matches Go's `net/http/cookiejar`
   and upstream, which use `URL.Path`. Switching to `EscapedPath()` would change matching for servers that send
   unescaped `Path` attributes. Escaped slashes in identity provider cookie paths are rare, and this is not a security

@@ -68,13 +68,15 @@ func NewFormFromDocument(doc *goquery.Document, formFilter string) (*Form, error
 	}
 
 	attrValue, ok := formSelection.Attr("action")
-	if ok {
+	if ok && attrValue != "" {
 		action, err := resolveFormAction(attrValue, formBaseURL(doc))
 		if err != nil {
 			return nil, err
 		}
 		form.URL = action
 	} else if doc.Url != nil {
+		// Atmos fork: a missing or empty action submits to the document URL, as in the HTML specification;
+		// base[href] only applies to a nonempty relative action.
 		form.URL = doc.Url.String()
 	} else {
 		// Atmos fork: goquery leaves doc.Url nil for reader-based documents; upstream dereferenced it.

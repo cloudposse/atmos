@@ -26,10 +26,20 @@ func captureStdio(t *testing.T, fn func()) (string, string) {
 		return done
 	}
 
+	// Each pipe is released by a cleanup registered as soon as it opens, so a failure later in this
+	// helper does not leak it. Closing an already closed end again only returns an error, which is ignored.
 	outR, outW, err := os.Pipe()
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = outW.Close()
+		_ = outR.Close()
+	})
 	errR, errW, err := os.Pipe()
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = errW.Close()
+		_ = errR.Close()
+	})
 	origOut, origErr := os.Stdout, os.Stderr
 	os.Stdout, os.Stderr = outW, errW
 	outDone, errDone := drain(outR), drain(errR)

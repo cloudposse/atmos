@@ -139,7 +139,7 @@ auth:
   <dd>**Required.** SAML SSO URL from your identity provider.</dd>
 
   <dt>`driver`</dt>
-  <dd>Optional. Authentication method: `Browser` (default, requires Playwright), `GoogleApps`, `Okta`, or `ADFS`. Driver names are case-sensitive, and any other value fails when this provider is used to log in. `Browser` works with any identity provider that ends on the AWS SAML sign-in page.</dd>
+  <dd>Optional. Authentication method: `Browser` (default, requires Playwright), `GoogleApps`, `Okta`, or `ADFS`. Driver names are case-sensitive, and any other value fails when this provider is used to log in. `Browser` works with identity providers that submit the SAML response to the AWS SAML sign-in page from the login tab. A flow that opens the AWS sign-in in a new tab or window is not captured, and the login times out.</dd>
 </dl>
 
 :::note

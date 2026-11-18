@@ -3,6 +3,7 @@ package okta
 import (
 	"context"
 	"net/http"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -162,6 +163,31 @@ func TestSessionAPIs_FailureModes(t *testing.T) {
 			assert.ErrorContains(t, err, tc.wantErr)
 		})
 	}
+}
+
+// Recovery path: when only the first app page is unreadable, authWithSession requests the app again and
+// returns the assertion from the second response.
+func TestAuthWithSession_RecoversFromOneUnreadableAppPage(t *testing.T) {
+	var appRequests atomic.Int32
+	failFirst := faultAt(faultBody, pathApp, 1)
+	fault := func(r *http.Request) faultKind {
+		if r.URL.Path == pathApp {
+			appRequests.Add(1)
+		}
+		return failFirst(r)
+	}
+	handler := sessionAPI(map[string]func(int, *http.Request) string{
+		pathApp: static(samlTargetPage("https://aws.example.com/saml", encodedSAML())),
+	})
+	oc := newFaultClient(t, handler, fault)
+	oc.targetURL = "https://aws.example.com/saml"
+	ld := faultLogin()
+	ld.OktaSessionCookie = "sid-1"
+
+	got, err := oc.authWithSession(ld)
+	require.NoError(t, err)
+	assert.Equal(t, encodedSAML(), got)
+	assert.Equal(t, int32(2), appRequests.Load())
 }
 
 func TestFollow_FailureModes(t *testing.T) {

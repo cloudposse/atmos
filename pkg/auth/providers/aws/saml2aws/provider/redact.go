@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -12,9 +13,14 @@ import (
 const redactedQuery = "[redacted]"
 
 // queryInMessage matches a query string or fragment inside free-form error text, up to the end of the
-// URL: whitespace, a closing quote followed by a colon (the `Get "<url>": ...` form of *url.Error), or
-// the end of the message. Escaped quotes inside a %q-quoted URL do not end the match.
-var queryInMessage = regexp.MustCompile(`[?#]\S*?("?:\s|\s|"?:?$)`)
+// URL: whitespace, a closing quote followed by a colon (the `Get "<url>": ...` form of *url.Error) or by
+// whitespace, or the end of the message. Escaped quotes inside a %q-quoted URL do not end the match.
+var queryInMessage = regexp.MustCompile(`[?#]\S*?("?:\s|"?\s|"?:?$)`)
+
+// quotedInMessage matches a double-quoted value inside free-form error text, including escaped quotes.
+// Go quotes URLs in its errors (for example a malformed redirect Location), and a quoted URL can contain
+// whitespace, which ends queryInMessage's match before the rest of the query string.
+var quotedInMessage = regexp.MustCompile(`"(?:[^"\\]|\\.)*"`)
 
 // RedactURL returns u for logging: scheme, host and path only.
 // Atmos fork: identity-provider URLs can carry session tokens and one-time codes in the
@@ -38,8 +44,23 @@ func RedactRawURL(raw string) string {
 }
 
 // redactMessage removes URL query strings and fragments from free-form error text.
+// Atmos fork: quoted values are redacted first, up to their closing quote, so whitespace inside a quoted
+// URL cannot end the redaction early. The whitespace-delimited pass then covers unquoted URLs; it leaves
+// an already redacted value unchanged.
 func redactMessage(msg string) string {
+	msg = quotedInMessage.ReplaceAllStringFunc(msg, redactQuoted)
 	return queryInMessage.ReplaceAllString(msg, "?"+redactedQuery+"$1")
+}
+
+// redactQuoted removes everything from the first query or fragment delimiter to the closing quote of a
+// quoted value. A value without a delimiter is returned unchanged.
+func redactQuoted(quoted string) string {
+	inner := quoted[1 : len(quoted)-1]
+	i := strings.IndexAny(inner, "?#")
+	if i < 0 {
+		return quoted
+	}
+	return `"` + inner[:i] + "?" + redactedQuery + `"`
 }
 
 // RedactError returns err with the URL of an embedded *url.Error redacted like RedactURL.
@@ -90,14 +111,34 @@ func collectURLErrors(err error) []*url.Error {
 
 // sanitizeMessage returns the message of err with the URL of every *url.Error in its tree redacted,
 // then any remaining query string or fragment removed.
+// Atmos fork: one URL can be a prefix of another (`/login?token=` and `/login?token=secret`), so a raw
+// replacement of the shorter URL could cut the query delimiter off the longer one, leaving its secret
+// where redactMessage no longer finds it. URLs are replaced longest first, and a URL that had a query
+// string or fragment is replaced with a "?[redacted]" marker, so any text left after a partial match
+// still follows a delimiter that redactMessage removes.
 func sanitizeMessage(err error) string {
 	msg := err.Error()
-	for _, urlErr := range collectURLErrors(err) {
-		redacted := RedactRawURL(urlErr.URL)
-		msg = strings.ReplaceAll(msg, strconv.Quote(urlErr.URL), strconv.Quote(redacted))
-		msg = strings.ReplaceAll(msg, urlErr.URL, redacted)
+	for _, raw := range urlsLongestFirst(collectURLErrors(err)) {
+		redacted := RedactRawURL(raw)
+		if strings.ContainsAny(raw, "?#") {
+			redacted += "?" + redactedQuery
+		}
+		msg = strings.ReplaceAll(msg, strconv.Quote(raw), strconv.Quote(redacted))
+		msg = strings.ReplaceAll(msg, raw, redacted)
 	}
 	return redactMessage(msg)
+}
+
+// urlsLongestFirst returns the distinct non-empty URLs of urlErrs, longest first.
+func urlsLongestFirst(urlErrs []*url.Error) []string {
+	urls := make([]string, 0, len(urlErrs))
+	for _, urlErr := range urlErrs {
+		if urlErr.URL != "" && !slices.Contains(urls, urlErr.URL) {
+			urls = append(urls, urlErr.URL)
+		}
+	}
+	slices.SortStableFunc(urls, func(a, b string) int { return len(b) - len(a) })
+	return urls
 }
 
 // redactCause wraps cause so its message carries no URL secrets.
