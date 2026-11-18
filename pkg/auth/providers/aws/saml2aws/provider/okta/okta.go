@@ -97,7 +97,7 @@ type Client struct {
 // AuthRequest represents an mfa okta request
 type AuthRequest struct {
 	Username   string `json:"username"`
-	Password   string `json:"password"` //nolint:gosec // Okta primary-auth request body requires the password field.
+	Password   string `json:"password"`
 	StateToken string `json:"stateToken,omitempty"`
 }
 
@@ -114,7 +114,7 @@ type VerifyRequest struct {
 
 // SessionRequst holds the SessionToken used to create an Okta Session
 type SessionRequst struct {
-	SessionToken string `json:"sessionToken"` //nolint:gosec // Okta session request body requires the sessionToken field.
+	SessionToken string `json:"sessionToken"`
 }
 
 // mfaChallengeContext is used to hold MFA challenge context in a simple struct.
@@ -187,7 +187,7 @@ func (oc *Client) createSession(loginDetails *creds.LoginDetails, sessionToken s
 	// authenticate via okta api
 	sessionReq := SessionRequst{SessionToken: sessionToken}
 	sessionReqBody := new(bytes.Buffer)
-	err = json.NewEncoder(sessionReqBody).Encode(sessionReq)
+	err = json.NewEncoder(sessionReqBody).Encode(sessionReq) //nolint:gosec // Okta's sessions API requires the sessionToken field in the request body.
 	if err != nil {
 		return "", "", errors.Wrap(err, "error encoding session req")
 	}
@@ -439,7 +439,7 @@ func (oc *Client) primaryAuth(loginDetails *creds.LoginDetails) (string, string,
 		authReq = AuthRequest{StateToken: loginDetails.StateToken}
 	}
 	authBody := new(bytes.Buffer)
-	err = json.NewEncoder(authBody).Encode(authReq)
+	err = json.NewEncoder(authBody).Encode(authReq) //nolint:gosec // Okta's primary-auth API requires the password field in the request body.
 	if err != nil {
 		return "", "", "", errors.Wrap(err, "error encoding authreq")
 	}
@@ -1651,7 +1651,7 @@ func verifyEndpointHealth(oc *Client, doc *goquery.Document, origURL string, duo
 	ehDownloadLink, _ := doc.Find("input[name=\"eh_download_link\"]").Attr("value")
 	// isSilentCollection, _ := doc.Find("input[name=\"is_silent_collection\"]").Attr("value")
 
-	timestamp := strconv.Itoa((int)(time.Now().Unix()))
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	duoAliveUrl := fmt.Sprintf("https://%s/alive", duoEndpointHost)
 	req, _ := http.NewRequest("GET", duoAliveUrl, nil)
 
