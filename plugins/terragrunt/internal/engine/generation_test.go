@@ -2,11 +2,15 @@ package engine
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
+	"github.com/gruntwork-io/terragrunt/pkg/config"
+	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -365,4 +369,16 @@ func TestDestroyGuardDoesNotTrustDeniedTryFallback(t *testing.T) {
 	_, err := Resolve(t.Context(), request)
 	require.ErrorIs(t, err, errUndecidableDestroyPolicy)
 	require.NotErrorIs(t, err, ErrPreventDestroy)
+}
+
+func TestRenderGeneratedPreservesCallerConfiguration(t *testing.T) {
+	// The public parser map exposes the upstream generation value without importing its internal package.
+	parsed := config.TerragruntConfig{}
+	generated := parsed.GenerateConfigs["provider"]
+	generated.Path, generated.Contents, generated.Disable = "nested/main.tf", "locals { preserved = true }", true
+	original := generated
+	content, err := atmosbridge.RenderGenerated(t.Context(), log.New(log.WithOutput(io.Discard)), &generated)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "preserved = true")
+	require.Equal(t, original, generated, "rendering must not change caller configuration")
 }
