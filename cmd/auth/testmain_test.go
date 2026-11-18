@@ -14,6 +14,11 @@ import (
 // package so tests that exercise printWhoamiJSON, printWhoamiHuman, list
 // renderers, etc. don't panic with "data.InitWriter() must be called".
 func TestMain(m *testing.M) {
+	// Act as the child process of `auth exec` tests (see exec_child_process_test.go).
+	if os.Getenv(authExecChildEnv) == "1" {
+		os.Exit(runAuthExecChild())
+	}
+
 	ioCtx, err := iolib.NewContext()
 	if err != nil {
 		// Tests cannot run without an IO context; fail loud.
