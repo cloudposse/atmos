@@ -481,37 +481,14 @@ func (e *Executor) execute(
 		return handleDisabledComponent(component, stack, enabled, abstract), nil
 	}
 
-	// Step 2: Extract and validate component configuration.
-	// ExtractComponentConfig uses utils.GetComponentPath internally to ensure
-	// proper path resolution that works correctly with --chdir and when running
-	// from non-project-root directories.
-	// Plugin-owned state is located first: its reads never run in the component's execution
-	// workdir, so that workdir is neither resolved nor required.
-	state, err := ResolveConfigurationState(ctx, atmosConfig, &ConfigurationStateRequest{Sections: sections, Component: component, Stack: stack, AuthContext: authContext, AuthManagers: authManagers})
+	request := &ConfigurationStateRequest{Sections: sections, Component: component, Stack: stack, AuthContext: authContext, AuthManagers: authManagers}
+	resolved, err := prepareOutputConfiguration(ctx, atmosConfig, request, opts != nil && opts.SkipInit)
 	if err != nil {
 		return nil, err
 	}
-	var config *ComponentConfig
-	if state != nil {
-		config, err = extractConfigurationStateConfig(atmosConfig, sections, component, stack)
-	} else {
-		config, err = ExtractComponentConfig(atmosConfig, sections, component, stack)
-	}
-	if err != nil {
-		return nil, err
-	}
-	skipInit := opts != nil && opts.SkipInit
-	if state != nil {
-		// A plugin state reader must reuse initialized state when init is disabled.
-		// Ordinary components retain their existing mode and workspace behavior.
-		skipInit = skipInit || config.InitMode == schema.TerraformInitModeNever
-		config.BaseEnvironment = configurationEnvironment(authManagers)
-		cleanup, err := configurationStateReader(config, state, skipInit, component, stack)
-		if err != nil {
-			return nil, err
-		}
-		defer cleanup()
-		// Only the scratch reader regenerates its backend; the initialized unit is read as it is.
+	config, skipInit := resolved.config, resolved.skipInit
+	defer resolved.cleanup()
+	if resolved.owned {
 		processYamlFunctions = !skipInit
 	}
 
@@ -546,17 +523,8 @@ func (e *Executor) execute(
 	// correctly-rendered file produced by the preceding init/apply phase.
 	// Skipping regen is safe in that path because init/apply just ran in this
 	// process and has already written valid artifacts.
-	if processYamlFunctions {
-		backendGen := e.backendGenerator
-		if err := backendGen.GenerateBackendIfNeeded(config, component, stack, authContext); err != nil {
-			return nil, err
-		}
-		if err := backendGen.GenerateProvidersIfNeeded(config, authContext); err != nil {
-			return nil, err
-		}
-	} else {
-		log.Debug("Skipping backend/providers regeneration: YAML functions were not processed upstream (see #2356)",
-			"component", component, "stack", stack)
+	if err := e.generateOutputFiles(config, request, processYamlFunctions); err != nil {
+		return nil, err
 	}
 
 	// Step 6: Create terraform runner.
@@ -566,12 +534,7 @@ func (e *Executor) execute(
 	}
 
 	// Step 7: Configure quiet mode if requested.
-	var stderrCapture *quietModeWriter
-	if opts != nil && opts.QuietMode {
-		runner.SetStdout(io.Discard)
-		stderrCapture = newQuietModeWriter()
-		runner.SetStderr(stderrCapture)
-	}
+	stderrCapture := configureOutputCapture(runner, opts)
 
 	// Step 8: Setup environment variables.
 	envSetup := &defaultEnvironmentSetup{}
@@ -583,9 +546,7 @@ func (e *Executor) execute(
 	// Prepend toolchain bin dirs to subprocess PATH so terraform/tofu subprocesses
 	// can also find toolchain-installed binaries. Uses PrependToPath to preserve
 	// any PATH overrides from the component's env section.
-	if len(tenv.ToolchainDirs()) > 0 {
-		environMap["PATH"] = tenv.PrependToPath(environMap["PATH"])
-	}
+	prependOutputToolchainPath(tenv, environMap)
 	// terraform-exec rejects TF_VAR_* in SetEnv (issue #3231), so the runner gets a TF_VAR-free copy;
 	// the full environMap (with TF_VAR_* from init.pass_vars, issue #1412) is delivered to the init
 	// subprocess by the runner returned from withVarsInit, and still feeds the smart-init fingerprint.
@@ -617,4 +578,32 @@ func (e *Executor) execute(
 
 	// Step 12: Process and convert output values.
 	return processOutputs(outputMeta, atmosConfig), nil
+}
+
+// generateOutputFiles leaves retained skip-init files exactly as their prior execution wrote them.
+func (e *Executor) generateOutputFiles(config *ComponentConfig, request *ConfigurationStateRequest, enabled bool) error {
+	if !enabled {
+		log.Debug("Skipping backend/providers regeneration: YAML functions were not processed upstream (see #2356)", "component", request.Component, "stack", request.Stack)
+		return nil
+	}
+	if err := e.backendGenerator.GenerateBackendIfNeeded(config, request.Component, request.Stack, request.AuthContext); err != nil {
+		return err
+	}
+	return e.backendGenerator.GenerateProvidersIfNeeded(config, request.AuthContext)
+}
+
+func configureOutputCapture(runner TerraformRunner, opts *OutputOptions) *quietModeWriter {
+	if opts == nil || !opts.QuietMode {
+		return nil
+	}
+	runner.SetStdout(io.Discard)
+	capture := newQuietModeWriter()
+	runner.SetStderr(capture)
+	return capture
+}
+
+func prependOutputToolchainPath(tenv *dependencies.ToolchainEnvironment, environment map[string]string) {
+	if len(tenv.ToolchainDirs()) > 0 {
+		environment["PATH"] = tenv.PrependToPath(environment["PATH"])
+	}
 }

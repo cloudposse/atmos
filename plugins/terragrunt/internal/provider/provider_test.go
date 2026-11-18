@@ -385,7 +385,7 @@ func TestPreparationExportsOverlayModes(t *testing.T) {
 	for _, file := range result.Files {
 		modes[file.Path] = file.Mode
 	}
-	require.Equal(t, map[string]uint32{"bin/run.sh": 0o755, "plain.tf": 0, "shadow.sh": 0}, modes)
+	require.Equal(t, map[string]uint32{"bin/run.sh": 0o755, "plain.tf": 0, "shadow.sh": 0o600}, modes)
 	require.Equal(t, "bin/run.sh", result.Files[0].Path)
 	require.Equal(t, "shadow.sh", result.Files[len(result.Files)-1].Path)
 }
