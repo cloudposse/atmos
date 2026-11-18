@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/helper/credentials"
 )
 
 const (
@@ -190,8 +191,7 @@ func TestAuthenticate_WithSessions(t *testing.T) {
 	saml := encodedSAML()
 
 	t.Run("creates and stores a new session", func(t *testing.T) {
-		helper := &recordingHelper{}
-		withCredentialsHelper(t, helper)
+		helper := withCredentialsHelperMock(t)
 
 		f := newFakeOkta(t)
 		f.authn = func(map[string]any) string { return `{"status":"SUCCESS","sessionToken":"st-1"}` }
@@ -206,16 +206,16 @@ func TestAuthenticate_WithSessions(t *testing.T) {
 		f.app = func(int, *http.Request) string { return samlTargetPage(f.ts.URL, saml) }
 
 		oc, loginDetails := f.client(false)
+		// The new session cookie is stored exactly once; the controller verifies it when the test ends.
+		helper.EXPECT().Add(&credentials.Credentials{
+			ServerURL: loginDetails.URL + "/sessionCookie",
+			Username:  "user@example.com",
+			Secret:    "sid-1",
+		}).Return(nil).Times(1)
 		got, err := oc.Authenticate(loginDetails)
 		require.NoError(t, err)
 		assert.Equal(t, saml, got)
 		assert.Equal(t, "sid-1", loginDetails.OktaSessionCookie)
-
-		stored := helper.stored()
-		require.Len(t, stored, 1)
-		assert.Equal(t, loginDetails.URL+"/sessionCookie", stored[0].ServerURL)
-		assert.Equal(t, "user@example.com", stored[0].Username)
-		assert.Equal(t, "sid-1", stored[0].Secret)
 	})
 
 	t.Run("reuses a valid existing session without primary auth", func(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 
 	u2fhost "github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
 )
@@ -17,12 +17,11 @@ type fidoClientTests struct {
 	err   error
 }
 
-type MockDeviceFinder struct {
-	device *mocks.U2FDevice
-}
-
-func (m *MockDeviceFinder) findDevice() (u2fhost.Device, error) {
-	return m.device, nil
+// finderFor returns a DeviceFinder mock that finds the given device exactly once.
+func finderFor(ctrl *gomock.Controller, device u2fhost.Device) *MockDeviceFinder {
+	finder := NewMockDeviceFinder(ctrl)
+	finder.EXPECT().findDevice().Return(device, nil).Times(1)
+	return finder
 }
 
 func TestNewU2FClient(t *testing.T) {
@@ -39,8 +38,9 @@ func TestNewU2FClient(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.title, func(t *testing.T) {
-			device := &mocks.U2FDevice{}
-			client, err := NewU2FClient(challengeNonce, appID, version, keyHandle, &MockDeviceFinder{device})
+			ctrl := gomock.NewController(t)
+			device := mocks.NewMockU2FDevice(ctrl)
+			client, err := NewU2FClient(challengeNonce, appID, version, keyHandle, finderFor(ctrl, device))
 			if test.err != nil {
 				require.Error(t, err)
 				assert.Equal(t, test.err.Error(), err.Error())
@@ -71,8 +71,9 @@ func TestChallengeU2F(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.title, func(t *testing.T) {
-			device := &mocks.U2FDevice{}
-			mockDeviceFinder := &MockDeviceFinder{device}
+			ctrl := gomock.NewController(t)
+			device := mocks.NewMockU2FDevice(ctrl)
+			mockDeviceFinder := finderFor(ctrl, device)
 			request := &u2fhost.AuthenticateRequest{
 				Challenge:          "dGVzdAo",
 				AppId:              appID,
@@ -84,8 +85,8 @@ func TestChallengeU2F(t *testing.T) {
 				WebAuthn:           false,
 			}
 			response := &u2fhost.AuthenticateResponse{ClientData: "cd", SignatureData: "sig"}
-			device.On("Authenticate", request).Return(response, nil).Once()
-			device.On("Close").Return().Once()
+			device.EXPECT().Authenticate(request).Return(response, nil).Times(1)
+			device.EXPECT().Close().Times(1)
 			client, err := NewU2FClient(challengeNonce, appID, facet, keyHandle, mockDeviceFinder)
 			require.NoError(t, err)
 			got, err := client.ChallengeU2F()
@@ -96,26 +97,22 @@ func TestChallengeU2F(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.JSONEq(t, `{"clientData":"cd","signatureData":"sig","keyHandle":""}`, got)
-			device.AssertExpectations(t)
 		})
 	}
 }
 
-// scriptedDeviceFinder returns err for the first errCount calls (all calls when errCount is 0 and
-// err is set), then the device.
-type scriptedDeviceFinder struct {
-	err      error
-	errCount int
-	device   *mocks.U2FDevice
-	calls    int
+// failingFinder returns a DeviceFinder mock whose findDevice fails with err exactly times times.
+func failingFinder(ctrl *gomock.Controller, err error, times int) *MockDeviceFinder {
+	finder := NewMockDeviceFinder(ctrl)
+	finder.EXPECT().findDevice().Return(nil, err).Times(times)
+	return finder
 }
 
-func (s *scriptedDeviceFinder) findDevice() (u2fhost.Device, error) {
-	s.calls++
-	if s.err != nil && (s.errCount == 0 || s.calls <= s.errCount) {
-		return nil, s.err
-	}
-	return s.device, nil
+// noDeviceFinder returns a DeviceFinder mock that reports that no device is plugged in, any number of times.
+func noDeviceFinder(ctrl *gomock.Controller) *MockDeviceFinder {
+	finder := NewMockDeviceFinder(ctrl)
+	finder.EXPECT().findDevice().Return(nil, errNoDeviceFound).AnyTimes()
+	return finder
 }
 
 // withDeviceFinder makes the U2F challenge use the given finder instead of real hardware.
@@ -129,18 +126,23 @@ func withDeviceFinder(t *testing.T, finder DeviceFinder) {
 
 func TestNewU2FClient_DeviceDiscovery(t *testing.T) {
 	t.Run("no device plugged in fails immediately", func(t *testing.T) {
-		finder := &scriptedDeviceFinder{err: errNoDeviceFound}
+		// The finder is called exactly once; the controller verifies the count when the test ends.
+		finder := failingFinder(gomock.NewController(t), errNoDeviceFound, 1)
 		_, err := NewU2FClient("nonce", "app", "facet", "kh", finder)
 		assert.ErrorIs(t, err, errNoDeviceFound)
-		assert.Equal(t, 1, finder.calls)
 	})
 
 	t.Run("transient open error is retried", func(t *testing.T) {
-		device := &mocks.U2FDevice{}
-		finder := &scriptedDeviceFinder{err: fmt.Errorf("device busy"), errCount: 1, device: device}
+		ctrl := gomock.NewController(t)
+		device := mocks.NewMockU2FDevice(ctrl)
+		finder := NewMockDeviceFinder(ctrl)
+		// The first call fails and the second finds the device: exactly two calls, in order.
+		gomock.InOrder(
+			finder.EXPECT().findDevice().Return(nil, fmt.Errorf("device busy")).Times(1),
+			finder.EXPECT().findDevice().Return(device, nil).Times(1),
+		)
 		client, err := NewU2FClient("nonce", "app", "facet", "kh", finder)
 		assert.NoError(t, err)
-		assert.Equal(t, 2, finder.calls)
 		assert.Same(t, device, client.Device)
 		assert.Equal(t, "facet", client.Facet)
 	})
@@ -153,22 +155,21 @@ func TestU2FClientChallengeU2F_Behavior(t *testing.T) {
 	})
 
 	t.Run("waits for user presence then returns the JSON response", func(t *testing.T) {
-		device := &mocks.U2FDevice{}
-		device.On("Close").Return().Once()
-		device.On("Authenticate", mock.Anything).Return(nil, &u2fhost.TestOfUserPresenceRequiredError{}).Once()
-		device.On("Authenticate", mock.Anything).Return(&u2fhost.AuthenticateResponse{ClientData: "cd", SignatureData: "sig"}, nil).Once()
+		device := mocks.NewMockU2FDevice(gomock.NewController(t))
+		device.EXPECT().Close().Times(1)
+		device.EXPECT().Authenticate(gomock.Any()).Return(nil, &u2fhost.TestOfUserPresenceRequiredError{}).Times(1)
+		device.EXPECT().Authenticate(gomock.Any()).Return(&u2fhost.AuthenticateResponse{ClientData: "cd", SignatureData: "sig"}, nil).Times(1)
 
 		client := &U2FClient{Device: device, ChallengeNonce: "dGVzdAo=", KeyHandle: "dGVzdAo="}
 		got, err := client.ChallengeU2F()
 		assert.NoError(t, err)
 		assert.JSONEq(t, `{"clientData":"cd","signatureData":"sig","keyHandle":""}`, got)
-		device.AssertExpectations(t)
 	})
 
 	t.Run("device error is returned", func(t *testing.T) {
-		device := &mocks.U2FDevice{}
-		device.On("Close").Return().Once()
-		device.On("Authenticate", mock.Anything).Return(nil, fmt.Errorf("device unplugged")).Once()
+		device := mocks.NewMockU2FDevice(gomock.NewController(t))
+		device.EXPECT().Close().Times(1)
+		device.EXPECT().Authenticate(gomock.Any()).Return(nil, fmt.Errorf("device unplugged")).Times(1)
 
 		client := &U2FClient{Device: device, ChallengeNonce: "dGVzdAo=", KeyHandle: "dGVzdAo="}
 		_, err := client.ChallengeU2F()
@@ -177,11 +178,10 @@ func TestU2FClientChallengeU2F_Behavior(t *testing.T) {
 
 	// Atmos fork: upstream panicked on an invalid challenge; it now returns an error.
 	t.Run("invalid base64 challenge returns an error", func(t *testing.T) {
-		device := &mocks.U2FDevice{}
-		device.On("Close").Return().Once()
+		device := mocks.NewMockU2FDevice(gomock.NewController(t))
+		device.EXPECT().Close().Times(1)
 		client := &U2FClient{Device: device, ChallengeNonce: "not base64!", KeyHandle: "dGVzdAo="}
 		_, err := client.ChallengeU2F()
 		assert.ErrorContains(t, err, "invalid U2F challenge nonce")
-		device.AssertExpectations(t)
 	})
 }

@@ -11,8 +11,8 @@ import (
 
 	"github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
@@ -340,9 +340,9 @@ func TestDuoU2FChallenge_HungDeviceTimesOut(t *testing.T) {
 
 	release := make(chan struct{})
 	closed := make(chan struct{})
-	device := &mocks.U2FDevice{}
-	device.On("Authenticate", mock.Anything).Run(func(mock.Arguments) { <-release }).Return(nil, fmt.Errorf("device unplugged")).Once()
-	device.On("Close").Run(func(mock.Arguments) { close(closed) }).Return().Once()
+	device := mocks.NewMockU2FDevice(gomock.NewController(t))
+	device.EXPECT().Authenticate(gomock.Any()).Do(func(*u2fhost.AuthenticateRequest) { <-release }).Return(nil, fmt.Errorf("device unplugged")).Times(1)
+	device.EXPECT().Close().Do(func() { close(closed) }).Times(1)
 	t.Cleanup(func() {
 		select {
 		case <-release:
@@ -379,7 +379,6 @@ func TestDuoU2FChallenge_HungDeviceTimesOut(t *testing.T) {
 	case <-time.After(reviewTestWait):
 		t.Fatal("device was never closed after the blocked read returned")
 	}
-	device.AssertExpectations(t)
 }
 
 // Negative path: a Duo U2F device that keeps asking for a touch times out between polls with the same sentinel.
@@ -389,9 +388,9 @@ func TestDuoU2FChallenge_PresenceTimeoutBetweenPolls(t *testing.T) {
 	t.Cleanup(func() { u2fAuthTimeout, u2fPollInterval = origTimeout, origInterval }) // gitleaks:allow -- Test timing variables, not secrets.
 
 	closed := make(chan struct{})
-	device := &mocks.U2FDevice{}
-	device.On("Authenticate", mock.Anything).Return(nil, &u2fhost.TestOfUserPresenceRequiredError{})
-	device.On("Close").Run(func(mock.Arguments) { close(closed) }).Return().Once()
+	device := mocks.NewMockU2FDevice(gomock.NewController(t))
+	device.EXPECT().Authenticate(gomock.Any()).Return(nil, &u2fhost.TestOfUserPresenceRequiredError{}).AnyTimes()
+	device.EXPECT().Close().Do(func() { close(closed) }).Times(1)
 
 	got, err := (&DUOU2FClient{Device: device}).ChallengeU2F()
 	require.ErrorIs(t, err, ErrU2FAuthTimeout)

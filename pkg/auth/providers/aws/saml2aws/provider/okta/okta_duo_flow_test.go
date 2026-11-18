@@ -13,8 +13,8 @@ import (
 
 	"github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
@@ -167,8 +167,8 @@ func TestVerifyMfa_DuoFlow(t *testing.T) {
 
 	t.Run("option is chosen interactively when not configured", func(t *testing.T) {
 		pr := withMockPrompter(t)
-		pr.On("Choose", "Select a DUO MFA Option", []string{"Duo Push", "Passcode"}).Return(1).Once()
-		pr.On("StringRequired", "Enter passcode").Return("987654").Once()
+		pr.EXPECT().Choose("Select a DUO MFA Option", []string{"Duo Push", "Passcode"}).Return(1, nil).Times(1)
+		pr.EXPECT().StringRequired("Enter passcode").Return("987654", nil).Times(1)
 
 		s := &duoScenario{authPages: []string{duoAuthPage}, prompts: []string{duoPromptOK}, statuses: []string{duoSuccess}}
 		got, err := runDuo(t, s, "")
@@ -278,12 +278,12 @@ func TestVerifyMfa_DuoFlow(t *testing.T) {
 }
 
 func TestVerifyMfa_DuoU2F(t *testing.T) {
-	device := &mocks.U2FDevice{}
+	device := mocks.NewMockU2FDevice(gomock.NewController(t))
 	withMockDevice(t, device)
-	device.On("Close").Return()
-	device.On("Authenticate", mock.MatchedBy(func(r *u2fhost.AuthenticateRequest) bool {
+	device.EXPECT().Close().MinTimes(1) // Unlimited, but at least one call (the former testify AssertExpectations contract).
+	device.EXPECT().Authenticate(gomock.Cond(func(r *u2fhost.AuthenticateRequest) bool {
 		return r.Challenge == "u2f-nonce" && r.AppId == "duo-app" && r.KeyHandle == "duo-kh" && !r.WebAuthn
-	})).Return(&u2fhost.AuthenticateResponse{ClientData: "cd", SignatureData: "sig"}, nil).Once()
+	})).Return(&u2fhost.AuthenticateResponse{ClientData: "cd", SignatureData: "sig"}, nil).Times(1)
 
 	s := &duoScenario{
 		authPages: []string{`<form><input name="sid" value="sid-1"><select>` +
@@ -298,7 +298,6 @@ func TestVerifyMfa_DuoU2F(t *testing.T) {
 	got, err := runDuo(t, s, "U2F Key")
 	require.NoError(t, err)
 	assert.Equal(t, "duo-session", got)
-	device.AssertExpectations(t)
 
 	prompts := s.formsFor("/frame/prompt")
 	require.Len(t, prompts, 2)

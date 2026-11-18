@@ -10,8 +10,8 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
@@ -45,7 +45,7 @@ func runChallenge(t *testing.T, startPage string, routes map[string]pageHandler,
 
 func TestChallenge_TOTPPromptsWhenNoToken(t *testing.T) {
 	pr := withMockPrompter(t)
-	pr.On("RequestSecurityCode", "000000").Return("246810").Once()
+	pr.EXPECT().RequestSecurityCode("000000").Return("246810", nil).Times(1)
 
 	f, got, err := runChallenge(t, fixture(t, "challenge-totp.html"), map[string]pageHandler{
 		"/signin/challenge/totp/2": static(samlPage),
@@ -61,7 +61,7 @@ func TestChallenge_TOTPPromptsWhenNoToken(t *testing.T) {
 
 func TestChallenge_SMSAlreadySent(t *testing.T) {
 	pr := withMockPrompter(t)
-	pr.On("StringRequired", "Enter SMS token: G-").Return("135790").Once()
+	pr.EXPECT().StringRequired("Enter SMS token: G-").Return("135790", nil).Times(1)
 
 	f, got, err := runChallenge(t, challengePage("/signin/challenge/ipp/3", ""), map[string]pageHandler{
 		"/signin/challenge/ipp/3": static(samlPage),
@@ -78,8 +78,9 @@ func TestChallenge_SMSAlreadySent(t *testing.T) {
 func TestChallenge_SecurityKeyOTP(t *testing.T) {
 	// Regression: skotp URLs also contain "challenge/sk", so they used to be routed to the U2F handler.
 	pr := withMockPrompter(t)
-	pr.On("RequestSecurityCode", "000 000").Return("112233").Once()
-	withDeviceFinder(t, &scriptedDeviceFinder{err: errNoDeviceFound})
+	pr.EXPECT().RequestSecurityCode("000 000").Return("112233", nil).Times(1)
+	// A guard that keeps the test off real hardware: discovery may run any number of times, including never.
+	withDeviceFinder(t, noDeviceFinder(gomock.NewController(t)))
 
 	f, got, err := runChallenge(t, challengePage("/signin/challenge/skotp/4", ""), map[string]pageHandler{
 		"/signin/challenge/skotp/4": static(samlPage),
@@ -190,20 +191,20 @@ func securityKeyPage(withKeyHandle bool) string {
 
 func TestChallenge_SecurityKey(t *testing.T) {
 	t.Run("assertion is posted", func(t *testing.T) {
-		device := &mocks.U2FDevice{}
-		device.On("Close").Return().Once()
-		device.On("Authenticate", mock.MatchedBy(func(r *u2fhost.AuthenticateRequest) bool {
+		ctrl := gomock.NewController(t)
+		device := mocks.NewMockU2FDevice(ctrl)
+		device.EXPECT().Close().Times(1)
+		device.EXPECT().Authenticate(gomock.Cond(func(r *u2fhost.AuthenticateRequest) bool {
 			return r.Challenge == "Y2hhbGxlbmdl" && r.KeyHandle == "a2V5aGFuZGxl" &&
 				r.AppId == "https://www.gstatic.com/securitykey/origins.json" && strings.HasPrefix(r.Facet, "http://127.0.0.1:")
-		})).Return(&u2fhost.AuthenticateResponse{ClientData: "cd", SignatureData: "sig"}, nil).Once()
-		withDeviceFinder(t, &scriptedDeviceFinder{device: device})
+		})).Return(&u2fhost.AuthenticateResponse{ClientData: "cd", SignatureData: "sig"}, nil).Times(1)
+		withDeviceFinder(t, finderFor(ctrl, device))
 
 		f, got, err := runChallenge(t, securityKeyPage(true), map[string]pageHandler{
 			"/signin/challenge/sk/5": static(samlPage),
 		}, &creds.LoginDetails{})
 		require.NoError(t, err)
 		assert.Equal(t, testSAMLResponse, got)
-		device.AssertExpectations(t)
 
 		forms := f.formsFor("/signin/challenge/sk/5")
 		require.Len(t, forms, 1)
@@ -214,10 +215,11 @@ func TestChallenge_SecurityKey(t *testing.T) {
 	})
 
 	t.Run("device failure falls back to another challenge", func(t *testing.T) {
-		device := &mocks.U2FDevice{}
-		device.On("Close").Return().Once()
-		device.On("Authenticate", mock.Anything).Return(nil, fmt.Errorf("device unplugged")).Once()
-		withDeviceFinder(t, &scriptedDeviceFinder{device: device})
+		ctrl := gomock.NewController(t)
+		device := mocks.NewMockU2FDevice(ctrl)
+		device.EXPECT().Close().Times(1)
+		device.EXPECT().Authenticate(gomock.Any()).Return(nil, fmt.Errorf("device unplugged")).Times(1)
+		withDeviceFinder(t, finderFor(ctrl, device))
 
 		chooser := `<form action="/signin/challenge/totp/9" data-challengeentry="9"><input name="challengeId" value="9"></form>`
 		f, got, err := runChallenge(t, securityKeyPage(true), map[string]pageHandler{
@@ -231,7 +233,7 @@ func TestChallenge_SecurityKey(t *testing.T) {
 	})
 
 	t.Run("no device plugged in and no other factor offered", func(t *testing.T) {
-		withDeviceFinder(t, &scriptedDeviceFinder{err: errNoDeviceFound})
+		withDeviceFinder(t, failingFinder(gomock.NewController(t), errNoDeviceFound, 1))
 		_, _, err := runChallenge(t, withoutSkipForm(securityKeyPage(true)), map[string]pageHandler{}, &creds.LoginDetails{})
 		require.ErrorIs(t, err, errNoDeviceFound)
 		assert.Contains(t, err.Error(), "Failed to prompt for second factor")
@@ -239,7 +241,7 @@ func TestChallenge_SecurityKey(t *testing.T) {
 
 	// Regression: with no security key attached the flow stopped, even when the page offered another factor.
 	t.Run("no device plugged in falls back to another factor", func(t *testing.T) {
-		withDeviceFinder(t, &scriptedDeviceFinder{err: errNoDeviceFound})
+		withDeviceFinder(t, failingFinder(gomock.NewController(t), errNoDeviceFound, 1))
 		chooser := `<form action="/signin/challenge/totp/9" data-challengeentry="9"><input name="challengeId" value="9"></form>`
 		f, got, err := runChallenge(t, securityKeyPage(true), map[string]pageHandler{
 			"/signin/challenge/skip":   static(chooser),
@@ -253,7 +255,8 @@ func TestChallenge_SecurityKey(t *testing.T) {
 
 	t.Run("page without key handles", func(t *testing.T) {
 		// Regression: this used to panic with an index out of range.
-		withDeviceFinder(t, &scriptedDeviceFinder{err: errNoDeviceFound})
+		// A guard that keeps the test off real hardware: discovery may run any number of times, including never.
+		withDeviceFinder(t, noDeviceFinder(gomock.NewController(t)))
 		require.NotPanics(t, func() {
 			_, _, err := runChallenge(t, securityKeyPage(false), map[string]pageHandler{}, &creds.LoginDetails{})
 			require.Error(t, err)

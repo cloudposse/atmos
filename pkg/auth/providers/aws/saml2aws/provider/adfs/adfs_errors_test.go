@@ -12,6 +12,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/provider"
@@ -80,8 +81,8 @@ func TestAuthenticateRejectsUnparsableFormAction(t *testing.T) {
 
 func TestAuthenticateMFAPromptFailure(t *testing.T) {
 	errCancelled := errors.New("prompt cancelled")
-	pr := &mocks.Prompter{}
-	pr.On("RequestSecurityCode", "000000").Return("", errCancelled).Once()
+	pr := mocks.NewMockPrompter(gomock.NewController(t))
+	pr.EXPECT().RequestSecurityCode("000000").Return("", errCancelled).Times(1)
 	usePrompter(t, pr)
 
 	fake := &fakeADFS{
@@ -96,7 +97,6 @@ func TestAuthenticateMFAPromptFailure(t *testing.T) {
 	assert.Empty(t, assertion)
 	// Only the login form was posted; no MFA form is submitted after the prompt fails.
 	assert.Len(t, fake.postedForms(), 1)
-	pr.AssertExpectations(t)
 }
 
 func TestChallengeSubmitURLKeepsFallbackForUnparsableAction(t *testing.T) {

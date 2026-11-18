@@ -169,7 +169,7 @@ func TestAuthenticate_Captcha(t *testing.T) {
 	t.Run("plain terminal prints the captcha URL", func(t *testing.T) {
 		t.Setenv("TERM_PROGRAM", "Apple_Terminal")
 		pr := withMockPrompter(t)
-		pr.On("String", "Captcha", "").Return("solved-captcha").Once()
+		pr.EXPECT().String("Captcha", "").Return("solved-captcha", nil).Times(1)
 
 		f := newCaptchaServer(t)
 		kc, loginDetails := f.client()
@@ -186,7 +186,7 @@ func TestAuthenticate_Captcha(t *testing.T) {
 			t.Setenv("TERM_PROGRAM", "iTerm.app")
 			t.Setenv("TERM", term)
 			pr := withMockPrompter(t)
-			pr.On("String", "Captcha", "").Return("solved-captcha").Once()
+			pr.EXPECT().String("Captcha", "").Return("solved-captcha", nil).Times(1)
 
 			f := newCaptchaServer(t)
 			kc, loginDetails := f.client()
@@ -219,8 +219,8 @@ func TestAuthenticate_Captcha(t *testing.T) {
 func TestAuthenticate_CaptchaRetriedAfterRejectedAnswer(t *testing.T) {
 	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
 	pr := withMockPrompter(t)
-	pr.On("String", "Captcha", "").Return("wrong-answer").Once()
-	pr.On("String", "Captcha", "").Return("solved-captcha").Once()
+	pr.EXPECT().String("Captcha", "").Return("wrong-answer", nil).Times(1)
+	pr.EXPECT().String("Captcha", "").Return("solved-captcha", nil).Times(1)
 
 	captchaPage := fixture(t, "captcha.html")
 	routes := passwordFlowRoutes(t, static(captchaPage))
@@ -242,14 +242,13 @@ func TestAuthenticate_CaptchaRetriedAfterRejectedAnswer(t *testing.T) {
 	require.Len(t, answers, 2)
 	assert.Equal(t, "wrong-answer", answers[0].Get("ca"))
 	assert.Equal(t, "solved-captcha", answers[1].Get("ca"))
-	pr.AssertExpectations(t)
 }
 
 // A page that keeps asking for a captcha must not loop forever.
 func TestAuthenticate_CaptchaAttemptsExceeded(t *testing.T) {
 	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
 	pr := withMockPrompter(t)
-	pr.On("String", "Captcha", "").Return("wrong-answer")
+	pr.EXPECT().String("Captcha", "").Return("wrong-answer", nil).MinTimes(1) // Unlimited, but at least one call (the former testify AssertExpectations contract).
 
 	captchaPage := fixture(t, "captcha.html")
 	routes := passwordFlowRoutes(t, static(captchaPage))
