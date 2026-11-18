@@ -1085,7 +1085,7 @@ func isComponentSectionEqual(
 				if remoteComponentSection, ok := remoteComponentTypeSection[localComponentName].(map[string]any); ok {
 					remoteSection, ok := remoteComponentSection[sectionName]
 					if ok {
-						return reflect.DeepEqual(localSection, remoteSection)
+						return deepEqualValues(localSection, remoteSection)
 					}
 				}
 			}
