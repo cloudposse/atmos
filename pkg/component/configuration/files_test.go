@@ -421,3 +421,63 @@ func TestManifestMetadataHardLinkIsolation(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, entries, "no temporary metadata remains")
 }
+
+func TestWriteFilesOverwritePreservesOtherHardLinks(t *testing.T) {
+	root := t.TempDir()
+	state := filepath.Join(root, "terraform.tfstate")
+	generated := filepath.Join(root, "generated.tf")
+	require.NoError(t, os.WriteFile(state, []byte("protected state"), 0o600))
+	require.NoError(t, os.Link(state, generated))
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{{Path: "generated.tf", Content: []byte("replacement"), IfExists: "overwrite", Mode: 0o755}}))
+	content, err := os.ReadFile(state)
+	require.NoError(t, err)
+	require.Equal(t, "protected state", string(content))
+	content, err = os.ReadFile(generated)
+	require.NoError(t, err)
+	require.Equal(t, "replacement", string(content))
+	oldInfo, err := os.Stat(state)
+	require.NoError(t, err)
+	newInfo, err := os.Stat(generated)
+	require.NoError(t, err)
+	require.False(t, os.SameFile(oldInfo, newInfo))
+	if runtime.GOOS != "windows" {
+		require.Equal(t, os.FileMode(0o600), oldInfo.Mode().Perm())
+	}
+	entries, err := os.ReadDir(root)
+	require.NoError(t, err)
+	require.Len(t, entries, 3, "only state, generated file and ownership metadata remain")
+}
+
+func TestWriteFilesModeOnlyOverwritePreservesOtherHardLinks(t *testing.T) {
+	directory := t.TempDir()
+	original := filepath.Join(directory, "original.tf")
+	destination := filepath.Join(directory, "generated.tf")
+	require.NoError(t, os.WriteFile(original, []byte("same bytes"), 0o600))
+	require.NoError(t, os.Link(original, destination))
+	require.NoError(t, WriteFiles(directory, []schema.ComponentConfigurationFile{{Path: "generated.tf", Content: []byte("same bytes"), IfExists: "overwrite", Mode: 0o755}}))
+	before, err := os.Stat(original)
+	require.NoError(t, err)
+	after, err := os.Stat(destination)
+	require.NoError(t, err)
+	if runtime.GOOS != "windows" {
+		require.False(t, os.SameFile(before, after))
+		require.Equal(t, os.FileMode(0o600), before.Mode().Perm())
+		require.Equal(t, os.FileMode(0o755), after.Mode().Perm())
+	}
+	require.Equal(t, "same bytes", read(t, directory, "original.tf"))
+}
+
+func TestWriteFilesReplacementPreservesUnspecifiedMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows keeps its ACLs")
+	}
+	directory := t.TempDir()
+	path := filepath.Join(directory, "generated.tf")
+	require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
+	require.NoError(t, os.Chmod(path, 0o640))
+	require.NoError(t, WriteFiles(directory, []schema.ComponentConfigurationFile{generated("generated.tf", "after", "overwrite")}))
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o640), info.Mode().Perm())
+	require.Equal(t, "after", read(t, directory, "generated.tf"))
+}

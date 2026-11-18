@@ -335,6 +335,10 @@ func configurationHasBackend(path string, content []byte) bool {
 // workspace than the one the configuration provider prepared, before any initialization runs.
 // The component environment overrides the base environment, as it does for the Terraform process.
 func checkConfigurationWorkspace(info *schema.ConfigAndStacksInfo) error {
+	return checkConfigurationWorkspaceForPlatform(info, runtime.GOOS)
+}
+
+func checkConfigurationWorkspaceForPlatform(info *schema.ConfigAndStacksInfo, platform string) error {
 	base := info.SanitizedEnv
 	if base == nil {
 		base = os.Environ()
@@ -342,7 +346,7 @@ func checkConfigurationWorkspace(info *schema.ConfigAndStacksInfo) error {
 	workspace := ""
 	for _, entries := range [][]string{base, info.ComponentEnvList} {
 		for _, entry := range entries {
-			if key, value, ok := strings.Cut(entry, "="); ok && key == "TF_WORKSPACE" {
+			if key, value, ok := strings.Cut(entry, "="); ok && (key == "TF_WORKSPACE" || platform == "windows" && strings.EqualFold(key, "TF_WORKSPACE")) {
 				workspace = value
 			}
 		}

@@ -662,11 +662,11 @@ func processStackConfigs(atmosConfig *schema.AtmosConfiguration, configAndStacks
 		includeStackAbsPaths,
 		excludeStackAbsPaths,
 	)
-	if err != nil && (!atmosConfig.HasComponentDiscovery() || !errors.Is(err, errUtils.ErrNoStackManifestsFound)) {
+	if err != nil && (!atmosConfig.AllowsEmptyStackInventory() || !errors.Is(err, errUtils.ErrNoStackManifestsFound)) {
 		return err
 	}
 
-	if len(stackFiles.AbsolutePaths) < 1 && !atmosConfig.HasComponentDiscovery() {
+	if len(stackFiles.AbsolutePaths) < 1 && !atmosConfig.AllowsEmptyStackInventory() {
 		j, err := u.ConvertToYAML(includeStackAbsPaths)
 		if err != nil {
 			return err
@@ -674,7 +674,7 @@ func processStackConfigs(atmosConfig *schema.AtmosConfiguration, configAndStacks
 		errorMessage := fmt.Sprintf("\nno stack manifests found in the provided "+
 			"paths:\n%s\n\nCheck if `base_path`, 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
 			"files or ENV vars.", j)
-		return errors.New(errorMessage)
+		return fmt.Errorf("%w: %s", errUtils.ErrNoStackManifestsFound, errorMessage)
 	}
 
 	atmosConfig.StackConfigFilesAbsolutePaths = stackFiles.AbsolutePaths

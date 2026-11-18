@@ -277,19 +277,22 @@ func (r restorePoint) restoreFile(root *os.Root, path string) error {
 // restoreContents replaces the directory entry instead of truncating a possible hard link.
 // A private exclusive temporary file keeps the original bytes and mode together, and both
 // writes and permission changes use its handle rather than following a substituted leaf.
-func restoreContents(directory *os.Root, leaf string, state *fileState) error {
+func restoreContents(directory *os.Root, leaf string, state *fileState) (result error) {
 	temporary := "." + leaf + "." + rand.Text() + ".tmp"
 	file, err := directory.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, state.mode)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = directory.Remove(temporary) }()
+	defer func() { result = errors.Join(result, removeFile(directory, temporary)) }()
 	_, writeErr := file.Write(state.content)
 	var modeErr error
 	if runtime.GOOS != "windows" {
 		modeErr = file.Chmod(state.mode)
 	}
 	if err := errors.Join(writeErr, modeErr, file.Close()); err != nil {
+		return err
+	}
+	if err := validateDestination(directory, leaf); err != nil {
 		return err
 	}
 	return directory.Rename(temporary, leaf)

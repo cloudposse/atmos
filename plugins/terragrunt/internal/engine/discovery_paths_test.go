@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -428,6 +429,18 @@ unit "app" {
 	require.Equal(t, []string{"live/app", "live/standalone"}, inventoryNames(t, result))
 	require.Equal(t, filepath.Join(root, "live", "terragrunt.stack.hcl"), result.Inventory[0].GenerationRoot, "the stack owns the generated unit")
 	require.Empty(t, result.Inventory[1].GenerationRoot)
+	// Disabling a materialized declaration removes membership, not ownership.
+	stackPath := filepath.Join(root, "live", "terragrunt.stack.hcl")
+	stackBytes, err := os.ReadFile(stackPath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(stackPath, []byte(strings.Replace(string(stackBytes), `path   = "app"`, "enabled = false\n  path = \"app\"", 1)), 0o644))
+	result, err = Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**"}, Environment: map[string]string{}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/standalone"}, inventoryNames(t, result))
+	require.FileExists(t, filepath.Join(root, "live", "app", "terragrunt.hcl"))
+	result, err = Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"**"}, Environment: map[string]string{}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/standalone"}, inventoryNames(t, result), "disabled source remains a template in broad discovery")
 }
 
 // Inject errors during evaluation, after discovery has begun, without global
@@ -611,4 +624,45 @@ func TestDiscoveryParsePreservesCallerRequest(t *testing.T) {
 	_, err := discovery.parse(filepath.Join(request.BasePath, "missing", stackFile), true)
 	require.Error(t, err)
 	require.Equal(t, original, request)
+}
+
+func TestDiscoveryRejectsDeclaredUnitWithoutSource(t *testing.T) {
+	root := stackProject(t, map[string]string{"live/terragrunt.stack.hcl": `unit "app" {
+ source = "../catalog/units/app"
+ path = "app"
+}`})
+	require.NoError(t, os.WriteFile(filepath.Join(root, "catalog", "units", "app", "terragrunt.hcl"), []byte("locals { shared = true }"), 0o644))
+	result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**"}, Environment: map[string]string{}})
+	require.NoError(t, err)
+	require.Empty(t, result.Inventory)
+	require.Len(t, result.Failures, 1)
+	require.Equal(t, "app", result.Failures[0].Name)
+	require.Equal(t, model.CodeMissingSource, asProblem(t, result.Failures[0].Err).Code)
+}
+
+// L6 retains a configuration symlink at its logical unit address; only duplicated
+// logical paths are ambiguous to the provider and must be rejected.
+func TestDiscoveryDistinguishesLogicalUnitAliases(t *testing.T) {
+	request := nativeUnit(t, "")
+	request.Phase = "inventory"
+	alias := filepath.Join(request.BasePath, "alias", unitFile)
+	require.NoError(t, os.MkdirAll(filepath.Dir(alias), 0o755))
+	if err := os.Symlink(request.Path, alias); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	linked, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"default/alias", "default/root"}, inventoryNames(t, linked))
+	require.NotEqual(t, linked.Inventory[0].Config.Path, linked.Inventory[1].Config.Path)
+	duplicate := slices.Clone(linked.Inventory)
+	duplicate[1].Config.Path = duplicate[0].Config.Path
+	require.Equal(t, model.CodeEvaluationError, asProblem(t, checkIdentityCollisions(request.BasePath, duplicate)).Code)
+	require.NoError(t, os.Remove(alias))
+	contents, err := os.ReadFile(request.Path)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(alias, contents, 0o644))
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"default/alias", "default/root"}, inventoryNames(t, result))
+	require.NotEqual(t, result.Inventory[0].Config.Path, result.Inventory[1].Config.Path)
 }

@@ -14226,6 +14226,12 @@
       },
       "additionalProperties": {
         "if": {
+          "not": {
+            "properties": {
+              "enabled": false,
+              "provider": false
+            }
+          },
           "type": "object"
         },
         "then": {

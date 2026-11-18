@@ -470,3 +470,46 @@ func TestPlanBindingUsesPostInitDirectory(t *testing.T) {
 	require.Equal(t, relocated, binding.WorkingDirectory)
 	require.NoFileExists(t, filepath.Join(original, "moved.plan"+configurationPlanSuffix))
 }
+
+func TestPreparedFilesRefreshSensitiveDeclarations(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+	atmosio.ApplyMaskingConfig(&atmosio.Config{DisableMasking: false})
+	directory := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "main.tf"), []byte(""), 0o600))
+	info := &schema.ConfigAndStacksInfo{
+		ComponentSection:                map[string]any{"component_info": map[string]any{}},
+		ComponentVarsSection:            map[string]any{"token": "private-input", "provider_secret": "", "public": "visible"},
+		ConfigurationSensitiveInputKeys: map[string]bool{"provider_secret": true},
+	}
+	loadTerraformModuleInfo(info, directory)
+	require.Empty(t, terraformSensitiveVarKeys(info))
+	prepared := &schema.PreparedComponentConfiguration{Files: []schema.ComponentConfigurationFile{{Path: "variables.tf", Content: []byte("variable \"token\" {\n type = string\n sensitive = true\n}\n"), IfExists: "overwrite"}}}
+	require.NoError(t, writePreparedConfigurationFiles(info, prepared, directory))
+	ComputeTerraformSecretVarKeys(info)
+	require.Equal(t, map[string]bool{"token": true, "provider_secret": true}, info.TerraformSecretVarKeys)
+	require.Equal(t, map[string]any{"public": "visible"}, VarfileVarsToWrite(info, false, "test.tfvars.json"))
+	env, err := SecretVarEnv(info)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"TF_VAR_token=private-input", "TF_VAR_provider_secret="}, env)
+}
+
+func TestConfigurationWorkspaceEnvironmentCase(t *testing.T) {
+	for _, platform := range []string{"windows", "linux"} {
+		for _, key := range []string{"tf_workspace", "Tf_Workspace"} {
+			info := &schema.ConfigAndStacksInfo{TerraformWorkspace: "stage", SanitizedEnv: []string{"TF_WORKSPACE=stage"}, ComponentEnvList: []string{key + "=prod"}}
+			err := checkConfigurationWorkspaceForPlatform(info, platform)
+			if platform == "windows" {
+				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+			} else {
+				require.NoError(t, err)
+			}
+			info.ComponentEnvList = []string{key + "=stage"}
+			require.NoError(t, checkConfigurationWorkspaceForPlatform(info, platform))
+			info.SanitizedEnv = []string{key + "=prod"}
+			info.ComponentEnvList = []string{"TF_WORKSPACE=stage"}
+			require.NoError(t, checkConfigurationWorkspaceForPlatform(info, platform), "last component value overrides base")
+		}
+	}
+}
