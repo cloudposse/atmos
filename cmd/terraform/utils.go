@@ -1328,6 +1328,13 @@ func (n *terraformNodeHooks) runUserHooksForNodeWithWriters(atmosConfig *schema.
 // only logged, matching existing CI-hook behavior.
 func (n *terraformNodeHooks) runCIHooksForNode(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
 	forceCIMode := resolveCIMode(n.cmd.Flags())
+	outcome := terraformHookOutcome(n.afterEvent, execErr)
+	exitCode := outcome.ExitCode
+	if n.afterEvent.Normalize() == h.AfterTerraformPlan && exitCode == 2 && outcome.Status == h.RunFailure {
+		// CI reserves plan exit 2 for changes, not prerequisite or policy failures.
+		// Normalize only the CI status; retain the original error and scheduler exit code.
+		exitCode = 1
+	}
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
 		Event:        n.afterEvent,
@@ -1336,7 +1343,7 @@ func (n *terraformNodeHooks) runCIHooksForNode(atmosConfig *schema.AtmosConfigur
 		Output:       ansi.Strip(rawOutput),
 		ForceCIMode:  forceCIMode,
 		CommandError: execErr,
-		ExitCode:     errUtils.GetExitCode(execErr),
+		ExitCode:     exitCode,
 	}); err != nil {
 		log.Warn(ciHookFailedMsg, logKeyComponent, info.Component, "error", err)
 	}
