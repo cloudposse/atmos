@@ -98,10 +98,11 @@ type AIInstructionsSettings struct {
 
 // AIWebSearchSettings contains web search configuration.
 type AIWebSearchSettings struct {
-	Enabled      bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	GoogleAPIKey string `yaml:"google_api_key,omitempty" json:"google_api_key,omitempty" mapstructure:"google_api_key"` // For Google Custom Search
-	GoogleCSEID  string `yaml:"google_cse_id,omitempty" json:"google_cse_id,omitempty" mapstructure:"google_cse_id"`    // Google Custom Search Engine ID
-	MaxResults   int    `yaml:"max_results,omitempty" json:"max_results,omitempty" mapstructure:"max_results"`          // Maximum results to return
+	Enabled       bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	GoogleAPIKey  string `yaml:"google_api_key,omitempty" json:"google_api_key,omitempty" mapstructure:"google_api_key"`    // For Google Custom Search
+	GoogleCSEID   string `yaml:"google_cse_id,omitempty" json:"google_cse_id,omitempty" mapstructure:"google_cse_id"`       // Google Custom Search Engine ID
+	GoogleBaseURL string `yaml:"google_base_url,omitempty" json:"google_base_url,omitempty" mapstructure:"google_base_url"` // Custom Search JSON API URL (default: https://www.googleapis.com/customsearch/v1)
+	MaxResults    int    `yaml:"max_results,omitempty" json:"max_results,omitempty" mapstructure:"max_results"`             // Maximum results to return
 }
 
 // AIContextSettings contains automatic context discovery configuration.
