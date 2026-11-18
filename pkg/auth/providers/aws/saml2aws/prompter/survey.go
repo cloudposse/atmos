@@ -13,8 +13,7 @@ import (
 var outputWriter survey_terminal.FileWriter = os.Stderr
 
 // CliPrompter used to prompt for cli input
-type CliPrompter struct {
-}
+type CliPrompter struct{}
 
 // SetOutputWriter sets the output writer to use for all survey operations
 func SetOutputWriter(writer survey_terminal.FileWriter) {

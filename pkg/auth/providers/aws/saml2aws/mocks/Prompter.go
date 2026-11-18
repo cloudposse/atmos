@@ -113,7 +113,8 @@ func (_m *Prompter) StringRequired(_a0 string) string {
 func NewPrompter(t interface {
 	mock.TestingT
 	Cleanup(func())
-}) *Prompter {
+},
+) *Prompter {
 	mock := &Prompter{}
 	mock.Mock.Test(t)
 

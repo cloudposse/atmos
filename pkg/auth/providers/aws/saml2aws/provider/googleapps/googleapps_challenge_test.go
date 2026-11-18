@@ -105,8 +105,8 @@ func TestChallenge_PhonePrompt(t *testing.T) {
 
 	t.Run("waits for the Google app approval", func(t *testing.T) {
 		f := newFakeGoogle(t, map[string]pageHandler{
-			pathStart:               static(fixture(t, "challenge-prompt.html")),
-			awaitPath:               static(`{}`),
+			pathStart:                static(fixture(t, "challenge-prompt.html")),
+			awaitPath:                static(`{}`),
 			"/signin/challenge/az/5": static(samlPage),
 		})
 		kc, rt := newClient(t, f.ts.URL)

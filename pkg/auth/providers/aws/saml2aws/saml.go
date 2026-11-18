@@ -39,7 +39,6 @@ func (e ErrMissingElement) Error() string {
 // ExtractSessionDuration this will attempt to extract a session duration from the assertion
 // see https://aws.amazon.com/SAML/Attributes/SessionDuration
 func ExtractSessionDuration(data []byte) (int64, error) {
-
 	doc := etree.NewDocument()
 	if err := doc.ReadFromBytes(data); err != nil {
 		return 0, err
@@ -52,7 +51,7 @@ func ExtractSessionDuration(data []byte) (int64, error) {
 
 	// log.Printf("tag: %s", assertionElement.Tag)
 
-	//Get the actual assertion attributes
+	// Get the actual assertion attributes
 	attributeStatement := assertionElement.FindElement(childPath(assertionElement.Space, attributeStatementTag))
 	if attributeStatement == nil {
 		return 0, ErrMissingElement{Tag: attributeStatementTag}
@@ -77,7 +76,6 @@ func ExtractSessionDuration(data []byte) (int64, error) {
 // This is necessary to support AWS instances with custom endpoints such as GovCloud and AWS China without requiring
 // hardcoded endpoints on the saml2aws side.
 func ExtractDestinationURL(data []byte) (string, error) {
-
 	doc := etree.NewDocument()
 	if err := doc.ReadFromBytes(data); err != nil {
 		return "", err
@@ -135,7 +133,6 @@ func ExtractMFATokenExpiryTime(data []byte) (time.Time, error) {
 
 // ExtractAwsRoles given an assertion document extract the aws roles
 func ExtractAwsRoles(data []byte) ([]string, error) {
-
 	awsroles := []string{}
 
 	doc := etree.NewDocument()
@@ -152,7 +149,7 @@ func ExtractAwsRoles(data []byte) ([]string, error) {
 
 	// log.Printf("tag: %s", assertionElement.Tag)
 
-	//Get the actual assertion attributes
+	// Get the actual assertion attributes
 	attributeStatement := assertionElement.FindElement(childPath(assertionElement.Space, attributeStatementTag))
 	if attributeStatement == nil {
 		return nil, ErrMissingElement{Tag: attributeStatementTag}
@@ -178,6 +175,6 @@ func childPath(space, tag string) string {
 	if space == "" {
 		return "./" + tag
 	}
-	//log.Printf("query = %s", "./"+space+":"+tag)
+	// log.Printf("query = %s", "./"+space+":"+tag)
 	return "./" + space + ":" + tag
 }

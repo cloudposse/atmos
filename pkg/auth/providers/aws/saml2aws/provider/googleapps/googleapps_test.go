@@ -58,6 +58,7 @@ func TestExtractInputsByFormQuery(t *testing.T) {
 	require.Equal(t, "http://example.com/test", actionURL2)
 	require.Equal(t, "test error message", form2.Get("pass"))
 }
+
 func TestExtractErrorMsg(t *testing.T) {
 	html := `<html><body><span class="error-msg">test error message</span></body></html>`
 
@@ -179,7 +180,6 @@ func TestPasswordFormChallengeId3(t *testing.T) {
 }
 
 func TestChallengePage(t *testing.T) {
-
 	data, err := os.ReadFile("example/challenge-totp.html")
 	require.Nil(t, err)
 

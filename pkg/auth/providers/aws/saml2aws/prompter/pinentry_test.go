@@ -44,31 +44,37 @@ func (f *FakeDefaultPrompter) RequestSecurityCode(p string) string {
 	f.CalledRequestSecurityCode = true
 	return ""
 }
+
 func (f *FakeDefaultPrompter) Choose(p string, option []string) int {
 	f.CalledChoose = true
 	return 0
 }
+
 func (f *FakeDefaultPrompter) ChooseWithDefault(p string, d string, c []string) (string, error) {
 	f.CalledChooseWithDefault = true
 	return "", nil
 }
+
 func (f *FakeDefaultPrompter) String(p string, defaultValue string) string {
 	f.CalledString = true
 	return ""
 }
+
 func (f *FakeDefaultPrompter) StringRequired(p string) string {
 	f.CalledStringRequired = true
 	return ""
 }
+
 func (f *FakeDefaultPrompter) Password(p string) string {
 	f.CalledPassword = true
 	return ""
 }
+
 func (f *FakeDefaultPrompter) Display(p string) {
 	f.CalledDisplay = true
 }
-func TestValidateAndSetPrompterShouldFailWithWrongInput(t *testing.T) {
 
+func TestValidateAndSetPrompterShouldFailWithWrongInput(t *testing.T) {
 	// backing up the current prompters for the other tests
 	oldPrompter := ActivePrompter
 	defer func() { ActivePrompter = oldPrompter }()
@@ -78,10 +84,9 @@ func TestValidateAndSetPrompterShouldFailWithWrongInput(t *testing.T) {
 		err := ValidateAndSetPrompter(errPrompt)
 		assert.Error(t, err)
 	}
-
 }
-func TestValidateAndSetPrompterShouldWorkWithInputForCli(t *testing.T) {
 
+func TestValidateAndSetPrompterShouldWorkWithInputForCli(t *testing.T) {
 	// backing up the current prompters for the other tests
 	oldPrompter := ActivePrompter
 	defer func() { ActivePrompter = oldPrompter }()
@@ -92,10 +97,9 @@ func TestValidateAndSetPrompterShouldWorkWithInputForCli(t *testing.T) {
 		assert.NoError(t, err)
 		assert.IsType(t, ActivePrompter, NewCli())
 	}
-
 }
-func TestValidateAndSetPrompterShouldWorkWithInputForPinentry(t *testing.T) {
 
+func TestValidateAndSetPrompterShouldWorkWithInputForPinentry(t *testing.T) {
 	// backing up the current prompters for the other tests
 	oldPrompter := ActivePrompter
 	defer func() { ActivePrompter = oldPrompter }()
@@ -106,7 +110,6 @@ func TestValidateAndSetPrompterShouldWorkWithInputForPinentry(t *testing.T) {
 		assert.NoError(t, err)
 		assert.IsType(t, ActivePrompter, &PinentryPrompter{})
 	}
-
 }
 
 func TestChecksPinentryPrompterDefault(t *testing.T) {
@@ -143,7 +146,6 @@ func TestChecksPinentryPrompterCallsPinentryForRequestSecurityCode(t *testing.T)
 	assert.True(t, runner.HasRun)
 	assert.Equal(t, pinentryOutput, "random_code")
 	assert.Equal(t, runner.PassedInput, "SETPROMPT Security token [000000]\nGETPIN\n")
-
 }
 
 func TestChecksPinentryPrompterReturnsRightCodeGivenFakePinentryOutput(t *testing.T) {
@@ -155,7 +157,6 @@ func TestChecksPinentryPrompterReturnsRightCodeGivenFakePinentryOutput(t *testin
 
 	assert.True(t, runner.HasRun)
 	assert.Equal(t, pinentryOutput, "654321")
-
 }
 
 func TestChecksPinentryPrompterReturnsNoCodeGivenErroneousFakePinentryOutput(t *testing.T) {
@@ -170,7 +171,6 @@ func TestChecksPinentryPrompterReturnsNoCodeGivenErroneousFakePinentryOutput(t *
 }
 
 func TestParseOutputShouldThrowError(t *testing.T) {
-
 	input := strings.NewReader("OK Ignore this line\nERR This is an error\nD This result should be ignored\nOK this is irrelevant\n")
 	output, err := ParseResults(input)
 
@@ -179,7 +179,6 @@ func TestParseOutputShouldThrowError(t *testing.T) {
 }
 
 func TestParseOutputShouldReturnCorrectOutput(t *testing.T) {
-
 	input := strings.NewReader("OK Ignore this line\nD THISISTHERETURN\nOK this is irrelevant\n")
 	output, err := ParseResults(input)
 

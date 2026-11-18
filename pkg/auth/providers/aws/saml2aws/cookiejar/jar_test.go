@@ -28,6 +28,7 @@ type testPSL struct{}
 func (testPSL) String() string {
 	return "testPSL"
 }
+
 func (testPSL) PublicSuffix(d string) string {
 	if d == "co.uk" || strings.HasSuffix(d, ".co.uk") {
 		return "co.uk"
@@ -531,7 +532,8 @@ var basicsTests = [...]jarTest{
 			"A=a; path=/foo/bar",
 			"B=b; path=/foo/bar/baz/qux",
 			"C=c; path=/foo/bar/baz",
-			"D=d; path=/foo"},
+			"D=d; path=/foo",
+		},
 		"A=a B=b C=c D=d",
 		[]query{
 			{"http://www.host.test/foo/bar/baz/qux", "B=b C=c A=a D=d"},
@@ -550,7 +552,8 @@ var basicsTests = [...]jarTest{
 			"C=c; path=/foo/bar/baz",
 			"W=w; path=/foo/bar/baz",
 			"Z=z; path=/foo",
-			"D=d; path=/foo"},
+			"D=d; path=/foo",
+		},
 		"A=a B=b C=c D=d W=w X=x Y=y Z=z",
 		[]query{
 			{"http://www.host.test/foo/bar/baz/qux", "Y=y B=b C=c W=w A=a X=x Z=z D=d"},
@@ -633,7 +636,8 @@ var updateAndDeleteTests = [...]jarTest{
 			"a=1",
 			"b=2; secure",
 			"c=3; httponly",
-			"d=4; secure; httponly"},
+			"d=4; secure; httponly",
+		},
 		"a=1 b=2 c=3 d=4",
 		[]query{
 			{"http://www.host.test", "a=1 c=3"},
@@ -647,7 +651,8 @@ var updateAndDeleteTests = [...]jarTest{
 			"a=w",
 			"b=x; secure",
 			"c=y; httponly",
-			"d=z; secure; httponly"},
+			"d=z; secure; httponly",
+		},
 		"a=w b=x c=y d=z",
 		[]query{
 			{"http://www.host.test", "a=w c=y"},
@@ -659,7 +664,8 @@ var updateAndDeleteTests = [...]jarTest{
 		"http://www.host.test/",
 		[]string{
 			"b=xx",
-			"d=zz; httponly"},
+			"d=zz; httponly",
+		},
 		"a=w b=xx c=y d=zz",
 		[]query{{"http://www.host.test", "a=w b=xx c=y d=zz"}},
 	},
@@ -670,7 +676,8 @@ var updateAndDeleteTests = [...]jarTest{
 			"a=1; max-Age=-1",                    // delete via MaxAge
 			"b=2; " + expiresIn(-10),             // delete via Expires
 			"c=2; max-age=-1; " + expiresIn(-10), // delete via both
-			"d=4; max-age=-1; " + expiresIn(10)}, // MaxAge takes precedence
+			"d=4; max-age=-1; " + expiresIn(10),
+		}, // MaxAge takes precedence
 		"",
 		[]query{{"http://www.host.test", ""}},
 	},
@@ -681,7 +688,8 @@ var updateAndDeleteTests = [...]jarTest{
 			"A=1",
 			"A=2; path=/foo",
 			"A=3; domain=.host.test",
-			"A=4; path=/foo; domain=.host.test"},
+			"A=4; path=/foo; domain=.host.test",
+		},
 		"A=1 A=2 A=3 A=4",
 		[]query{{"http://www.host.test/foo", "A=2 A=4 A=1 A=3"}},
 	},
@@ -692,7 +700,8 @@ var updateAndDeleteTests = [...]jarTest{
 			"A=6",
 			"A=7; path=/foo",
 			"A=8; domain=.google.com",
-			"A=9; path=/foo; domain=.google.com"},
+			"A=9; path=/foo; domain=.google.com",
+		},
 		"A=1 A=2 A=3 A=4 A=6 A=7 A=8 A=9",
 		[]query{
 			{"http://www.host.test/foo", "A=2 A=4 A=1 A=3"},
@@ -744,7 +753,8 @@ var updateAndDeleteTests = [...]jarTest{
 		"http://www.host.test",
 		[]string{
 			"A=; domain=google.com; max-age=-1",
-			"A=; path=/foo; domain=google.com; max-age=-1"},
+			"A=; path=/foo; domain=google.com; max-age=-1",
+		},
 		"A=1 A=2 A=8 A=9",
 		[]query{
 			{"http://www.host.test/foo", "A=2 A=1"},
@@ -756,7 +766,8 @@ var updateAndDeleteTests = [...]jarTest{
 		"http://www.google.com",
 		[]string{
 			"A=; domain=google.com; max-age=-1",
-			"A=; path=/foo; domain=google.com; max-age=-1"},
+			"A=; path=/foo; domain=google.com; max-age=-1",
+		},
 		"A=1 A=2",
 		[]query{
 			{"http://www.host.test/foo", "A=2 A=1"},
@@ -813,7 +824,8 @@ var chromiumBasicsTests = [...]jarTest{
 		"http://www.google.com/",
 		[]string{
 			"a=1; domain=.www.google.com.",
-			"b=2; domain=.www.google.com.."},
+			"b=2; domain=.www.google.com..",
+		},
 		"",
 		[]query{
 			{"http://www.google.com", ""},
@@ -826,7 +838,8 @@ var chromiumBasicsTests = [...]jarTest{
 			"a=1; domain=.a.b.c.d.com",
 			"b=2; domain=.b.c.d.com",
 			"c=3; domain=.c.d.com",
-			"d=4; domain=.d.com"},
+			"d=4; domain=.d.com",
+		},
 		"a=1 b=2 c=3 d=4",
 		[]query{
 			{"http://a.b.c.d.com", "a=1 b=2 c=3 d=4"},
@@ -844,7 +857,8 @@ var chromiumBasicsTests = [...]jarTest{
 			"c=3; domain=.c.d.com",
 			"d=4; domain=.d.com",
 			"X=bcd; domain=.b.c.d.com",
-			"X=cd; domain=.c.d.com"},
+			"X=cd; domain=.c.d.com",
+		},
 		"X=bcd X=cd a=1 b=2 c=3 d=4",
 		[]query{
 			{"http://b.c.d.com", "b=2 c=3 d=4 X=bcd X=cd"},
@@ -904,7 +918,8 @@ var chromiumBasicsTests = [...]jarTest{
 		"http://www.google.com",
 		[]string{
 			"a=1; domain=.GOOGLE.COM",
-			"b=2; domain=.www.gOOgLE.coM"},
+			"b=2; domain=.www.gOOgLE.coM",
+		},
 		"a=1 b=2",
 		[]query{{"http://www.google.com", "a=1 b=2"}},
 	},
@@ -920,7 +935,8 @@ var chromiumBasicsTests = [...]jarTest{
 		"http://1.2.3.4/foo",
 		[]string{
 			"a=1; domain=.1.2.3.4",
-			"b=2; domain=.3.4"},
+			"b=2; domain=.3.4",
+		},
 		"",
 		[]query{{"http://1.2.3.4/foo", ""}},
 	},
@@ -946,7 +962,8 @@ var chromiumBasicsTests = [...]jarTest{
 		"http://a.b",
 		[]string{
 			"a=1; domain=.b",
-			"b=2; domain=b"},
+			"b=2; domain=b",
+		},
 		"",
 		[]query{{"http://bar.foo", ""}},
 	},
@@ -955,7 +972,8 @@ var chromiumBasicsTests = [...]jarTest{
 		"http://google.com",
 		[]string{
 			"a=1; domain=.com",
-			"b=2; domain=com"},
+			"b=2; domain=com",
+		},
 		"",
 		[]query{{"http://google.com", ""}},
 	},
@@ -964,7 +982,8 @@ var chromiumBasicsTests = [...]jarTest{
 		"http://google.co.uk",
 		[]string{
 			"a=1; domain=.co.uk",
-			"b=2; domain=.uk"},
+			"b=2; domain=.uk",
+		},
 		"",
 		[]query{
 			{"http://google.co.uk", ""},
@@ -977,7 +996,8 @@ var chromiumBasicsTests = [...]jarTest{
 		"http://www.google.com",
 		[]string{
 			"a=1",
-			"b=2; domain=.www.google.com."},
+			"b=2; domain=.www.google.com.",
+		},
 		"a=1",
 		[]query{{"http://www.google.com", "a=1"}},
 	},
@@ -1063,7 +1083,6 @@ func TestChromiumDomain(t *testing.T) {
 	for _, test := range chromiumDomainTests {
 		test.run(t, jar)
 	}
-
 }
 
 // chromiumDeletionTests must be performed all on the same Jar.

@@ -63,19 +63,17 @@ var (
 	newU2FDeviceFinder = func() DeviceFinder { return new(U2FDeviceFinder) }
 )
 
-var (
-	supportedMfaOptions = map[string]string{
-		IdentifierDuoMfa:          "DUO MFA authentication",
-		IdentifierSmsMfa:          "SMS MFA authentication",
-		IdentifierEmailMfa:        "EMAIL MFA authentication",
-		IdentifierPushMfa:         "PUSH MFA authentication",
-		IdentifierTotpMfa:         "TOTP MFA authentication",
-		IdentifierOktaTotpMfa:     "Okta MFA authentication",
-		IdentifierSymantecTotpMfa: "Symantec VIP MFA authentication",
-		IdentifierFIDOWebAuthn:    "FIDO WebAuthn MFA authentication",
-		IdentifierYubiMfa:         "YUBICO TOKEN:HARDWARE",
-	}
-)
+var supportedMfaOptions = map[string]string{
+	IdentifierDuoMfa:          "DUO MFA authentication",
+	IdentifierSmsMfa:          "SMS MFA authentication",
+	IdentifierEmailMfa:        "EMAIL MFA authentication",
+	IdentifierPushMfa:         "PUSH MFA authentication",
+	IdentifierTotpMfa:         "TOTP MFA authentication",
+	IdentifierOktaTotpMfa:     "Okta MFA authentication",
+	IdentifierSymantecTotpMfa: "Symantec VIP MFA authentication",
+	IdentifierFIDOWebAuthn:    "FIDO WebAuthn MFA authentication",
+	IdentifierYubiMfa:         "YUBICO TOKEN:HARDWARE",
+}
 
 // Client is a wrapper representing a Okta SAML client
 type Client struct {
@@ -121,7 +119,6 @@ type mfaChallengeContext struct {
 
 // New creates a new Okta client
 func New(idpAccount *cfg.IDPAccount) (*Client, error) {
-
 	tr := provider.NewDefaultTransport(idpAccount.SkipVerify)
 
 	client, err := provider.NewHTTPClient(tr, provider.BuildHttpClientOpts(idpAccount))
@@ -177,7 +174,7 @@ func (oc *Client) createSession(loginDetails *creds.LoginDetails, sessionToken s
 
 	oktaOrgHost := oktaURL.Host
 
-	//authenticate via okta api
+	// authenticate via okta api
 	sessionReq := SessionRequst{SessionToken: sessionToken}
 	sessionReqBody := new(bytes.Buffer)
 	err = json.NewEncoder(sessionReqBody).Encode(sessionReq)
@@ -361,7 +358,7 @@ func (oc *Client) authWithSession(loginDetails *creds.LoginDetails) (string, err
 // cookie value
 // This function is not currently used and but can be used in the future
 func (oc *Client) getDeviceTokenFromOkta(loginDetails *creds.LoginDetails) (string, error) {
-	//dummy request to set device token cookie ("dt")
+	// dummy request to set device token cookie ("dt")
 	req, err := http.NewRequest("GET", loginDetails.URL, nil)
 	if err != nil {
 		return "", errors.Wrap(err, "error building device token request")
@@ -385,7 +382,6 @@ func (oc *Client) getDeviceTokenFromOkta(loginDetails *creds.LoginDetails) (stri
 // this func can be uplifted in the future to set custom device tokens or used with
 // getDeviceTokenFromOkta function
 func (oc *Client) setDeviceTokenCookie(loginDetails *creds.LoginDetails) error {
-
 	// getDeviceTokenFromOkta is not used but doing this to keep the function code
 	// uncommented (avoid linting issues)
 	if false {
@@ -417,14 +413,13 @@ func (oc *Client) setDeviceTokenCookie(loginDetails *creds.LoginDetails) error {
 // primaryAuth creates the Okta Primary Authentication request
 // returns the authStatus, sessionToken, http response and a error
 func (oc *Client) primaryAuth(loginDetails *creds.LoginDetails) (string, string, string, error) {
-
 	oktaURL, err := url.Parse(loginDetails.URL)
 	if err != nil {
 		return "", "", "", errors.Wrap(err, "error building oktaURL")
 	}
 
 	oktaOrgHost := oktaURL.Host
-	//authenticate via okta api
+	// authenticate via okta api
 	authReq := AuthRequest{Username: loginDetails.Username, Password: loginDetails.Password}
 	if loginDetails.StateToken != "" {
 		authReq = AuthRequest{StateToken: loginDetails.StateToken}
@@ -465,7 +460,6 @@ func (oc *Client) primaryAuth(loginDetails *creds.LoginDetails) (string, string,
 
 // Authenticate logs into Okta and returns a SAML response
 func (oc *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error) {
-
 	// Set Okta device token
 	err := oc.setDeviceTokenCookie(loginDetails)
 	if err != nil {
@@ -510,7 +504,7 @@ func (oc *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 
 	// if user disabled sessions, default to using standard login WITHOUT sessions
 	if oc.disableSessions {
-		//now call saml endpoint
+		// now call saml endpoint
 		oktaSessionRedirectURL := fmt.Sprintf("https://%s/login/sessionCookieRedirect", oktaOrgHost)
 
 		req, err := http.NewRequest("GET", oktaSessionRedirectURL, nil)
@@ -600,7 +594,6 @@ func (oc *Client) follow(ctx context.Context, req *http.Request, loginDetails *c
 		return "", err
 	}
 	return oc.follow(ctx, req, loginDetails)
-
 }
 
 func (oc *Client) getStateToken(req *http.Request, loginDetails *creds.LoginDetails) (string, error) {
@@ -644,7 +637,6 @@ func getStateTokenFromOktaPageBody(responseBody string) (string, error) {
 	}
 
 	return "", errors.New("cannot find state token")
-
 }
 
 func parseMfaIdentifer(json string, arrayPosition int) (string, string, string) {
@@ -684,7 +676,8 @@ func docIsFormRedirectToTarget(doc *goquery.Document, target string) bool {
 		url := fmt.Sprintf("form[action=\"%s\"]", target)
 		urls = []string{url}
 	} else {
-		urls = []string{"form[action=\"https://signin.aws.amazon.com/saml\"]",
+		urls = []string{
+			"form[action=\"https://signin.aws.amazon.com/saml\"]",
 			"form[action=\"https://signin.amazonaws-us-gov.com/saml\"]",
 			"form[action=\"https://signin.amazonaws.cn/saml\"]",
 		}
@@ -795,7 +788,6 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 			} else {
 				mfaOptions = append(mfaOptions, fmt.Sprintf("%s - %s", val, id))
 			}
-
 		} else {
 			mfaOptions = append(mfaOptions, "UNSUPPORTED: "+identifier)
 		}
@@ -834,7 +826,7 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 	case IdentifierYubiMfa:
 		return gjson.Get(challengeContext.challengeResponseBody, "sessionToken").String(), nil
 	case IdentifierSmsMfa, IdentifierEmailMfa, IdentifierTotpMfa, IdentifierOktaTotpMfa, IdentifierSymantecTotpMfa:
-		var verifyCode = loginDetails.MFAToken
+		verifyCode := loginDetails.MFAToken
 		if verifyCode == "" {
 			verifyCode = prompter.RequestSecurityCode("000000")
 		}
@@ -916,8 +908,8 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 		if len(duoSignatures) < 2 {
 			return "", errors.New("invalid duo verification signature")
 		}
-		//duoSignatures[0] = TX
-		//duoSignatures[1] = APP
+		// duoSignatures[0] = TX
+		// duoSignatures[1] = APP
 		duoCallback := gjson.Get(challengeContext.challengeResponseBody, "_embedded.factor._embedded.verification._links.complete.href").String()
 
 		// initiate duo mfa to get sid
@@ -958,7 +950,6 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 
 		// At this point, if device trust is enabled we need to go on that tangent
 		doc, err := goquery.NewDocumentFromReader(res.Body)
-
 		if err != nil {
 			return "", errors.Wrap(err, "error parsing document")
 		}
@@ -973,10 +964,8 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 			origUrl := req.URL.String()
 			duoEndpointHost := "127.0.0.1:53100"
 			doc, err = verifyEndpointHealth(oc, doc, origUrl, duoEndpointHost, duoHost, duoSubmitURL, q)
-
 			if err != nil {
 				return "", errors.Wrap(err, "couldn't validate endpoint health")
-
 			}
 
 		}
@@ -988,7 +977,7 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 		}
 		duoSID = html.UnescapeString(duoSID)
 
-		var duoMfaOptions = []string{}
+		duoMfaOptions := []string{}
 		var token string
 
 		webauthnOption := doc.Find("option[name=\"webauthn\"]")
@@ -1024,7 +1013,7 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 		}
 
 		if duoMfaOptions[duoMfaOption] == "Passcode" {
-			//get users DUO MFA Token
+			// get users DUO MFA Token
 			token = prompter.StringRequired("Enter passcode")
 		}
 
@@ -1111,14 +1100,13 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 
 		if duoRestStatusCode == "u2f_sent" {
 			appId := gjson.Get(resp, "response.u2f_sign_request.0.appId").String()
-			//appId := "api-23a9854b.duosecurity.com"
+			// appId := "api-23a9854b.duosecurity.com"
 			version := gjson.Get(resp, "response.u2f_sign_request.0.version").String()
 			challengeNonce := gjson.Get(resp, "response.u2f_sign_request.0.challenge").String()
 			keyHandle := gjson.Get(resp, "response.u2f_sign_request.0.keyHandle").String()
 			sessionId := gjson.Get(resp, "response.u2f_sign_request.0.sessionId").String()
 
 			u2fClient, err := NewDUOU2FClient(challengeNonce, appId, version, keyHandle, sessionId, newU2FDeviceFinder())
-
 			if err != nil {
 				return "", err
 			}
@@ -1207,7 +1195,7 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 		}
 
 		if duoTxResult != "SUCCESS" {
-			//poll as this is likely a push request
+			// poll as this is likely a push request
 			for {
 				time.Sleep(duoPollInterval)
 
@@ -1361,7 +1349,6 @@ func extractSessionToken(r io.Reader) (string, error) {
 }
 
 func fidoWebAuthn(oc *Client, oktaOrgHost string, challengeContext *mfaChallengeContext, mfaOption int, stateToken string, mfaOptions []string, resp string) (string, error) {
-
 	var signedAssertion *SignedAssertion
 	challengeResponseBody := challengeContext.challengeResponseBody
 	lastMfaOption := mfaOption
@@ -1495,7 +1482,6 @@ func verifyTrustedCert(oc *Client, doc *goquery.Document, duoHost string, duoSub
 	oc.client.Transport = customTransport
 
 	req, err := http.NewRequest("GET", duoCertifierURL, nil)
-
 	if err != nil {
 		return nil, errors.Wrap(err, "error building cert validation request")
 	}
@@ -1509,14 +1495,12 @@ func verifyTrustedCert(oc *Client, doc *goquery.Document, duoHost string, duoSub
 		duoCertURL := fmt.Sprintf("%s?sid=%s&certs_txid=%s&type=AJAX", certUrl, url.QueryEscape(sid), txid)
 
 		req, err = http.NewRequest("GET", duoCertURL, nil)
-
 		if err != nil {
 			return nil, errors.Wrap(err, "error building cert validation request ")
 		}
 
 		req.Header.Add("Referer", "https://"+duoHost)
 		res, err = oc.client.Do(req)
-
 		if err != nil {
 			return nil, errors.Wrap(err, "error retrieving cert validation response")
 		}
@@ -1567,7 +1551,6 @@ func verifyTrustedCert(oc *Client, doc *goquery.Document, duoHost string, duoSub
 }
 
 func verifyEndpointHealth(oc *Client, doc *goquery.Document, origURL string, duoEndpointHost string, duoHost string, duoSubmitURL string, postQuery url.Values) (*goquery.Document, error) {
-
 	txid, _ := doc.Find("input[name=\"txid\"]").Attr("value")
 	sid, _ := doc.Find("input[name=\"sid\"]").Attr("value")
 	ehServiceUrl, _ := doc.Find("input[name=\"eh_service_url\"]").Attr("value")
@@ -1592,7 +1575,6 @@ func verifyEndpointHealth(oc *Client, doc *goquery.Document, origURL string, duo
 	_, err := oc.client.Do(req)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to query alive URL %s", duoAliveUrl)
-
 	}
 
 	duoCheckEndpointAppURL := fmt.Sprintf("https://%s/frame/check_endpoint_app_status", duoHost)

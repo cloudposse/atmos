@@ -364,7 +364,6 @@ var autoFill = func(page playwright.Page, loginDetails *creds.LoginDetails) erro
 	err := passwordField.WaitFor(playwright.LocatorWaitForOptions{
 		State: playwright.WaitForSelectorStateVisible,
 	})
-
 	if err != nil {
 		return err
 	}
@@ -413,7 +412,6 @@ func signinRegex() (*regexp.Regexp, error) {
 }
 
 func (cl *Client) Validate(loginDetails *creds.LoginDetails) error {
-
 	if loginDetails.URL == "" {
 		return errors.New("empty URL")
 	}

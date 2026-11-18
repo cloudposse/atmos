@@ -72,7 +72,6 @@ type Client struct {
 
 // New create a new Google Apps Client
 func New(idpAccount *cfg.IDPAccount) (*Client, error) {
-
 	tr := provider.NewDefaultTransport(idpAccount.SkipVerify)
 
 	client, err := provider.NewHTTPClient(tr, provider.BuildHttpClientOpts(idpAccount))
@@ -87,7 +86,6 @@ func New(idpAccount *cfg.IDPAccount) (*Client, error) {
 
 // Authenticate logs into Google Apps and returns a SAML response
 func (kc *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error) {
-
 	// Get the first page
 	authURL, authForm, err := kc.loadFirstPage(loginDetails)
 	if err != nil {
@@ -102,11 +100,10 @@ func (kc *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 	// Post email address w/o password, then Get the password-input page
 	passwordURL, passwordForm, err := kc.loadLoginPage(authURL+"?hl=en&loc=US", loginDetails.URL+"&hl=en&loc=US", authForm)
 	if err != nil {
-		//if failed, try with "identifier"
+		// if failed, try with "identifier"
 		authForm.Set("Email", "") // Clear previous key
 		authForm.Set("identifier", loginDetails.Username)
 		passwordURL, passwordForm, err = kc.loadLoginPage(authURL+"?hl=en&loc=US", loginDetails.URL+"&hl=en&loc=US", authForm)
-
 		if err != nil {
 			return "", errors.Wrap(err, "error loading login page")
 		}
@@ -297,7 +294,6 @@ func (kc *Client) loadFirstPage(loginDetails *creds.LoginDetails) (string, url.V
 }
 
 func (kc *Client) loadLoginPage(submitURL string, referer string, authForm url.Values) (string, url.Values, error) {
-
 	req, err := http.NewRequest("POST", submitURL, strings.NewReader(authForm.Encode()))
 	if err != nil {
 		return "", nil, errors.Wrap(err, "error retrieving login form")
@@ -332,7 +328,6 @@ func (kc *Client) loadLoginPage(submitURL string, referer string, authForm url.V
 }
 
 func (kc *Client) loadChallengePage(submitURL string, referer string, authForm url.Values, loginDetails *creds.LoginDetails) (*goquery.Document, error) {
-
 	authForm.Set("bgresponse", "js_enabled")
 
 	req, err := http.NewRequest("POST", submitURL, strings.NewReader(authForm.Encode()))
@@ -387,7 +382,7 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 		switch {
 		case strings.Contains(secondActionURL, "challenge/totp"): // handle TOTP challenge
 
-			var token = loginDetails.MFAToken
+			token := loginDetails.MFAToken
 			if token == "" {
 				token = prompter.RequestSecurityCode("000000")
 			}
@@ -418,7 +413,7 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 				logger.Debugf("After sms request secondActionURL: %s", secondActionURL)
 			}
 
-			var token = prompter.StringRequired("Enter SMS token: G-")
+			token := prompter.StringRequired("Enter SMS token: G-")
 
 			responseForm.Set("Pin", token)
 			responseForm.Set("TrustDevice", "on") // Don't ask again on this computer
@@ -429,7 +424,7 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 		// "challenge/sk" first, which also matches skotp URLs and made this case unreachable.
 		case strings.Contains(secondActionURL, "challenge/skotp"): // handle one-time HOTP challenge
 			log.Println("Get a one-time code by visiting https://g.co/sc on another device where you can use your security key")
-			var token = prompter.RequestSecurityCode("000 000")
+			token := prompter.RequestSecurityCode("000 000")
 
 			responseForm.Set("Pin", token)
 			responseForm.Set("TrustDevice", "on") // Don't ask again on this computer
@@ -509,11 +504,9 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 	}
 
 	return doc, nil
-
 }
 
 func (kc *Client) skipChallengePage(doc *goquery.Document, submitURL string, secondActionURL string, loginDetails *creds.LoginDetails) (*goquery.Document, error) {
-
 	skipResponseForm, skipActionURL, err := extractInputsByFormQuery(doc, `[action$="skip"]`)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to extract skip form")
@@ -527,7 +520,6 @@ func (kc *Client) skipChallengePage(doc *goquery.Document, submitURL string, sec
 }
 
 func (kc *Client) loadAlternateChallengePage(submitURL string, referer string, authForm url.Values, loginDetails *creds.LoginDetails) (*goquery.Document, error) {
-
 	req, err := http.NewRequest("POST", submitURL, strings.NewReader(authForm.Encode()))
 	if err != nil {
 		return nil, errors.Wrap(err, "error retrieving login form")
@@ -591,7 +583,6 @@ func (kc *Client) loadChallengeEntryPage(doc *goquery.Document, submitURL string
 }
 
 func (kc *Client) postJSON(submitURL string, values map[string]string, referer string) (*http.Response, error) {
-
 	data, _ := json.Marshal(values)
 
 	req, err := http.NewRequest("POST", submitURL, bytes.NewReader(data))
@@ -613,7 +604,6 @@ func (kc *Client) postJSON(submitURL string, values map[string]string, referer s
 }
 
 func (kc *Client) loadResponsePage(submitURL string, referer string, responseForm url.Values) (*goquery.Document, error) {
-
 	req, err := http.NewRequest("POST", submitURL, strings.NewReader(responseForm.Encode()))
 	if err != nil {
 		return nil, errors.Wrap(err, "error retrieving response page")
@@ -667,7 +657,6 @@ func mustFindErrorMsg(doc *goquery.Document) string {
 	var fieldValue string
 	doc.Find(".error-msg").Each(func(i int, s *goquery.Selection) {
 		fieldValue = s.Text()
-
 	})
 	return fieldValue
 }
@@ -703,7 +692,7 @@ func extractInputsByFormQuery(doc *goquery.Document, formQuery string) (url.Valu
 
 	currentURL := doc.Url.String()
 
-	//get action url
+	// get action url
 	foundForms := doc.Find(query)
 	if len(foundForms.Nodes) == 0 {
 		return formData, "", fmt.Errorf("could not find form with query %q", query)
@@ -742,7 +731,6 @@ func extractInputsByFormQuery(doc *goquery.Document, formQuery string) (url.Valu
 }
 
 func extractNodeText(doc *goquery.Document, tag, txt string) string {
-
 	var res string
 
 	doc.Find(tag).Each(func(i int, s *goquery.Selection) {
@@ -755,7 +743,6 @@ func extractNodeText(doc *goquery.Document, tag, txt string) string {
 }
 
 func extractDataAttributes(doc *goquery.Document, query string, attrsToSelect []string) map[string]string {
-
 	dataAttrs := make(map[string]string)
 
 	doc.Find(query).Each(func(_ int, sel *goquery.Selection) {

@@ -6,8 +6,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 )
 
-type ValidateBase struct {
-}
+type ValidateBase struct{}
 
 func (ac *ValidateBase) Validate(ld *creds.LoginDetails) error {
 	if ld.URL == "" {

@@ -9,7 +9,6 @@ import (
 // RequestString helper method to dump the http request
 func RequestString(req *http.Request) string {
 	data, err := httputil.DumpRequestOut(req, ContentEnable())
-
 	if err != nil {
 		return ""
 	}
@@ -20,7 +19,6 @@ func RequestString(req *http.Request) string {
 // ResponseString helper method to dump the http response
 func ResponseString(res *http.Response) string {
 	data, err := httputil.DumpResponse(res, ContentEnable())
-
 	if err != nil {
 		return ""
 	}
