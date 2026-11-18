@@ -80,7 +80,9 @@ For more details on the `ansible-playbook` command and options, refer to [Ansibl
     <dt>`--identity`<em>(optional)</em></dt>
     <dd>
         Atmos Auth identity for this run. Its environment is passed to `ansible-playbook`, so credentials
-        made of environment variables, such as `SSH_AUTH_SOCK`, reach the playbook.
+        made of environment variables, such as `SSH_AUTH_SOCK`, reach the playbook. Credentials already in
+        your environment that conflict with the identity, such as `AWS_ACCESS_KEY_ID` next to an AWS
+        profile, are removed for the playbook so it runs as the identity you selected.
     </dd>
 
     <dt>`--dry-run`<em>(optional)</em></dt>
