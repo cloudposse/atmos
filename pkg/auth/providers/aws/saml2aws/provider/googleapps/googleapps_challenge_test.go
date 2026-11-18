@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -268,8 +269,9 @@ func TestChallenge_UnsupportedSecondFactor(t *testing.T) {
 }
 
 func TestExtractInputsByFormID(t *testing.T) {
-	t.Run("form without action falls back to any form", func(t *testing.T) {
-		// Regression: a matching form without an action attribute used to panic.
+	t.Run("selected form without action uses the document URL and only its own fields", func(t *testing.T) {
+		// Regression: a matching form without an action attribute used to panic, and then
+		// fell back to every form, merging their fields and posting to another form's action.
 		doc := mustDoc(t, `<form id="challenge"><input name="a" value="1"></form>`+
 			`<form action="/signin/next"><input name="b" value="2"></form>`, "https://accounts.google.com/page")
 		var (
@@ -279,9 +281,34 @@ func TestExtractInputsByFormID(t *testing.T) {
 		)
 		require.NotPanics(t, func() { form, action, err = extractInputsByFormID(doc, "challenge") })
 		require.NoError(t, err)
-		assert.Equal(t, "https://accounts.google.com/signin/next", action)
+		assert.Equal(t, "https://accounts.google.com/page", action)
 		assert.Equal(t, "1", form.Get("a"))
+		assert.NotContains(t, form, "b")
+	})
+
+	t.Run("selected form keeps its explicit action", func(t *testing.T) {
+		doc := mustDoc(t, `<form id="challenge" action="/signin/mine"><input name="a" value="1"></form>`+
+			`<form action="/signin/next"><input name="b" value="2"></form>`, "https://accounts.google.com/page")
+		form, action, err := extractInputsByFormID(doc, "challenge")
+		require.NoError(t, err)
+		assert.Equal(t, "https://accounts.google.com/signin/mine", action)
+		assert.Equal(t, "1", form.Get("a"))
+		assert.NotContains(t, form, "b")
+	})
+
+	t.Run("no form with the given id falls back to any form", func(t *testing.T) {
+		doc := mustDoc(t, `<form action="/signin/next"><input name="b" value="2"></form>`, "https://accounts.google.com/page")
+		form, action, err := extractInputsByFormID(doc, "challenge")
+		require.NoError(t, err)
+		assert.Equal(t, "https://accounts.google.com/signin/next", action)
 		assert.Equal(t, "2", form.Get("b"))
+	})
+
+	t.Run("document without URL returns an error", func(t *testing.T) {
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<form id="challenge"><input name="a" value="1"></form>`))
+		require.NoError(t, err)
+		require.NotPanics(t, func() { _, _, err = extractInputsByFormQuery(doc, "#challenge") })
+		require.Error(t, err)
 	})
 
 	t.Run("no forms", func(t *testing.T) {

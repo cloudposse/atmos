@@ -562,6 +562,10 @@ func (oc *Client) follow(ctx context.Context, req *http.Request, loginDetails *c
 		logger.Debug("FAILED TO BUILD DOC FROM RESP")
 		return "", errors.Wrap(err, "failed to build document from response")
 	}
+	// Atmos fork: reader-based documents have no URL; keep the response URL so relative form actions can be resolved.
+	if doc.Url == nil && res.Request != nil {
+		doc.Url = res.Request.URL
+	}
 
 	var handler func(context.Context, *goquery.Document) (context.Context, *http.Request, error)
 
@@ -1501,6 +1505,35 @@ func isLoopbackURL(rawURL string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// errCertifierRedirect is returned when the certifier redirects somewhere other than a loopback address.
+var errCertifierRedirect = errors.New("certifier redirected to a non-loopback URL")
+
+// maxCertifierRedirects bounds the redirects followed by the certifier request.
+const maxCertifierRedirects = 10
+
+// newCertifierClient returns a dedicated client for the Duo certifier request.
+// Atmos fork: upstream (and the first Atmos version) swapped the shared client's transport for one
+// that skips certificate verification, which also applied to every redirect hop. The dedicated client
+// leaves the shared client untouched, shares its cookie jar and status check, and refuses to follow a
+// redirect to a non-loopback URL, so an unverified connection can never reach a remote host.
+func newCertifierClient(base *provider.HTTPClient, certifierURL string) *provider.HTTPClient {
+	certTransport := http.DefaultTransport.(*http.Transport).Clone()
+	certTransport.TLSClientConfig = certifierTLSConfig(certifierURL)
+
+	client := *base
+	client.Transport = certTransport
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= maxCertifierRedirects {
+			return errors.New("stopped after too many certifier redirects")
+		}
+		if !isLoopbackURL(req.URL.String()) {
+			return errCertifierRedirect
+		}
+		return nil
+	}
+	return &client
+}
+
 func verifyTrustedCert(oc *Client, doc *goquery.Document, duoHost string, duoSubmitURL string, q url.Values) (*goquery.Document, error) {
 	// If you enable DUO trusted cert validation, it requires an extra step before continuing.
 	// The way the validation process works is it attempts to send a request to a localhost:15310
@@ -1521,21 +1554,13 @@ func verifyTrustedCert(oc *Client, doc *goquery.Document, duoHost string, duoSub
 	duoUrl := fmt.Sprintf("%s?type=AJAX&sid=%s&certs_txid=%s", certUrl, url.QueryEscape(sid), txid)
 	duoCertifierURL := fmt.Sprintf("%s?certUrl=%s", certifierUrl, url.QueryEscape(duoUrl))
 
-	// The locally running certifier does not have a valid certificate, so we have to skip verification
-	customTransport := http.DefaultTransport.(*http.Transport).Clone()
-	customTransport.TLSClientConfig = certifierTLSConfig(certifierUrl)
-	originalTransport := oc.client.Transport
-
-	oc.client.Transport = customTransport
-
 	req, err := http.NewRequest("GET", duoCertifierURL, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "error building cert validation request")
 	}
 
 	req.Header.Add("Referer", "https://"+duoHost+"/")
-	res, err := oc.client.Do(req)
-	oc.client.Transport = originalTransport
+	res, err := newCertifierClient(oc.client, certifierUrl).Do(req)
 
 	if err != nil {
 		// Local certifier not running, try online one
