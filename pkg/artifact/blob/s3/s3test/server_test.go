@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -444,6 +445,10 @@ func TestAttributesWrapTagFailuresWithSharedSentinels(t *testing.T) {
 func TestGateAppliesToExactlyOneRequest(t *testing.T) {
 	srv := NewServer(t)
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	// Registered after NewServer, so it runs first and the server's Close cannot wait on a held request.
+	t.Cleanup(unblock)
 	srv.Inject(Fault{Op: OpPutObject, Action: Gate, Times: -1, Entered: entered, Release: release, Done: done})
 	client := noRetryClient(srv)
 	first := make(chan error, 1)
@@ -451,10 +456,14 @@ func TestGateAppliesToExactlyOneRequest(t *testing.T) {
 		_, err := putObject(t, client, srv, "gated", "x")
 		first <- err
 	}()
-	<-entered
+	select {
+	case <-entered:
+	case err := <-first:
+		require.Fail(t, "the first request finished before reaching the gate", "error: %v", err)
+	}
 	_, err := putObject(t, client, srv, "ungated", "y")
 	require.NoError(t, err, "a second matching request is not gated")
-	close(release)
+	unblock()
 	require.NoError(t, <-first)
 	<-done
 	for _, key := range []string{"gated", "ungated"} {
