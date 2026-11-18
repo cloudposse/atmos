@@ -1,0 +1,85 @@
+---
+title: atmos artifacts catalog add
+sidebar_label: catalog add
+sidebar_class_name: command
+id: catalog-add
+description: List releases in the repository's published catalog.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Resolve one or more releases and list them in the latest published catalog, creating the catalog when none exists. Only artifact metadata is read.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts catalog add --help" src="/casts/screengrabs/atmos-artifacts-catalog-add--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts catalog add <ref>... --repository=<alias> [flags]
+```
+
+## Examples
+
+```shell
+# List one release
+atmos artifacts catalog add components/terraform/vpc:1.2.0 --repository=shared
+
+# List several releases in one write
+atmos artifacts catalog add components/terraform/vpc:1.2.0 tools/helper:0.1.0 --repository=shared
+```
+
+## Behavior
+
+Add takes the repository's lock when it provides one, reads the latest catalog, resolves each ref, lists it, and publishes the result with a new revision. A version that is already listed is updated when its tag now resolves to a different digest, and reported under `updated`.
+
+## Arguments
+
+<dl>
+    <dt>`ref` <em>(required, repeatable)</em></dt>
+    <dd>
+        `name:version` or `name@sha256:<digest>`, relative to the repository.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(required)</em></dt>
+    <dd>
+        Configured repository alias. Its `catalog` setting selects the catalog.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Errors
+
+<dl>
+    <dt>Catalog not configured</dt>
+    <dd>The repository has no `catalog`. Nothing is written.</dd>
+
+    <dt>Reference not found</dt>
+    <dd>A ref does not resolve in the repository. Nothing is written.</dd>
+
+    <dt>Catalog changed</dt>
+    <dd>Another writer published between the read and the write. Run the command again, and run only one catalog writer at a time.</dd>
+</dl>
+
+Every failure exits with a nonzero status.
+
+## Related
+
+- [`atmos artifacts catalog remove`](/cli/commands/artifacts/catalog-remove)
+- [`atmos artifacts catalog sync`](/cli/commands/artifacts/catalog-sync)
+- [Artifacts Configuration](/cli/configuration/artifacts)

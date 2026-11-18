@@ -94,11 +94,11 @@ func (p *provider) Authenticate(ctx context.Context) (types.ICredentials, error)
 	}
 	var result types.ICredentials
 	err = p.definition.invoke(ctx, p.name, p.realm, p.sessionSettings(), func(call *invocation) error {
-		stream, err := call.handle.Provider.Authenticate(ctx, &pluginv1.ProviderRequest{Invocation: call.request, Name: p.name, Kind: p.Kind(), Spec: spec, Realm: p.realm})
+		stream, err := call.handle.Provider.Authenticate(call.ctx, &pluginv1.ProviderRequest{Invocation: call.request, Name: p.name, Kind: p.Kind(), Spec: spec, Realm: p.realm})
 		if err != nil {
 			return err
 		}
-		envelope, err := receiveCredentials(stream)
+		envelope, err := receiveCredentials(stream, interactionHandler(call.ctx, call.request.GetInteractive(), presentDeviceCode))
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ func (p *provider) Logout(ctx context.Context) error {
 		return err
 	}
 	return p.definition.logout(ctx, p.name, p.realm, p.sessionSettings(), func(call *invocation) error {
-		_, err := call.handle.Provider.Logout(ctx, &pluginv1.ProviderRequest{Invocation: call.request, Name: p.name, Kind: p.Kind(), Spec: spec, Realm: p.realm})
+		_, err := call.handle.Provider.Logout(call.ctx, &pluginv1.ProviderRequest{Invocation: call.request, Name: p.name, Kind: p.Kind(), Spec: spec, Realm: p.realm})
 		return err
 	})
 }

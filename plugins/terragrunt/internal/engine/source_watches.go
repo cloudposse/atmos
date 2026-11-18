@@ -2,8 +2,10 @@ package engine
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -33,8 +35,8 @@ type fileScan struct {
 	ctx  *hcl.EvalContext
 }
 
-// queuedFile is an HCL file to inspect. Files the unit evaluated must exist;
-// files discovered through read_terragrunt_config are best effort.
+// queuedFile is an HCL file to inspect. Files recorded by unit evaluation keep
+// its scope; files reached through configuration reads establish their own scope.
 type queuedFile struct {
 	path     string
 	required bool
@@ -52,6 +54,7 @@ type watchTracker struct {
 	folders map[string]struct{}
 	visited map[[2]string]struct{}
 	queue   []queuedFile
+	err     error
 }
 
 // trackInputSources inspects syntax, not values. Partial discovery intentionally
@@ -135,7 +138,10 @@ func (t *watchTracker) scan() error {
 func (t *watchTracker) scanFile(next queuedFile) error {
 	contents, err := afero.ReadFile(t.fs, next.path)
 	if err != nil {
-		return optionalFailure(next, fmt.Errorf("track configuration sources %s: %w", next.path, err))
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("track configuration sources %s: %w", next.path, err)
 	}
 	file, diagnostics := hclsyntax.ParseConfig(contents, next.path, hcl.InitialPos)
 	if diagnostics.HasErrors() {
@@ -160,16 +166,7 @@ func (t *watchTracker) scanFile(next queuedFile) error {
 	for _, block := range body.Blocks {
 		t.scanBlock(scan, block, next.required)
 	}
-	return nil
-}
-
-// optionalFailure ignores problems in files that were only discovered through
-// read_terragrunt_config; the unit's own files must be inspectable.
-func optionalFailure(next queuedFile, err error) error {
-	if !next.required {
-		return nil
-	}
-	return err
+	return t.err
 }
 
 func (t *watchTracker) scanBlock(scan fileScan, block *hclsyntax.Block, required bool) {
@@ -251,22 +248,26 @@ func (t *watchTracker) trackFile(scan fileScan, call *hclsyntax.FunctionCallExpr
 // reads the default configuration inside it, so the directory is watched, which also covers a
 // configuration created later, and the default configuration is inspected when it exists.
 func (t *watchTracker) followConfigurationDirectory(path string) bool {
-	if info, err := t.fs.Stat(path); err != nil || !info.IsDir() {
+	info, err := t.fs.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		// A currently absent config target may later be created as a directory.
+		t.add(t.folders, path)
+		return false
+	}
+	if err != nil {
+		t.err = err
+		return true
+	}
+	if !info.IsDir() {
 		return false
 	}
 	t.add(t.folders, path)
-	// Match Terragrunt's lookup order, including JSON precedence when both exist.
-	for _, name := range config.DefaultTerragruntConfigPaths {
-		selected := filepath.Join(path, name)
-		if exists, _ := afero.Exists(t.fs, selected); !exists {
-			continue
-		}
-		if strings.HasSuffix(selected, ".json") {
-			t.fallback()
-		} else {
-			t.queue = append(t.queue, queuedFile{path: selected})
-		}
-		break
+	selected := config.GetDefaultConfigPath(t.fs, path)
+	t.add(t.files, selected)
+	if strings.HasSuffix(selected, ".json") {
+		t.fallback()
+	} else {
+		t.queue = append(t.queue, queuedFile{path: selected})
 	}
 	return true
 }

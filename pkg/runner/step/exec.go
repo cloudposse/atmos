@@ -57,6 +57,8 @@ func (h *ExecHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 		return nil, err
 	}
 
+	// A successful replacement never returns, so write the artifact report of the earlier steps first.
+	vars.FlushArtifactReport()
 	if err := process.ReplaceShellSession(&process.ExecSpec{
 		Command: command,
 		Name:    step.Name,

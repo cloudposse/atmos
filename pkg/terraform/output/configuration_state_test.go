@@ -244,6 +244,8 @@ func TestPluginOutputSkipInitReadsTheInitializedUnit(t *testing.T) {
 			config.Components.Terraform.Init.Mode = policy.mode
 			unit := t.TempDir()
 			require.NoError(t, os.Mkdir(filepath.Join(unit, ".terraform"), 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(unit, ".terraform", "environment"), []byte("prod"), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(unit, ".terraform", "terraform.tfstate"), []byte(`{"backend":{"type":"local","config":{}}}`), 0o600))
 			config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
 				return &schema.ComponentConfigurationState{BackendType: "local", Workspace: "prod", WorkingDirectory: unit}, nil
 			})
@@ -327,8 +329,10 @@ func TestConfigurationInitializedOutputConfigUsesEffectiveDataDir(t *testing.T) 
 			t.Setenv("TF_DATA_DIR", test.inherited)
 			unit := t.TempDir()
 			require.NoError(t, os.Mkdir(filepath.Join(unit, test.dataDir), 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(unit, test.dataDir, "environment"), []byte("prod"), 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(unit, test.dataDir, "terraform.tfstate"), []byte(`{"backend":{"type":"local","config":{}}}`), 0o600))
 			config := &ComponentConfig{BaseEnvironment: test.base, Env: test.env}
-			err := configurationInitializedOutputConfig(config, &schema.ComponentConfigurationState{Workspace: "prod", WorkingDirectory: unit}, "network", "live")
+			err := configurationInitializedOutputConfig(config, &schema.ComponentConfigurationState{BackendType: "local", Workspace: "prod", WorkingDirectory: unit}, "network", "live")
 			if !test.ok {
 				require.ErrorIs(t, err, errUtils.ErrTerraformOutputFailed)
 				return
@@ -349,6 +353,8 @@ func TestPluginOutputDoesNotResolveTheExecutionWorkdir(t *testing.T) {
 	config := validAtmosConfig(t)
 	unit := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(unit, ".terraform"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(unit, ".terraform", "environment"), []byte("prod"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(unit, ".terraform", "terraform.tfstate"), []byte(`{"backend":{"type":"local","config":{}}}`), 0o600))
 	config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
 		return &schema.ComponentConfigurationState{BackendType: "local", Workspace: "prod", WorkingDirectory: unit}, nil
 	})
@@ -471,4 +477,54 @@ func TestPluginOutputFailsBeforeRunnerWhenScratchDirectoryCannotBeCreated(t *tes
 	entries, readErr := os.ReadDir(stateRoot)
 	require.NoError(t, readErr)
 	require.Empty(t, entries, "the plugin's state directory is never used as scratch space")
+}
+
+func TestOutputResolvesRetainedAtmosWorkdir(t *testing.T) {
+	config := validAtmosConfig(t)
+	upstream, retained := t.TempDir(), t.TempDir()
+	sections := validSections()
+	sections["provision"] = map[string]any{"workdir": map[string]any{"enabled": true}}
+	sections["metadata"] = map[string]any{"working_directory": retained}
+	state := &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{"path": "relative.tfstate"}, WorkingDirectory: upstream}
+	path, err := retainedConfigurationOutputPath(config, sections, state, "network", "live")
+	require.NoError(t, err)
+	require.Equal(t, retained, path)
+	require.Equal(t, upstream, state.WorkingDirectory)
+	require.Equal(t, "relative.tfstate", state.Backend["path"])
+	require.NotContains(t, sections, "_workdir_path")
+}
+
+func TestInitializedOutputRejectsDifferentWorkspace(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(root, ".terraform"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".terraform", "terraform.tfstate"), []byte(`{"backend":{"type":"local","config":{}}}`), 0o600))
+	state := &schema.ComponentConfigurationState{BackendType: "local", Workspace: "prod", WorkingDirectory: root}
+	config := &ComponentConfig{}
+	err := configurationInitializedOutputConfig(config, state, "network", "live")
+	require.ErrorIs(t, err, errUtils.ErrTerraformOutputFailed)
+	require.Contains(t, err.Error(), "initialized workspace \"default\"")
+	require.NoFileExists(t, filepath.Join(root, ".terraform", "environment"))
+}
+
+func TestInitializedOutputVerifiesBackendIdentity(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(root, ".terraform"), 0o700))
+	metadata := filepath.Join(root, ".terraform", "terraform.tfstate")
+	original := []byte(`{"backend":{"type":"local","config":{"path":"old.tfstate","workspace_dir":null}}}`)
+	require.NoError(t, os.WriteFile(metadata, original, 0o600))
+	for _, path := range []string{"old.tfstate", "new.tfstate"} {
+		state := &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{"path": path}, WorkingDirectory: root}
+		err := configurationInitializedOutputConfig(&ComponentConfig{}, state, "network", "live")
+		if path == "old.tfstate" {
+			require.NoError(t, err)
+		} else {
+			require.ErrorIs(t, err, errUtils.ErrTerraformOutputFailed)
+		}
+	}
+	after, err := os.ReadFile(metadata)
+	require.NoError(t, err)
+	require.Equal(t, original, after)
+	require.NoError(t, os.Remove(metadata))
+	err = configurationInitializedOutputConfig(&ComponentConfig{}, &schema.ComponentConfigurationState{BackendType: "local", WorkingDirectory: root}, "network", "live")
+	require.ErrorIs(t, err, errUtils.ErrTerraformOutputFailed)
 }

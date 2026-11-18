@@ -1,0 +1,249 @@
+package local
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/layout"
+	"github.com/cloudposse/atmos/pkg/filelock"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// Internal lock resources. They start with a NUL byte, which no artifact reference can contain,
+// so they can never collide with a caller's reference lock.
+const (
+	claimsResource   = "\x00claims"
+	locationResource = "\x00location\x00"
+)
+
+// heldLocks tracks the locks this process holds, keyed by lock file path. The OS lock excludes
+// other processes; this table supplies the ownership-token check on release and diagnostics.
+var (
+	heldMu    sync.Mutex
+	heldLocks = map[string]*fileLock{}
+)
+
+// fileLock is an OS file lock held until Release. It implements [artifact.LockHandle].
+type fileLock struct {
+	path        string
+	resource    string
+	owner       string
+	operationID string
+	token       string
+	release     chan struct{}
+	done        chan error
+	released    bool
+}
+
+var _ artifact.LockHandle = (*fileLock)(nil)
+
+// Lock implements [artifact.LockProvider] with an OS-backed file lock of host scope. It waits for
+// a competing owner until ctx ends; a canceled wait leaks no ownership. Leases are rejected
+// because a paused writer could not be fenced, and repository scope is rejected because a local
+// file lock cannot exclude writers on other hosts.
+func (r *Repository) Lock(ctx context.Context, request artifact.LockRequest) (artifact.LockHandle, error) {
+	defer perf.Track(nil, "local.Repository.Lock")()
+
+	if request.Lease != 0 {
+		return nil, artifact.NewUnsupportedCapability(r.alias, "lock", "lease", "local file locks do not expire, so a lease cannot be fenced")
+	}
+	if request.Required != "" && !artifact.LockScopeHost.Satisfies(request.Required) {
+		return nil, artifact.NewUnsupportedCapability(r.alias, "lock", "lock/"+string(request.Required),
+			"local repositories provide host-scope locks only; use an S3 repository or a lock delegate for repository scope")
+	}
+	if request.Resource == "" {
+		return nil, fmt.Errorf("%w: a lock needs a resource", errUtils.ErrArtifactRefInvalid)
+	}
+	owner := request.Owner
+	if owner == "" {
+		owner = r.settings.owner
+	}
+	return r.acquire(ctx, request.Resource, owner, request.OperationID)
+}
+
+// LockNamespace implements [artifact.LockNamespacer]: the repository root identifies the collection.
+func (r *Repository) LockNamespace() string {
+	defer perf.Track(nil, "local.Repository.LockNamespace")()
+
+	root := r.root
+	if resolved, err := filepath.EvalSymlinks(root); err == nil {
+		root = resolved
+	}
+	return filepath.ToSlash(root)
+}
+
+// coversReference reports whether lock protects reference (name:version) in this repository. A
+// direct lock names the reference itself. A lock taken through locking.repository delegation names
+// it scoped by this repository's collection namespace, or by its alias when it reports none, as
+// built by the service when it resolves the delegate. A lock for any other reference never matches.
+func (r *Repository) coversReference(lock *fileLock, reference string) bool {
+	resource := lock.Resource()
+	// The namespace is the symlink-resolved root once it exists and the literal root before, so a
+	// handle taken before the first publish names the literal form.
+	return resource == reference ||
+		resource == r.LockNamespace()+"/"+reference ||
+		resource == filepath.ToSlash(r.root)+"/"+reference ||
+		resource == r.alias+"/"+reference
+}
+
+// holdsTargetLock reports whether lock already holds the physical lock file this repository uses
+// for reference. A matching namespace is not enough: a delegate repository with another root
+// acquires its lock file under its own root, so direct writers of this repository would not be
+// excluded by it. Only a handle on the target's own lock file can stand in for acquiring it.
+//
+// Path equality is the fast path. Two spellings of one root (a symlink alias) name the same
+// physical lock file, so a mismatch falls back to comparing file identity: acquiring a lock the
+// caller already holds through another alias would otherwise block until the context ends. A lock
+// file that cannot be inspected is treated as a different file, so the handle is never reused on a
+// guess.
+func (r *Repository) holdsTargetLock(lock *fileLock, reference string) bool {
+	target := r.referenceLockPath(reference)
+	if lock.path == target {
+		return true
+	}
+	held, err := os.Stat(lock.path)
+	if err != nil {
+		return false
+	}
+	want, err := os.Stat(target)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(held, want)
+}
+
+// lockReference returns the lock a mutation of reference must hold. A caller handle that holds this
+// repository's own lock file is reused (nil is returned: nothing to release). A handle that covers
+// the reference but holds another repository's file, and a missing handle, make the repository
+// acquire its own lock, which the caller releases. A local handle for another reference is a conflict.
+func (r *Repository) lockReference(ctx context.Context, reference string, lock artifact.LockHandle) (*fileLock, error) {
+	if localLock, ok := lock.(*fileLock); ok {
+		if !r.coversReference(localLock, reference) {
+			return nil, fmt.Errorf("%w: supplied lock does not cover reference %s", errUtils.ErrArtifactConflict, reference)
+		}
+		if r.holdsTargetLock(localLock, reference) {
+			return nil, nil
+		}
+	}
+	return r.acquire(ctx, reference, r.settings.owner, "")
+}
+
+// referenceLockPath returns the lock file this repository uses for reference (name:version).
+func (r *Repository) referenceLockPath(reference string) string {
+	return filepath.Join(r.root, native(layout.LockPath(reference)))
+}
+
+// acquire takes the OS lock for resource.
+func (r *Repository) acquire(ctx context.Context, resource, owner, operationID string) (*fileLock, error) {
+	lockPath := r.referenceLockPath(resource)
+	if err := os.MkdirAll(filepath.Dir(lockPath), dirMode); err != nil {
+		return nil, fmt.Errorf("%w: create lock directory for %q: %w", errUtils.ErrArtifactConfigInvalid, resource, err)
+	}
+	held := make(chan struct{})
+	lock := &fileLock{
+		path: lockPath, resource: resource, owner: owner, operationID: operationID,
+		token: uuid.NewString(), release: make(chan struct{}), done: make(chan error, 1),
+	}
+	go func() {
+		lock.done <- filelock.New(lockPath).WithExclusive(ctx, func() error {
+			close(held)
+			<-lock.release
+			return nil
+		})
+	}()
+	select {
+	case <-held:
+		heldMu.Lock()
+		heldLocks[lockPath] = lock
+		heldMu.Unlock()
+		return lock, nil
+	case err := <-lock.done:
+		return nil, fmt.Errorf("waiting for lock %q in repository %q: %w", resource, r.alias, err)
+	}
+}
+
+// Resource implements [artifact.LockHandle].
+func (l *fileLock) Resource() string {
+	defer perf.Track(nil, "local.fileLock.Resource")()
+
+	return l.resource
+}
+
+// Owner implements [artifact.LockHandle].
+func (l *fileLock) Owner() string {
+	defer perf.Track(nil, "local.fileLock.Owner")()
+
+	return l.owner
+}
+
+// Scope implements [artifact.LockHandle]; local locks are host scope.
+func (l *fileLock) Scope() artifact.LockScope {
+	defer perf.Track(nil, "local.fileLock.Scope")()
+
+	return artifact.LockScopeHost
+}
+
+// Token implements [artifact.LockHandle].
+func (l *fileLock) Token() string {
+	defer perf.Track(nil, "local.fileLock.Token")()
+
+	return l.token
+}
+
+// ExpiresAt implements [artifact.LockHandle]; local locks never expire.
+func (l *fileLock) ExpiresAt() (time.Time, bool) {
+	defer perf.Track(nil, "local.fileLock.ExpiresAt")()
+
+	return time.Time{}, false
+}
+
+// Renew implements [artifact.LockHandle]; local locks have no leases.
+func (l *fileLock) Renew(context.Context, time.Duration) error {
+	defer perf.Track(nil, "local.fileLock.Renew")()
+
+	return artifact.NewUnsupportedCapability("", "lock", "lease", "local file locks do not expire")
+}
+
+// Release implements [artifact.LockHandle]. It checks the ownership token against the lock this
+// process holds, so a stale or foreign handle can never release another operation's lock. The OS
+// also releases the lock if its owner exits.
+func (l *fileLock) Release(context.Context) error {
+	defer perf.Track(nil, "local.fileLock.Release")()
+
+	heldMu.Lock()
+	current, owned := heldLocks[l.path]
+	if !owned || current != l || l.released || current.token != l.token {
+		heldMu.Unlock()
+		return fmt.Errorf("%w: lock %q is not held by token %s", errUtils.ErrArtifactConflict, l.resource, l.token)
+	}
+	delete(heldLocks, l.path)
+	l.released = true
+	heldMu.Unlock()
+	close(l.release)
+	if err := <-l.done; err != nil {
+		return fmt.Errorf("release lock %q: %w", l.resource, err)
+	}
+	return nil
+}
+
+// releaseQuietly releases a lock acquired internally and returns the first error alongside err.
+func releaseAll(ctx context.Context, locks ...*fileLock) error {
+	var first error
+	for index := len(locks) - 1; index >= 0; index-- {
+		if locks[index] == nil {
+			continue
+		}
+		if err := locks[index].Release(context.WithoutCancel(ctx)); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}

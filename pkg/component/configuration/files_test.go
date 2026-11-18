@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -402,4 +403,83 @@ func TestWriteFilesRollsBackWhenTheManifestCannotBeWritten(t *testing.T) {
 			require.NoFileExists(t, path, "removing the generate block removes the file the host owns")
 		})
 	}
+}
+
+func TestWriteFilesRejectsRuntimeAliases(t *testing.T) {
+	for _, directoryAlias := range []bool{false, true} {
+		t.Run(fmt.Sprintf("directory=%v", directoryAlias), func(t *testing.T) {
+			root := t.TempDir()
+			target := "terraform.tfstate"
+			alias := "alias.tf"
+			require.NoError(t, os.WriteFile(filepath.Join(root, target), []byte("state"), 0o600))
+			if directoryAlias {
+				require.NoError(t, os.Mkdir(filepath.Join(root, ".terraform"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(root, ".terraform", "environment"), []byte("stage"), 0o600))
+				target, alias = ".terraform", "alias"
+			}
+			if err := os.Symlink(target, filepath.Join(root, alias)); err != nil {
+				t.Skipf("symlink unavailable: %v", err)
+			}
+			path := alias
+			if directoryAlias {
+				path = filepath.Join(alias, "environment")
+			}
+			file := schema.ComponentConfigurationFile{Path: path, Content: []byte("destroyed"), IfExists: "overwrite"}
+			err := WriteFiles(root, []schema.ComponentConfigurationFile{{Path: "first.tf", IfExists: "overwrite"}, file})
+			require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+			require.NoFileExists(t, filepath.Join(root, "first.tf"), "preflight covers all files before writing")
+			expected := "state"
+			if directoryAlias {
+				target = filepath.Join(target, "environment")
+				expected = "stage"
+			}
+			content, err := os.ReadFile(filepath.Join(root, target))
+			require.NoError(t, err)
+			require.Equal(t, expected, string(content))
+		})
+	}
+}
+
+func TestWriteFileRejectsAliasIntroducedAfterPreflight(t *testing.T) {
+	directory := t.TempDir()
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+	file := schema.ComponentConfigurationFile{Path: "generated.tf", Content: []byte("destroyed"), IfExists: "overwrite"}
+	require.NoError(t, validateFile(file))
+	require.NoError(t, validateDestination(root, file.Path))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "terraform.tfstate"), []byte("state"), 0o600))
+	if err := os.Symlink("terraform.tfstate", filepath.Join(directory, file.Path)); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	_, err = writeFile(root, file, "")
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	content, err := root.ReadFile("terraform.tfstate")
+	require.NoError(t, err)
+	require.Equal(t, "state", string(content))
+}
+
+func TestUnchangedGeneratedFilePinsPermissionUpdates(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows retains ACLs")
+	}
+	root, err := os.OpenRoot(t.TempDir())
+	require.NoError(t, err)
+	defer root.Close()
+	require.NoError(t, root.WriteFile("unchanged.tf", []byte("reviewed"), 0o400))
+	file := schema.ComponentConfigurationFile{Path: "unchanged.tf", Content: []byte("reviewed"), IfExists: "overwrite", Sensitive: true}
+	digest, err := writeFile(root, file, contentDigest(file.Content))
+	require.NoError(t, err)
+	require.Equal(t, contentDigest(file.Content), digest)
+	contents, err := root.ReadFile(file.Path)
+	require.NoError(t, err)
+	require.Equal(t, file.Content, contents)
+	info, err := root.Stat(file.Path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	if err := os.Symlink(file.Path, filepath.Join(root.Name(), "alias.tf")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	file.Path = "alias.tf"
+	require.ErrorIs(t, ensureMode(root, file), errUtils.ErrPluginInvalidConfig)
 }

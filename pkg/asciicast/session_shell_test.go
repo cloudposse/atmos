@@ -340,3 +340,49 @@ func TestFinishSessionWithDiagnosticsPreservesCauseAndOutput(t *testing.T) {
 	assert.Contains(t, err.Error(), "bad shell option")
 	assert.NotContains(t, err.Error(), "\x1b[")
 }
+
+// A caller's deadline covers startup and completion, including startup with no output.
+// Seven seconds exceeds the old five-second teardown timer without exhausting that budget.
+func TestRunSessionSlowStartupHonorsCallerDeadline(t *testing.T) {
+	require.NoError(t, iolib.Initialize())
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	for _, failing := range []bool{false, true} {
+		name := "nil options complete normally"
+		if failing {
+			name = "startup failure preserves exit status and output"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("_ATMOS_ASCIICAST_STARTUP_DELAY", "7s")
+			ctx, cancel := context.WithTimeout(t.Context(), 40*time.Second)
+			defer cancel()
+			var opts *SessionOptions
+			if failing {
+				t.Setenv(asciicastExecHelperEnv, "fail")
+				opts = &SessionOptions{Shell: exe, Actions: []SessionAction{{Type: "write", Text: "echo hi", Rate: "0"}}}
+			} else {
+				t.Setenv("SHELL", exe)
+				t.Setenv(asciicastSessionHelperEnv, "1")
+			}
+			err := RunSession(ctx, opts)
+			require.NoError(t, ctx.Err())
+			if failing {
+				require.ErrorIs(t, err, errUtils.ErrCastSessionShellExited)
+				assert.Contains(t, err.Error(), "exit status 3")
+				assert.Contains(t, err.Error(), "about to fail")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestRunSessionSlowStartupIsCancelled(t *testing.T) {
+	require.NoError(t, iolib.Initialize())
+	shell := sessionHelperShell(t)
+	t.Setenv("_ATMOS_ASCIICAST_STARTUP_DELAY", "7s")
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	err := RunSession(ctx, &SessionOptions{Shell: shell})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}

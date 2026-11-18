@@ -579,3 +579,86 @@ func TestDiscoverySkipsStackOwnedSymlinkedConfig(t *testing.T) {
 	require.Equal(t, []string{"live/app"}, inventoryNames(t, result))
 	require.Equal(t, filepath.Join(root, "live", "terragrunt.stack.hcl"), result.Inventory[0].GenerationRoot)
 }
+
+func TestNamedWorkspaceOrderingOnlyDependencies(t *testing.T) {
+	for _, tc := range []struct {
+		name, attributes string
+		rejected         bool
+	}{
+		{"outputs", "", true},
+		{"explicit outputs", "skip_outputs = false", true},
+		{"ordering only", "skip_outputs = true", false},
+		{"disabled", "enabled = false", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := nativeUnit(t, "")
+			content, err := os.ReadFile(req.Path)
+			require.NoError(t, err)
+			dep := filepath.Join(req.BasePath, "network")
+			require.NoError(t, os.MkdirAll(dep, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(dep, "terragrunt.hcl"), content, 0o644))
+			configuration := string(content) + "\ndependency \"network\" {\n config_path = \"./network\"\n" + tc.attributes + "\n}\n"
+			require.NoError(t, os.WriteFile(req.Path, []byte(configuration), 0o644))
+			req.Environment["TF_WORKSPACE"] = "stage"
+			req.Phase = "inventory"
+			result, err := Resolve(t.Context(), req)
+			require.NoError(t, err)
+			if tc.rejected {
+				require.Len(t, result.Failures, 1)
+				require.Equal(t, model.CodeWorkspace, asProblem(t, result.Failures[0].Err).Code)
+				require.Equal(t, []string{"default/network"}, inventoryNames(t, result), "healthy units remain usable")
+				return
+			}
+			require.Empty(t, result.Failures)
+			require.Len(t, result.Inventory, 2)
+			require.Equal(t, []string{"default/network", "default/root"}, inventoryNames(t, result))
+		})
+	}
+}
+
+func TestDiscoverySkipsMaterializedNestedStacks(t *testing.T) {
+	for _, child := range []string{"a-child", "z-child"} {
+		t.Run(child, func(t *testing.T) {
+			root := stackProject(t, map[string]string{
+				"live/terragrunt.stack.hcl": `stack "nested" {
+ source = "../catalog/stacks/nested"
+ path = "` + child + `"
+ no_dot_terragrunt_stack = true
+ values = { project_root = dirname(get_terragrunt_dir()) }
+}`,
+				"catalog/stacks/nested/terragrunt.stack.hcl": `unit "app" {
+ source = "${values.project_root}/catalog/units/app"
+ path = "app"
+ no_dot_terragrunt_stack = true
+}`,
+			})
+			request := model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**"}, Environment: map[string]string{}}
+			first, err := Resolve(t.Context(), request)
+			require.NoError(t, err)
+			require.Equal(t, []string{"live/" + child + "/app"}, inventoryNames(t, first))
+			generation := request
+			generation.Phase, generation.Command = "discover", "generate"
+			generation.Path = filepath.Join(root, "live", stackFile)
+			_, err = Resolve(t.Context(), generation)
+			require.NoError(t, err)
+			require.FileExists(t, filepath.Join(root, "live", child, stackFile))
+			second, err := Resolve(t.Context(), request)
+			require.NoError(t, err)
+			require.Equal(t, inventoryNames(t, first), inventoryNames(t, second))
+			require.Equal(t, generation.Path, second.Inventory[0].GenerationRoot)
+		})
+	}
+}
+
+func TestDiscoveryParsePreservesCallerRequest(t *testing.T) {
+	request := nativeUnit(t, "")
+	request.Phase = "inventory"
+	original := request
+	discovery := projectDiscovery{
+		ctx: t.Context(), request: &request, root: request.BasePath, evaluate: resolve,
+		overlay: afero.NewCopyOnWriteFs(afero.NewReadOnlyFs(afero.NewOsFs()), afero.NewMemMapFs()),
+	}
+	_, err := discovery.parse(filepath.Join(request.BasePath, "missing", stackFile), true)
+	require.Error(t, err)
+	require.Equal(t, original, request)
+}

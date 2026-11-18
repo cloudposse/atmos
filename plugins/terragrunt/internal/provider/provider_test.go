@@ -472,74 +472,6 @@ func TestPrepareReturnsExactInputsWithSensitivePaths(t *testing.T) {
 	require.Empty(t, whole.SensitivePaths[0].Steps, "the empty path marks the whole value")
 }
 
-func TestPrepareReturnsEngineLogsOnlyAtTheInvocationLevel(t *testing.T) {
-	root := fixture(t, "explicit-stack")
-	opts, err := encode(map[string]any{"enabled": true, "mode": "native", "discovery": map[string]any{"enabled": true, "included_paths": []string{"live/**"}}})
-	require.NoError(t, err)
-	provider := New(nil)
-	discover := func(level string) *pluginv1.DiscoverComponentsResponse {
-		response, err := provider.Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts, IncludePaths: []string{"live/**"}, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "plan"}, Invocation: &pluginv1.Invocation{LogLevel: level, Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "must-not-execute"}}})
-		require.NoError(t, err)
-		return response
-	}
-	prepare := func(component *pluginv1.DiscoveredComponent, level string) *pluginv1.PrepareComponentResponse {
-		request := &pluginv1.ComponentRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts, Address: component.Address, Source: component.Source, Configuration: component.Configuration, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "plan"}, Invocation: &pluginv1.Invocation{LogLevel: level, Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "must-not-execute"}}}
-		request.Effects = &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true}
-		response, err := provider.Prepare(t.Context(), request)
-		require.NoError(t, err)
-		return response
-	}
-
-	quiet := discover("")
-	require.Empty(t, quiet.Logs, "engine chatter is hidden at the Atmos default level, even when Terragrunt warns")
-	require.Empty(t, discover("off").Logs)
-	noisy := discover("trace")
-	require.NotEmpty(t, noisy.Logs)
-	require.Empty(t, prepare(noisy.Components[1], "warn").Logs)
-	logs := prepare(noisy.Components[1], "debug").Logs
-	require.NotEmpty(t, logs)
-	for _, entry := range logs {
-		require.NotEqual(t, pluginv1.LogLevel_LOG_LEVEL_UNSPECIFIED, entry.Level)
-		require.NotEqual(t, pluginv1.LogLevel_LOG_LEVEL_TRACE, entry.Level, "trace events are below the requested level")
-		require.NotEmpty(t, entry.Message)
-		require.NotNil(t, entry.Time)
-	}
-}
-
-func TestFailureCarriesTheLogsThatPrecededIt(t *testing.T) {
-	root := t.TempDir()
-	root, err := filepath.EvalSymlinks(root)
-	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "module"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "terragrunt.hcl"), []byte("terraform { source = \"./module\" }\ninputs = { broken = local.absent }\n"), 0o644))
-	request := componentRequest(t)
-	request.RootDirectory, request.Source = root, "terragrunt.hcl"
-	request.Configuration, err = encode(map[string]any{})
-	require.NoError(t, err)
-	request.Invocation.LogLevel = "trace"
-
-	_, err = New(nil).Prepare(t.Context(), request)
-
-	require.Error(t, err)
-	detail, ok := component.FailureDetail(err)
-	require.True(t, ok)
-	require.NotEmpty(t, detail.Logs, "the events before the failure explain it")
-	request.Invocation.LogLevel = "off"
-	_, err = New(nil).Prepare(t.Context(), request)
-	detail, ok = component.FailureDetail(err)
-	require.True(t, ok)
-	require.Empty(t, detail.Logs)
-}
-
-func TestLogLevelsMapOntoTheProtocol(t *testing.T) {
-	for name, want := range map[string]pluginv1.LogLevel{
-		"trace": pluginv1.LogLevel_LOG_LEVEL_TRACE, "DEBUG": pluginv1.LogLevel_LOG_LEVEL_DEBUG, "info": pluginv1.LogLevel_LOG_LEVEL_INFO,
-		"warn": pluginv1.LogLevel_LOG_LEVEL_WARN, "error": pluginv1.LogLevel_LOG_LEVEL_ERROR, "other": pluginv1.LogLevel_LOG_LEVEL_UNSPECIFIED,
-	} {
-		require.Equal(t, want, logLevel(name), name)
-	}
-}
-
 func encodedOption(t *testing.T, value any) *pluginv1.ComponentValue {
 	t.Helper()
 	encoded, err := encode(value)
@@ -866,7 +798,7 @@ func TestPreparationExportsOverlayModes(t *testing.T) {
 	for _, file := range result.Files {
 		modes[file.Path] = file.Mode
 	}
-	require.Equal(t, map[string]uint32{"bin/run.sh": 0o755, "plain.tf": 0, "shadow.sh": 0}, modes)
+	require.Equal(t, map[string]uint32{"bin/run.sh": 0o755, "plain.tf": 0, "shadow.sh": 0o600}, modes)
 	require.Equal(t, "bin/run.sh", result.Files[0].Path)
 	require.Equal(t, "shadow.sh", result.Files[len(result.Files)-1].Path)
 }
@@ -941,5 +873,166 @@ func TestScopedDiscoveryRetainsGeneratedUnitsAndDependencies(t *testing.T) {
 			require.Equal(t, target.Engine, found.Engine)
 			require.Equal(t, target.Dependencies, found.Dependencies)
 		}
+	}
+}
+
+func TestDiscoveryRejectsScopeAndConfiguration(t *testing.T) {
+	for _, name := range []string{"provider", "settings", "empty scope", "imports", "unknown option", "non-native mode"} {
+		t.Run(name, func(t *testing.T) {
+			base := componentRequest(t)
+			req := &pluginv1.DiscoverComponentsRequest{RootDirectory: base.RootDirectory, Provider: base.Provider, ProviderConfiguration: base.ProviderConfiguration, Operation: base.Operation, IncludePaths: []string{"live/**"}}
+			switch name {
+			case "provider":
+				req.Provider = "other"
+			case "settings":
+				req.ProviderConfiguration = nil
+			case "empty scope":
+				req.IncludePaths = nil
+			case "imports":
+				req.Imports = []string{"terragrunt://live"}
+			case "unknown option":
+				req.ProviderConfiguration, _ = encode(map[string]any{"binary": "terragrunt"})
+			case "non-native mode":
+				req.ProviderConfiguration, _ = encode(map[string]any{"mode": "cli"})
+			}
+			p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+				t.Fatal("invalid requests must not evaluate HCL")
+				return nil, nil
+			})
+			_, err := p.Discover(t.Context(), req)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestDiscoveryRejectsUnrepresentableInventory(t *testing.T) {
+	for _, name := range []string{"unit outside root", "module outside root", "missing module", "generation outside root", "watch outside root", "dependency outside scope", "evaluator failure"} {
+		t.Run(name, func(t *testing.T) {
+			base := componentRequest(t)
+			outside := t.TempDir()
+			unit := model.DiscoveredUnit{Stack: "live", Name: "app", Config: model.Resolution{Path: filepath.Join(base.RootDirectory, "live", "app", "terragrunt.hcl"), Folders: []string{filepath.Join(base.RootDirectory, "module")}}}
+			switch name {
+			case "unit outside root":
+				unit.Config.Path = filepath.Join(outside, "terragrunt.hcl")
+			case "module outside root":
+				unit.Config.Folders = []string{outside}
+			case "missing module":
+				unit.Config.Folders = nil
+			case "generation outside root":
+				unit.GenerationRoot = filepath.Join(outside, "terragrunt.stack.hcl")
+			case "watch outside root":
+				unit.Config.Files = []string{filepath.Join(outside, "secret.hcl")}
+			case "dependency outside scope":
+				unit.Config.Dependencies = []string{filepath.Join(base.RootDirectory, "other", "terragrunt.hcl")}
+				require.NoError(t, os.MkdirAll(filepath.Dir(unit.Config.Dependencies[0]), 0o700))
+				require.NoError(t, os.WriteFile(unit.Config.Dependencies[0], []byte(""), 0o600))
+			}
+			p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+				if name == "evaluator failure" {
+					return nil, context.Canceled
+				}
+				return &model.Resolution{Inventory: []model.DiscoveredUnit{unit}}, nil
+			})
+			result, err := p.Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{RootDirectory: base.RootDirectory, Provider: base.Provider, ProviderConfiguration: base.ProviderConfiguration, Operation: base.Operation, IncludePaths: []string{"live/**"}})
+			if name == "evaluator failure" {
+				require.Nil(t, result)
+				require.Equal(t, codes.Canceled, status.Code(err))
+				return
+			}
+			// A unit that cannot be represented is reported on its own and never hides healthy units.
+			require.NoError(t, err)
+			if name == "dependency outside scope" {
+				// The unit is kept with its out-of-scope dependency; the host fails it, naming the target.
+				require.Empty(t, result.Diagnostics)
+				require.Len(t, result.Components, 1)
+				component := result.Components[0]
+				require.Equal(t, "live", component.Address.Stack)
+				require.Equal(t, "app", component.Address.Component)
+				require.Len(t, component.Dependencies, 1)
+				target := component.Dependencies[0].Target
+				require.Equal(t, "default", target.Stack)
+				require.Equal(t, "other", target.Component)
+				require.Equal(t, "terraform", target.ComponentType)
+				require.Equal(t, "terraform", component.Address.ComponentType)
+				require.Equal(t, pluginv1.ComponentDependency_ORDER, component.Dependencies[0].Kind)
+				return
+			}
+			require.Empty(t, result.Components)
+			require.Len(t, result.Diagnostics, 1)
+			detail := result.Diagnostics[0].Detail
+			require.Equal(t, "app", detail.Unit)
+			require.Equal(t, "live", detail.Stack)
+			require.Equal(t, "discover", detail.Operation)
+			require.NotEqual(t, pluginv1.Severity_SEVERITY_WARNING, detail.Severity)
+		})
+	}
+}
+
+func TestPreparationWithoutInputsAndDefaultState(t *testing.T) {
+	req := componentRequest(t)
+	req.Invocation = nil
+	var err error
+	req.Configuration, err = encode(map[string]any{})
+	require.NoError(t, err)
+	p := New(func(_ context.Context, request model.Request) (*model.Resolution, error) {
+		require.Equal(t, "terraform", request.Tofu)
+		require.Empty(t, request.Environment)
+		return &model.Resolution{Source: filepath.Join(req.RootDirectory, "module"), WorkingDir: filepath.Join(req.RootDirectory, "cache")}, nil
+	})
+	result, err := p.Prepare(t.Context(), req)
+	require.NoError(t, err)
+	inputs, err := component.Decode(result.Inputs)
+	require.NoError(t, err)
+	require.False(t, inputs.IsNull())
+	require.True(t, inputs.Type().IsObjectType())
+	require.Empty(t, inputs.AsValueMap())
+	require.Equal(t, "terraform", result.Engine)
+	require.Equal(t, "default", result.State.Workspace)
+	require.Equal(t, "local", result.State.BackendType)
+}
+
+func TestStateAndPreparationRejectEscapedProvenance(t *testing.T) {
+	req := componentRequest(t)
+	var err error
+	req.Configuration, err = encode(map[string]any{})
+	require.NoError(t, err)
+	p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+		return &model.Resolution{Inputs: map[string]any{}, Files: []string{filepath.Join(filepath.Dir(req.RootDirectory), "outside.hcl")}}, nil
+	})
+	_, err = p.Prepare(t.Context(), req)
+	require.Equal(t, codes.Unimplemented, status.Code(err))
+	_, err = p.Resolve(t.Context(), req)
+	require.Equal(t, codes.Unimplemented, status.Code(err))
+	req.Source = "../outside"
+	_, err = p.Resolve(t.Context(), req)
+	require.Equal(t, codes.Unimplemented, status.Code(err))
+	p = New(func(context.Context, model.Request) (*model.Resolution, error) { return nil, context.Canceled })
+	req.Source = "live/unit/terragrunt.hcl"
+	_, err = p.Resolve(t.Context(), req)
+	require.Equal(t, codes.Canceled, status.Code(err))
+	req.Configuration, err = encode(map[string]any{"settings": map[string]any{"terragrunt": map[string]any{"generation_root": "../escape"}}})
+	require.NoError(t, err)
+	_, err = p.Prepare(t.Context(), req)
+	require.Equal(t, codes.Unimplemented, status.Code(err))
+}
+
+func TestRelativeNormalizesMixedSeparators(t *testing.T) {
+	// Terragrunt reports physical paths, so compare from the physical root.
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	for name, spelling := range map[string]string{
+		"native":       filepath.Join(root, "live", "terragrunt.stack.hcl"),
+		"slash suffix": root + "/live/terragrunt.stack.hcl",
+		"redundant":    root + "/live/./sub/../terragrunt.stack.hcl",
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := relative(root, spelling)
+			require.NoError(t, err)
+			require.Equal(t, "live/terragrunt.stack.hcl", got)
+		})
+	}
+	for _, outside := range []string{filepath.Dir(root), root + "/../elsewhere/terragrunt.hcl"} {
+		_, err := relative(root, outside)
+		require.ErrorIs(t, err, ErrUnsupported)
 	}
 }

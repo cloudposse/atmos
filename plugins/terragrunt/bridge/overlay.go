@@ -130,6 +130,7 @@ func under(root, path string) bool {
 	return err == nil && filepath.IsLocal(rel)
 }
 
+//nolint:lintroller // Standalone bridge module cannot import the host performance tracker.
 func (r rebaseFs) Open(name string) (afero.File, error) {
 	target, err := r.resolve("open", name)
 	if err != nil {
@@ -138,6 +139,7 @@ func (r rebaseFs) Open(name string) (afero.File, error) {
 	return r.Fs.Open(target)
 }
 
+//nolint:lintroller // Standalone bridge module cannot import the host performance tracker.
 func (r rebaseFs) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
 	target, err := r.resolve("open", name)
 	if err != nil {
@@ -146,6 +148,7 @@ func (r rebaseFs) OpenFile(name string, flag int, perm os.FileMode) (afero.File,
 	return r.Fs.OpenFile(target, flag, perm)
 }
 
+//nolint:lintroller // Standalone bridge module cannot import the host performance tracker.
 func (r rebaseFs) Stat(name string) (os.FileInfo, error) {
 	target, err := r.resolve("stat", name)
 	if err != nil {
@@ -155,6 +158,8 @@ func (r rebaseFs) Stat(name string) (os.FileInfo, error) {
 }
 
 // LstatIfPossible lets the copy tell a symlink from the file it points to.
+//
+//nolint:lintroller // Standalone bridge module cannot import the host performance tracker.
 func (r rebaseFs) LstatIfPossible(name string) (os.FileInfo, bool, error) {
 	target, err := r.resolve("lstat", name)
 	if err != nil {
@@ -168,6 +173,8 @@ func (r rebaseFs) LstatIfPossible(name string) (os.FileInfo, bool, error) {
 }
 
 // ReadlinkIfPossible reports a link's target, which stays a real path.
+//
+//nolint:lintroller // Standalone bridge module cannot import the host performance tracker.
 func (r rebaseFs) ReadlinkIfPossible(name string) (string, error) {
 	target, err := r.resolve("readlink", name)
 	if err != nil {

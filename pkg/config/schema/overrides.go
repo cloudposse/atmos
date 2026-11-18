@@ -22,6 +22,7 @@ const (
 	// The name of the shared `$defs` entry that models an Atmos YAML function
 	// invocation in its authored (string) form.
 	yamlFunctionDef = "yamlFunction"
+	yamlFunctionRef = "#/$defs/" + yamlFunctionDef
 
 	// JSON Schema type names used when constructing and inspecting subschemas.
 	typeString  = "string"
@@ -131,6 +132,19 @@ func applyOverrides(r *jsonschema.Reflector, root *jsonschema.Schema) {
 	overrideComponentConfigurations(r, root)
 	applyPolymorphicOverrides(root)
 	allowYamlFunctions(root)
+	// Artifact trusted keys are decoded strictly and do not use the generic
+	// string-to-slice coercion that other configuration fields support.
+	if def := root.Definitions["ArtifactVerificationConfig"]; def != nil {
+		if keys, ok := def.Properties.Get("trusted_keys"); ok {
+			filtered := keys.AnyOf[:0]
+			for _, branch := range keys.AnyOf {
+				if branch.Type != typeString {
+					filtered = append(filtered, branch)
+				}
+			}
+			keys.AnyOf = filtered
+		}
+	}
 }
 
 // applyPolymorphicOverrides relaxes shapes that custom unmarshalers accept
@@ -196,6 +210,12 @@ func applyDefinitionPropertyAlternatives(root *jsonschema.Schema) {
 			// padding/margin: "1 2" string or bare integer shorthand.
 			"padding": {{Type: typeInteger}},
 			"margin":  {{Type: typeInteger}},
+			// query: the http step maps query-string parameters; the artifact step takes search text.
+			"query": {{Type: typeString}},
+		},
+		"WorkflowStep": {
+			// query: preserve the mapping shape for http and scalar search text for artifact steps.
+			"query": {{Type: typeString}, {Ref: yamlFunctionRef}},
 		},
 		"Command": {
 			// env accepts the map form ({KEY: value}) in addition to the list
@@ -378,7 +398,7 @@ func wrapped(s *jsonschema.Schema) *jsonschema.Schema {
 			s.AnyOf = append(s.AnyOf, &jsonschema.Schema{Type: typeNull})
 		}
 		if !anyOfAcceptsYamlFunction(s.AnyOf) {
-			s.AnyOf = append(s.AnyOf, &jsonschema.Schema{Ref: "#/$defs/" + yamlFunctionDef})
+			s.AnyOf = append(s.AnyOf, &jsonschema.Schema{Ref: yamlFunctionRef})
 		}
 		return s
 	case s.Ref == "" && s.Type == "" || s.Type == typeNull:
@@ -398,7 +418,7 @@ func isAnyOfWrapper(s *jsonschema.Schema) bool {
 func authoredAlternatives(s *jsonschema.Schema) []*jsonschema.Schema {
 	alternatives := []*jsonschema.Schema{{Type: typeNull}}
 	if rejectsYamlFunctionString(s) {
-		alternatives = append(alternatives, &jsonschema.Schema{Ref: "#/$defs/" + yamlFunctionDef})
+		alternatives = append(alternatives, &jsonschema.Schema{Ref: yamlFunctionRef})
 	}
 	// String-list fields also accept a scalar string: the loader's
 	// StringToSliceHookFunc coerces `import: "path"` into a one-element list.
@@ -443,7 +463,7 @@ func anyOfAcceptsYamlFunction(branches []*jsonschema.Schema) bool {
 		if branch == nil {
 			continue
 		}
-		if branch.Ref == "#/$defs/"+yamlFunctionDef {
+		if branch.Ref == yamlFunctionRef {
 			return true
 		}
 		if branch.Type == typeString && !rejectsYamlFunctionString(branch) {
@@ -458,7 +478,7 @@ func anyOfAcceptsYamlFunction(branches []*jsonschema.Schema) bool {
 // already accept it.
 func rejectsYamlFunctionString(s *jsonschema.Schema) bool {
 	if s.Ref != "" {
-		return s.Ref != "#/$defs/"+yamlFunctionDef
+		return s.Ref != yamlFunctionRef
 	}
 	switch s.Type {
 	case typeObject, typeArray, typeBoolean, typeInteger, typeNumber:

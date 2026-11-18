@@ -74,6 +74,19 @@ func scan(ctx context.Context, params *Params, run commandRunner) error {
 
 func runCommand(ctx context.Context, stdout, stderr io.Writer, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- fixed tool name, mage-target-controlled args.
+	// These optional CI experiment settings affect only the scanner child, not
+	// Mage, compilation, or other Go processes in the job.
+	cmd.Env = cmd.Environ()
+	if gc, ok := os.LookupEnv("ATMOS_VULNCHECK_GOGC"); ok && gc != "" {
+		cmd.Env = append(cmd.Env, "GOGC="+gc)
+	}
+	if trace, ok := os.LookupEnv("ATMOS_VULNCHECK_GCTRACE"); ok && trace == "1" {
+		debug, _ := os.LookupEnv("GODEBUG")
+		if debug != "" {
+			debug += ","
+		}
+		cmd.Env = append(cmd.Env, "GODEBUG="+debug+"gctrace=1")
+	}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	return cmd.Run()

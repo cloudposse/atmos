@@ -126,3 +126,5 @@ source, evaluated values, or evaluator error text. The host validates paths and
 categories and renders its own messages; unknown details retain the generic
 error. Cancellation, deadlines, and unsupported operations retain their existing
 status mappings. The contract assumes the enabled native plugin is trusted code.
+
+Backend-only reads project referenced input keys per configuration file. References through `read_terragrunt_config` must use a literal target path, directly or through a local alias of that call. A target that cannot be identified without evaluating HCL expressions is rejected instead of evaluating unrelated inputs or silently selecting a fallback directory. Generated file destinations must use ordinary files and directories; symlink aliases are rejected before writes.

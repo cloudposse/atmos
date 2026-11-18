@@ -93,6 +93,11 @@ func generatedBackend(ctx context.Context, logger log.Logger, cfg *config.Terrag
 	}
 	result.Generated[path] = string(content)
 	result.GeneratedPolicies[path] = generated.IfExists
+	// Preserving an existing backend could initialize a different state than the recorded identity.
+	// Reject collisions rather than guessing the identity of arbitrary existing backend HCL.
+	if generated.IfExists == "skip" {
+		result.GeneratedPolicies[path] = "error"
+	}
 	result.BackendGenerated = true
 	markSensitive(result, path)
 	return nil

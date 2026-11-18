@@ -388,6 +388,8 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	// this, incidental init/workspace-select output (e.g. a stray "No changes."
 	// lookalike) can poison the exec-metadata parser's extraction even though the
 	// real plan/apply's own output is correct (research.md Decision 32).
+	// Init may relocate the actual execution directory after preparation.
+	execCtx.componentPath, execCtx.workingDir = componentPath, componentPath
 	if err := validateEnvironmentPlanOutput(atmosConfig, info, execCtx, opts...); err != nil {
 		return err
 	}
@@ -539,7 +541,7 @@ func (e *Executor) resolvePreparedComponentPath(ctx context.Context, writers pro
 
 // writePreparedConfigurationFiles validates generated paths before writing a live preparation.
 func writePreparedConfigurationFiles(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, componentPath string) error {
-	if prepared == nil || info.DryRun {
+	if prepared == nil || info.DryRun || (usesConfigurationPlan(info) && restoresConfigurationPlan(info)) {
 		return nil
 	}
 	if err := rejectRuntimeArtifacts(prepared.Files); err != nil {

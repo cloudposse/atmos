@@ -16,6 +16,7 @@ type LoadOptions struct {
 	includeAtmosConfig *schema.AtmosConfiguration
 	includeFile        string
 	consumedPaths      *[]string
+	includeRoot        string
 }
 
 // LoadOption configures an optional Load behavior.
@@ -50,6 +51,12 @@ func WithIncludeResolution(atmosConfig *schema.AtmosConfiguration, file string, 
 	}
 }
 
+// WithIncludeRoot confines local includes to root when resolving a manifest.
+func WithIncludeRoot(root string) LoadOption {
+	defer perf.Track(nil, "manifest.WithIncludeRoot")()
+	return func(o *LoadOptions) { o.includeRoot = root }
+}
+
 // resolveIncludeTags resolves every tag scaffold.yaml supports (see
 // utils.ScaffoldTagPolicy) found anywhere in data's document tree,
 // returning the re-serialized, fully resolved YAML bytes. Walks via the
@@ -61,7 +68,7 @@ func WithIncludeResolution(atmosConfig *schema.AtmosConfiguration, file string, 
 // manifest load has no business invoking) is a hard error naming the tag,
 // never silently left unresolved or deferred to a phase scaffold.yaml has
 // none of.
-func resolveIncludeTags(atmosConfig *schema.AtmosConfiguration, data []byte, file string, consumedPaths *[]string) ([]byte, error) {
+func resolveIncludeTags(atmosConfig *schema.AtmosConfiguration, data []byte, file string, consumedPaths *[]string, includeRoot string) ([]byte, error) {
 	defer perf.Track(atmosConfig, "manifest.resolveIncludeTags")()
 
 	var doc yaml.Node
@@ -75,6 +82,16 @@ func resolveIncludeTags(atmosConfig *schema.AtmosConfiguration, data []byte, fil
 	policy := utils.ScaffoldTagPolicy(func(path string) {
 		recordConsumedPath(consumedPaths, path)
 	})
+	if includeRoot != "" {
+		var err error
+		policy, err = confineScaffoldIncludes(policy, includeRoot, utils.LocalIncludeFile)
+		if err != nil {
+			return nil, errUtils.Build(errUtils.ErrManifestIncludeRoot).
+				WithCause(err).
+				WithExplanationf("Cannot confine includes to `%s`", includeRoot).
+				Err()
+		}
+	}
 	if err := utils.WalkYAMLTags(atmosConfig, &doc, file, policy); err != nil {
 		return nil, err
 	}
