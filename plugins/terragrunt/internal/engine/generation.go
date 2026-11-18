@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
@@ -42,7 +41,7 @@ func generatedFiles(ctx context.Context, logger log.Logger, cfg *config.Terragru
 			return unresolvedGeneratedBackend(result.Path)
 		}
 	}
-	if err := unitLockFile(result); err != nil {
+	if err := unitLockFile(logger, cfg, result); err != nil {
 		return err
 	}
 	return generatedBackend(ctx, logger, cfg, result)
@@ -57,13 +56,13 @@ func skipDisabledGeneration(disabled bool, policy string) bool {
 func validateGeneratedPath(path string, result *model.Resolution) error {
 	if !filepath.IsLocal(path) || path == "." {
 		return &model.Problem{
-			Code: model.CodeInvalidGenerate, Summary: "A `generate` block writes outside the unit's working directory", Detail: fmt.Sprintf("The `generate` path %q is absolute or escapes the working directory.", path),
+			Code: model.CodeInvalidGenerate, Summary: "A `generate` block writes outside the unit's working directory", Detail: "The `generate` path is absolute or escapes the working directory.",
 			Hints: []string{"Use a relative `path` without `..`, for example `path = \"provider.tf\"`."}, File: result.Path, Key: "generate", Safe: true, Err: ErrUnsupportedExecution,
 		}
 	}
 	if _, exists := result.GeneratedPolicies[filepath.Clean(path)]; exists {
 		return &model.Problem{
-			Code: model.CodeInvalidGenerate, Summary: "Two `generate` blocks write the same file", Detail: fmt.Sprintf("More than one `generate` block writes %q.", path),
+			Code: model.CodeInvalidGenerate, Summary: "Two `generate` blocks write the same file", Detail: "More than one `generate` block writes the same target path.",
 			Hints: []string{"Give each `generate` block a distinct `path`."}, File: result.Path, Key: "generate", Safe: true, Err: ErrUnsupportedExecution,
 		}
 	}
@@ -77,14 +76,14 @@ func generatedBackend(ctx context.Context, logger log.Logger, cfg *config.Terrag
 	generated := cfg.RemoteState.Generate
 	if !filepath.IsLocal(generated.Path) || generated.Path == "." {
 		return &model.Problem{
-			Code: model.CodeInvalidGenerate, Summary: "The `remote_state` generate block writes outside the unit's working directory", Detail: fmt.Sprintf("The `remote_state` generate path %q is absolute or escapes the working directory.", generated.Path),
+			Code: model.CodeInvalidGenerate, Summary: "The `remote_state` generate block writes outside the unit's working directory", Detail: "The `remote_state` generate path is absolute or escapes the working directory.",
 			Hints: []string{"Use a relative path without `..`, for example `path = \"backend.tf\"`."}, File: result.Path, Key: "remote_state.generate", Safe: true, Err: ErrUnsupportedExecution,
 		}
 	}
 	path := filepath.Clean(generated.Path)
 	if _, exists := result.GeneratedPolicies[path]; exists {
 		return &model.Problem{
-			Code: model.CodeInvalidGenerate, Summary: "A `generate` block and `remote_state` write the same file", Detail: fmt.Sprintf("A `generate` block already writes %q.", generated.Path),
+			Code: model.CodeInvalidGenerate, Summary: "A `generate` block and `remote_state` write the same file", Detail: "A `generate` block already writes the remote state target path.",
 			Hints: []string{"Give the `remote_state` generate block a different `path`."}, File: result.Path, Key: "remote_state.generate", Safe: true, Err: ErrUnsupportedExecution,
 		}
 	}

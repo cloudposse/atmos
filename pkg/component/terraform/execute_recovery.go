@@ -169,8 +169,8 @@ func (e *Executor) initFromModuleWrapper(atmosConfig *schema.AtmosConfiguration,
 	if !recovered && !hasLifecycleHooks(config, execution.CommandInitFromModule) {
 		return nil
 	}
-	stage := lifecycleStage{command: execution.CommandInitFromModule, config: config}
 	return func(ctx context.Context, target *source.Target, provision func(context.Context) error) error {
+		stage := lifecycleStage{command: execution.CommandInitFromModule, config: config, directory: target.Dir}
 		fetch := provision
 		if recovered {
 			fetch = recoveringFetch(info, target, config.Errors, provision)
@@ -229,8 +229,9 @@ func hasLifecycleHooks(config *schema.ComponentExecution, command string) bool {
 
 // lifecycleStage is a provider stage and the hooks that wrap it.
 type lifecycleStage struct {
-	command string
-	config  *schema.ComponentExecution
+	command   string
+	config    *schema.ComponentExecution
+	directory string
 }
 
 // withInitFromModule makes source provisioning run the init-from-module hooks, when the unit has any.
@@ -243,7 +244,7 @@ func (e *Executor) withInitFromModule(ctx context.Context, atmosConfig *schema.A
 
 // runLifecycle runs action wrapped by the hooks of one lifecycle stage.
 func (e *Executor) runLifecycle(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, stage lifecycleStage, action func(context.Context) error) error {
-	phase := &executionPhase{command: stage.command}
+	phase := &executionPhase{command: stage.command, componentPath: stage.directory}
 	hookOpts := hookOptions([]component.ExecutionOption{component.WithProcessContext(ctx), component.WithEnvironment(info.SanitizedEnv)})
 	// Error hooks match on the output of the hooks that ran before them, so their output is recorded for as
 	// long as the lifecycle runs, including the matching.

@@ -347,6 +347,9 @@ func (s *planSnapshot) restorePublicFiles(files []schema.ComponentConfigurationF
 	for i := range files {
 		if content, ok := observed[files[i].Path]; ok && !files[i].Sensitive {
 			files[i].Content = content
+			if content == nil {
+				files[i].IfExists = "remove"
+			}
 		}
 	}
 	return nil

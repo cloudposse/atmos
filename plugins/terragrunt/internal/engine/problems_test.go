@@ -186,3 +186,58 @@ func TestLocalSubdirectorySourceMustExistDuringDiscovery(t *testing.T) {
 		})
 	}
 }
+
+func TestGeneratedPathDiagnosticsDoNotExposeEvaluatedSecrets(t *testing.T) {
+	const secret = "private-evaluated-target"
+	for _, extra := range []string{
+		`generate "private" {
+ path = "../${get_env("PRIVATE_TARGET")}"
+ if_exists = "overwrite"
+ contents = ""
+}`,
+		`generate "first" {
+ path = get_env("PRIVATE_TARGET")
+ if_exists = "overwrite"
+ contents = ""
+}
+generate "second" {
+ path = get_env("PRIVATE_TARGET")
+ if_exists = "overwrite"
+ contents = ""
+}`,
+		`remote_state {
+ backend = "local"
+ config = {}
+ generate = { path = "../${get_env("PRIVATE_TARGET")}", if_exists = "overwrite" }
+}`,
+		`generate "first" {
+ path = get_env("PRIVATE_TARGET")
+ if_exists = "overwrite"
+ contents = ""
+}
+remote_state {
+ backend = "local"
+ config = {}
+ generate = { path = get_env("PRIVATE_TARGET"), if_exists = "overwrite" }
+}`,
+	} {
+		request := nativeUnit(t, extra)
+		request.Environment["PRIVATE_TARGET"] = secret
+		_, err := Resolve(t.Context(), request)
+		problem := asProblem(t, err)
+		require.True(t, problem.Safe)
+		require.NotContains(t, problem.Error(), secret)
+		require.NotContains(t, problem.Detail, secret)
+	}
+}
+
+func TestUnsupportedSourceDiagnosticsDoNotExposeEvaluatedText(t *testing.T) {
+	require.NoError(t, validateRemoteSource("tfr://registry.example.test/module"))
+	for _, source := range []string{"private-credential://module", "private-credential", "unsupported::private-credential/module"} {
+		problem := asProblem(t, validateRemoteSource(source))
+		require.True(t, problem.Safe)
+		require.NotContains(t, problem.Error(), "private-credential")
+		require.NotContains(t, problem.Detail, "private-credential")
+		require.Contains(t, problem.Hints[0], "tfr://", "L7 supports registry sources")
+	}
+}

@@ -271,7 +271,7 @@ func TestConfigurationPlanRecordHoldsNoSensitiveGeneratedFiles(t *testing.T) {
 				{Path: "public.txt", Content: []byte("public-content"), IfExists: "overwrite"},
 				{Path: "obsolete.tf", IfExists: "remove"},
 			}
-			for _, file := range execCtx.preparedConfiguration.Files[:2] {
+			for _, file := range execCtx.preparedConfiguration.Files[:3] {
 				require.NoError(t, os.WriteFile(filepath.Join(execCtx.workingDir, file.Path), file.Content, 0o600))
 			}
 			require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
@@ -1250,4 +1250,108 @@ func TestConfigurationPlanPreservesReviewedOverwriteBytes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, reviewed, actual)
 	require.Equal(t, []byte("# original A"), execCtx.preparedConfiguration.Files[0].Content)
+}
+
+func TestSavedPlanBindsFilteredEnvironmentDefaults(t *testing.T) {
+	for _, explicitApply := range []bool{false, true} {
+		t.Run(fmt.Sprint(explicitApply), func(t *testing.T) {
+			config, info, execCtx, _, path := planFixture(t)
+			info.ComponentEnvSection = map[string]any{"PROVIDER_TOKEN": "stack-secret"}
+			execution := &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan", "apply"}, Environment: map[string]string{"PROVIDER_TOKEN": "provider-secret"}}}}
+			if explicitApply {
+				execution.Apply = &schema.ComponentExecution{}
+			}
+			execCtx.preparedConfiguration.Execution = execution
+			require.NoError(t, applyStackOverrides(config, info, execCtx.preparedConfiguration))
+			require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out", filepath.Base(path)}))
+			record, err := os.ReadFile(path + configurationPlanSuffix)
+			require.NoError(t, err)
+			require.NotContains(t, string(record), "provider-secret")
+			require.NotContains(t, string(record), "stack-secret")
+			info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+			_, err = restoreConfigurationPlan(t.Context(), config, info)
+			require.NoError(t, err)
+			info.ComponentEnvSection = nil
+			_, err = restoreConfigurationPlan(t.Context(), config, info)
+			if explicitApply {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+			}
+		})
+	}
+}
+
+func TestConfigurationPlanPreservesReviewedFileAbsence(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	execCtx.preparedConfiguration.Files = []schema.ComponentConfigurationFile{{Path: "override.tf", Content: []byte("# prepared but removed by before-hook"), IfExists: "overwrite"}}
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+	prepared, err := restoreConfigurationPlan(t.Context(), config, info)
+	require.NoError(t, err)
+	require.NoError(t, writePreparedConfiguration(execCtx.workingDir, prepared))
+	require.NoFileExists(t, filepath.Join(execCtx.workingDir, "override.tf"))
+	require.Equal(t, "overwrite", execCtx.preparedConfiguration.Files[0].IfExists)
+	// An empty file is different from an absent one and must survive restoration.
+	require.NoError(t, os.WriteFile(filepath.Join(execCtx.workingDir, "override.tf"), []byte{}, 0o600))
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "plan", false, ""
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+	prepared, err = restoreConfigurationPlan(t.Context(), config, info)
+	require.NoError(t, err)
+	require.NoError(t, writePreparedConfiguration(execCtx.workingDir, prepared))
+	data, err := os.ReadFile(filepath.Join(execCtx.workingDir, "override.tf"))
+	require.NoError(t, err)
+	require.Empty(t, data)
+}
+
+// The rebuild path must check environment identity before preparing a new workdir.
+func TestRestoredPlanChecksStackEnvironmentBeforeRebuild(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	info.ComponentSection = map[string]any{"metadata": map[string]any{"working_directory": filepath.Join("components", "network")}}
+	info.ComponentEnvSection = map[string]any{"PROVIDER_TOKEN": "reviewed-secret"}
+	execCtx.preparedConfiguration.Execution = &schema.ComponentExecution{}
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+	otherRoot := t.TempDir()
+	otherWorkdir := filepath.Join(otherRoot, "components", "network")
+	require.NoError(t, os.MkdirAll(otherWorkdir, 0o700))
+	otherPlan := filepath.Join(otherWorkdir, filepath.Base(path))
+	for _, suffix := range []string{"", configurationPlanSuffix} {
+		data, err := os.ReadFile(path + suffix)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(otherPlan+suffix, data, 0o600))
+	}
+	config.BasePath = otherRoot
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, otherPlan
+	prepared, rebuild, err := restoreOrRebuildConfigurationPlan(t.Context(), config, info)
+	require.NoError(t, err)
+	require.NotNil(t, prepared)
+	require.NotNil(t, rebuild)
+	info.ComponentEnvSection = map[string]any{"PROVIDER_TOKEN": "changed-secret"}
+	prepared, rebuild, err = restoreOrRebuildConfigurationPlan(t.Context(), config, info)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorContains(t, err, "reviewed stack environment overrides changed")
+	require.NotContains(t, err.Error(), "reviewed-secret")
+	require.NotContains(t, err.Error(), "changed-secret")
+	require.Nil(t, prepared)
+	require.Nil(t, rebuild)
+}
+
+func TestConfigurationPlanRejectsRecordWithoutEnvironmentBinding(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+	data, err := os.ReadFile(path + configurationPlanSuffix)
+	require.NoError(t, err)
+	var legacy map[string]any
+	require.NoError(t, json.Unmarshal(data, &legacy))
+	legacy["Version"] = 3
+	delete(legacy, "StackEnvironmentDigest")
+	data, err = json.Marshal(legacy)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path+configurationPlanSuffix, data, 0o600))
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+	prepared, rebuild, err := restoreOrRebuildConfigurationPlan(t.Context(), config, info)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.Nil(t, prepared)
+	require.Nil(t, rebuild)
 }

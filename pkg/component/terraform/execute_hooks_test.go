@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1318,6 +1319,55 @@ func TestDetailedExitCodeEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			require.Equal(t, tt.want, detailedExitCodeEnabled(subcommandPlan, tt.args, nil))
+		})
+	}
+}
+
+func TestInitFromModuleHookDirectoriesUseProvisionTarget(t *testing.T) {
+	for _, workingDir := range []string{"", "hooks"} {
+		t.Run(workingDir, func(t *testing.T) {
+			module := filepath.Join(t.TempDir(), "module")
+			directory := filepath.Join(module, workingDir)
+			require.NoError(t, os.MkdirAll(directory, 0o700))
+			hook := schema.ComponentHook{Name: "fetch", Commands: []string{"init-from-module"}, Execute: []string{"hook-fetch"}, WorkingDirectory: workingDir}
+			config := &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{hook}, AfterHooks: []schema.ComponentHook{hook}}
+			shell := newShellFixture(t, nil)
+			wrapper := hookExecutor(shell).initFromModuleWrapper(&schema.AtmosConfiguration{}, hookInfo("plan", config))
+			require.NoError(t, wrapper(t.Context(), &source.Target{Dir: module}, func(context.Context) error { return nil }))
+			require.Len(t, shell.calls, 2)
+			for _, call := range shell.calls {
+				require.Equal(t, directory, call.dir, "both lifecycle hooks resolve against the provisioned module")
+			}
+		})
+	}
+}
+
+func TestInitFromModuleMissingDirectoryFailsBeforeHookButAllowsFetchBeforeAfterHook(t *testing.T) {
+	for _, before := range []bool{true, false} {
+		t.Run(strconv.FormatBool(before), func(t *testing.T) {
+			module := filepath.Join(t.TempDir(), "not-yet-fetched")
+			hook := schema.ComponentHook{Name: "fetch", Commands: []string{"init-from-module"}, Execute: []string{"hook-fetch"}}
+			config := &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{hook}}
+			if before {
+				config.BeforeHooks = []schema.ComponentHook{hook}
+			}
+			shell := newShellFixture(t, nil)
+			wrapper := hookExecutor(shell).initFromModuleWrapper(&schema.AtmosConfiguration{}, hookInfo("plan", config))
+			fetched := false
+			err := wrapper(t.Context(), &source.Target{Dir: module}, func(context.Context) error {
+				fetched = true
+				return os.MkdirAll(module, 0o700)
+			})
+			if before {
+				require.ErrorIs(t, err, errUtils.ErrComponentHookWorkingDirectory)
+				require.False(t, fetched, "a before-fetch hook cannot run in a nonexistent module directory")
+				require.Empty(t, shell.calls)
+			} else {
+				require.NoError(t, err)
+				require.True(t, fetched)
+				require.Len(t, shell.calls, 1)
+				require.Equal(t, module, shell.calls[0].dir)
+			}
 		})
 	}
 }

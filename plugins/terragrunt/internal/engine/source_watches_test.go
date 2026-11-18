@@ -277,3 +277,29 @@ func TestInputWatchesOriginalCallerInNestedReads(t *testing.T) {
 	require.NotContains(t, result.Files, filepath.Join(root, "shared", "data.json"))
 	require.Empty(t, result.Folders)
 }
+
+func TestWatchesFollowNativeConfigWithoutHCLSuffix(t *testing.T) {
+	project := newWatchProject(t)
+	settings := filepath.Join(project.unit, "shared", "settings.conf")
+	project.write(settings, `inputs = { value = file("../data.json") }`)
+	result := project.track(`inputs = { nested = read_terragrunt_config("shared/settings.conf") }`)
+	require.Contains(t, result.Files, settings)
+	require.Contains(t, result.Files, filepath.Join(project.unit, "data.json"))
+	require.Empty(t, result.Folders)
+}
+
+func TestIncludedConfigReadUsesUnitWhileFileUsesAuthorDirectory(t *testing.T) {
+	project := newWatchProject(t)
+	parent := filepath.Join(project.root, "live", "root.hcl")
+	project.write(parent, `inputs = {
+ nested = read_terragrunt_config("extra.conf")
+ authored = file("authored.json")
+}`)
+	project.write(filepath.Join(project.unit, "extra.conf"), `inputs = { data = file("nested.json") }`)
+	result := project.track(`inputs = {}`)
+	require.Contains(t, result.Files, filepath.Join(project.unit, "extra.conf"))
+	require.Contains(t, result.Files, filepath.Join(project.unit, "nested.json"))
+	require.Contains(t, result.Files, filepath.Join(filepath.Dir(parent), "authored.json"))
+	require.NotContains(t, result.Files, filepath.Join(filepath.Dir(parent), "extra.conf"))
+	require.Empty(t, result.Folders)
+}

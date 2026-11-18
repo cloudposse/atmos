@@ -434,6 +434,9 @@ func hookUnitLabel(info *schema.ConfigAndStacksInfo) string {
 func (r *hookRunner) workingDirectory(hook *schema.ComponentHook) (string, error) {
 	switch {
 	case hook.WorkingDirectory == "":
+		if r.phase.command == execution.CommandInitFromModule {
+			return r.phase.componentPath, requireDirectory(r.phase.componentPath, "")
+		}
 		return r.phase.componentPath, nil
 	case filepath.IsAbs(hook.WorkingDirectory):
 		return hook.WorkingDirectory, requireDirectory(hook.WorkingDirectory, "")

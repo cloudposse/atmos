@@ -64,7 +64,10 @@ func localModuleSubdir(source string, existingRoot func(root string) bool) (root
 }
 
 func safeModuleSubdir(subdir string) bool {
-	if subdir == "" || filepath.IsAbs(subdir) || filepath.VolumeName(subdir) != "" || strings.HasPrefix(subdir, "/") || strings.HasPrefix(subdir, `\`) {
+	if subdir == "" {
+		return true
+	}
+	if absoluteModuleSubdir(subdir) {
 		return false
 	}
 	for _, part := range strings.Split(filepath.ToSlash(subdir), "/") {
@@ -73,6 +76,11 @@ func safeModuleSubdir(subdir string) bool {
 		}
 	}
 	return true
+}
+
+// absoluteModuleSubdir rejects native absolute paths and Windows-qualified paths on every host.
+func absoluteModuleSubdir(subdir string) bool {
+	return (len(subdir) >= 2 && subdir[1] == ':') || filepath.IsAbs(subdir) || filepath.VolumeName(subdir) != "" || strings.HasPrefix(subdir, "/") || strings.HasPrefix(subdir, `\`)
 }
 
 func checkVersions(ctx context.Context, request *model.Request, terraform, terragrunt string) error {
@@ -176,12 +184,11 @@ func validateRemoteSource(source string) error {
 			return nil
 		}
 	}
-	scheme, _, found := strings.Cut(source, "://")
 	return &model.Problem{
 		Code: model.CodeInvalidSource, Summary: "Unsupported module source transport",
-		Detail: fmt.Sprintf("The module source scheme %q is not supported.", scheme),
+		Detail: "The module source transport is not supported.",
 		Hints:  []string{"Use a local path, a `git::https://`, `git::ssh://`, or `https://` source, a `tfr://` registry source, or a Git source pinned with `?ref=`."},
-		Key:    "terraform.source", Safe: found, Err: ErrUnsupportedExecution,
+		Key:    "terraform.source", Safe: true, Err: ErrUnsupportedExecution,
 	}
 }
 

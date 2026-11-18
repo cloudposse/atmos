@@ -242,3 +242,17 @@ func checkOverlayFile(name string) error {
 	}
 	return nil
 }
+
+// UnitFileIncluded applies the upstream copy exclusions to an implicit file copy.
+// Mount at a stable path so metacharacters in the unit directory remain literal.
+//
+//nolint:lintroller // Standalone bridge module cannot import the host performance tracker.
+func UnitFileIncluded(logger log.Logger, unit, name string, excluded []string) (bool, error) {
+	view := newUnitView(unit)
+	filter, err := util.NewCopyFilter(logger, view.mount(afero.NewOsFs()), view.source,
+		util.WithIncludeInCopy(name), util.WithExcludeFromCopy(excluded...))
+	if err != nil {
+		return false, err
+	}
+	return filter(filepath.Join(view.source, name), false), nil
+}

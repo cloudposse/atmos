@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
+	"github.com/gruntwork-io/terragrunt/pkg/config"
+	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 
@@ -19,10 +22,19 @@ import (
 // and hashes it pins take effect in the working directory. The host rewrites it only when this
 // copy changes, so what `init` records in the working directory is not undone on every run.
 // Atmos does not write lock file changes back to the unit directory.
-func unitLockFile(result *model.Resolution) error {
+func unitLockFile(logger log.Logger, cfg *config.TerragruntConfig, result *model.Resolution) error {
 	if _, exists := result.GeneratedPolicies[lockFileName]; exists {
 		// An explicit generate block for the lock file wins over the copy.
 		return nil
+	}
+	if cfg.Terraform != nil && cfg.Terraform.ExcludeFromCopy != nil {
+		included, err := atmosbridge.UnitFileIncluded(logger, filepath.Dir(result.Path), lockFileName, *cfg.Terraform.ExcludeFromCopy)
+		if err != nil {
+			return err
+		}
+		if !included {
+			return nil
+		}
 	}
 	content, err := os.ReadFile(filepath.Join(filepath.Dir(result.Path), lockFileName))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -40,15 +52,13 @@ func unitLockFile(result *model.Resolution) error {
 // declaresBackend reports whether generated Terraform configuration holds a backend or cloud block.
 // Content that cannot be parsed is not a backend: Terraform reports its own syntax error later.
 func declaresBackend(path, content string) bool {
-	lower := strings.ToLower(path)
-	switch {
-	case strings.HasSuffix(lower, ".tf.json"):
-		return jsonDeclaresBackend([]byte(content))
-	case strings.HasSuffix(lower, ".tf"):
-		return hclDeclaresBackend([]byte(content), path)
-	default:
+	if !terraformConfigurationFile(path) {
 		return false
 	}
+	if strings.HasSuffix(strings.ToLower(path), ".json") {
+		return jsonDeclaresBackend([]byte(content))
+	}
+	return hclDeclaresBackend([]byte(content), path)
 }
 
 func hclDeclaresBackend(content []byte, path string) bool {

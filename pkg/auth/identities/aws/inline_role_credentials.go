@@ -431,13 +431,15 @@ func containerCredentials(env map[string]string) (aws.CredentialsProvider, bool,
 		endpoint = ecsContainerEndpoint + relative
 	} else if endpoint == "" {
 		return nil, false, nil
-	} else if err := checkContainerEndpoint(endpoint); err != nil {
+	}
+	client, err := checkContainerEndpoint(endpoint)
+	if err != nil {
 		return nil, false, err
 	}
 	token, tokenFile := env["AWS_CONTAINER_AUTHORIZATION_TOKEN"], env["AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE"]
 	provider := endpointcreds.New(endpoint, func(o *endpointcreds.Options) {
-		if strings.HasPrefix(endpoint, "http://") {
-			o.HTTPClient = containerEndpointClient(containerCredentialRequestTimeout)
+		if client != nil {
+			o.HTTPClient = client
 		}
 		o.AuthorizationToken = token
 		if tokenFile != "" {
@@ -505,30 +507,31 @@ func validatedContainerDialer(lookup func(ctx context.Context, host string) ([]s
 	}
 }
 
-func checkContainerEndpoint(endpoint string) error {
+// checkContainerEndpoint validates the parsed URL and selects the transport from its normalized scheme.
+func checkContainerEndpoint(endpoint string) (*http.Client, error) {
 	parsed, err := url.Parse(endpoint)
 	if err != nil {
-		return fmt.Errorf("%w: invalid container credentials URL: %w", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: invalid container credentials URL: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	host := parsed.Hostname()
 	if host == "" {
-		return fmt.Errorf("%w: no host in the container credentials URL", errUtils.ErrInvalidAuthConfig)
+		return nil, fmt.Errorf("%w: no host in the container credentials URL", errUtils.ErrInvalidAuthConfig)
 	}
 	if parsed.Scheme != "http" {
-		return nil
+		return nil, nil
 	}
 	addresses := []string{host}
 	if net.ParseIP(host) == nil {
 		if addresses, err = net.LookupHost(host); err != nil {
-			return fmt.Errorf("%w: resolve container credentials host %q: %w", errUtils.ErrInvalidAuthConfig, host, err)
+			return nil, fmt.Errorf("%w: resolve container credentials host %q: %w", errUtils.ErrInvalidAuthConfig, host, err)
 		}
 	}
 	for _, address := range addresses {
 		if ip := net.ParseIP(address); ip == nil || !containerHostAllowed(ip) {
-			return fmt.Errorf("%w: container credentials host %q is not a loopback, ECS, or EKS host", errUtils.ErrInvalidAuthConfig, host)
+			return nil, fmt.Errorf("%w: container credentials host %q is not a loopback, ECS, or EKS host", errUtils.ErrInvalidAuthConfig, host)
 		}
 	}
-	return nil
+	return containerEndpointClient(containerCredentialRequestTimeout), nil
 }
 
 func containerHostAllowed(ip net.IP) bool {

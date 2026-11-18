@@ -27,7 +27,7 @@ const freshPlanName = "new.plan"
 const configurationPlanSuffix = ".atmos.json"
 
 // configurationPlanVersion is bumped whenever the stored binding changes shape.
-const configurationPlanVersion = 3
+const configurationPlanVersion = 4
 
 // subcommandPlan names the Terraform plan command.
 const subcommandPlan = "plan"
@@ -58,6 +58,8 @@ type configurationPlan struct {
 	// SensitiveDigest binds the bytes of every sensitive generated file, including files the working
 	// directory digest excludes, such as those below a Terragrunt cache.
 	SensitiveDigest string
+	// StackEnvironmentDigest binds stack overrides when apply reuses filtered plan execution.
+	StackEnvironmentDigest string
 }
 
 // ownsConfigurationPlan reports whether a provider manages this component's saved plans.
@@ -262,6 +264,9 @@ func configurationArtifactMatches(config *schema.AtmosConfiguration, info *schem
 // verifyReviewedArtifacts checks everything about a reviewed plan that does not depend on the working
 // directory: provider identity and watched sources, plan bytes, engine, and backend.
 func verifyReviewedArtifacts(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, plan *configurationPlan, path string) error {
+	if err := verifyPlanStackEnvironment(info, plan); err != nil {
+		return err
+	}
 	runtime, err := planRuntime(config)
 	if err != nil {
 		return err
@@ -356,7 +361,11 @@ func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Config
 	if err != nil {
 		return nil, err
 	}
-	return &configurationPlan{WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: snapshot.rebuildDigest, LockDigest: snapshot.lockDigest, Modules: snapshot.modules, SensitiveDigest: snapshot.sensitiveDigest, Prepared: stored}, nil
+	environmentDigest, err := planStackEnvironmentDigest(info, stored)
+	if err != nil {
+		return nil, err
+	}
+	return &configurationPlan{StackEnvironmentDigest: environmentDigest, WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: snapshot.rebuildDigest, LockDigest: snapshot.lockDigest, Modules: snapshot.modules, SensitiveDigest: snapshot.sensitiveDigest, Prepared: stored}, nil
 }
 
 // reviewedPlanConfiguration keeps reviewed public bytes while omitting inputs and secrets.
