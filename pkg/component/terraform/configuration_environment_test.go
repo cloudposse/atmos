@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	componentpkg "github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 )
@@ -202,4 +205,90 @@ func TestGetTerraformStateRejectsConfigurationOwnedBackend(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
 	require.ErrorContains(t, err, "does not support state lookup")
 	require.Nil(t, value)
+}
+
+// TestPreExecutionEnvPreservesConfigurationRouting checks prepared-environment reuse,
+// workspace validation before secret injection, and ordinary/dry-run assembly.
+func TestPreExecutionEnvPreservesConfigurationRouting(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		configuration bool
+		dryRun        bool
+		workspace     string
+		invalidSecret bool
+	}{
+		{name: "prepared environment", configuration: true, workspace: "stage"},
+		{name: "workspace error before secret encoding", configuration: true, workspace: "other", invalidSecret: true},
+		{name: "secret encoding error", configuration: true, workspace: "stage", invalidSecret: true},
+		{name: "ordinary component", workspace: "other"},
+		{name: "ordinary dry run", dryRun: true, workspace: "other"},
+		{name: "configuration dry run", configuration: true, dryRun: true, workspace: "other"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, config, info := configurationExecution(t)
+			info.ComponentSettingsSection["configuration"] = tc.configuration
+			info.DryRun = tc.dryRun
+			info.TerraformWorkspace = "stage"
+			info.SanitizedEnv = []string{"TF_WORKSPACE=" + tc.workspace}
+			info.ComponentEnvList = []string{"TF_IN_AUTOMATION=true", "PREPARED=value"}
+			info.ComponentEnvSection["FROM_COMPONENT"] = "visible"
+			info.TerraformSecretVarKeys = map[string]bool{"token": true}
+			info.ComponentVarsSection = map[string]any{"token": "secret-env-fixture"}
+			if tc.invalidSecret {
+				info.ComponentVarsSection["token"] = make(chan int)
+			}
+
+			err := assemblePreExecutionEnvVars(config, info, nil)
+			switch tc.name {
+			case "workspace error before secret encoding":
+				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+				require.Equal(t, []string{"TF_IN_AUTOMATION=true", "PREPARED=value"}, info.ComponentEnvList)
+			case "secret encoding error":
+				var encodingErr *json.UnsupportedTypeError
+				require.ErrorAs(t, err, &encodingErr)
+				require.Equal(t, []string{"TF_IN_AUTOMATION=true", "PREPARED=value"}, info.ComponentEnvList)
+			case "prepared environment":
+				require.NoError(t, err)
+				require.Equal(t, []string{"TF_IN_AUTOMATION=true", "PREPARED=value", "TF_VAR_token=secret-env-fixture"}, info.ComponentEnvList)
+			default:
+				require.NoError(t, err)
+				require.Contains(t, info.ComponentEnvList, "FROM_COMPONENT=visible")
+				require.Equal(t, "TF_IN_AUTOMATION=true", info.ComponentEnvList[0])
+				require.Equal(t, "TF_VAR_token=secret-env-fixture", info.ComponentEnvList[len(info.ComponentEnvList)-1])
+			}
+		})
+	}
+}
+
+// A provider that excludes the operation ends preparation before any source is fetched; a failing
+// read-config hook stops it the same way, and the unit's other hooks stay out of preparation.
+func TestPrepareComponentExecutionHonorsExclusionAndReadConfigHooks(t *testing.T) {
+	root := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, TerraformDirAbsolutePath: filepath.Join(root, "components")}
+	config.Components.Terraform.BasePath = "components"
+	provider := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	config.ComponentConfigurations = provider
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	newInfo := func() *schema.ConfigAndStacksInfo {
+		return &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": "dev", "source": map[string]any{"uri": "./module"}}}
+	}
+
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&schema.PreparedComponentConfiguration{
+		Engine: "terraform", Source: "./module", Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{}, Workspace: "default",
+		Exclusion: &schema.ComponentExclusion{Actions: []string{"plan"}},
+	}, nil)
+	_, err = testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, config, newInfo(), false)
+	require.ErrorIs(t, err, errUtils.ErrComponentExcluded)
+	require.NoDirExists(t, filepath.Join(root, ".workdir"), "an excluded operation must not provision a source")
+
+	hooks := &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{{Name: "read", Commands: []string{"terragrunt-read-config"}, Execute: []string{"failing-hook"}}}}
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&schema.PreparedComponentConfiguration{
+		Engine: "terraform", Source: "./module", Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{}, Workspace: "default", Execution: hooks,
+	}, nil)
+	shell := newShellFixture(t, func(*shellCall) error { return errors.New("hook failed") })
+	executor := NewExecutor(Services{ExecuteShellCommand: shell.mock.Execute})
+	_, err = executor.prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, config, newInfo(), false)
+	require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
+	require.Equal(t, []string{"failing-hook"}, shell.names())
 }

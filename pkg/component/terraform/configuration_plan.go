@@ -352,17 +352,26 @@ func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Config
 	if err != nil {
 		return nil, err
 	}
+	stored, err := reviewedPlanConfiguration(execCtx.preparedConfiguration, snapshot)
+	if err != nil {
+		return nil, err
+	}
+	return &configurationPlan{WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: snapshot.rebuildDigest, LockDigest: snapshot.lockDigest, Modules: snapshot.modules, SensitiveDigest: snapshot.sensitiveDigest, Prepared: stored}, nil
+}
+
+// reviewedPlanConfiguration keeps reviewed public bytes while omitting inputs and secrets.
+func reviewedPlanConfiguration(prepared *schema.PreparedComponentConfiguration, snapshot *planSnapshot) (*schema.PreparedComponentConfiguration, error) {
 	// Inputs and backend values stay out of the record; see configurationPlan. Sensitive generated
 	// files, such as a backend file with credentials, keep only their place: apply reads their bytes
 	// back from the retained workdir, whose digest proves they are the reviewed ones, and a rebuild
 	// writes them again from a fresh preparation that must match RebuildDigest.
-	stored := *execCtx.preparedConfiguration
+	stored := *prepared
 	stored.Inputs, stored.Backend = nil, nil
 	stored.Files = withoutSensitiveContent(stored.Files)
 	if err := snapshot.restorePublicFiles(stored.Files); err != nil {
 		return nil, err
 	}
-	return &configurationPlan{WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: snapshot.rebuildDigest, LockDigest: snapshot.lockDigest, Modules: snapshot.modules, SensitiveDigest: snapshot.sensitiveDigest, Prepared: &stored}, nil
+	return &stored, nil
 }
 
 // relativeWorkdirIdentity is set only when an explicit relative override actually resolves
