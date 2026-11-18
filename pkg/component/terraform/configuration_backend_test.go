@@ -169,11 +169,38 @@ func TestRestoreSensitiveContentAcceptsRemovedFiles(t *testing.T) {
 		})
 	}
 
+	// A file that was already absent when the plan was reviewed, and still is, matches the digest.
 	directory := t.TempDir()
 	files := []schema.ComponentConfigurationFile{{Path: "secret.auto.tfvars", Sensitive: true, IfExists: "overwrite"}}
 	reviewed, err := sensitiveDigest(directory, files)
 	require.NoError(t, err)
+	require.NoError(t, restoreSensitiveContent(directory, files, reviewed))
+	require.Nil(t, files[0].Content)
+
+	// A file that existed at review and has disappeared is rejected as missing.
+	path := filepath.Join(directory, "secret.auto.tfvars")
+	require.NoError(t, os.WriteFile(path, []byte("token=1"), 0o600))
+	reviewed, err = sensitiveDigest(directory, files)
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(path))
 	err = restoreSensitiveContent(directory, files, reviewed)
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+// The retained-file check excludes backend.tf.json only when its receipt and bytes verify that the
+// host handoff removes it; a modified file is still checked and rejected.
+func TestRetainedBackendFileExcludedOnlyWhenHandoffRemovesIt(t *testing.T) {
+	directory := t.TempDir()
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{}}}
+	require.NoError(t, backend.GenerateFile(config, info, directory))
+	skipped := []schema.ComponentConfigurationFile{{Path: "backend.tf.json", Content: []byte(`{"terraform":{"backend":{"s3":{}}}}`), IfExists: "skip"}}
+
+	require.NoError(t, validateRetainedConfiguration(directory, skipped, true), "the verified host backend is removed by the handoff")
+	require.ErrorIs(t, validateRetainedConfiguration(directory, skipped, false), errUtils.ErrPluginInvalidConfig, "without a handoff it stays retained")
+
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "backend.tf.json"), []byte(`{"terraform":{"backend":{"local":{}}}}`), 0o600))
+	require.ErrorIs(t, validateRetainedConfiguration(directory, skipped, true), errUtils.ErrPluginInvalidConfig, "a modified file has no matching receipt")
 }

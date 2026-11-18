@@ -227,7 +227,7 @@ func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *
 // writePreparedConfiguration verifies retained files before relinquishing the host backend
 // and applying provider file policies.
 func writePreparedConfiguration(directory string, prepared *schema.PreparedComponentConfiguration) error {
-	if err := validateRetainedConfiguration(directory, prepared.Files); err != nil {
+	if err := validateRetainedConfiguration(directory, prepared.Files, prepared.BackendGenerated); err != nil {
 		return err
 	}
 	if prepared.BackendGenerated {
@@ -242,11 +242,17 @@ func writePreparedConfiguration(directory string, prepared *schema.PreparedCompo
 // A skipped Terraform file may disagree with the provider's resolved state identity.
 // Accept different bytes only when both versions are provably free of backend/cloud
 // declarations; otherwise fail closed without replacing the user's retained file.
-func validateRetainedConfiguration(directory string, files []schema.ComponentConfigurationFile) error {
+//
+// When the host backend is about to be handed off, a skipped file is excluded only if its receipt
+// and bytes verify that RemoveHostBackend will remove it; any other retained file is still checked.
+func validateRetainedConfiguration(directory string, files []schema.ComponentConfigurationFile, backendHandoff bool) error {
 	defer perf.Track(nil, "terraform.validateRetainedConfiguration")()
 
 	for _, file := range files {
 		if file.IfExists != "skip" || !terraformConfigurationPath(file.Path) {
+			continue
+		}
+		if backendHandoff && backend.WillRemoveHostBackend(directory, file.Path) {
 			continue
 		}
 		if err := validateRetainedFile(directory, file); err != nil {

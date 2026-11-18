@@ -125,22 +125,37 @@ func contentDigest(content []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// fileDigest returns the digest of an existing regular file, or false when there is none.
+// fileDigest returns the digest of an existing regular file, or false when there is none or it
+// cannot be read. Callers that must not mistake a read failure for absence use readFileDigest.
 func fileDigest(root *os.Root, path string) (string, bool) {
+	digest, exists, err := readFileDigest(root, path)
+	return digest, exists && err == nil
+}
+
+// readFileDigest returns the digest of an existing regular file. A missing or nonregular entry
+// reports no file and no error; a failure to inspect or read an entry that may be a regular file
+// is returned, so the caller can keep what it recorded about the file instead of forgetting it.
+func readFileDigest(root *os.Root, path string) (string, bool, error) {
 	info, err := root.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() {
-		return "", false
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if !info.Mode().IsRegular() {
+		return "", false, nil
 	}
 	file, err := root.Open(path)
 	if err != nil {
-		return "", false
+		return "", true, err
 	}
 	defer file.Close()
 	data, err := io.ReadAll(file)
 	if err != nil {
-		return "", false
+		return "", true, err
 	}
-	return contentDigest(data), true
+	return contentDigest(data), true, nil
 }
 
 // removeStaleFiles deletes files an earlier run generated that the current run does not name.
@@ -173,7 +188,11 @@ func removeStaleFile(root *os.Root, path, recorded string, undo restorePoint) er
 	}
 	defer directory.Close()
 	leaf := filepath.Base(local)
-	digest, exists := fileDigest(directory, leaf)
+	digest, exists, err := readFileDigest(directory, leaf)
+	if err != nil {
+		// An unreadable file may still be the generated one; the caller keeps its record for a retry.
+		return err
+	}
 	if !exists || (digest != recorded && verifyTerragruntSignature(directory, leaf) != nil) {
 		return nil
 	}
