@@ -1,0 +1,11 @@
+base_path: .
+artifacts:
+  repositories:
+    shared:
+      kind: aws/s3
+      options:
+        bucket: example-artifacts
+  verification:
+    require_signature: true
+    trusted_keys:
+      - keys/release.pub

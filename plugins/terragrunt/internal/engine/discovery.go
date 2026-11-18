@@ -69,8 +69,8 @@ type projectDiscovery struct {
 	overlay   afero.Fs
 	result    *model.Resolution
 	templates map[string]bool
-	// generated records units reached through stack traversal so the standalone
-	// pass does not discover the same generated unit again.
+	// generated records units and stacks reached through parent traversal so an
+	// independent pass cannot discover materialized children again.
 	generated map[string]bool
 	// childFailures holds generated children that failed, with their generation root, so the
 	// failures of stacks that turn out to be templates can be dropped.
@@ -165,7 +165,7 @@ func (d *projectDiscovery) parse(path string, generate bool) (*model.Resolution,
 func (d *projectDiscovery) discoverStacks(stacks []string) error {
 	failures := map[string]error{}
 	for _, path := range stacks {
-		if d.skipped(path) {
+		if !d.independentStack(path) {
 			continue
 		}
 		if err := d.discoverStack(path); err != nil {
@@ -176,19 +176,24 @@ func (d *projectDiscovery) discoverStacks(stacks []string) error {
 		}
 	}
 	for _, path := range stacks {
-		if err := failures[path]; err != nil && !d.skipped(path) {
+		if err := failures[path]; err != nil && d.independentStack(path) {
 			// The components of a stack that cannot be generated are unknown, so the stack file itself is the unit.
 			d.result.Failures = append(d.result.Failures, model.UnitFailure{Stack: d.nameFor(filepath.Dir(path)), Name: filepath.Base(path), Err: problemFor(err, path)})
 		}
 	}
-	// A template that parsed independently is still a template, not another live stack.
-	d.result.Inventory = slices.DeleteFunc(d.result.Inventory, func(unit model.DiscoveredUnit) bool { return d.skipped(unit.GenerationRoot) })
+	// Templates and generated child stacks discovered before their parent are not independent roots.
+	d.result.Inventory = slices.DeleteFunc(d.result.Inventory, func(unit model.DiscoveredUnit) bool { return !d.independentStack(unit.GenerationRoot) })
 	for _, child := range d.childFailures {
-		if !d.skipped(child.generationRoot) {
+		if d.independentStack(child.generationRoot) {
 			d.result.Failures = append(d.result.Failures, child.failure)
 		}
 	}
 	return nil
+}
+
+// independentStack excludes templates and materialized child stacks from root discovery.
+func (d *projectDiscovery) independentStack(path string) bool {
+	return !d.skipped(path) && !d.generated[path]
 }
 
 // discoverStandaloneUnits visits units that no stack owns. A unit already
@@ -247,6 +252,9 @@ func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement *uni
 	for _, child := range slices.Sorted(maps.Keys(resolved.StackConfigs)) {
 		source := resolved.StackSources[child]
 		d.templates[source] = true
+		if logical, err := logicalPath(resolved.StackConfigs[child]); err == nil {
+			d.generated[logical] = true
+		}
 		if err := d.visitChild(resolved.StackConfigs[child], placement.child(resolved.Stacks[child], source, files), depth); err != nil {
 			return err
 		}

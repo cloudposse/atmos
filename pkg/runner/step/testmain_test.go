@@ -21,7 +21,11 @@ import (
 // on in CI). The test binary itself impersonates the shell: it echoes a
 // "ready" marker in response to a scripted "printf ready" line, mirroring
 // pkg/asciicast's own session test helper.
-const sessionShellHelperEnv = "_ATMOS_STEP_SESSION_SHELL"
+const (
+	sessionShellHelperEnv       = "_ATMOS_STEP_SESSION_SHELL"
+	sessionShellReadyFileEnv    = "_ATMOS_STEP_SESSION_READY_FILE"
+	sessionShellStartupDelayEnv = "_ATMOS_STEP_SESSION_STARTUP_DELAY"
+)
 
 // sessionShellBannerEnv makes the fake shell print sessionShellBanner once it reads input.
 const (
@@ -148,8 +152,14 @@ func runStepSessionShellHelper() {
 	// The test binary can emit terminal queries during startup that swallow
 	// input typed before the helper starts reading. Tests that need their typed
 	// line to reach the helper wait for this banner before typing.
+	if delay, err := time.ParseDuration(os.Getenv(sessionShellStartupDelayEnv)); err == nil {
+		time.Sleep(delay)
+	}
 	if os.Getenv(sessionShellBannerEnv) == "1" {
 		_, _ = os.Stdout.WriteString(sessionShellBanner + "\n")
+	}
+	if path := os.Getenv(sessionShellReadyFileEnv); path != "" {
+		_ = os.WriteFile(path, []byte("ready"), 0o600)
 	}
 	if os.Getenv(sessionShellDelayEnv) == "1" {
 		time.Sleep(3 * time.Second)

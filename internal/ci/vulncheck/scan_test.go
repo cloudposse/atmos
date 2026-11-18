@@ -176,6 +176,25 @@ func TestRunCommand_MissingBinary(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestRunCommand_ScannerEnvironment(t *testing.T) {
+	if os.Getenv("VULNCHECK_ENV_HELPER") == "1" {
+		_, _ = io.WriteString(os.Stdout, os.Getenv("GOGC")+"|"+os.Getenv("GODEBUG"))
+		return
+	}
+	t.Setenv("VULNCHECK_ENV_HELPER", "1")
+	t.Setenv("GOGC", "100")
+	t.Setenv("GODEBUG", "invalidptr=1")
+	t.Setenv("ATMOS_VULNCHECK_GOGC", "50")
+	t.Setenv("ATMOS_VULNCHECK_GCTRACE", "1")
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	var stdout, stderr bytes.Buffer
+	require.NoError(t, runCommand(context.Background(), &stdout, &stderr, exe, "-test.run=^TestRunCommand_ScannerEnvironment$"))
+	assert.Contains(t, stdout.String(), "50|invalidptr=1,gctrace=1")
+	assert.Equal(t, "100", os.Getenv("GOGC"))
+	assert.Equal(t, "invalidptr=1", os.Getenv("GODEBUG"))
+}
+
 func TestScan_ReportsMissingGovulncheck(t *testing.T) {
 	// With nothing on PATH the real runner cannot find the tool, and Scan must
 	// say so instead of writing an empty report.
