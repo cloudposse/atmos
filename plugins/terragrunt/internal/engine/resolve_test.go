@@ -523,3 +523,26 @@ func TestBackendGenerationOverlayPreservesCallerRequest(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, original, request)
 }
+
+// The pinned upstream include parser rejects JSON parents before download-dir probing.
+// Exercise the probe with its real JSON input independently of that upstream restriction.
+func TestBackendRecognizesEscapedDownloadDirAttribute(t *testing.T) {
+	filesystem := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(filesystem, "parent.hcl.json", []byte(`{"download_\u0064ir":"custom-cache"}`), 0o600))
+	require.True(t, mentionsDownloadDir(filesystem, []string{"parent.hcl.json"}))
+}
+
+func TestDownloadDirDetectionUsesAttributeSyntax(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	for _, test := range []struct {
+		text string
+		want bool
+	}{
+		{`# download_dir is not set`, false},
+		{`locals { text = "download_dir" }`, false},
+		{`download_dir = run_cmd("must-not-run")`, true},
+	} {
+		require.NoError(t, afero.WriteFile(fs, "unit.hcl", []byte(test.text), 0o600))
+		require.Equal(t, test.want, mentionsDownloadDir(fs, []string{"unit.hcl"}))
+	}
+}

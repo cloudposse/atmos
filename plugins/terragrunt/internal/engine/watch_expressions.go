@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -88,7 +90,7 @@ func (e *watchEvaluator) functions() map[string]function.Function {
 	functions := map[string]function.Function{
 		"format":     stdlib.FormatFunc,
 		"join":       stdlib.JoinFunc,
-		"replace":    stdlib.ReplaceFunc,
+		"replace":    watchReplaceFunction(),
 		"lower":      stdlib.LowerFunc,
 		"upper":      stdlib.UpperFunc,
 		"concat":     stdlib.ConcatFunc,
@@ -209,4 +211,23 @@ func (e *watchEvaluator) includeParent(body *hclsyntax.Body) string {
 		}
 	}
 	return ""
+}
+
+// watchReplaceFunction matches Terragrunt's literal and slash-delimited regex replacement.
+func watchReplaceFunction() function.Function {
+	return function.New(&function.Spec{
+		Params: []function.Parameter{{Name: "str", Type: cty.String}, {Name: "substr", Type: cty.String}, {Name: "replace", Type: cty.String}},
+		Type:   function.StaticReturnType(cty.String),
+		Impl: func(args []cty.Value, _ cty.Type) (cty.Value, error) {
+			text, pattern, replacement := args[0].AsString(), args[1].AsString(), args[2].AsString()
+			if len(pattern) > 1 && strings.HasPrefix(pattern, "/") && strings.HasSuffix(pattern, "/") {
+				expression, err := regexp.Compile(pattern[1 : len(pattern)-1])
+				if err != nil {
+					return cty.NilVal, err
+				}
+				return cty.StringVal(expression.ReplaceAllString(text, replacement)), nil
+			}
+			return cty.StringVal(strings.ReplaceAll(text, pattern, replacement)), nil
+		},
+	})
 }

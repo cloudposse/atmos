@@ -327,3 +327,21 @@ func TestPreventDestroyMalformedEnvironmentFailsClosed(t *testing.T) {
 	_, err := Resolve(t.Context(), request)
 	require.ErrorContains(t, err, "invalid TF_CLI_ARGS_apply")
 }
+
+func TestImplicitUnitLockHonorsCopyExclusion(t *testing.T) {
+	for _, pattern := range []string{".terraform.lock.hcl", "*.lock.hcl"} {
+		t.Run(pattern, func(t *testing.T) {
+			request := nativeUnit(t, "")
+			body, err := os.ReadFile(request.Path)
+			require.NoError(t, err)
+			body = []byte(strings.Replace(string(body), " }", "\n}", 1))
+			body = []byte(strings.Replace(string(body), "terraform {", fmt.Sprintf("terraform {\n exclude_from_copy = [%q]\n", pattern), 1))
+			require.NoError(t, os.WriteFile(request.Path, body, 0o600))
+			require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), lockFileName), []byte("# stale unit pins"), 0o600))
+			result, err := Resolve(t.Context(), request)
+			require.NoError(t, err)
+			require.NotContains(t, result.Generated, lockFileName)
+			require.NotContains(t, result.UnitFileCopies, lockFileName)
+		})
+	}
+}

@@ -254,8 +254,8 @@ func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement *uni
 	for _, child := range slices.Sorted(maps.Keys(resolved.UnitConfigs)) {
 		source := resolved.UnitSources[child]
 		d.templates[source] = true
-		if physical, err := canonicalPath(resolved.UnitConfigs[child]); err == nil {
-			d.generated[physical] = true
+		if logical, err := logicalPath(resolved.UnitConfigs[child]); err == nil {
+			d.generated[logical] = true
 		}
 		if err := d.visitChild(resolved.UnitConfigs[child], placement.child(child, source, files), depth); err != nil {
 			return err

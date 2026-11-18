@@ -506,3 +506,26 @@ func TestDiscoveryContextCanceledDuringEvaluation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	require.Nil(t, result)
 }
+
+func TestDiscoverySkipsStackOwnedSymlinkedConfig(t *testing.T) {
+	root := stackProject(t, map[string]string{
+		"live/terragrunt.stack.hcl": `unit "app" {
+ source = "../catalog/units/app"
+ path = "app"
+ no_dot_terragrunt_stack = true
+ }`,
+	})
+	module, err := json.Marshal(filepath.ToSlash(filepath.Join(root, "modules", "unit")))
+	require.NoError(t, err)
+	target := filepath.Join(root, "shared-config.hcl")
+	require.NoError(t, os.WriteFile(target, []byte("terraform { source = "+string(module)+" }\n"), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "live", "app"), 0o700))
+	if err := os.Symlink(target, filepath.Join(root, "live", "app", "terragrunt.hcl")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**"}, Environment: map[string]string{}})
+	require.NoError(t, err)
+	require.Empty(t, result.Failures)
+	require.Equal(t, []string{"live/app"}, inventoryNames(t, result))
+	require.Equal(t, filepath.Join(root, "live", "terragrunt.stack.hcl"), result.Inventory[0].GenerationRoot)
+}

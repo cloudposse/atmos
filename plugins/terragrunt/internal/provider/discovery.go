@@ -183,6 +183,13 @@ func directoryPattern(path string) string {
 // derivedAddress names a unit that was not part of the evaluation: the component is its
 // directory name and the stack is the directory above it, relative to the project.
 func derivedAddress(base, path string) (*pluginv1.ComponentAddress, error) {
+	name := filepath.Base(path)
+	if name != "terragrunt.hcl" && name != "terragrunt.hcl.json" {
+		return nil, ErrUnsupported
+	}
+	if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
+		return nil, ErrUnsupported
+	}
 	dir, err := relative(base, filepath.Dir(path))
 	if err != nil {
 		return nil, err

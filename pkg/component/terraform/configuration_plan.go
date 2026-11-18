@@ -23,7 +23,7 @@ import (
 const configurationPlanSuffix = ".atmos.json"
 
 // configurationPlanVersion is bumped whenever the stored binding changes shape.
-const configurationPlanVersion = 3
+const configurationPlanVersion = 4
 
 // subcommandPlan names the Terraform plan command.
 const subcommandPlan = "plan"
@@ -42,7 +42,9 @@ type configurationPlan struct {
 	// SensitiveDigest binds the bytes of every sensitive generated file, including files the working
 	// directory digest excludes, such as those below a Terragrunt cache.
 	SensitiveDigest string
-	Prepared        *schema.PreparedComponentConfiguration
+	// StackEnvironmentDigest binds stack overrides when apply reuses filtered plan execution.
+	StackEnvironmentDigest string
+	Prepared               *schema.PreparedComponentConfiguration
 }
 
 // ownsConfigurationPlan reports whether a provider manages this component's saved plans.
@@ -106,6 +108,9 @@ func restoreConfigurationPlan(ctx context.Context, config *schema.AtmosConfigura
 // verifyReviewedPlan rejects a plan whose identity, artifact, backend, or workdir changed since review,
 // then restores the sensitive content the reviewed plan depends on.
 func verifyReviewedPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, runtime schema.ComponentConfigurationPlanRuntime, plan *configurationPlan) error {
+	if err := verifyPlanStackEnvironment(info, plan); err != nil {
+		return err
+	}
 	path := configurationPlanPath(config, info)
 	identity, err := runtime.PlanIdentity(ctx, info, plan.Prepared.Sources)
 	if err != nil {
@@ -278,7 +283,11 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	if err != nil {
 		return nil, err
 	}
-	return &configurationPlan{WorkingDigest: snapshot.workingDigest, SensitiveDigest: snapshot.sensitiveDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, Prepared: stored}, nil
+	environmentDigest, err := planStackEnvironmentDigest(info, stored)
+	if err != nil {
+		return nil, err
+	}
+	return &configurationPlan{StackEnvironmentDigest: environmentDigest, WorkingDigest: snapshot.workingDigest, SensitiveDigest: snapshot.sensitiveDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, Prepared: stored}, nil
 }
 
 // reviewedPlanConfiguration keeps reviewed public bytes while omitting inputs and secrets.
@@ -289,14 +298,18 @@ func reviewedPlanConfiguration(prepared *schema.PreparedComponentConfiguration, 
 	stored := *prepared
 	stored.Inputs, stored.Backend = nil, nil
 	stored.Files = withoutSensitiveContent(stored.Files)
-	if publicFiles != "" {
-		var observed map[string][]byte
-		if err := json.Unmarshal([]byte(publicFiles), &observed); err != nil {
-			return nil, err
-		}
-		for i := range stored.Files {
-			if content, ok := observed[stored.Files[i].Path]; ok && !stored.Files[i].Sensitive {
-				stored.Files[i].Content = content
+	if publicFiles == "" {
+		return &stored, nil
+	}
+	var observed map[string][]byte
+	if err := json.Unmarshal([]byte(publicFiles), &observed); err != nil {
+		return nil, err
+	}
+	for i := range stored.Files {
+		if content, ok := observed[stored.Files[i].Path]; ok && !stored.Files[i].Sensitive {
+			stored.Files[i].Content = content
+			if content == nil {
+				stored.Files[i].IfExists = "remove"
 			}
 		}
 	}

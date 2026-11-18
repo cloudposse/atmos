@@ -2,7 +2,6 @@
 package engine
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -17,6 +16,7 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/log/format"
 	"github.com/gruntwork-io/terragrunt/pkg/options"
 	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/afero"
@@ -323,10 +323,10 @@ func (e *unitEvaluator) parseUnit(ctx context.Context) (*config.TerragruntConfig
 			return nil, err
 		}
 		// Reject unverifiable backend generation before the full download_dir probe.
-		if err := checkBackendGeneration(environment.FS, append(e.pctx.FilesRead.Paths(), e.path)); err != nil {
+		if err := checkBackendGeneration(environment.FS, backendConfigurationPaths(cfg, e.path)); err != nil {
 			return nil, err
 		}
-		if e.request.Environment[downloadDirEnv] == "" && mentionsDownloadDir(environment.FS, append(e.pctx.FilesRead.Paths(), e.path)) {
+		if e.request.Environment[downloadDirEnv] == "" && mentionsDownloadDir(environment.FS, backendConfigurationPaths(cfg, e.path)) {
 			cfg.DownloadDir, err = downloadDir(ctx, e.logger, environment, e.pctx)
 		}
 		return cfg, err
@@ -358,7 +358,23 @@ func downloadDir(ctx context.Context, logger log.Logger, environment *atmosbridg
 // inputs stay unevaluated during backend reads.
 func mentionsDownloadDir(filesystem afero.Fs, paths []string) bool {
 	for _, path := range paths {
-		if content, err := afero.ReadFile(filesystem, path); err == nil && bytes.Contains(content, []byte("download_dir")) {
+		data, err := afero.ReadFile(filesystem, path)
+		if err != nil {
+			continue
+		}
+		parser := hclparse.NewParser()
+		var file *hcl.File
+		var diagnostics hcl.Diagnostics
+		if strings.HasSuffix(path, ".json") {
+			file, diagnostics = parser.ParseJSON(data, path)
+		} else {
+			file, diagnostics = parser.ParseHCL(data, path)
+		}
+		if diagnostics.HasErrors() {
+			continue
+		}
+		content, _, _ := file.Body.PartialContent(&hcl.BodySchema{Attributes: []hcl.AttributeSchema{{Name: "download_dir"}}})
+		if content.Attributes["download_dir"] != nil {
 			return true
 		}
 	}

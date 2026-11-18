@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -588,4 +589,45 @@ inputs = { value = dependency.upstream.outputs.value }
 	require.NoError(t, err)
 	require.Equal(t, "planned", result.Inputs["value"])
 	require.NotNil(t, result.Execution.Apply)
+}
+
+func TestDiscoveryPreservesRepeatedHooksInOneFile(t *testing.T) {
+	request := executionUnit(t, `before_hook "lint" {
+ commands = ["plan"]
+ execute = ["tflint"]
+}
+before_hook "lint" {
+ commands = ["plan"]
+ execute = ["./wrapper.sh"]
+}`)
+	for _, phase := range []string{"discover", ""} {
+		request.Phase = phase
+		_, err := Resolve(t.Context(), request)
+		require.ErrorContains(t, err, "Unsupported built-in")
+	}
+}
+
+func TestDiscoveryHonorsAutomaticHookOverride(t *testing.T) {
+	for _, unsupportedAuto := range []bool{false, true} {
+		t.Run(fmt.Sprint(unsupportedAuto), func(t *testing.T) {
+			unit, auto := "tflint", "./wrapper.sh"
+			if unsupportedAuto {
+				unit, auto = auto, unit
+			}
+			hook := func(program string) string {
+				return fmt.Sprintf("before_hook \"lint\" {\n commands = [\"plan\"]\n execute = [%q]\n}", program)
+			}
+			request := executionUnit(t, hook(unit))
+			require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), "terragrunt.autoinclude.hcl"), []byte("terraform {\n"+hook(auto)+"\n}"), 0o600))
+			for _, phase := range []string{"discover", ""} {
+				request.Phase = phase
+				_, err := Resolve(t.Context(), request)
+				if unsupportedAuto {
+					require.ErrorContains(t, err, "Unsupported built-in")
+				} else {
+					require.NoError(t, err)
+				}
+			}
+		})
+	}
 }

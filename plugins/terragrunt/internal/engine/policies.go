@@ -139,12 +139,11 @@ func validateRemoteSource(source string) error {
 			return nil
 		}
 	}
-	scheme, _, found := strings.Cut(source, "://")
 	return &model.Problem{
 		Code: model.CodeInvalidSource, Summary: "Unsupported module source transport",
-		Detail: fmt.Sprintf("The module source scheme %q is not supported. Registry sources such as `tfr://` need Terragrunt's version selection and are not interchangeable with Git or archive sources.", scheme),
+		Detail: "The module source transport is not supported. Registry sources such as `tfr://` need Terragrunt's version selection and are not interchangeable with Git or archive sources.",
 		Hints:  []string{"Use a local path, a `git::https://`, `git::ssh://`, or `https://` source, or a Git source pinned with `?ref=`."},
-		Key:    "terraform.source", Safe: found, Err: ErrUnsupportedExecution,
+		Key:    "terraform.source", Safe: true, Err: ErrUnsupportedExecution,
 	}
 }
 

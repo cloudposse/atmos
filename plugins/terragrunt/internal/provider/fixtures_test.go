@@ -182,6 +182,8 @@ func TestDerivedAddressNamesAnUnscopedUnit(t *testing.T) {
 		filepath.Join(root, "vpc", "terragrunt.hcl"):                {Stack: "default", Component: "vpc", ComponentType: "terraform"},
 		filepath.Join(root, "terragrunt.hcl"):                       {Stack: "default", Component: "root", ComponentType: "terraform"},
 	} {
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(""), 0o600))
 		got, err := derivedAddress(root, path)
 		require.NoError(t, err)
 		require.Equal(t, want.Stack, got.Stack)
@@ -200,4 +202,21 @@ func TestWarningDiagnosticsNeverFailTheCommand(t *testing.T) {
 	require.True(t, diagnostics[0].Detail.UserSafe)
 	require.Equal(t, "live/linked", diagnostics[0].Detail.Location.File)
 	require.Empty(t, warningDiagnostics(nil))
+}
+
+func TestDiscoveredDependencyDoesNotAliasAnotherConfig(t *testing.T) {
+	root := t.TempDir()
+	unit := filepath.Join(root, "db", "terragrunt.hcl")
+	settings := filepath.Join(root, "db", "settings.hcl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(unit), 0o700))
+	require.NoError(t, os.WriteFile(unit, []byte(""), 0o600))
+	require.NoError(t, os.WriteFile(settings, []byte(""), 0o600))
+	addresses := map[string]*pluginv1.ComponentAddress{unit: {Stack: "default", Component: "db", ComponentType: "terraform"}}
+	_, err := discoveredDependencies(root, &model.Resolution{Dependencies: []string{settings}}, addresses)
+	require.ErrorIs(t, err, ErrUnsupported)
+	// An explicit inventory identity always wins, including a named configuration.
+	addresses[settings] = &pluginv1.ComponentAddress{Stack: "custom", Component: "settings", ComponentType: "terraform"}
+	deps, err := discoveredDependencies(root, &model.Resolution{Dependencies: []string{settings}}, addresses)
+	require.NoError(t, err)
+	require.Equal(t, addresses[settings], deps[0].Target)
 }

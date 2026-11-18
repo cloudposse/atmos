@@ -236,3 +236,47 @@ func TestBackendGenerationPartialParseInspectsAutoIncludes(t *testing.T) {
 	require.ErrorContains(t, err, "Cannot verify backend identity from an automatic include")
 	require.Nil(t, result)
 }
+
+func TestBackendGenerationIgnoresDataWatches(t *testing.T) {
+	for _, expression := range []string{`mark_as_read("optional.txt")`, `read_tfvars_file("values.json")`} {
+		t.Run(expression, func(t *testing.T) {
+			request := nativeUnit(t, "locals { data = "+expression+" }\n")
+			request.Phase = "backend"
+			require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), "values.json"), []byte(`{"generate":{"path":"backend.tf","contents":"invalid"}}`), 0o600))
+			_, err := Resolve(t.Context(), request)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestBackendGenerationNormalizesTargetPath(t *testing.T) {
+	for _, target := range []string{"backend.tf/.", "./backend.tf", "backend.tf.json/."} {
+		t.Run(target, func(t *testing.T) {
+			content := "terraform {\n backend \"local\" { path = \"other.tfstate\" }\n}"
+			if target == "backend.tf.json/." {
+				content = `{"terraform":{"backend":{"local":{"path":"other.tfstate"}}}}`
+			}
+			request := nativeUnit(t, fmt.Sprintf("generate \"backend\" {\n path = %q\n if_exists = \"overwrite\"\n contents = %q\n}", target, content))
+			request.Phase = "backend"
+			_, err := Resolve(t.Context(), request)
+			require.ErrorIs(t, err, ErrUnsupportedExecution)
+		})
+	}
+}
+
+func TestOpenTofuGeneratedBackendRejected(t *testing.T) {
+	for _, phase := range []string{"", "backend"} {
+		for _, target := range []string{"backend.tofu", "backend.tofu.json"} {
+			t.Run(phase+target, func(t *testing.T) {
+				content := "terraform {\n backend \"local\" { path = \"other.tfstate\" }\n}"
+				if filepath.Ext(target) == ".json" {
+					content = `{"terraform":{"backend":{"local":{"path":"other.tfstate"}}}}`
+				}
+				request := nativeUnit(t, fmt.Sprintf("generate \"backend\" {\n path = %q\n if_exists = \"overwrite\"\n disable_signature = true\n contents = %q\n}", target, content))
+				request.Phase = phase
+				_, err := Resolve(t.Context(), request)
+				require.ErrorIs(t, err, ErrUnsupportedExecution)
+			})
+		}
+	}
+}
