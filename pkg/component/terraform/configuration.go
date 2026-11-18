@@ -53,7 +53,7 @@ func resolveComponentToolchain(config *schema.AtmosConfiguration, info *schema.C
 
 // writePreparedConfigurationFiles validates generated paths before writing a live preparation.
 func writePreparedConfigurationFiles(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, componentPath string) error {
-	if prepared == nil || info.DryRun {
+	if prepared == nil || info.DryRun || (usesConfigurationPlan(info) && restoresConfigurationPlan(info)) {
 		return nil
 	}
 	if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
@@ -252,4 +252,13 @@ func rejectRuntimeArtifacts(files []schema.ComponentConfigurationFile) error {
 
 func isRuntimeArtifact(path string) bool {
 	return configuration.IsRuntimeArtifact(path)
+}
+
+// recheckReviewedApply runs inside each subprocess attempt, after before hooks and recovery init.
+func recheckReviewedApply(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if info.DryRun || !schema.ConfigurationOwned(info.ComponentSettingsSection) || !usesConfigurationPlan(info) || !restoresConfigurationPlan(info) {
+		return nil
+	}
+	_, err := restoreConfigurationPlan(ctx, config, info)
+	return err
 }

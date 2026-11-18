@@ -263,6 +263,8 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	// this, incidental init/workspace-select output (e.g. a stray "No changes."
 	// lookalike) can poison the exec-metadata parser's extraction even though the
 	// real plan/apply's own output is correct (research.md Decision 32).
+	// Init/provisioning can relocate the execution directory after preparation.
+	execCtx.componentPath, execCtx.workingDir = componentPath, componentPath
 	if err := validateEnvironmentPlanOutput(atmosConfig, info, execCtx); err != nil {
 		return err
 	}
@@ -381,12 +383,14 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() er
 		case *after != *before:
 			s.err = fmt.Errorf("%w: configuration changed while Terraform ran", errUtils.ErrPlanVerificationFailed)
 		default:
-			// Terraform writes the plan itself unless a policy gate publishes it later, so the plan is
-			// fingerprinted now and an after hook cannot move the binding onto rewritten bytes.
-			if s.execCtx.planPolicy == nil {
-				if digest, digestErr := fileDigest(path); digestErr == nil {
-					after.planDigest = digest
-				}
+			// Hash the engine's actual -out artifact before after hooks, even when policy
+			// later publishes it at a different path retained by the companion.
+			writtenPath := path
+			if s.execCtx.planPolicy != nil {
+				writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
+			}
+			if digest, digestErr := fileDigest(writtenPath); digestErr == nil {
+				after.planDigest = digest
 			}
 			s.result = after
 		}

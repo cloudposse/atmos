@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -58,7 +59,11 @@ func TestInputWatchesFailuresAndIncludedInputs(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	path := filepath.Join(root, "shared.hcl")
 	result := &model.Resolution{Files: []string{path}}
-	require.Error(t, trackInputSources(fs, root, result))
+	require.NoError(t, trackInputSources(fs, root, result))
+	require.Contains(t, result.Files, path, "a missing mark_as_read target remains watched")
+	require.NoError(t, os.MkdirAll(path, 0o700))
+	require.Error(t, trackInputSources(afero.NewOsFs(), root, result), "non-absence I/O errors still fail")
+	require.NoError(t, os.Remove(path))
 	require.NoError(t, fs.MkdirAll(root, 0o700))
 	// A read data file named *.hcl need not be HCL; it remains a file watch instead of
 	// failing the whole inventory.
@@ -99,5 +104,31 @@ func TestInputWatchesFollowNestedConfigurationReads(t *testing.T) {
 	} {
 		require.Contains(t, result.Files, path, "a transitive read is watched, even before it exists")
 	}
-	require.Empty(t, result.Folders)
+	require.Contains(t, result.Folders, filepath.Join(root, "shared", "absent.hcl"))
+}
+
+func TestDiscoveryKeepsMissingMarkAsRead(t *testing.T) {
+	request := nativeUnit(t, `locals { optional = mark_as_read("optional.hcl") }`)
+	request.Phase = "discover"
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	root, err := filepath.EvalSymlinks(filepath.Dir(request.Path))
+	require.NoError(t, err)
+	require.Contains(t, result.Files, filepath.Join(root, "optional.hcl"))
+}
+
+func TestInputWatchesResolveDirectoryConfiguration(t *testing.T) {
+	root := t.TempDir()
+	fs := afero.NewMemMapFs()
+	require.NoError(t, fs.MkdirAll(filepath.Join(root, "shared"), 0o700))
+	unit := filepath.Join(root, "terragrunt.hcl")
+	shared := filepath.Join(root, "shared", "terragrunt.hcl")
+	require.NoError(t, afero.WriteFile(fs, unit, []byte(`inputs = { value = read_terragrunt_config("shared") }`), 0o600))
+	result := &model.Resolution{Files: []string{unit}}
+	require.NoError(t, trackInputSources(fs, root, result))
+	require.Contains(t, result.Files, shared)
+	require.Contains(t, result.Folders, filepath.Dir(shared), "config creation is watched")
+	require.NoError(t, afero.WriteFile(fs, shared, []byte(`inputs = { value = file("data.json") }`), 0o600))
+	require.NoError(t, trackInputSources(fs, root, result))
+	require.Contains(t, result.Files, filepath.Join(root, "shared", "data.json"), "selected config is scanned transitively")
 }

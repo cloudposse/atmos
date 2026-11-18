@@ -231,3 +231,24 @@ func TestPreventDestroyMalformedEnvironmentFailsClosed(t *testing.T) {
 	_, err := Resolve(t.Context(), request)
 	require.ErrorContains(t, err, "invalid TF_CLI_ARGS_apply")
 }
+
+func TestGeneratedBackendSkipRejectsExistingDestination(t *testing.T) {
+	request := nativeUnit(t, `remote_state {
+ backend = "local"
+ config = { path = "expected.tfstate" }
+ generate = { path = "backend.tf", if_exists = "skip" }
+}`)
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.True(t, result.BackendGenerated)
+	require.Equal(t, "error", result.GeneratedPolicies["backend.tf"])
+	require.Contains(t, result.Generated["backend.tf"], "expected.tfstate")
+}
+
+func TestDestroyGuardDoesNotTrustDeniedTryFallback(t *testing.T) {
+	request := nativeUnit(t, `prevent_destroy = try(run_cmd("must-not-execute-policy") == "protected", true)`)
+	request.Command = "destroy"
+	_, err := Resolve(t.Context(), request)
+	require.ErrorIs(t, err, errUndecidableDestroyPolicy)
+	require.NotErrorIs(t, err, ErrPreventDestroy)
+}

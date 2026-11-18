@@ -94,6 +94,9 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 				phaseInfo,
 				info.SubCommand,
 				func(o ...component.ExecutionOption) error {
+					if err := recheckReviewedApply(component.ContextFromOptions(o...), atmosConfig, phaseInfo); err != nil {
+						return err
+					}
 					return e.executeStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
 						componentPath:  componentPath,
 						args:           phaseArgs,
