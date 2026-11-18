@@ -2,8 +2,11 @@ package exec
 
 import (
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 
+	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -26,6 +29,50 @@ var deletableComponentTypes = []string{
 	cfg.KubernetesComponentType,
 	cfg.HelmComponentType,
 	cfg.CloudFormationComponentType,
+}
+
+// customAffectedComponentTypes returns, in sorted order, the component types present in a stack's
+// components section that are not canonical (see deletableComponentTypes) but are registered with
+// the component registry, such as custom kinds declared by custom commands. Sections of
+// unregistered types are ignored, the same as describe stacks does. Both the added/modified path
+// (processStackAffected) and the deleted path use this function, so they stay in sync. See #3208.
+func customAffectedComponentTypes(componentsSection map[string]any) []string {
+	var types []string
+	for componentType, section := range componentsSection {
+		if slices.Contains(deletableComponentTypes, componentType) {
+			continue
+		}
+		if _, ok := section.(map[string]any); !ok {
+			continue
+		}
+		if _, ok := comp.GetProvider(componentType); !ok {
+			continue
+		}
+		types = append(types, componentType)
+	}
+	sort.Strings(types)
+	return types
+}
+
+// customComponentBasePath returns the base path of a registered custom component type (a type
+// not in deletableComponentTypes), as its provider reports it. The second result is false for
+// canonical and unregistered types. The base path is empty when the provider has no source tree.
+// Folder-change detection and component_path both use it, so they resolve the same folder. See #3208.
+func customComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentType string) (string, bool) {
+	if slices.Contains(deletableComponentTypes, componentType) {
+		return "", false
+	}
+	provider, ok := comp.GetProvider(componentType)
+	if !ok {
+		return "", false
+	}
+	return provider.GetBasePath(atmosConfig), true
+}
+
+// deletedComponentTypes returns the component types to evaluate for deletion in a BASE components
+// section: the canonical types, then the registered custom types present in that section.
+func deletedComponentTypes(remoteComponentsSection map[string]any) []string {
+	return append(slices.Clone(deletableComponentTypes), customAffectedComponentTypes(remoteComponentsSection)...)
 }
 
 // detectDeletedComponents detects components and stacks that exist in BASE (remoteStacks)
@@ -128,7 +175,7 @@ func processAllComponentsAsDeleted(
 	var deleted []schema.Affected
 
 	// Process each component type.
-	for _, componentType := range deletableComponentTypes {
+	for _, componentType := range deletedComponentTypes(remoteComponentsSection) {
 		componentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any)
 		if !ok {
 			continue
@@ -206,7 +253,7 @@ func processDeletedComponentsInStack(
 	var deleted []schema.Affected
 
 	// Process each component type.
-	for _, componentType := range deletableComponentTypes {
+	for _, componentType := range deletedComponentTypes(remoteComponentsSection) {
 		remoteTypeSection, ok := remoteComponentsSection[componentType].(map[string]any)
 		if !ok {
 			continue

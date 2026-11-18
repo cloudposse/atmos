@@ -438,7 +438,8 @@ var simpleAffectedComponentTypes = []string{
 // compares the shared component sections (vars, env, source, provision, ...), and checks
 // settings/dependencies. Terraform, Kubernetes, and Helm have dedicated processors with extra logic
 // (Spacelift/Atlantis wiring, Kubernetes manifests, Helm values files); every other
-// affected-eligible type (helmfile, packer, ansible, container, emulator) routes here. See #3203.
+// affected-eligible type (helmfile, packer, ansible, container, emulator, and registered custom
+// types) routes here. See #3203 and #3208.
 //
 //nolint:funlen // Straightforward per-component checks; splitting would reduce readability.
 func processSimpleComponentsIndexed(

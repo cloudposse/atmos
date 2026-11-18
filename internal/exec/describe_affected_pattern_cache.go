@@ -75,8 +75,17 @@ func (c *componentPathPatternCache) getComponentPathPattern(
 	case cfg.CloudFormationComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.CloudFormation.BasePath, component)
 	default:
-		// Unknown component type - return pattern without caching.
-		return "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
+		// A registered custom component type (see customAffectedComponentTypes) uses the base path
+		// of its provider. A provider without a base path has no source tree to match.
+		basePath, ok := customComponentBasePath(atmosConfig, componentType)
+		if !ok {
+			// Unknown component type - return pattern without caching.
+			return "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
+		}
+		if basePath == "" {
+			return "", nil
+		}
+		componentPath = filepath.Join(atmosConfig.BasePath, basePath, component)
 	}
 
 	componentPathAbs, err := filepath.Abs(componentPath)
