@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"maps"
 
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -35,6 +37,10 @@ type RepositoryInfo struct {
 	// Policy is the effective verification policy: the global and repository trust sets, both of
 	// which must be satisfied.
 	Policy artifact.VerificationPolicy
+
+	// Discovery describes where the repository's discoverable data lives, for the discovery cache
+	// and catalogs. It is empty for repositories described without configuration.
+	Discovery DiscoveryInfo
 }
 
 // Clone returns a RepositoryInfo that shares no map, slice, or pointer with i, so a caller editing a
@@ -46,7 +52,19 @@ func (i *RepositoryInfo) Clone() RepositoryInfo {
 	out.Capabilities = i.Capabilities.Clone()
 	out.Defaults = i.Defaults.Clone()
 	out.Policy = i.Policy.Clone()
+	out.Discovery.Options = cloneOptions(i.Discovery.Options)
 	return out
+}
+
+// cloneOptions deep-copies discovery options, including nested maps and slices. The copy can fail
+// only for typed maps whose keys collide once normalized; the options then fall back to a copy of
+// the top-level map, which still never shares that map with the original.
+func cloneOptions(options map[string]any) map[string]any {
+	copied, err := merge.DeepCopyMap(options)
+	if err != nil {
+		return maps.Clone(options)
+	}
+	return copied
 }
 
 // Repositories resolves repository aliases. Describe must be free of network access and

@@ -41,7 +41,7 @@ func (s *Service) Publish(ctx context.Context, request artifact.PublishRequest) 
 func (s *Service) PublishDetailed(ctx context.Context, request artifact.PublishRequest) (*PublishOutcome, error) {
 	defer perf.Track(nil, "service.Service.PublishDetailed")()
 
-	op := s.begin(artifact.ActionPublish, request.Repository, requestedName(request.Name, request.Version))
+	op := s.begin(&request.Execution, artifact.ActionPublish, request.Repository, requestedName(request.Name, request.Version))
 	state := &publishState{}
 	err := s.publish(ctx, op, &request, state)
 	return &PublishOutcome{Operation: op.done(err), Record: state.record, Existing: state.existing}, err
@@ -92,6 +92,7 @@ func (s *Service) publish(ctx context.Context, op *operation, request *artifact.
 	}
 	state.record = prepared.Record
 	fillPrepared(op, in)
+	reportExclusions(op, prepared.Exclusions)
 	if request.DryRun {
 		op.result.Outcome = artifact.OutcomeDryRun
 		op.info("dry-run", fmt.Sprintf("would publish %s to repository %q as %s packaging; no repository was contacted", op.result.Ref, request.Repository, packaging))
@@ -190,6 +191,26 @@ func fillPrepared(op *operation, in *incoming) {
 	op.result.RecordDigest = in.recordDigest
 	op.result.ContentDigest = in.record.ContentDigest
 	op.result.Size = in.size
+	op.result.SizeMeasured = true
+}
+
+// diagnosticExcluded is the diagnostic code of a source entry that a kind-specific producer left out.
+const (
+	diagnosticExcluded      = "excluded"
+	maxExclusionDiagnostics = 100
+)
+
+// reportExclusions makes the default exclusions of a kind-specific producer visible: every excluded
+// entry becomes one info diagnostic, so dry runs and real publications, structured output, and
+// step results all show what was left out and which rule excluded it.
+func reportExclusions(op *operation, exclusions []artifact.Exclusion) {
+	limit := min(len(exclusions), maxExclusionDiagnostics)
+	for index := range limit {
+		op.info(diagnosticExcluded, fmt.Sprintf("excluded %s (rule %s)", exclusions[index].Path, exclusions[index].Rule))
+	}
+	if remaining := len(exclusions) - limit; remaining > 0 {
+		op.info(diagnosticExcluded, fmt.Sprintf("%d additional exclusions omitted", remaining))
+	}
 }
 
 // reportUnchanged fills the result from the EXISTING record; the current execution keeps its own
@@ -207,6 +228,7 @@ func (s *Service) reportUnchanged(pub *publication, cur *current) {
 	op.result.RecordDigest = cur.pinned.RecordDigest
 	op.result.RepresentationDigest = cur.inspection.Representation.RepresentationDigest
 	op.result.Size = payloadSize(cur.inspection)
+	op.result.SizeMeasured = true
 	op.info("unchanged", fmt.Sprintf("an identical artifact already exists in repository %q; the existing record was returned unchanged", pub.tgt.alias))
 }
 

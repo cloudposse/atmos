@@ -1,18 +1,17 @@
 package artifacts
 
 import (
-	"context"
-
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func newDeleteCommand() *cobra.Command {
 	parser := newRepositoryParser(deletePrefix)
-	c := &command{action: artifact.ActionDelete, parser: parser, prefix: deletePrefix, run: runDelete, text: textDelete}
+	c := &command{action: artifact.ActionDelete, parser: parser, prefix: deletePrefix, params: paramsDelete, text: textDelete}
 	cmd := &cobra.Command{
 		Use:   "delete <ref>",
 		Short: "Delete one published artifact reference",
@@ -28,17 +27,12 @@ command is noninteractive: name exactly the reference you mean.`,
 	return cmd
 }
 
-func runDelete(ctx context.Context, svc artifact.Service, in *input) (*result, error) {
+func paramsDelete(in *input) (*invoke.Params, error) {
 	repository, err := in.repository()
 	if err != nil {
 		return nil, err
 	}
-	ref, err := in.ref()
-	if err != nil {
-		return nil, err
-	}
-	op, err := svc.Delete(ctx, artifact.DeleteRequest{Repository: repository, Ref: ref})
-	return operationFrom(op), err
+	return &invoke.Params{Action: artifact.ActionDelete, Repository: repository, Ref: in.args[0]}, nil
 }
 
 func textDelete(res *result) error {

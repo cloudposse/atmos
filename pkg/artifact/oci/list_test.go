@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/registry/remote/errcode"
@@ -25,6 +26,7 @@ type failingCatalog struct {
 
 func (f failingCatalog) Repositories(context.Context, string) ([]string, error) { return nil, f.err }
 
+//nolint:gocritic // Test helper; the query is a small literal.
 func listAll(t *testing.T, repo *Repository, query artifact.ListQuery) []string {
 	t.Helper()
 	var seen []string
@@ -53,6 +55,24 @@ func TestCollectionListingIsScopedSortedAndPaged(t *testing.T) {
 		assert.Equal(t, want, listAll(t, repo, artifact.ListQuery{PageSize: 100}))
 		assert.Equal(t, want, listAll(t, repo, artifact.ListQuery{PageSize: 1}), "every entry exactly once across pages")
 		assert.Equal(t, []string{"a/app:1", "a/app:2"}, listAll(t, repo, artifact.ListQuery{Name: "a/app", PageSize: 1}))
+	})
+}
+
+func TestPaginationRetainsKnownDigestMetadata(t *testing.T) {
+	backends(t, func(t *testing.T, repo *Repository) {
+		for _, version := range []string{"1", "2", "3"} {
+			publish(t, repo, publishSpec{name: "app", version: version, content: version})
+		}
+		all, err := repo.List(context.Background(), artifact.ListQuery{Name: "app"})
+		require.NoError(t, err)
+		require.Len(t, all.Entries, 3)
+		known := make(map[digest.Digest]artifact.ListEntry)
+		for _, entry := range all.Entries {
+			entry.Labels = map[string]string{"cached": "yes"}
+			known[entry.Pinned.ResolvedDigest] = entry
+		}
+		query := artifact.ListQuery{Name: "app", Cursor: "app|1", PageSize: 1, Known: known, Labels: []artifact.Label{{Key: "cached", Value: "yes"}}}
+		assert.Equal(t, []string{"app:2", "app:3"}, listAll(t, repo, query), "pagination skips preceding versions while reusing cached metadata")
 	})
 }
 

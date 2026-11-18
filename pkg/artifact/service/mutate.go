@@ -15,7 +15,7 @@ import (
 func (s *Service) Delete(ctx context.Context, request artifact.DeleteRequest) (*artifact.OperationResult, error) {
 	defer perf.Track(nil, "service.Service.Delete")()
 
-	op := s.begin(artifact.ActionDelete, request.Repository, request.Ref.String())
+	op := s.begin(&request.Execution, artifact.ActionDelete, request.Repository, request.Ref.String())
 	err := s.deleteArtifact(ctx, op, &request)
 	result := op.done(err)
 	return &result, err
@@ -68,6 +68,7 @@ func (s *Service) runDelete(ctx context.Context, op *operation, request *artifac
 	op.result.Outcome = artifact.OutcomeDeleted
 	op.result.LockScope = locks.scope()
 	op.result.Size = payloadSize(inspection)
+	op.result.SizeMeasured = true
 	if len(result.Deleted) > 0 {
 		op.result.Location = result.Deleted[0]
 		op.result.Aliases = result.Deleted[1:]
@@ -109,7 +110,7 @@ func deleteLockTargets(ctx context.Context, request *artifact.DeleteRequest, inf
 func (s *Service) Pin(ctx context.Context, request artifact.PinRequest) (*artifact.PinResult, error) {
 	defer perf.Track(nil, "service.Service.Pin")()
 
-	op := s.begin(artifact.ActionPin, request.Repository, request.Ref.String())
+	op := s.begin(&request.Execution, artifact.ActionPin, request.Repository, request.Ref.String())
 	result := &artifact.PinResult{}
 	err := s.pin(ctx, op, &request, result)
 	result.Operation = op.done(err)

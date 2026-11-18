@@ -1,18 +1,18 @@
 package artifacts
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 )
 
 func newInspectCommand() *cobra.Command {
 	parser := newRepositoryParser(inspectPrefix)
-	c := &command{action: artifact.ActionInspect, parser: parser, prefix: inspectPrefix, run: runInspect, text: textInspect}
+	c := &command{action: artifact.ActionInspect, parser: parser, prefix: inspectPrefix, params: paramsInspect, text: textInspect}
 	cmd := &cobra.Command{
 		Use:   "inspect <ref>",
 		Short: "Show the metadata of an artifact without downloading its payload",
@@ -28,23 +28,12 @@ checksums. Without trust configuration the artifact is reported as unchecked, ne
 	return cmd
 }
 
-func runInspect(ctx context.Context, svc artifact.Service, in *input) (*result, error) {
+func paramsInspect(in *input) (*invoke.Params, error) {
 	repository, err := in.repository()
 	if err != nil {
 		return nil, err
 	}
-	ref, err := in.ref()
-	if err != nil {
-		return nil, err
-	}
-	inspected, err := svc.Inspect(ctx, artifact.InspectRequest{Repository: repository, Ref: ref})
-	if inspected == nil {
-		return nil, err
-	}
-	res := operationFrom(&inspected.Operation)
-	res.Inspection = &inspected.Inspection
-	res.Verification = inspected.Verification
-	return res, err
+	return &invoke.Params{Action: artifact.ActionInspect, Repository: repository, Ref: in.args[0]}, nil
 }
 
 func textInspect(res *result) error {

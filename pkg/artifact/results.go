@@ -21,6 +21,13 @@ type RepositoryListing struct {
 	// Count is the number of entries returned from the repository.
 	Count int `json:"count"`
 
+	// Source says where the entries came from: "live" (read from the repository), "cache" (a
+	// discovery snapshot), or "catalog" (the repository's configured catalog).
+	Source string `json:"source,omitempty"`
+
+	// FetchedAt is when a cached or catalog snapshot was fetched, in RFC 3339 UTC.
+	FetchedAt string `json:"fetched_at,omitempty"`
+
 	// Diagnostics explain capability or refresh problems.
 	Diagnostics []Diagnostic `json:"diagnostics,omitempty"`
 }
@@ -33,6 +40,10 @@ type ListResult struct {
 
 	// Repositories reports per-repository outcomes.
 	Repositories []RepositoryListing `json:"repositories,omitempty"`
+
+	// Incomplete is true when at least one selected repository could not be listed, so Artifacts
+	// must not be read as the whole collection. Each failing repository carries an error diagnostic.
+	Incomplete bool `json:"incomplete,omitempty"`
 }
 
 // DocumentResult is the result of Service.ShowDocument. Content is bounded by [MaxDocumentSize].
