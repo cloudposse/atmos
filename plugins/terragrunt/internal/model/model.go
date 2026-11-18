@@ -23,6 +23,9 @@ type Request struct {
 }
 
 type Resolution struct {
+	// OwnedPaths includes disabled declarations, independently of inventory membership.
+	OwnedPaths         []string          `json:"-"`
+	OwnedSources       []string          `json:"-"`
 	Overlay            map[string][]byte `json:"overlay,omitempty"`
 	OverlayModes       map[string]uint32 `json:"overlay_modes,omitempty"`
 	Inventory          []DiscoveredUnit  `json:"inventory,omitempty"`

@@ -16,18 +16,22 @@ import (
 
 const inputsAttribute = "inputs"
 
-var errInputReferenceTarget = errors.New("backend input projection requires a statically identifiable configuration path")
+var (
+	errInputReferenceTarget   = errors.New("backend input projection requires a statically identifiable configuration path")
+	errIncludeReferenceTarget = errors.New("backend input projection requires a static exposed include path")
+)
 
 // inputReferences tracks input keys used by the probe, including references in
 // retained input values. A whole-map or dynamic reference requires all inputs.
 // The parser may read included files concurrently.
 type inputReferences struct {
-	mu     sync.Mutex
-	root   string
-	files  map[string]*inputSelection
-	locals map[string]map[string]hclsyntax.Expression
-	err    error
-	fs     afero.Fs
+	mu       sync.Mutex
+	root     string
+	files    map[string]*inputSelection
+	locals   map[string]map[string]hclsyntax.Expression
+	includes map[string]map[string]hclsyntax.Expression
+	err      error
+	fs       afero.Fs
 }
 
 type inputSelection struct {
@@ -36,7 +40,7 @@ type inputSelection struct {
 }
 
 func newInputReferences(root string, fs afero.Fs) *inputReferences {
-	return &inputReferences{fs: fs, root: filepath.Clean(root), files: map[string]*inputSelection{}, locals: map[string]map[string]hclsyntax.Expression{}}
+	return &inputReferences{fs: fs, root: filepath.Clean(root), files: map[string]*inputSelection{}, locals: map[string]map[string]hclsyntax.Expression{}, includes: map[string]map[string]hclsyntax.Expression{}}
 }
 
 // project preserves syntax errors for the upstream parser to diagnose.
@@ -81,7 +85,15 @@ func (r *inputReferences) project(name string, data []byte) ([]byte, error) {
 
 func (r *inputReferences) collectBody(name string, body *hclsyntax.Body) {
 	aliases := map[string]hclsyntax.Expression{}
+	includes := map[string]hclsyntax.Expression{}
 	for _, block := range body.Blocks {
+		if block.Type == "include" && block.Body.Attributes["path"] != nil {
+			label := ""
+			if len(block.Labels) > 0 {
+				label = block.Labels[0]
+			}
+			includes[label] = block.Body.Attributes["path"].Expr
+		}
 		if block.Type == "locals" {
 			for key, attr := range block.Body.Attributes {
 				aliases[key] = attr.Expr
@@ -89,6 +101,7 @@ func (r *inputReferences) collectBody(name string, body *hclsyntax.Body) {
 		}
 	}
 	r.locals[name] = aliases
+	r.includes[name] = includes
 	for attribute, attr := range body.Attributes {
 		if attribute != inputsAttribute {
 			r.collect(name, attr.Expr)
@@ -175,7 +188,7 @@ func (r *inputReferences) traversal(name string, source hclsyntax.Expression, tr
 		}
 		target := r.referenceTarget(name, source, map[string]bool{})
 		if target == "" {
-			r.err = fmt.Errorf("%w: %s", errInputReferenceTarget, name)
+			// Ordinary object attributes named inputs are not configuration reads.
 			return
 		}
 		selection := r.selection(target)
@@ -200,6 +213,12 @@ func (r *inputReferences) referenceTarget(name string, expression hclsyntax.Expr
 	case *hclsyntax.ParenthesesExpr:
 		return r.referenceTarget(name, expression.Expression, seen)
 	case *hclsyntax.ScopeTraversalExpr:
+		if len(expression.Traversal) > 0 {
+			root, _ := traversalName(expression.Traversal[0])
+			if root == "include" {
+				return r.includeTarget(name, expression.Traversal)
+			}
+		}
 		if len(expression.Traversal) != 2 {
 			return ""
 		}
@@ -218,11 +237,16 @@ func (r *inputReferences) referenceTarget(name string, expression hclsyntax.Expr
 
 // configCallTarget accepts only a literal path, without executing HCL functions.
 func (r *inputReferences) configCallTarget(name string, expression *hclsyntax.FunctionCallExpr) string {
-	if expression.Name != "read_terragrunt_config" || len(expression.Args) == 0 {
+	if expression.Name != "read_terragrunt_config" {
+		return ""
+	}
+	if len(expression.Args) == 0 {
+		r.err = fmt.Errorf("%w: %s", errInputReferenceTarget, name)
 		return ""
 	}
 	value, diags := expression.Args[0].Value(nil)
 	if diags.HasErrors() || !value.IsKnown() || value.IsNull() || value.Type() != cty.String {
+		r.err = fmt.Errorf("%w: %s", errInputReferenceTarget, name)
 		return ""
 	}
 	target := localPath(filepath.Dir(name), value.AsString())
@@ -244,4 +268,68 @@ func traversalName(step hcl.Traverser) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// includeTarget resolves only literal paths and the read-only parent lookup;
+// unsupported include expressions have a distinct diagnostic from config reads.
+func (r *inputReferences) includeTarget(name string, traversal hcl.Traversal) string {
+	if len(traversal) > 2 {
+		return ""
+	}
+	label := ""
+	if len(traversal) == 2 {
+		label, _ = traversalName(traversal[1])
+	}
+	target := r.includeExpressionTarget(name, r.includes[name][label])
+	if target == "" {
+		r.err = fmt.Errorf("%w: %s", errIncludeReferenceTarget, name)
+	}
+	return target
+}
+
+func (r *inputReferences) includeExpressionTarget(name string, expression hclsyntax.Expression) string {
+	if value, ok := literalString(expression); ok {
+		return localPath(filepath.Dir(name), value)
+	}
+	if call, ok := expression.(*hclsyntax.FunctionCallExpr); ok && call.Name == "find_in_parent_folders" {
+		return r.parentInclude(name, call)
+	}
+	return ""
+}
+
+func literalString(expression hclsyntax.Expression) (string, bool) {
+	if expression == nil {
+		return "", false
+	}
+	value, diags := expression.Value(nil)
+	if diags.HasErrors() || !value.IsKnown() || value.IsNull() || value.Type() != cty.String {
+		return "", false
+	}
+	return value.AsString(), true
+}
+
+func (r *inputReferences) parentInclude(name string, call *hclsyntax.FunctionCallExpr) string {
+	filename := unitFile
+	if len(call.Args) > 0 {
+		var ok bool
+		filename, ok = literalString(call.Args[0])
+		if !ok {
+			return ""
+		}
+	}
+	for directory := filepath.Dir(filepath.Dir(name)); ; directory = filepath.Dir(directory) {
+		candidate := filepath.Join(directory, filename)
+		if info, err := r.fs.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate
+		}
+		if parent := filepath.Dir(directory); parent == directory {
+			break
+		}
+	}
+	if len(call.Args) == 2 {
+		if value, ok := literalString(call.Args[1]); ok {
+			return localPath(filepath.Dir(name), value)
+		}
+	}
+	return ""
 }

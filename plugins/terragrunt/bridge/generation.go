@@ -11,17 +11,20 @@ import (
 	"github.com/spf13/afero"
 )
 
+const generatedDirectoryMode = 0o700
+
 // RenderGenerated uses upstream signature and formatting semantics in memory.
 // The host applies ownership policies later, in the provisioned working directory.
-func RenderGenerated(ctx context.Context, logger log.Logger, config codegen.GenerateConfig) ([]byte, error) {
+func RenderGenerated(ctx context.Context, logger log.Logger, config *codegen.GenerateConfig) ([]byte, error) {
 	fs := afero.NewMemMapFs()
 	directory := filepath.Join(string(filepath.Separator), "generated")
-	if err := fs.MkdirAll(filepath.Join(directory, filepath.Dir(config.Path)), 0o700); err != nil {
+	if err := fs.MkdirAll(filepath.Join(directory, filepath.Dir(config.Path)), generatedDirectoryMode); err != nil {
 		return nil, err
 	}
-	config.Disable = false
+	rendered := *config
+	rendered.Disable = false
 	env := Environment(map[string]string{}, io.Discard, io.Discard).WithFS(fs)
-	if err := codegen.WriteToFile(ctx, logger, env, directory, &config); err != nil {
+	if err := codegen.WriteToFile(ctx, logger, env, directory, &rendered); err != nil {
 		return nil, err
 	}
 	return afero.ReadFile(fs, filepath.Join(directory, config.Path))
@@ -32,7 +35,7 @@ func RenderGenerated(ctx context.Context, logger log.Logger, config codegen.Gene
 func RenderBackend(ctx context.Context, logger log.Logger, remote *remotestate.Config, backend map[string]any) ([]byte, error) {
 	fs := afero.NewMemMapFs()
 	directory := filepath.Join(string(filepath.Separator), "generated")
-	if err := fs.MkdirAll(filepath.Join(directory, filepath.Dir(remote.Generate.Path)), 0o700); err != nil {
+	if err := fs.MkdirAll(filepath.Join(directory, filepath.Dir(remote.Generate.Path)), generatedDirectoryMode); err != nil {
 		return nil, err
 	}
 	resolved := *remote

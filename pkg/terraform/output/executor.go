@@ -326,36 +326,17 @@ func (e *Executor) GetOutputWithOptions(
 	defer stopSpinner()
 
 	// Describe the component to get its configuration.
-	yamlFunctions := processYamlFunctions(opts, authManager)
-	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
-		SecretsMaskOnly:      maskOnly,
-		Skip:                 optsSkip(opts),
-		AtmosConfig:          atmosConfig,
-		Component:            component,
-		Stack:                stack,
-		ProcessTemplates:     true,
-		ProcessYamlFunctions: yamlFunctions,
-		AuthManager:          authManager,
-	})
+	sections, yamlFunctions, err := e.describeOutputWithOptions(atmosConfig, component, stack, authManager, opts)
 	if err != nil {
 		outputLookupFailed(message)
 		return nil, false, wrapDescribeError(component, stack, err)
 	}
 
 	// Check for static remote state backend.
-	if e.staticRemoteStateGetter != nil {
-		if staticOutputs := e.staticRemoteStateGetter.GetStaticRemoteStateOutputs(&sections); staticOutputs != nil {
-			if !maskOnly || deferred.IsCacheable(staticOutputs) {
-				terraformOutputsCache.Store(key, staticOutputs)
-			}
-			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
-			if resultErr != nil {
-				outputLookupFailed(message)
-				return nil, false, resultErr
-			}
-			outputLookupSucceeded(message)
-			return value, exists, nil
-		}
+	if staticOutputs := e.staticOutputValues(&sections); staticOutputs != nil {
+		cacheOutputValues(&key, staticOutputs, maskOnly)
+		value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
+		return completeOutputLookup(message, value, exists, resultErr)
 	}
 
 	// Execute terraform output with caller-supplied options.
@@ -372,18 +353,10 @@ func (e *Executor) GetOutputWithOptions(
 	}
 
 	// Cache the result.
-	if !maskOnly || deferred.IsCacheable(outputs) {
-		terraformOutputsCache.Store(key, outputs)
-	}
+	cacheOutputValues(&key, outputs, maskOnly)
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
-	if resultErr != nil {
-		outputLookupFailed(message)
-		return nil, false, resultErr
-	}
-
-	outputLookupSucceeded(message)
-	return value, exists, nil
+	return completeOutputLookup(message, value, exists, resultErr)
 }
 
 // ExecuteWithSections retrieves terraform outputs using pre-loaded sections.
@@ -606,4 +579,45 @@ func prependOutputToolchainPath(tenv *dependencies.ToolchainEnvironment, environ
 	if len(tenv.ToolchainDirs()) > 0 {
 		environment["PATH"] = tenv.PrependToPath(environment["PATH"])
 	}
+}
+
+// staticOutputValues keeps missing static-state support distinct from an empty static result.
+func (e *Executor) staticOutputValues(sections *map[string]any) map[string]any {
+	if e.staticRemoteStateGetter == nil {
+		return nil
+	}
+	return e.staticRemoteStateGetter.GetStaticRemoteStateOutputs(sections)
+}
+
+// cacheOutputValues never caches deferred secrets during a mask-only lookup.
+func cacheOutputValues(key *refcache.Key, outputs map[string]any, maskOnly bool) {
+	if !maskOnly || deferred.IsCacheable(outputs) {
+		terraformOutputsCache.Store(*key, outputs)
+	}
+}
+
+// describeOutputWithOptions preserves mask-only evaluation and auth context routing.
+func (e *Executor) describeOutputWithOptions(atmosConfig *schema.AtmosConfiguration, component, stack string, authManager any, opts *OutputOptions) (map[string]any, bool, error) {
+	yamlFunctions := processYamlFunctions(opts, authManager)
+	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
+		SecretsMaskOnly:      opts != nil && opts.SecretsMaskOnly,
+		Skip:                 optsSkip(opts),
+		AtmosConfig:          atmosConfig,
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: yamlFunctions,
+		AuthManager:          authManager,
+	})
+	return sections, yamlFunctions, err
+}
+
+// completeOutputLookup keeps success and error reporting after output selection.
+func completeOutputLookup(message string, value any, exists bool, err error) (any, bool, error) {
+	if err != nil {
+		outputLookupFailed(message)
+		return nil, false, err
+	}
+	outputLookupSucceeded(message)
+	return value, exists, nil
 }

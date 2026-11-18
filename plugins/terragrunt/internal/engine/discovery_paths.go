@@ -233,3 +233,24 @@ func (d *projectDiscovery) skipped(path string) bool {
 func (d *projectDiscovery) independentStack(path string) bool {
 	return !d.skipped(path) && !d.generated[path]
 }
+
+func checkIdentityCollisions(root string, inventory []model.DiscoveredUnit) error {
+	identities := map[string]string{}
+	paths := map[string]string{}
+	for i := range inventory {
+		unit := &inventory[i]
+		key := unit.Stack + "\x00" + unit.Name
+		if previous, exists := identities[key]; exists {
+			return &model.Problem{
+				Code: model.CodeEvaluationError, Summary: "Two Terragrunt units resolve to the same component", Detail: fmt.Sprintf("%s/%s is produced by both %s and %s.", unit.Stack, unit.Name, filepath.ToSlash(mustRel(root, previous)), filepath.ToSlash(mustRel(root, unit.Config.Path))), Safe: true,
+				Hints: []string{"Remove one of the units, a symlink that repeats a unit, or an overlapping `included_paths` entry."},
+			}
+		}
+		identities[key] = unit.Config.Path
+		if previous, exists := paths[unit.Config.Path]; exists {
+			return &model.Problem{Code: model.CodeEvaluationError, Summary: "Two components resolve to the same Terragrunt unit", Detail: fmt.Sprintf("%s and %s/%s both use %s.", previous, unit.Stack, unit.Name, filepath.ToSlash(mustRel(root, unit.Config.Path))), Safe: true}
+		}
+		paths[unit.Config.Path] = unit.Stack + "/" + unit.Name
+	}
+	return nil
+}

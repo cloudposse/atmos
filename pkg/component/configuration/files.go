@@ -67,13 +67,8 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 		return fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
 	}
 	defer root.Close()
-	for _, file := range files {
-		if err := validateFile(file); err != nil {
-			return err
-		}
-		if err := validateDestination(root, file.Path); err != nil {
-			return generatedFileError(file.Path, err)
-		}
+	if err := validateFiles(root, files); err != nil {
+		return err
 	}
 	previous := readManifest(root)
 	undo := make(restorePoint)
@@ -83,7 +78,9 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 		// Clean the key, so ./provider.tf and provider.tf name the same recorded file.
 		key := filepath.ToSlash(filepath.Clean(file.Path))
 		names = append(names, key)
-		undo.capture(root, key)
+		if err := undo.capture(root, key); err != nil {
+			return errors.Join(generatedFileError(file.Path, err), keepRecordsAfterFailure(root, previous, current, undo))
+		}
 		digest, err := writeFile(root, file, previous[key])
 		if err != nil {
 			return errors.Join(err, keepRecordsAfterFailure(root, previous, current, undo))
@@ -118,6 +115,22 @@ func keepRecordsAfterFailure(root *os.Root, previous, current map[string]string,
 		}
 	}
 	return recordManifest(root, current, undo)
+}
+
+// validateFiles checks every destination before the batch performs its first mutation.
+func validateFiles(root *os.Root, files []schema.ComponentConfigurationFile) error {
+	if err := validateDestination(root, manifestName); err != nil {
+		return generatedFileError(manifestName, err)
+	}
+	for _, file := range files {
+		if err := validateFile(file); err != nil {
+			return err
+		}
+		if err := validateDestination(root, file.Path); err != nil {
+			return generatedFileError(file.Path, err)
+		}
+	}
+	return nil
 }
 
 func validateFile(file schema.ComponentConfigurationFile) error {
@@ -240,7 +253,11 @@ func ensureMode(root *os.Root, file schema.ComponentConfigurationFile) error {
 	if !file.Sensitive && file.Mode == 0 {
 		return nil
 	}
-	return generatedFileError(file.Path, restrictExistingGeneratedFile(root, file))
+	if runtime.GOOS == "windows" {
+		return generatedFileError(file.Path, restrictExistingGeneratedFile(root, file))
+	}
+	// Even a mode-only update must not change an inode shared by another path.
+	return replaceFile(root, file, true)
 }
 
 // replaceFile writes the bytes with the file's clamped permission bits; sensitive files, which can
@@ -249,9 +266,6 @@ func ensureMode(root *os.Root, file schema.ComponentConfigurationFile) error {
 // An existing file is replaced through a temporary file renamed over it, so a failed write leaves
 // the previous bytes, and the digest recorded for them, valid for a retry.
 func replaceFile(root *os.Root, file schema.ComponentConfigurationFile, exists bool) error {
-	if err := root.MkdirAll(filepath.Dir(file.Path), directoryMode); err != nil {
-		return generatedFileError(file.Path, err)
-	}
 	// Sensitive files on Windows need the secured handle to retain their ACL and
 	// reject concurrent readers while replacing existing bytes.
 	if runtime.GOOS == "windows" && file.Sensitive {
@@ -260,15 +274,18 @@ func replaceFile(root *os.Root, file schema.ComponentConfigurationFile, exists b
 	if !exists {
 		return createFile(root, file.Path, file)
 	}
-	temporary := filepath.Join(filepath.Dir(file.Path), "."+filepath.Base(file.Path)+"."+rand.Text()+".tmp")
-	if err := createFile(root, temporary, file); err != nil {
+	info, err := root.Lstat(file.Path)
+	if err != nil {
 		return generatedFileError(file.Path, err)
 	}
-	if err := root.Rename(temporary, file.Path); err != nil {
-		_ = root.Remove(temporary)
-		return generatedFileError(file.Path, err)
+	if !info.Mode().IsRegular() {
+		return generatedFileError(file.Path, errUtils.ErrPluginInvalidConfig)
 	}
-	return nil
+	mode := writtenMode(file)
+	if !file.Sensitive && file.Mode == 0 {
+		mode = info.Mode().Perm()
+	}
+	return generatedFileError(file.Path, restoreContents(root, file.Path, &fileState{content: file.Content, mode: mode}))
 }
 
 // replaceSensitiveWindowsFile writes the bytes to a secured temporary file and renames it over
@@ -414,6 +431,11 @@ func openDestinationChild(root *os.Root, name string, create bool) (*os.Root, er
 // openExistingGeneratedFile pins an ordinary file for permission updates without
 // creating or truncating it. Replacement writes use exclusive temporary files.
 func openExistingGeneratedFile(root *os.Root, name string) (*os.File, error) {
+	return openExistingRegularFile(root, name, os.O_RDONLY)
+}
+
+// openExistingRegularFile verifies identity before returning a non-truncating handle.
+func openExistingRegularFile(root *os.Root, name string, flags int) (*os.File, error) {
 	before, err := root.Lstat(name)
 	if err != nil {
 		return nil, err
@@ -421,7 +443,7 @@ func openExistingGeneratedFile(root *os.Root, name string) (*os.File, error) {
 	if !before.Mode().IsRegular() {
 		return nil, errUtils.ErrPluginInvalidConfig
 	}
-	output, err := root.Open(name)
+	output, err := root.OpenFile(name, flags, 0)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"slices"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // manifestName records, per working directory, the files this host generated and the digest of
@@ -34,7 +36,12 @@ type manifest struct {
 // readManifest returns the recorded digests, or none when the manifest is absent or unreadable.
 // An unreadable manifest only costs stale-file cleanup for one run, so it is never an error.
 func readManifest(root *os.Root) map[string]string {
-	file, err := root.Open(manifestName)
+	directory, err := destinationDirectory(root, filepath.Dir(manifestName), false)
+	if err != nil {
+		return map[string]string{}
+	}
+	defer directory.Close()
+	file, err := openExistingGeneratedFile(directory, filepath.Base(manifestName))
 	if err != nil {
 		return map[string]string{}
 	}
@@ -65,27 +72,61 @@ func writeManifest(root *os.Root, files map[string]string) error {
 }
 
 func storeManifest(root *os.Root, files map[string]string) error {
-	if len(files) == 0 {
-		err := root.Remove(manifestName)
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
+	directory, err := destinationDirectory(root, filepath.Dir(manifestName), len(files) != 0)
+	if len(files) == 0 && errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
 		return err
+	}
+	defer directory.Close()
+	leaf := filepath.Base(manifestName)
+	if err := validateDestination(directory, leaf); err != nil {
+		return err
+	}
+	if len(files) == 0 {
+		return removeFile(directory, leaf)
 	}
 	data, err := json.MarshalIndent(manifest{Files: files}, "", "  ")
 	if err != nil {
 		return err
 	}
-	if err := root.MkdirAll(filepath.Dir(manifestName), directoryMode); err != nil {
-		return err
-	}
-	return root.WriteFile(manifestName, data, fileMode)
+	return writeManifestContents(directory, leaf, data)
 }
 
-// manifestExists reports whether the working directory has a manifest, without opening a root.
+// writeManifestContents checks write access without truncating the existing file. Replacing
+// its directory entry then isolates hard links, while a read-only manifest still fails and
+// triggers generated-file rollback. The verified handle supplies the original permissions.
+func writeManifestContents(directory *os.Root, leaf string, data []byte) error {
+	file, err := openExistingRegularFile(directory, leaf, os.O_WRONLY)
+	if errors.Is(err, os.ErrNotExist) {
+		return createFile(directory, leaf, schema.ComponentConfigurationFile{Content: data})
+	}
+	if err != nil {
+		return err
+	}
+	info, statErr := file.Stat()
+	if err := errors.Join(statErr, file.Close()); err != nil {
+		return err
+	}
+	return restoreContents(directory, leaf, &fileState{content: data, mode: info.Mode().Perm()})
+}
+
+// manifestExists also reports invalid metadata destinations so an empty batch still
+// validates them. Missing metadata keeps the historical no-op behavior.
 func manifestExists(directory string) bool {
-	_, err := os.Stat(filepath.Join(directory, filepath.FromSlash(manifestName)))
-	return err == nil
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		return !errors.Is(err, os.ErrNotExist)
+	}
+	defer root.Close()
+	parent, err := destinationDirectory(root, filepath.Dir(manifestName), false)
+	if err != nil {
+		return !errors.Is(err, os.ErrNotExist)
+	}
+	defer parent.Close()
+	_, err = parent.Lstat(filepath.Base(manifestName))
+	return !errors.Is(err, os.ErrNotExist)
 }
 
 func contentDigest(content []byte) string {
@@ -121,20 +162,38 @@ func removeStaleFiles(root *os.Root, previous map[string]string, current []strin
 		if slices.Contains(current, path) || !filepath.IsLocal(filepath.FromSlash(path)) {
 			continue
 		}
-		local := filepath.FromSlash(path)
-		digest, exists := fileDigest(root, local)
-		if !exists || (digest != previous[path] && verifyTerragruntSignature(root, local) != nil) {
-			continue
-		}
-		undo.capture(root, path)
-		if err := root.Remove(local); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := removeStaleFile(root, path, previous[path], undo); err != nil {
 			kept[path] = previous[path]
 			failures = errors.Join(failures, fmt.Errorf("%w: remove stale generated file %s: %w", errUtils.ErrPluginInvalidConfig, path, err))
-			continue
 		}
-		removeEmptyParents(root, filepath.Dir(local))
 	}
 	return failures
+}
+
+// removeStaleFile checks ownership and removes the leaf through one pinned ordinary parent.
+func removeStaleFile(root *os.Root, path, recorded string, undo restorePoint) error {
+	local := filepath.FromSlash(path)
+	directory, err := destinationDirectory(root, filepath.Dir(local), false)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	leaf := filepath.Base(local)
+	digest, exists := fileDigest(directory, leaf)
+	if !exists || (digest != recorded && verifyTerragruntSignature(directory, leaf) != nil) {
+		return nil
+	}
+	if err := undo.captureFrom(directory, path, leaf); err != nil {
+		return err
+	}
+	if err := removeFile(directory, leaf); err != nil {
+		return err
+	}
+	removeEmptyParents(root, filepath.Dir(local))
+	return nil
 }
 
 // restorePoint remembers the files a run changes, so a run whose manifest cannot be written leaves
@@ -149,23 +208,48 @@ type fileState struct {
 }
 
 // capture remembers a path's state the first time the run is about to change it. Only regular
-// files and absent paths are recorded; anything else is left alone by the run's policies.
-func (r restorePoint) capture(root *os.Root, path string) {
+// files and absent paths are recorded; unreadable or aliased paths fail before mutation.
+func (r restorePoint) capture(root *os.Root, path string) error {
 	if _, seen := r[path]; seen {
-		return
+		return nil
 	}
 	local := filepath.FromSlash(path)
-	info, err := root.Lstat(local)
-	switch {
-	case errors.Is(err, os.ErrNotExist):
+	directory, err := destinationDirectory(root, filepath.Dir(local), false)
+	if errors.Is(err, os.ErrNotExist) {
 		r[path] = &fileState{}
-	case err != nil || !info.Mode().IsRegular():
-		return
-	default:
-		if content, readErr := root.ReadFile(local); readErr == nil {
-			r[path] = &fileState{exists: true, content: content, mode: info.Mode().Perm()}
-		}
+		return nil
 	}
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return r.captureFrom(directory, path, filepath.Base(local))
+}
+
+// captureFrom reads a regular leaf by handle in the directory that the mutation uses.
+func (r restorePoint) captureFrom(directory *os.Root, path, leaf string) error {
+	if _, seen := r[path]; seen {
+		return nil
+	}
+	file, err := openExistingGeneratedFile(directory, leaf)
+	if errors.Is(err, os.ErrNotExist) {
+		r[path] = &fileState{}
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return err
+	}
+	r[path] = &fileState{exists: true, content: content, mode: info.Mode().Perm()}
+	return nil
 }
 
 // restore puts every captured file back, removing the ones the run created.
@@ -181,25 +265,67 @@ func (r restorePoint) restore(root *os.Root) error {
 
 func (r restorePoint) restoreFile(root *os.Root, path string) error {
 	state, local := r[path], filepath.FromSlash(path)
-	if !state.exists {
-		return removeFile(root, local)
-	}
-	if err := root.MkdirAll(filepath.Dir(local), directoryMode); err != nil {
-		return err
-	}
-	if err := root.WriteFile(local, state.content, state.mode); err != nil {
-		return err
-	}
-	if runtime.GOOS == "windows" {
+	directory, err := destinationDirectory(root, filepath.Dir(local), state.exists)
+	if !state.exists && errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
-	return root.Chmod(local, state.mode)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	leaf := filepath.Base(local)
+	if err := validateDestination(directory, leaf); err != nil {
+		return err
+	}
+	if !state.exists {
+		return removeFile(directory, leaf)
+	}
+	return restoreContents(directory, leaf, state)
+}
+
+// restoreContents replaces the directory entry instead of truncating a possible hard link.
+// A private exclusive temporary file keeps the original bytes and mode together, and both
+// writes and permission changes use its handle rather than following a substituted leaf.
+func restoreContents(directory *os.Root, leaf string, state *fileState) (result error) {
+	temporary := "." + leaf + "." + rand.Text() + ".tmp"
+	file, err := directory.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, state.mode)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, removeFile(directory, temporary)) }()
+	_, writeErr := file.Write(state.content)
+	var modeErr error
+	if runtime.GOOS != "windows" {
+		modeErr = file.Chmod(state.mode)
+	}
+	if err := errors.Join(writeErr, modeErr, file.Close()); err != nil {
+		return err
+	}
+	if err := validateDestination(directory, leaf); err != nil {
+		return err
+	}
+	return directory.Rename(temporary, leaf)
 }
 
 // removeEmptyParents tidies directories that only existed for a removed generated file.
-func removeEmptyParents(root *os.Root, directory string) {
-	for directory != "." && directory != string(filepath.Separator) && root.Remove(directory) == nil {
-		directory = filepath.Dir(directory)
+func removeEmptyParents(root *os.Root, path string) {
+	for path != "." && path != string(filepath.Separator) {
+		parent, err := destinationDirectory(root, filepath.Dir(path), false)
+		if err != nil {
+			return
+		}
+		leaf := filepath.Base(path)
+		info, statErr := parent.Lstat(leaf)
+		if statErr != nil || !info.IsDir() {
+			_ = parent.Close()
+			return
+		}
+		err = parent.Remove(leaf)
+		_ = parent.Close()
+		if err != nil {
+			return
+		}
+		path = filepath.Dir(path)
 	}
 }
 
