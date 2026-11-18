@@ -28,24 +28,28 @@ function ebpfBlockReady(journal) {
     && /\bpolicyMgr\.mode=BLOCK(?:\s|$)/.test(lines[mode]) && applied > mode;
 }
 
-function initializedEbpfAgent(files, config) {
-  if (typeof config.correlation_id !== 'string' || !config.correlation_id) return false;
+function initializedJobRecords(files, config) {
+  if (typeof config.correlation_id !== 'string' || !config.correlation_id) return [];
   let status, records;
   try {
     status = files.readFileSync('/home/agent/agent.status', 'utf8').trim();
     records = files.readFileSync('/home/agent/agent.log', 'utf8').split(/\r?\n/)
       .map(line => line.includes('GMT:') ? line.slice(line.indexOf('GMT:') + 4) : '');
   } catch (error) {
-    if (error.code === 'ENOENT') return false;
+    if (error.code === 'ENOENT') return [];
     throw error;
   }
+  const job = records.findLast(record => record.startsWith('Step Security Job Correlation ID: '));
+  return status === 'Initialized' && job === `Step Security Job Correlation ID: ${config.correlation_id}` ? records : [];
+}
+
+function initializedEbpfAgent(files, config) {
+  const records = initializedJobRecords(files, config);
   // The pinned action can select AgentAlpha when its tier lookup times out.
   // Its eBPF block mode keeps host DNS; it does not run the community DNS proxy.
   // Require initialization and policy evidence for this job, not an audit line
   // containing a command or stale evidence from a different invocation.
-  return status === 'Initialized'
-    && records.some(record => record.startsWith('[buildInfo] name=AgentAlpha '))
-    && records.includes(`Step Security Job Correlation ID: ${config.correlation_id}`)
+  return records.some(record => record.startsWith('[buildInfo] name=AgentAlpha '))
     && records.some(record => /^Initial Feature flags: \{[^}]*\bNetMode:ebpf(?:\s|\})/.test(record))
     && records.includes('[tracerManager] block-policy applied');
 }
@@ -103,20 +107,35 @@ function run({ files = fs, exec = execFileSync, env = process.env, platform = pr
   };
   const listening = () => sudo('ss', '-lnup', '( sport = :53 )')
     .split('\n').some(line => /127\.0\.0\.1:53\s/.test(line) && /"agent"/.test(line));
+  const dnsReady = () => {
+    // Binding DNS precedes the agent's Docker setup and final initialization.
+    // Require this job's completed startup and a stable, active service too.
+    if (!listening()) return false;
+    const id = readEvidence(invocation);
+    if (id === undefined) return false;
+    if (!/^[a-f0-9]{32}$/.test(id)) throw new Error('Invalid StepSecurity service invocation ID');
+    if (!initializedJobRecords(files, config).length) return false;
+    if (!active()) throw new Error('StepSecurity agent changed during DNS readiness check');
+    const currentId = readEvidence(invocation);
+    if (currentId === undefined) return false;
+    if (currentId !== id) throw new Error('StepSecurity agent changed during DNS readiness check');
+    return true;
+  };
   let attempt = 1;
   while (true) {
+    if (!active()) throw new Error('StepSecurity agent is not active');
     if (initializedEbpfAgent(files, config)) {
       log('StepSecurity eBPF block policy initialized for this job; preserving host DNS.');
       return;
     }
-    if (listening()) break;
+    if (dnsReady()) break;
     if (ebpfBlocking()) {
       log('StepSecurity eBPF block enforcement is active; retaining host DNS (no DNS proxy required).');
       return;
     }
     if (attempt >= STARTUP_ATTEMPTS) {
       if (lastReadError) throw lastReadError;
-      throw new Error(`StepSecurity is not ready after ${(STARTUP_ATTEMPTS * STARTUP_INTERVAL_MS) / 1000}s: expected an agent DNS listener on 127.0.0.1:53 or an initialized eBPF block policy for this job`);
+      throw new Error(`StepSecurity is not ready after ${(STARTUP_ATTEMPTS * STARTUP_INTERVAL_MS) / 1000}s: expected an initialized agent for this job listening on 127.0.0.1:53 or an initialized eBPF block policy for this job`);
     }
     attempt++;
     sleep(STARTUP_INTERVAL_MS);

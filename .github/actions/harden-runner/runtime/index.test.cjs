@@ -21,6 +21,8 @@ function fixture(options = {}) {
   const contents = new Map([
     ['/etc/resolv.conf', original],
     ['/home/agent/agent.json', JSON.stringify({ egress_policy: options.policy || 'block', correlation_id: 'current-job' })],
+    ['/home/agent/agent.status', 'Initialized'],
+    ['/home/agent/agent.log', 'Wed, 18 Nov 2026 04:00:31 GMT:Step Security Job Correlation ID: current-job'],
   ]);
   const env = { RUNNER_TEMP: '/tmp', GITHUB_STATE: '/tmp/state', ...options.env };
   const files = {
@@ -103,7 +105,7 @@ test('waits for an agent whose DNS listener binds after startup', () => {
 });
 test('gives up after the listener timeout without replacing DNS', () => {
   const f = fixture({ listener: false });
-  assert.throws(() => run(f.dependencies), /not ready after 60s: expected an agent DNS listener on 127\.0\.0\.1:53 or an initialized eBPF block policy/);
+  assert.throws(() => run(f.dependencies), /not ready after 60s: expected an initialized agent for this job listening on 127\.0\.0\.1:53 or an initialized eBPF block policy/);
   assert.equal(f.listenerChecks(), 120);
   assert.equal(f.sleeps.length, 119);
   assert.equal(f.contents.get('/etc/resolv.conf'), original);
@@ -114,11 +116,67 @@ test('repairs DNS when the community listener starts after 15 seconds', () => {
   assert.equal(f.sleeps.reduce((sum, ms) => sum + ms, 0), 20000);
   assert.equal(f.contents.get('/etc/resolv.conf'), resolverConfig(original));
 });
-test('does not wait when the listener is already up', () => {
+test('does not wait when this job is initialized and its listener is already up', () => {
   const f = fixture();
   run(f.dependencies);
   assert.equal(f.listenerChecks(), 1);
   assert.deepEqual(f.sleeps, []);
+});
+test('waits for same-job initialization after the DNS listener binds', () => {
+  const f = fixture();
+  f.contents.set('/home/agent/agent.status', 'Starting');
+  f.dependencies.sleep = ms => {
+    f.sleeps.push(ms);
+    assert.equal(f.contents.get('/etc/resolv.conf'), original);
+    assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
+    // Model Docker configuration completing after the DNS socket is bound.
+    if (f.sleeps.length === 2) f.contents.set('/home/agent/agent.status', 'Initialized');
+  };
+  run(f.dependencies);
+  assert.deepEqual(f.sleeps, [500, 500]);
+  assert.equal(f.listenerChecks(), 3);
+  assert.equal(f.contents.get('/etc/resolv.conf'), resolverConfig(original));
+});
+test('fails if the agent dies after binding DNS but before initialization', () => {
+  const f = fixture();
+  f.contents.set('/home/agent/agent.status', 'Starting');
+  const exec = f.dependencies.exec;
+  f.dependencies.exec = (command, args) => command === 'systemctl' && args.includes('--property=ActiveState') && f.sleeps.length
+    ? 'failed' : exec(command, args);
+  assert.throws(() => run(f.dependencies), /agent is not active/);
+  assert.deepEqual(f.sleeps, [500]);
+  assert.equal(f.contents.get('/etc/resolv.conf'), original);
+  assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
+});
+for (const [name, records] of [
+  ['different job', ['Step Security Job Correlation ID: previous-job']],
+  ['stale matching job followed by another job', ['Step Security Job Correlation ID: current-job', 'Step Security Job Correlation ID: previous-job']],
+  ['audit text', ['sudo process started: Arguments: [echo Step Security Job Correlation ID: current-job]']],
+  ['missing job', []],
+]) {
+  test(`refuses DNS readiness with ${name} evidence`, () => {
+    const f = fixture();
+    f.contents.set('/home/agent/agent.log', records.map(record => `Wed, 18 Nov 2026 04:00:31 GMT:${record}`).join('\n'));
+    assert.throws(() => run(f.dependencies), /not ready after 60s/);
+    assert.equal(f.sleeps.length, 119);
+    assert.equal(f.contents.get('/etc/resolv.conf'), original);
+    assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
+  });
+}
+test('refuses an agent restart during DNS readiness confirmation', () => {
+  const f = fixture({ restart: true });
+  assert.throws(() => run(f.dependencies), /agent changed during DNS readiness check/);
+  assert.equal(f.contents.get('/etc/resolv.conf'), original);
+  assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
+});
+test('refuses an agent that stops during DNS readiness confirmation', () => {
+  const f = fixture();
+  const exec = f.dependencies.exec;
+  f.dependencies.exec = (command, args) => command === 'systemctl' && args.includes('--property=ActiveState') && f.listenerChecks()
+    ? 'inactive' : exec(command, args);
+  assert.throws(() => run(f.dependencies), /agent changed during DNS readiness check/);
+  assert.equal(f.contents.get('/etc/resolv.conf'), original);
+  assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
 });
 test('retains host DNS when the current agent has attached eBPF block enforcement', () => {
   const f = fixture({ listener: false, journal: ebpfJournal });
@@ -139,8 +197,16 @@ for (const [name, options, reason] of [
   ['invocation', { invocationError: true }, /invocation unavailable/],
   ['journal', { journalError: true }, /journal unavailable/],
 ]) {
-  test(`waits for a late DNS proxy despite unavailable ${name} evidence`, () => {
+  test(`handles a late DNS proxy with unavailable ${name} evidence`, () => {
     const f = fixture({ listenerReadyOnCheck: 3, ...options });
+    if (name === 'invocation') {
+      assert.throws(() => run(f.dependencies), reason);
+      assert.equal(f.listenerChecks(), 120);
+      assert.equal(f.sleeps.length, 119);
+      assert.equal(f.contents.get('/etc/resolv.conf'), original);
+      assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
+      return;
+    }
     run(f.dependencies);
     assert.equal(f.listenerChecks(), 3);
     assert.deepEqual(f.sleeps, [500, 500]);
@@ -151,6 +217,24 @@ for (const [name, options, reason] of [
     assert.throws(() => run(f.dependencies), reason);
     assert.equal(f.listenerChecks(), 120);
     assert.equal(f.sleeps.length, 119);
+    assert.equal(f.contents.get('/etc/resolv.conf'), original);
+    assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
+  });
+}
+for (const check of [1, 2]) {
+  test(`rechecks DNS readiness after invocation read ${check} fails transiently`, () => {
+    const f = fixture({ invocationErrorOnChecks: [check] });
+    run(f.dependencies);
+    assert.equal(f.listenerChecks(), 2);
+    assert.deepEqual(f.sleeps, [500]);
+    assert.equal(f.contents.get('/etc/resolv.conf'), resolverConfig(original));
+  });
+}
+for (const missing of ['agent.status', 'agent.log']) {
+  test(`does not repair DNS without ${missing}`, () => {
+    const f = fixture();
+    f.contents.delete(`/home/agent/${missing}`);
+    assert.throws(() => run(f.dependencies), /not ready after 60s/);
     assert.equal(f.contents.get('/etc/resolv.conf'), original);
     assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
   });
