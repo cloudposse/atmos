@@ -33,7 +33,7 @@ type componentExecContext struct {
 	workingDir            string
 	tenv                  *dependencies.ToolchainEnvironment
 	planPolicy            *planfile.Guard
-	// rebuild is set when the working directory was re-provisioned for a restored plan; it is verified before any command runs.
+	// rebuild binds a restored workdir before preparation finishes and again after init or recovery.
 	rebuild *reviewedRebuild
 	// planSnapshots observes the configuration around the main command for plan binding.
 	planSnapshots *planSnapshotter
@@ -79,7 +79,7 @@ func (e *Executor) prepareComponentExecution(
 	// Execution has now written its own files, so the directory is complete and must equal the reviewed one.
 	if execCtx.rebuild != nil {
 		if err = e.installReviewedModules(atmosConfig, info, execCtx.rebuild, execCtx.workingDir); err != nil {
-			return nil, err
+			return nil, execCtx.rebuild.isolateFailedRebuild(err)
 		}
 		if err = execCtx.rebuild.verify(execCtx.workingDir); err != nil {
 			return nil, err
@@ -377,6 +377,9 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	uploadStatusFlag bool,
 	opts ...component.ExecutionOption,
 ) error {
+	if err := execCtx.verifyRebuild(componentPath); err != nil {
+		return err
+	}
 	// FR-006f: capture this invocation's own stdout/stderr into a buffer pair
 	// scoped to ONLY the main command, in addition to (not instead of) whatever
 	// WithStdoutCapture/WithStderrCapture already accumulate across the whole
@@ -546,4 +549,43 @@ func writePreparedConfigurationFiles(info *schema.ConfigAndStacksInfo, prepared 
 		return fmt.Errorf("component %s in stack %s, working directory %s: %w", info.ComponentFromArg, info.Stack, componentPath, err)
 	}
 	return nil
+}
+
+// runInitRecovery classifies a failed main command and, when smart init's recovery policy
+// allows it, runs the forced init the diagnostic asked for. It reports whether the main command
+// should now be retried; otherwise it returns the error to propagate.
+func (e *Executor) runInitRecovery( //nolint:revive // argument-limit: every parameter is load-bearing context from the recovering caller.
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+	componentPath string,
+	mainErr error,
+	stdoutBuf, stderrBuf *bytes.Buffer,
+	opts ...component.ExecutionOption,
+) (bool, error) {
+	if info.SubCommand == subcommandInit {
+		return false, mainErr
+	}
+
+	combined := stdoutBuf.String() + "\n" + stderrBuf.String() + "\n" + mainErr.Error()
+	rec, policyErr := classifyInitRecovery(atmosConfig, info, combined)
+	if policyErr != nil {
+		return false, errors.Join(mainErr, policyErr)
+	}
+	if !rec.Run {
+		return false, mainErr
+	}
+
+	ui.Warning(fmt.Sprintf("Terraform requires initialization; running init and retrying '%s'", info.SubCommand))
+
+	initErr := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandInit), func() error {
+		return e.executeTerraformInitForcedFn(atmosConfig, info, componentPath, execCtx.varFile, rec.WithReconfigure, rec.WithUpgrade, opts...)
+	})
+	if initErr != nil {
+		return false, errors.Join(mainErr, initErr)
+	}
+	if err := execCtx.verifyRebuild(componentPath); err != nil {
+		return false, errors.Join(mainErr, err)
+	}
+	return true, nil
 }

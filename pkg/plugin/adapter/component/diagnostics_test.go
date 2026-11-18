@@ -2,6 +2,7 @@ package component
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -321,5 +322,35 @@ func TestHostLogLevelUsesThePluginVocabulary(t *testing.T) {
 		log.SetLevel(level)
 		assert.Equal(t, want, HostLogLevel())
 		log.SetLevel(previous)
+	}
+}
+
+func TestIAMProbeRegistersTokenBeforeDiagnostics(t *testing.T) {
+	for _, invalid := range []bool{false, true} {
+		t.Run(fmt.Sprint(invalid), func(t *testing.T) {
+			atmosio.Reset()
+			t.Cleanup(atmosio.Reset)
+			require.NoError(t, atmosio.Initialize())
+			output := captureLogs(t, charm.DebugLevel)
+			token := objectWireValue(t, cty.StringVal("probe-token-9a3b"))
+			token.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+			if invalid {
+				token.TypeJson = []byte("{")
+			}
+			result := &pluginv1.PrepareComponentResponse{
+				Iam:         &pluginv1.ComponentIam{Role: "role", WebIdentityToken: token},
+				Diagnostics: []*pluginv1.Diagnostic{{Detail: &pluginv1.ErrorDetail{Code: "warning", Summary: "Probe warning", Detail: "token probe-token-9a3b", Severity: pluginv1.Severity_SEVERITY_WARNING}}},
+			}
+			err := checkPreparationResponse(result, "iam-probe")
+			if invalid {
+				require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+				require.Empty(t, output.String())
+			} else {
+				require.NoError(t, err)
+				require.Contains(t, output.String(), "<MASKED>")
+			}
+			require.NotContains(t, output.String(), "probe-token-9a3b")
+			require.Len(t, result.Diagnostics, 1)
+		})
 	}
 }

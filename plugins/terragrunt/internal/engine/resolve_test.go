@@ -281,11 +281,12 @@ inputs = {
 	inputs := map[string]any{"shared": "s", "open": "o", "own": json.Number("1"), "looped": "x", "dynamic": map[string]any{"a": json.Number("1")}, "json": "x", "everything": json.Number("1")}
 
 	files := []string{"/unit/terragrunt.hcl", "/root.hcl", "/broken.hcl", "/data.json", "/missing.hcl"}
-	// A for expression that yields sensitive values is marked as a whole.
-	require.Equal(t, [][]string{{"dynamic"}, {"looped"}, {"own"}, {"shared"}}, SensitiveInputs(fsys, files, inputs))
+	// JSON input sensitivity fails closed; HCL still retains its precise paths.
+	require.Equal(t, [][]string{nil, {"dynamic"}, {"looped"}, {"own"}, {"shared"}}, SensitiveInputs(fsys, files, inputs))
 
 	require.Equal(t, [][]string{nil}, SensitiveInputs(fsys, []string{"/whole.hcl"}, inputs), "sensitive(...) around the whole inputs marks every input")
-	require.Empty(t, SensitiveInputs(fsys, files, map[string]any{"open": "o"}), "a path that is not among the evaluated inputs is dropped")
+	require.Equal(t, [][]string{nil}, SensitiveInputs(fsys, files, map[string]any{"open": "o"}), "JSON protects inputs even without an explicit HCL mark")
+	require.Empty(t, SensitiveInputs(fsys, files[:3], map[string]any{"open": "o"}), "an HCL path that is not among the evaluated inputs is dropped")
 	require.Empty(t, SensitiveInputs(fsys, nil, inputs))
 }
 
@@ -756,5 +757,98 @@ func TestDownloadDirDetectionUsesAttributeSyntax(t *testing.T) {
 	} {
 		require.NoError(t, afero.WriteFile(fs, "unit.hcl", []byte(test.text), 0o600))
 		require.Equal(t, test.want, mentionsDownloadDir(fs, []string{"unit.hcl"}))
+	}
+}
+
+func TestResolveSensitivityUsesEvaluatedIncludePaths(t *testing.T) {
+	for i, expression := range []string{`"${get_terragrunt_dir()}/shared.hcl"`, `get_env("INCLUDE_FILE")`} {
+		t.Run(fmt.Sprint(i), func(t *testing.T) {
+			request := nativeUnit(t, "include \"shared\" {\n path = "+expression+"\n expose = true\n}\ninputs = { token = include.shared.locals.token, plain = include.shared.locals.plain }\n")
+			shared := filepath.Join(filepath.Dir(request.Path), "shared.hcl")
+			request.Environment["INCLUDE_FILE"] = shared
+			require.NoError(t, os.WriteFile(shared, []byte("locals {\n token = sensitive(\"included-secret\")\n plain = \"visible\"\n}\n"), 0o600))
+			result, err := Resolve(t.Context(), request)
+			require.NoError(t, err)
+			require.Equal(t, "included-secret", result.Inputs["token"])
+			require.Equal(t, [][]string{{"token"}}, result.SensitiveInputs)
+		})
+	}
+}
+
+func TestJSONConfigurationFailsClosedForSensitiveInputsAndLogs(t *testing.T) {
+	for _, mode := range []string{"unit", "read"} {
+		t.Run(mode, func(t *testing.T) {
+			request := nativeUnit(t, "")
+			request.Environment[effectChildEnv] = "1"
+			executable, err := os.Executable()
+			require.NoError(t, err)
+			body, err := json.Marshal(map[string]any{
+				"terraform": map[string]any{"source": filepath.Join(request.BasePath, "module")},
+				"locals":    map[string]any{"command": executable, "message": "json-include-secret"},
+				"inputs":    map[string]any{"token": "${sensitive(run_cmd(local.command, local.message))}", "plain": "visible"},
+			})
+			require.NoError(t, err)
+			jsonPath := request.Path + ".json"
+			require.NoError(t, os.WriteFile(jsonPath, body, 0o600))
+			if mode == "unit" {
+				request.Path = jsonPath
+			} else {
+				require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = \"./module\" }\nlocals { shared = read_terragrunt_config(\"terragrunt.hcl.json\") }\ninputs = local.shared.inputs\n"), 0o600))
+			}
+			sink := NewLogSink("debug", request.BasePath)
+			result, err := Resolve(WithLogSink(t.Context(), sink), request)
+			require.NoError(t, err)
+			require.Equal(t, "json-include-secret", result.Inputs["token"])
+			require.Equal(t, "visible", result.Inputs["plain"])
+			require.Equal(t, [][]string{nil}, result.SensitiveInputs)
+			effects, err := os.ReadFile(filepath.Join(request.BasePath, "effects"))
+			require.NoError(t, err)
+			require.Contains(t, string(effects), "json-include-secret")
+			entries := sink.Entries()
+			require.Len(t, entries, 1)
+			require.Contains(t, entries[0].Message, "withheld")
+			require.NotContains(t, entries[0].Message, "json-include-secret")
+		})
+	}
+}
+
+func TestResolveConditionalSensitiveBranches(t *testing.T) {
+	for _, test := range []struct {
+		name, expression string
+		commands         bool
+	}{
+		{"branch marks", "true ? sensitive(%s) : sensitive(%s)", true},
+		{"outer mark", "sensitive(true ? %s : %s)", true},
+		{"nested object", "{ nested = true ? sensitive(%s) : sensitive(%s) }", true},
+		{"literal branches", `true ? sensitive("selected") : sensitive("discarded")`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			expression := test.expression
+			if test.commands {
+				expression = fmt.Sprintf(expression, effectCommand(t, "selected-secret"), effectCommand(t, "discarded-secret"))
+			}
+			request := nativeUnit(t, "inputs = { token = "+expression+" }\n")
+			request.Environment[effectChildEnv] = "1"
+			sink := NewLogSink("debug", request.BasePath)
+			logger(t, sink).Debug("retained marker")
+			result, err := Resolve(WithLogSink(t.Context(), sink), request)
+			require.NoError(t, err)
+			require.NotEmpty(t, result.SensitiveInputs)
+			entries := sink.Entries()
+			require.NotEmpty(t, entries)
+			if test.commands {
+				effects, err := os.ReadFile(filepath.Join(request.BasePath, "effects"))
+				require.NoError(t, err)
+				require.Contains(t, string(effects), "selected-secret")
+				require.Contains(t, string(effects), "discarded-secret")
+				require.Len(t, entries, 1)
+				require.Contains(t, entries[0].Message, "withheld")
+			} else {
+				require.Equal(t, "retained marker", entries[0].Message)
+			}
+			for _, entry := range entries {
+				require.NotContains(t, entry.Message, "discarded-secret")
+			}
+		})
 	}
 }

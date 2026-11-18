@@ -4,6 +4,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -285,7 +286,7 @@ func literalPreventDestroy(body *hclsyntax.Body, parseErr error) error {
 // unitExecution returns hooks and extra arguments as data for the host to run;
 // evaluation never executes them. Backend identity is read from a partial parse
 // that does not decode them.
-func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.TerragruntConfig) (*model.Execution, []string, error) {
+func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.TerragruntConfig, scan *sensitivityScan) (*model.Execution, []string, error) {
 	if e.request.Phase == phaseBackend {
 		return nil, nil, nil
 	}
@@ -296,6 +297,8 @@ func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.Terragrun
 	finalizeExecution(execution, e.path)
 	reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
 		parsed, err := config.ParseConfigFile(ctx, e.logger, e.environment, apply, e.path, nil)
+		// Retain reads even when later execution validation rejects the reparse.
+		scan.applyFiles = append(scan.applyFiles, apply.FilesRead.Paths()...)
 		if err != nil {
 			// The apply-time values are unknown, and the unit's own inputs and locals no longer count as
 			// registered: whatever Terragrunt logged before failing may carry them.
@@ -307,7 +310,7 @@ func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.Terragrun
 		}
 		// Apply-time values can differ from the ones planned, so register them before any event is returned.
 		sink := logSinkFrom(ctx)
-		redactUnitInputs(sink, e.environment.FS, append(apply.FilesRead.Paths(), e.path), e.path, parsed.Inputs)
+		redactUnitInputs(sink, e.environment.FS, append(apply.FilesRead.Paths(), e.path), e.path, parsed)
 		redactLocals(sink, e.environment.FS, e.path, parsed.Locals)
 		return parsed, nil
 	}
@@ -588,4 +591,23 @@ func (e *unitEvaluator) unitResolution(ctx context.Context, cfg *config.Terragru
 	result.Files = append(result.Files, e.request.OriginFiles...)
 	result.Folders = append(result.Folders, e.request.OriginFolders...)
 	return result, nil
+}
+
+// checkInlineModule identifies inline Terraform modules and reports shared configurations to skip.
+func (d *projectDiscovery) checkInlineModule(path string) (bool, error) {
+	entries, err := afero.ReadDir(d.overlay, filepath.Dir(path))
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".tf") || strings.HasSuffix(entry.Name(), ".tf.json")) {
+			return true, nil
+		}
+	}
+	rel, _ := filepath.Rel(d.root, path)
+	d.result.Warnings = append(d.result.Warnings, model.Warning{
+		Code: model.WarningUnitWithoutSource, Path: filepath.ToSlash(rel),
+		Message: fmt.Sprintf("%s has no terraform { source } block and no Terraform files next to it, so it is treated as a shared configuration and is not listed as a component", filepath.ToSlash(rel)),
+	})
+	return false, nil
 }

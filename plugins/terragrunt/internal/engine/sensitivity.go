@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/spf13/afero"
@@ -30,14 +31,26 @@ const (
 //
 //nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
 func SensitiveInputs(fsys afero.Fs, files []string, inputs map[string]any) [][]string {
+	return sensitiveInputs(fsys, files, inputs, "", nil)
+}
+
+// sensitiveInputs binds exposed aliases to the paths from this evaluation.
+func sensitiveInputs(fsys afero.Fs, files []string, inputs map[string]any, unit string, includes config.IncludeConfigsMap) [][]string {
 	var found [][]string
 	bodies := make(map[string]*hclsyntax.Body)
 	for _, file := range files {
-		if filepath.Ext(file) != ".hcl" {
+		extension := filepath.Ext(file)
+		if extension != ".hcl" && extension != ".json" {
 			continue
 		}
 		content, err := afero.ReadFile(fsys, file)
 		if err != nil {
+			continue
+		}
+		// JSON expressions are opaque to this HCL syntax scan. Protect every input
+		// until precise JSON sensitivity analysis is available.
+		if extension == ".json" {
+			found = append(found, nil)
 			continue
 		}
 		parsed, diags := hclsyntax.ParseConfig(content, file, hcl.InitialPos)
@@ -51,18 +64,22 @@ func SensitiveInputs(fsys afero.Fs, files []string, inputs map[string]any) [][]s
 		bodies[filepath.Clean(file)] = body
 	}
 	for file, body := range bodies {
-		found = append(found, scanFile(body, file, bodies)...)
+		var evaluated config.IncludeConfigsMap
+		if file == filepath.Clean(unit) {
+			evaluated = includes
+		}
+		found = append(found, scanFile(body, file, bodies, evaluated)...)
 	}
 	return existingPaths(uniquePaths(found), inputs)
 }
 
 // scanFile finds the sensitive paths declared by one file's inputs attribute.
-func scanFile(body *hclsyntax.Body, file string, bodies map[string]*hclsyntax.Body) [][]string {
+func scanFile(body *hclsyntax.Body, file string, bodies map[string]*hclsyntax.Body, includes config.IncludeConfigsMap) [][]string {
 	attribute := body.Attributes[inputsName]
 	if attribute == nil {
 		return nil
 	}
-	scanner := &sensitivityScanner{locals: localExpressions(body), includes: exposedIncludes(body, file, bodies)}
+	scanner := &sensitivityScanner{locals: localExpressions(body), includes: exposedIncludes(body, file, bodies, includes)}
 	scanner.walk(attribute.Expr, nil, 0)
 	return scanner.paths
 }
@@ -263,13 +280,13 @@ func (s *sensitivityScanner) reference(traversal hcl.Traversal) (sensitivityRefe
 }
 
 // exposedIncludes associates an include alias with the parsed file's locals.
-func exposedIncludes(body *hclsyntax.Body, file string, bodies map[string]*hclsyntax.Body) map[string]map[string]hclsyntax.Expression {
+func exposedIncludes(body *hclsyntax.Body, file string, bodies map[string]*hclsyntax.Body, evaluated config.IncludeConfigsMap) map[string]map[string]hclsyntax.Expression {
 	result := make(map[string]map[string]hclsyntax.Expression)
 	for _, block := range body.Blocks {
 		if block.Type != "include" || len(block.Labels) == 0 {
 			continue
 		}
-		path, ok := exposedIncludePath(block)
+		path, ok := exposedIncludePath(block, evaluated)
 		if !ok {
 			continue
 		}
@@ -281,7 +298,11 @@ func exposedIncludes(body *hclsyntax.Body, file string, bodies map[string]*hclsy
 }
 
 // exposedIncludePath reads a statically exposed include's path.
-func exposedIncludePath(block *hclsyntax.Block) (string, bool) {
+func exposedIncludePath(block *hclsyntax.Block, evaluated config.IncludeConfigsMap) (string, bool) {
+	if evaluated != nil {
+		include, found := evaluated[block.Labels[0]]
+		return include.Path, found && include.Expose != nil && *include.Expose
+	}
 	expose, ok := block.Body.Attributes["expose"]
 	if !ok {
 		return "", false

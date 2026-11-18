@@ -42,6 +42,7 @@ func discoveryRequest(request *pluginv1.DiscoverComponentsRequest) (model.Reques
 		return req, rpcError(err)
 	}
 	req.Phase, req.IncludedPaths, req.ExcludedPaths = "inventory", paths, request.ExcludePaths
+	req.Mode = request.GetOperation().GetMode()
 	return req, nil
 }
 

@@ -32,9 +32,9 @@ type unitSensitivity struct {
 
 // redactUnitInputs registers final values and withholds logs when a sensitive input transforms
 // a raw value that Terragrunt may already have logged while evaluating the unit.
-func redactUnitInputs(sink *LogSink, fsys afero.Fs, files []string, unit string, inputs map[string]any) [][]string {
-	paths := SensitiveInputs(fsys, files, inputs)
-	redactInputs(sink, inputs, paths)
+func redactUnitInputs(sink *LogSink, fsys afero.Fs, files []string, unit string, cfg *config.TerragruntConfig) [][]string {
+	paths := sensitiveInputs(fsys, files, cfg.Inputs, unit, cfg.ProcessedIncludes)
+	redactInputs(sink, cfg.Inputs, paths)
 	if sink.collecting() && transformsSensitiveInputs(fsys, unit) {
 		sink.Withhold()
 	}
@@ -71,16 +71,12 @@ func (s *sensitivityScanner) transformsSensitiveInput(expression hclsyntax.Expre
 func (s *sensitivityScanner) inputTransformsRaw(expression hclsyntax.Expression) bool {
 	expression = unwrapParentheses(expression)
 	if conditional, ok := expression.(*hclsyntax.ConditionalExpr); ok {
-		return s.containsSensitive(conditional.Condition, 0) ||
+		return s.conditionalDiscardsSensitive(conditional, false, 0) || s.containsSensitive(conditional.Condition, 0) ||
 			s.inputTransformsRaw(conditional.TrueResult) || s.inputTransformsRaw(conditional.FalseResult)
 	}
 	if call, ok := expression.(*hclsyntax.FunctionCallExpr); ok && call.Name == "sensitive" && len(call.Args) == 1 {
 		if conditional, ok := unwrapParentheses(call.Args[0]).(*hclsyntax.ConditionalExpr); ok {
-			selected := *call
-			selected.Args = []hclsyntax.Expression{conditional.TrueResult}
-			other := *call
-			other.Args = []hclsyntax.Expression{conditional.FalseResult}
-			return s.containsSensitive(conditional.Condition, 0) || s.inputTransformsRaw(&selected) || s.inputTransformsRaw(&other)
+			return s.wrappedConditionalTransforms(call, conditional)
 		}
 	}
 	return s.transformsRaw(expression, 0)
@@ -147,7 +143,9 @@ func (s *sensitivityScanner) transformsRaw(expression hclsyntax.Expression, dept
 		}
 		switch typed := node.(type) {
 		case *hclsyntax.FunctionCallExpr:
-			transformed = callTransformsRaw(typed, wrapped)
+			transformed = callTransformsRaw(typed, wrapped) || (typed.Name == "merge" && s.mergeOverwritesSensitive(typed, depth))
+		case *hclsyntax.ConditionalExpr:
+			transformed = s.conditionalDiscardsSensitive(typed, wrapped[typed], depth)
 		case *hclsyntax.TemplateExpr:
 			transformed = !isLiteralTemplate(typed)
 		case *hclsyntax.ForExpr, *hclsyntax.BinaryOpExpr, *hclsyntax.UnaryOpExpr:
@@ -222,11 +220,16 @@ func isLiteralTemplate(template *hclsyntax.TemplateExpr) bool {
 // about it.
 func unredactedSensitivity(fsys afero.Fs, files []string, unit string, resolved bool) bool {
 	for _, file := range files {
-		if filepath.Ext(file) != ".hcl" {
+		extension := filepath.Ext(file)
+		if extension != ".hcl" && extension != ".json" {
 			continue
 		}
 		if _, err := fsys.Stat(file); err != nil {
 			continue
+		}
+		// JSON sensitivity is not representable by the native HCL AST scanner.
+		if extension == ".json" {
+			return true
 		}
 		body, ok := parseBody(fsys, file)
 		if !ok {
@@ -300,7 +303,7 @@ func (u *unitEvaluator) resolveUnit(ctx context.Context, scan *sensitivityScan) 
 	}
 	var sensitiveInputs [][]string
 	if request.Phase != phaseBackend {
-		sensitiveInputs = redactUnitInputs(logSinkFrom(ctx), environment.FS, append(pctx.FilesRead.Paths(), path), path, cfg.Inputs)
+		sensitiveInputs = redactUnitInputs(logSinkFrom(ctx), environment.FS, append(pctx.FilesRead.Paths(), path), path, cfg)
 		redactLocals(logSinkFrom(ctx), environment.FS, path, cfg.Locals)
 		scan.registered = true
 	}
@@ -314,8 +317,7 @@ func (u *unitEvaluator) resolveUnit(ctx context.Context, scan *sensitivityScan) 
 // set before the backend resolves so the backend step sees the final result.
 func (u *unitEvaluator) buildResolution(ctx context.Context, cfg *config.TerragruntConfig, sensitivity *unitSensitivity) (*model.Resolution, error) {
 	logger, environment, request, path := u.logger, u.environment, u.request, u.path
-	execution, applyFiles, err := u.unitExecution(ctx, cfg)
-	sensitivity.scan.applyFiles = applyFiles
+	execution, applyFiles, err := u.unitExecution(ctx, cfg, sensitivity.scan)
 	if err != nil {
 		return nil, err
 	}
@@ -339,4 +341,112 @@ func (u *unitEvaluator) buildResolution(ctx context.Context, cfg *config.Terragr
 		return nil, err
 	}
 	return result, nil
+}
+
+// mergeOverwritesSensitive detects values evaluated before a later merge argument replaces them.
+func (s *sensitivityScanner) mergeOverwritesSensitive(call *hclsyntax.FunctionCallExpr, depth int) bool {
+	for i, argument := range call.Args {
+		scan := *s
+		scan.paths = nil
+		scan.walk(argument, nil, depth)
+		for _, later := range call.Args[i+1:] {
+			if s.overwritesSensitivePaths(later, scan.paths, depth) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (s *sensitivityScanner) overwritesSensitivePaths(expression hclsyntax.Expression, paths [][]string, depth int) bool {
+	if len(paths) == 0 {
+		return false
+	}
+	keys, known := s.objectKeys(expression, depth)
+	if !known {
+		return true
+	}
+	for _, path := range paths {
+		if len(path) == 0 {
+			return len(keys) != 0
+		}
+		if keys[path[0]] {
+			return true
+		}
+	}
+	return false
+}
+
+// objectKeys proves shallow merge keys without evaluating functions or invoking effects.
+func (s *sensitivityScanner) objectKeys(expression hclsyntax.Expression, depth int) (map[string]bool, bool) {
+	if depth >= maxLocalDepth {
+		return nil, false
+	}
+	switch node := unwrapParentheses(expression).(type) {
+	case *hclsyntax.ObjectConsExpr:
+		keys := make(map[string]bool)
+		for _, item := range node.Items {
+			key, ok := staticKey(item.KeyExpr)
+			if !ok {
+				return nil, false
+			}
+			keys[key] = true
+		}
+		return keys, true
+	case *hclsyntax.ScopeTraversalExpr:
+		reference, ok := s.reference(node.Traversal)
+		if !ok || len(reference.rest) != 0 {
+			return nil, false
+		}
+		next := *s
+		next.locals = reference.locals
+		return next.objectKeys(reference.expression, depth+1)
+	}
+	return nil, false
+}
+
+// conditionalDiscardsSensitive accounts for HCL evaluating both branches before selection.
+func (s *sensitivityScanner) conditionalDiscardsSensitive(expression *hclsyntax.ConditionalExpr, wrapped bool, depth int) bool {
+	for _, branch := range []hclsyntax.Expression{expression.TrueResult, expression.FalseResult} {
+		if (wrapped || s.containsSensitive(branch, depth)) && s.mayLogValue(branch, depth) {
+			return true
+		}
+	}
+	return false
+}
+
+// mayLogValue conservatively follows calls and references; literal branches cannot emit logs.
+func (s *sensitivityScanner) mayLogValue(expression hclsyntax.Expression, depth int) bool {
+	if depth >= maxLocalDepth {
+		return true
+	}
+	possible := false
+	_ = hclsyntax.VisitAll(expression, func(node hclsyntax.Node) hcl.Diagnostics {
+		if possible {
+			return nil
+		}
+		switch typed := node.(type) {
+		case *hclsyntax.FunctionCallExpr:
+			possible = typed.Name != "sensitive"
+		case *hclsyntax.ScopeTraversalExpr:
+			reference, found := s.reference(typed.Traversal)
+			if !found {
+				possible = true
+				break
+			}
+			nested := *s
+			nested.locals = reference.locals
+			possible = nested.mayLogValue(reference.expression, depth+1)
+		}
+		return nil
+	})
+	return possible
+}
+
+func (s *sensitivityScanner) wrappedConditionalTransforms(call *hclsyntax.FunctionCallExpr, conditional *hclsyntax.ConditionalExpr) bool {
+	selected := *call
+	selected.Args = []hclsyntax.Expression{conditional.TrueResult}
+	other := *call
+	other.Args = []hclsyntax.Expression{conditional.FalseResult}
+	return s.conditionalDiscardsSensitive(conditional, true, 0) || s.containsSensitive(conditional.Condition, 0) || s.inputTransformsRaw(&selected) || s.inputTransformsRaw(&other)
 }

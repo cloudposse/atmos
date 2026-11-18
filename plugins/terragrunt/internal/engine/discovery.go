@@ -278,7 +278,15 @@ func (d *projectDiscovery) visitChild(path string, placement *unitPlacement, dep
 
 func (d *projectDiscovery) visitUnit(path string, resolved *model.Resolution, placement *unitPlacement) error {
 	if resolved.Source == "" && len(resolved.Folders) == 0 {
-		return d.checkInlineModule(path)
+		inline, err := d.checkInlineModule(path)
+		if err != nil || !inline {
+			return err
+		}
+		if d.request.Mode != "executable" {
+			return missingSourceProblem(path)
+		}
+		resolved.Source = filepath.Dir(path)
+		resolved.Folders = []string{resolved.Source}
 	}
 	resolved.Files = append(resolved.Files, placement.files...)
 	resolved.Folders = append(resolved.Folders, placement.folders...)
@@ -286,26 +294,6 @@ func (d *projectDiscovery) visitUnit(path string, resolved *model.Resolution, pl
 		return err
 	}
 	d.result.Inventory = append(d.result.Inventory, model.DiscoveredUnit{Stack: placement.stack, Name: filepath.ToSlash(placement.name), GenerationRoot: placement.generationRoot, Config: *resolved})
-	return nil
-}
-
-// checkInlineModule rejects Terraform files without a source and reports a shared include,
-// which is not a runnable local-source unit and so is not listed.
-func (d *projectDiscovery) checkInlineModule(path string) error {
-	entries, err := afero.ReadDir(d.overlay, filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".tf") || strings.HasSuffix(entry.Name(), ".tf.json")) {
-			return missingSourceProblem(path)
-		}
-	}
-	rel, _ := filepath.Rel(d.root, path)
-	d.result.Warnings = append(d.result.Warnings, model.Warning{
-		Code: model.WarningUnitWithoutSource, Path: filepath.ToSlash(rel),
-		Message: fmt.Sprintf("%s has no terraform { source } block and no Terraform files next to it, so it is treated as a shared configuration and is not listed as a component", filepath.ToSlash(rel)),
-	})
 	return nil
 }
 

@@ -870,3 +870,76 @@ func TestPreparationExportsOverlayModes(t *testing.T) {
 	require.Equal(t, "bin/run.sh", result.Files[0].Path)
 	require.Equal(t, "shadow.sh", result.Files[len(result.Files)-1].Path)
 }
+
+func TestExecutableDiscoveryIncludesInlineTerraformModules(t *testing.T) {
+	for _, mode := range []string{ModeNative, ModeExecutable} {
+		t.Run(mode, func(t *testing.T) {
+			root := t.TempDir()
+			for _, name := range []string{"app", "shared"} {
+				dir := filepath.Join(root, "live", name)
+				require.NoError(t, os.MkdirAll(dir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "terragrunt.hcl"), []byte("inputs = {}\n"), 0o600))
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(root, "live", "app", "main.tf"), []byte("# inline module"), 0o600))
+			options, err := encode(map[string]any{"mode": mode})
+			require.NoError(t, err)
+			request := &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: options, IncludePaths: []string{"live/**"}, Operation: &pluginv1.ComponentOperation{Mode: mode, Command: "plan"}}
+			response, err := New(nil).Discover(t.Context(), request)
+			require.NoError(t, err)
+			if mode == ModeExecutable {
+				require.Len(t, response.Components, 1)
+				require.Equal(t, "app", response.Components[0].Address.Component)
+				require.Equal(t, "terragrunt", response.Components[0].Engine)
+			} else {
+				require.Empty(t, response.Components)
+				require.NotEmpty(t, response.Diagnostics)
+			}
+			require.NotEmpty(t, response.Diagnostics, "shared configurations remain skipped with a warning")
+		})
+	}
+}
+
+func TestScopedDiscoveryRetainsGeneratedUnitsAndDependencies(t *testing.T) {
+	root := fixture(t, "explicit-stack")
+	options, err := encode(map[string]any{"enabled": true, "mode": "native", "discovery": map[string]any{"enabled": true}})
+	require.NoError(t, err)
+	provider := New(nil)
+	request := &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: options, IncludePaths: []string{"live/**"}, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "plan"}, Invocation: &pluginv1.Invocation{Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "tofu"}}}
+	initial, err := provider.Discover(t.Context(), request)
+	require.NoError(t, err)
+	require.NotEmpty(t, initial.Components)
+	for _, selected := range initial.Components {
+		scoped := proto.Clone(request).(*pluginv1.DiscoverComponentsRequest)
+		scoped.IncludePaths = []string{selected.Source}
+		targets := []*pluginv1.DiscoveredComponent{selected}
+		for _, dependency := range selected.Dependencies {
+			for _, candidate := range initial.Components {
+				if proto.Equal(dependency.Target, candidate.Address) {
+					targets = append(targets, candidate)
+				}
+			}
+		}
+		for _, target := range targets {
+			scoped.IncludePaths = append(scoped.IncludePaths, target.Source)
+			for _, source := range target.Sources {
+				if source.Kind == pluginv1.ComponentSource_FILE {
+					scoped.IncludePaths = append(scoped.IncludePaths, source.Path)
+				}
+			}
+		}
+		current, err := provider.Discover(t.Context(), scoped)
+		require.NoError(t, err)
+		for _, target := range targets {
+			var found *pluginv1.DiscoveredComponent
+			for _, candidate := range current.Components {
+				if proto.Equal(target.Address, candidate.Address) {
+					found = candidate
+				}
+			}
+			require.NotNil(t, found)
+			require.Equal(t, target.Source, found.Source)
+			require.Equal(t, target.Engine, found.Engine)
+			require.Equal(t, target.Dependencies, found.Dependencies)
+		}
+	}
+}

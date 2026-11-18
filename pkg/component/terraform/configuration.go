@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2"
@@ -203,6 +204,10 @@ func prepareForRebuild(ctx context.Context, config *schema.AtmosConfiguration, i
 	prepared, err := config.ComponentConfigurations.Prepare(ctx, &fresh)
 	if err != nil || prepared == nil {
 		return nil, err
+	}
+	// A reviewed absence of IAM is a binding too, not permission to assume a new role.
+	if !reflect.DeepEqual(prepared.IAM, rebuild.plan.Prepared.IAM) {
+		return nil, fmt.Errorf("%w: reviewed IAM settings changed between role and unit evaluation", errUtils.ErrPlanVerificationFailed)
 	}
 	digest, err := backendIdentityDigest(prepared.Backend)
 	if err != nil {

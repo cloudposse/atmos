@@ -174,6 +174,7 @@ func cachedCredentials(key string, load func() (aws.Credentials, error)) (aws.Cr
 }
 
 func awsCacheKey(env map[string]string) string {
+	env = resolvedSharedFiles(env)
 	hash := sha256.New()
 	names := append(slices.Clone(awsSelectors), "AWS_ROLE_ARN", "AWS_ROLE_SESSION_NAME", "AWS_REGION", "AWS_DEFAULT_REGION")
 	for name := range maps.Keys(env) {
@@ -218,6 +219,9 @@ func roleCacheKey(env map[string]string, role iam.RoleOptions) string {
 func resolveAWSCredentials(ctx context.Context, env map[string]string, transport *awsTransport) (aws.Credentials, error) {
 	ctx, cancel := context.WithTimeout(ctx, awsResolveTimeout)
 	defer cancel()
+	if err := rejectAmbientCredentialSources(ctx, env); err != nil {
+		return aws.Credentials{}, err
+	}
 	cfg, err := config.LoadDefaultConfig(ctx, loadOptions(env, transport)...)
 	if err != nil {
 		return aws.Credentials{}, fmt.Errorf("loading the AWS configuration selected by the invocation environment: %w", err)
@@ -246,6 +250,7 @@ func profileName(env map[string]string) string {
 }
 
 func loadOptions(env map[string]string, transport *awsTransport) []func(*config.LoadOptions) error {
+	env = resolvedSharedFiles(env)
 	region := env["AWS_REGION"]
 	if region == "" {
 		region = env["AWS_DEFAULT_REGION"]
@@ -256,6 +261,13 @@ func loadOptions(env map[string]string, transport *awsTransport) []func(*config.
 	// The transport carries the endpoint overrides for the STS calls that role and web identity profiles make.
 	options := []func(*config.LoadOptions) error{
 		config.WithRegion(region),
+		// Clear process/shared endpoint selections before STS resolves or signs its request.
+		// The invocation transport applies its own endpoint and prefix to the default AWS host.
+		config.WithServiceOptions(func(_ string, options any) {
+			if stsOptions, ok := options.(*sts.Options); ok {
+				stsOptions.BaseEndpoint = nil
+			}
+		}),
 		config.WithHTTPClient(&http.Client{Transport: transport, Timeout: awsResolveTimeout}),
 		// A role chain signs its STS calls with source credentials the transport does not hold, so the
 		// endpoint path prefix is applied before the SDK signs them instead of re-signing in the transport.
@@ -275,8 +287,8 @@ func loadOptions(env map[string]string, transport *awsTransport) []func(*config.
 	return append(
 		options,
 		config.WithSharedConfigProfile(profileName(env)),
-		config.WithSharedCredentialsFiles([]string{cmpFirst(env["AWS_SHARED_CREDENTIALS_FILE"], config.DefaultSharedCredentialsFilename())}),
-		config.WithSharedConfigFiles([]string{cmpFirst(env["AWS_CONFIG_FILE"], config.DefaultSharedConfigFilename())}),
+		config.WithSharedCredentialsFiles([]string{env["AWS_SHARED_CREDENTIALS_FILE"]}),
+		config.WithSharedConfigFiles([]string{env["AWS_CONFIG_FILE"]}),
 	)
 }
 
@@ -402,7 +414,10 @@ func (t *awsTransport) signPrefixedRequest(req *http.Request) error {
 		return err
 	}
 	req.Header.Del("Authorization")
-	return v4.NewSigner().SignHTTP(req.Context(), t.credentials, req, payloadHash, scope[3], scope[2], stamp)
+	return v4.NewSigner().SignHTTP(req.Context(), t.credentials, req, payloadHash, scope[3], scope[2], stamp, func(options *v4.SignerOptions) {
+		// S3 signs the escaped wire path without escaping percent signs a second time.
+		options.DisableURIPathEscaping = scope[3] == "s3"
+	})
 }
 
 // requestPayloadHash preserves an existing hash or hashes and restores the request body.
@@ -461,4 +476,36 @@ func awsEndpoints(env map[string]string) map[string]*url.URL {
 		endpoints[strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(service))] = target
 	}
 	return endpoints
+}
+
+// resolvedSharedFiles binds cache fingerprints to the same explicit paths the SDK loads.
+func resolvedSharedFiles(env map[string]string) map[string]string {
+	resolved := maps.Clone(env)
+	if resolved == nil {
+		resolved = map[string]string{}
+	}
+	resolved["AWS_SHARED_CREDENTIALS_FILE"] = cmpFirst(env["AWS_SHARED_CREDENTIALS_FILE"], config.DefaultSharedCredentialsFilename())
+	resolved["AWS_CONFIG_FILE"] = cmpFirst(env["AWS_CONFIG_FILE"], config.DefaultSharedConfigFilename())
+	return resolved
+}
+
+// rejectAmbientCredentialSources rejects profile sources the SDK resolves from process state.
+func rejectAmbientCredentialSources(ctx context.Context, env map[string]string) error {
+	if selectsWebIdentityRole(env) {
+		return nil
+	}
+	files := resolvedSharedFiles(env)
+	selected, err := config.LoadSharedConfigProfile(ctx, profileName(env), func(options *config.LoadSharedConfigOptions) {
+		options.CredentialsFiles = []string{files["AWS_SHARED_CREDENTIALS_FILE"]}
+		options.ConfigFiles = []string{files["AWS_CONFIG_FILE"]}
+	})
+	if err != nil {
+		return err
+	}
+	for profile := &selected; profile != nil; profile = profile.Source {
+		if profile.CredentialSource != "" {
+			return fmt.Errorf("%w: profile credential_source cannot be isolated from the plugin process; use invocation static credentials or a file-backed source_profile", ErrAWSCredentials)
+		}
+	}
+	return nil
 }

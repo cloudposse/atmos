@@ -16,12 +16,16 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/iotest"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gruntwork-io/terragrunt/internal/awshelper"
 	"github.com/gruntwork-io/terragrunt/internal/iam"
 	"github.com/gruntwork-io/terragrunt/internal/venv"
@@ -453,6 +457,13 @@ func TestAWSCacheKeyTracksSelectionAndFileChanges(t *testing.T) {
 }
 
 func TestAWSWebIdentityRoleFromInvocationTokenFile(t *testing.T) {
+	var ambientCalls atomic.Int32
+	ambient := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ambientCalls.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer ambient.Close()
+	t.Setenv("AWS_ENDPOINT_URL_STS", ambient.URL)
 	var mu sync.Mutex
 	var gotAction string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -480,6 +491,7 @@ func TestAWSWebIdentityRoleFromInvocationTokenFile(t *testing.T) {
 	mu.Unlock()
 	assert.Contains(t, action, "AssumeRoleWithWebIdentity")
 	assert.Contains(t, action, "RoleSessionName=atmos-web")
+	assert.Zero(t, ambientCalls.Load(), "the process STS endpoint must never receive the invocation token")
 }
 
 // An assumed role session is reused only for the same assumption: a different or rotated web identity token,
@@ -509,4 +521,84 @@ func TestAWSRoleCacheKeyTracksEveryAssumptionInput(t *testing.T) {
 
 func testRole(arn, token string) iam.RoleOptions {
 	return iam.RoleOptions{RoleARN: arn, AssumeRoleSessionName: "atmos", WebIdentityToken: token}
+}
+
+func TestAWSS3PrefixPreservesSigningForEscapedKeys(t *testing.T) {
+	keys := aws.Credentials{AccessKeyID: "AKIAS3", SecretAccessKey: "secret"}
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/gateway/state with space.tfstate", r.URL.Path)
+		assert.Contains(t, r.URL.EscapedPath(), "%20")
+		signature := r.Header.Get("Authorization")
+		replay := r.Clone(r.Context())
+		replay.Header.Del("Authorization")
+		stamp, err := time.Parse("20060102T150405Z", r.Header.Get("X-Amz-Date"))
+		if !assert.NoError(t, err) {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		err = v4.NewSigner().SignHTTP(r.Context(), keys, replay, r.Header.Get("X-Amz-Content-Sha256"), "s3", "us-east-1", stamp, func(o *v4.SignerOptions) { o.DisableURIPathEscaping = true })
+		if !assert.NoError(t, err) || !assert.Equal(t, signature, replay.Header.Get("Authorization"), "gateway verifies S3 canonical path escaping") {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		_, _ = io.WriteString(w, "reviewed state")
+	}))
+	defer gateway.Close()
+	endpoint, err := url.Parse(gateway.URL + "/gateway")
+	require.NoError(t, err)
+	transport := &awsTransport{credentials: keys, endpoints: map[string]*url.URL{"s3": endpoint}}
+	client := s3.NewFromConfig(aws.Config{Region: "us-east-1", Credentials: credentials.NewStaticCredentialsProvider(keys.AccessKeyID, keys.SecretAccessKey, ""), HTTPClient: &http.Client{Transport: transport}}, func(o *s3.Options) { o.RetryMaxAttempts = 1 })
+	result, err := client.GetObject(t.Context(), &s3.GetObjectInput{Bucket: aws.String("bucket"), Key: aws.String("state with space.tfstate")})
+	require.NoError(t, err)
+	defer result.Body.Close()
+	body, err := io.ReadAll(result.Body)
+	require.NoError(t, err)
+	require.Equal(t, "reviewed state", string(body))
+}
+
+func TestAWSDefaultSharedFilesInvalidateCachedCredentials(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	path := config.DefaultSharedCredentialsFilename()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(config.DefaultSharedConfigFilename(), nil, 0o600))
+	write := func(key string) {
+		require.NoError(t, os.WriteFile(path, []byte("[rotating]\naws_access_key_id = "+key+"\naws_secret_access_key = secret\n"), 0o600))
+	}
+	env := map[string]string{"AWS_PROFILE": "rotating", "AWS_EC2_METADATA_DISABLED": "true"}
+	write("AKIAORIGINAL")
+	before := awsCacheKey(env)
+	first := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+	require.Equal(t, "AKIAORIGINAL", first.Env[envAccessKeyID])
+	require.Equal(t, before, awsCacheKey(env), "unchanged files preserve the cache identity")
+	again := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+	require.Equal(t, first.Env[envAccessKeyID], again.Env[envAccessKeyID])
+	write("AKIAREPLACEMENTLONGER")
+	require.NotEqual(t, before, awsCacheKey(env))
+	rotated := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+	require.Equal(t, "AKIAREPLACEMENTLONGER", rotated.Env[envAccessKeyID])
+}
+
+func TestAWSRejectsAmbientCredentialSourceInRoleProfiles(t *testing.T) {
+	var calls atomic.Int32
+	ambient := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		_, _ = io.WriteString(w, `{"AccessKeyId":"AKIAAMBIENT","SecretAccessKey":"secret","Token":"ambient-token","Expiration":"2099-01-01T00:00:00Z"}`)
+	}))
+	defer ambient.Close()
+	t.Setenv("AWS_CONTAINER_CREDENTIALS_FULL_URI", ambient.URL)
+	t.Setenv("AWS_CONTAINER_AUTHORIZATION_TOKEN", "ambient-authorization")
+	server := newSTSServer(t)
+	credentials, configFile := writeProfile(t, "source", "AKIAFILES")
+	require.NoError(t, os.WriteFile(configFile, []byte("[profile role]\nrole_arn = arn:aws:iam::1:role/test\ncredential_source = EcsContainer\n"), 0o600))
+	env := map[string]string{"AWS_PROFILE": "role", "AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile, "AWS_ENDPOINT_URL_STS": server.URL, "AWS_EC2_METADATA_DISABLED": "true"}
+	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+	require.Equal(t, awsUnresolvedKey, scoped.Env[envAccessKeyID])
+	_, err := accountID(t, scoped)
+	require.ErrorIs(t, err, ErrAWSCredentials)
+	require.ErrorContains(t, err, "credential_source")
+	require.Zero(t, calls.Load(), "the process credential endpoint must never receive a request")
+	signers, _ := server.seen()
+	require.Empty(t, signers, "no role may be assumed with process credentials")
 }

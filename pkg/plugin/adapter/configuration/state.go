@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
 
@@ -54,10 +56,10 @@ func (s *Session) checkPreparationDependencies(ctx context.Context, instance *pl
 	if baseline == nil {
 		return errUtils.ErrPluginInvalidConfig
 	}
-	request := proto.Clone(baseline.request).(*pluginv1.DiscoverComponentsRequest)
-	request.Invocation = &pluginv1.Invocation{Environment: env}
-	request.Operation = proto.Clone(baseline.request.Operation).(*pluginv1.ComponentOperation)
-	request.Operation.Command = command
+	request, err := s.preparationDiscoveryRequest(baseline, instance.Provider, env, command)
+	if err != nil {
+		return err
+	}
 	response, err := s.registry[instance.Provider].Discover(ctx, request)
 	if err != nil {
 		return err
@@ -66,21 +68,9 @@ func (s *Session) checkPreparationDependencies(ctx context.Context, instance *pl
 	if err := addDiscovered(make(map[string]map[string]any), current, response); err != nil {
 		return err
 	}
-	selected := current[addressKey(baseline.self.Address)]
-	if !sameDependencyUnit(baseline.self, selected) || !sameDependencies(baseline.self.Dependencies, selected.Dependencies) {
-		return fmt.Errorf("%w: preparation changed discovered dependency paths", errUtils.ErrPluginInvalidConfig)
-	}
-	for _, dependency := range selected.Dependencies {
-		key := addressKey(dependency.Target)
-		before, after := baseline.units[key], current[key]
-		// A target outside the evaluated scope, such as a dependency beyond a single imported
-		// unit's root, is absent from both inventories. The unchanged edge is already compared above.
-		if before == nil && after == nil {
-			continue
-		}
-		if !sameDependencyUnit(before, after) {
-			return fmt.Errorf("%w: preparation changed discovered dependency paths", errUtils.ErrPluginInvalidConfig)
-		}
+	selected, err := checkedDependencyInventory(baseline, current)
+	if err != nil {
+		return err
 	}
 	return s.checkDependencyStates(ctx, baseline, selected.Dependencies, env, command)
 }
@@ -200,11 +190,15 @@ func (s *Session) referenceState(ctx context.Context, discovery *pluginv1.Discov
 }
 
 func (s *Session) dependencyState(ctx context.Context, discovery *pluginv1.DiscoverComponentsRequest, target *pluginv1.DiscoveredComponent, env map[string]string, command string) (*pluginv1.ComponentStateIdentity, error) {
+	_, options, err := s.providerOperation(target.Provider, env)
+	if err != nil {
+		return nil, err
+	}
 	result, err := s.registry[target.Provider].ResolveState(ctx, &pluginv1.ComponentRequest{
 		Provider: target.Provider, Address: target.Address, Source: target.Source, RootDirectory: s.root,
 		Configuration: target.Configuration, ProviderConfiguration: discovery.ProviderConfiguration,
 		Invocation: &pluginv1.Invocation{Environment: env},
-		Operation:  &pluginv1.ComponentOperation{Command: command, Mode: "native", Options: discovery.GetOperation().GetOptions()},
+		Operation:  &pluginv1.ComponentOperation{Command: command, Mode: "native", Options: options},
 	})
 	if err != nil {
 		return nil, err
@@ -259,4 +253,76 @@ func (s *Session) otherImportTarget(key [3]string) (*pluginv1.DiscoveredComponen
 		}
 	}
 	return nil, nil
+}
+
+// scopePreparationDiscovery reevaluates the selected unit and direct targets. File
+// provenance includes the owning stacks needed to regenerate virtual units. Directory
+// watches describe module contents, not additional inventory roots.
+func scopePreparationDiscovery(request *pluginv1.DiscoverComponentsRequest, baseline *preparationEvidence) {
+	units := []*pluginv1.DiscoveredComponent{baseline.self}
+	for _, dependency := range baseline.self.Dependencies {
+		if target := baseline.units[addressKey(dependency.Target)]; target != nil {
+			units = append(units, target)
+		}
+	}
+	paths := map[string]bool{}
+	for _, unit := range units {
+		paths[unit.Source] = true
+		for _, source := range unit.Sources {
+			if source.Kind == pluginv1.ComponentSource_FILE {
+				paths[source.Path] = true
+			}
+		}
+	}
+	for path := range paths {
+		// A source containing glob syntax cannot be represented as a literal include
+		// by every provider. Retain the original scope rather than broaden that path.
+		if !filepath.IsLocal(path) || strings.ContainsAny(path, "*?[{\\") {
+			return
+		}
+	}
+	request.IncludePaths = slices.Sorted(maps.Keys(paths))
+	request.Imports = nil
+}
+
+func (s *Session) preparationDiscoveryRequest(baseline *preparationEvidence, provider string, env map[string]string, command string) (*pluginv1.DiscoverComponentsRequest, error) {
+	request := proto.Clone(baseline.request).(*pluginv1.DiscoverComponentsRequest)
+	// The selected executable may change intentionally; inventory identity uses the
+	// original discovery binary while all other preparation overrides remain active.
+	inventoryEnv := maps.Clone(env)
+	delete(inventoryEnv, "ATMOS_TERRAFORM_BINARY")
+	if binary, ok := baseline.request.GetInvocation().GetEnvironment()["ATMOS_TERRAFORM_BINARY"]; ok {
+		inventoryEnv["ATMOS_TERRAFORM_BINARY"] = binary
+	}
+	request.Invocation = &pluginv1.Invocation{Environment: inventoryEnv}
+	scopePreparationDiscovery(request, baseline)
+	request.Operation = proto.Clone(baseline.request.Operation).(*pluginv1.ComponentOperation)
+	request.Operation.Command = command
+	_, options, err := s.providerOperation(provider, env)
+	if err != nil {
+		return nil, err
+	}
+	request.Operation.Options = options
+	return request, nil
+}
+
+// checkedDependencyInventory rejects identity or edge drift before any output reads.
+func checkedDependencyInventory(baseline *preparationEvidence, current map[[3]string]*pluginv1.DiscoveredComponent) (*pluginv1.DiscoveredComponent, error) {
+	selected := current[addressKey(baseline.self.Address)]
+	if !sameDependencyUnit(baseline.self, selected) || !sameDependencies(baseline.self.Dependencies, selected.Dependencies) {
+		return nil, fmt.Errorf("%w: preparation changed discovered dependency paths", errUtils.ErrPluginInvalidConfig)
+	}
+	for _, dependency := range selected.Dependencies {
+		key := addressKey(dependency.Target)
+		before, after := baseline.units[key], current[key]
+		// A target outside the evaluated scope, such as a dependency beyond a single imported
+		// unit's root, is absent from both inventories. The unchanged edge is already compared above.
+		if before == nil && after == nil {
+			continue
+		}
+		if !sameDependencyUnit(before, after) {
+			return nil, fmt.Errorf("%w: preparation changed discovered dependency paths", errUtils.ErrPluginInvalidConfig)
+		}
+	}
+	return selected, nil
 }

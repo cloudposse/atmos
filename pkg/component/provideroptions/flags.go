@@ -233,7 +233,7 @@ func Resolve(cmd *cobra.Command, v *viper.Viper) (map[string]map[string]schema.C
 			if result[entry.provider.Section] == nil {
 				result[entry.provider.Section] = make(map[string]schema.ComponentProviderOption)
 			}
-			result[entry.provider.Section][option.Name] = schema.ComponentProviderOption{Value: value, Sensitive: option.Sensitive, FromCLI: entry.fromCLI(cmd, option)}
+			result[entry.provider.Section][option.Name] = schema.ComponentProviderOption{Value: value, Sensitive: option.Sensitive, FromCLI: entry.fromCLI(cmd, option), Type: option.Type, EnvNames: option.EnvNames(entry.provider.Name)}
 			if option.Sensitive {
 				atmosio.RegisterSecretValue(value)
 			}
@@ -400,4 +400,20 @@ func (r *registration) raw(cmd *cobra.Command, v *viper.Viper, option *Option, p
 		}
 	}
 	return v.Get(primary)
+}
+
+// InvocationValue resolves environment-derived options against the invocation before RPC encoding.
+func InvocationValue(name string, option schema.ComponentProviderOption, environment map[string]string) (any, bool, error) {
+	defer perf.Track(nil, "provideroptions.InvocationValue")()
+	if !option.FromCLI && option.Type != "" {
+		for _, variable := range option.EnvNames {
+			if raw, found := environment[variable]; found {
+				value, err := convert(&Option{Name: name, Type: option.Type, Sensitive: option.Sensitive}, name, raw)
+				return value, true, err
+			}
+		}
+		// An identity may intentionally remove a process environment option.
+		return nil, false, nil
+	}
+	return option.Value, true, nil
 }

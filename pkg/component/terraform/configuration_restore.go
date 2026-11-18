@@ -386,3 +386,41 @@ func (e *Executor) rebuildReviewedWorkdir(ctx context.Context, writers provision
 	restore = func() error { return nil }
 	return path, nil
 }
+
+// verifyRebuild checks the reviewed bytes after any initialization that could upgrade modules.
+func (c *componentExecContext) verifyRebuild(workdir string) error {
+	if c.rebuild == nil {
+		return nil
+	}
+	return c.rebuild.verify(workdir)
+}
+
+// isolateFailedRebuild keeps unverified output for inspection and restores only transport files.
+// A retry can rebuild the workdir again without treating partial downloads as reviewed content.
+func (r *reviewedRebuild) isolateFailedRebuild(cause error) error {
+	transport := r.transportFiles()
+	holding, err := os.MkdirTemp(filepath.Dir(r.workdir), ".atmos-failed-rebuild-*")
+	if err != nil {
+		return errors.Join(cause, err)
+	}
+	failed := filepath.Join(holding, "workdir")
+	if err := os.Rename(r.workdir, failed); err != nil {
+		return errors.Join(cause, err)
+	}
+	for name := range transport {
+		source := filepath.Join(failed, filepath.FromSlash(name))
+		if _, err := os.Lstat(source); errors.Is(err, fs.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return errors.Join(cause, err)
+		}
+		destination := filepath.Join(r.workdir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(destination), workdirMode); err != nil {
+			return errors.Join(cause, err)
+		}
+		if err := os.Rename(source, destination); err != nil {
+			return errors.Join(cause, err)
+		}
+	}
+	return errUtils.Build(cause).WithHintf("The failed rebuild is preserved at `%s`; the restored plan artifacts are ready for a retry.", failed).Err()
+}

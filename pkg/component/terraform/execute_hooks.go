@@ -567,42 +567,6 @@ func (e *Executor) recoverFromInitRequired( //nolint:revive // argument-limit: e
 	return e.retryMainCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, opts...)
 }
 
-// runInitRecovery classifies a failed main command and, when smart init's recovery policy
-// allows it, runs the forced init the diagnostic asked for. It reports whether the main command
-// should now be retried; otherwise it returns the error to propagate.
-func (e *Executor) runInitRecovery( //nolint:revive // argument-limit: every parameter is load-bearing context from the recovering caller.
-	atmosConfig *schema.AtmosConfiguration,
-	info *schema.ConfigAndStacksInfo,
-	execCtx *componentExecContext,
-	componentPath string,
-	mainErr error,
-	stdoutBuf, stderrBuf *bytes.Buffer,
-	opts ...component.ExecutionOption,
-) (bool, error) {
-	if info.SubCommand == subcommandInit {
-		return false, mainErr
-	}
-
-	combined := stdoutBuf.String() + "\n" + stderrBuf.String() + "\n" + mainErr.Error()
-	rec, policyErr := classifyInitRecovery(atmosConfig, info, combined)
-	if policyErr != nil {
-		return false, errors.Join(mainErr, policyErr)
-	}
-	if !rec.Run {
-		return false, mainErr
-	}
-
-	ui.Warning(fmt.Sprintf("Terraform requires initialization; running init and retrying '%s'", info.SubCommand))
-
-	initErr := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandInit), func() error {
-		return e.executeTerraformInitForcedFn(atmosConfig, info, componentPath, execCtx.varFile, rec.WithReconfigure, rec.WithUpgrade, opts...)
-	})
-	if initErr != nil {
-		return false, errors.Join(mainErr, initErr)
-	}
-	return true, nil
-}
-
 // recoverWithinLifecycle is recoverFromInitRequired for a main command wrapped by provider
 // hooks. It runs inside that command's lifecycle and retries only the Terraform subprocess, so
 // before and after hooks run once for the user command. The exec-metadata capture is reset so

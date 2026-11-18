@@ -6,10 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"google.golang.org/protobuf/proto"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component/provideroptions"
+	"github.com/cloudposse/atmos/pkg/merge"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -89,13 +88,20 @@ func operationMode(settings *schema.ComponentConfiguration) string {
 // operationOptions encodes the options the user set explicitly. Only those are sent, so the provider
 // can tell an absent option from an explicit false, zero, or empty one. Sensitive values are marked so
 // every consumer masks them.
-func operationOptions(options map[string]schema.ComponentProviderOption) (map[string]*pluginv1.ComponentValue, error) {
+func operationOptions(options map[string]schema.ComponentProviderOption, environment map[string]string) (map[string]*pluginv1.ComponentValue, error) {
 	if len(options) == 0 {
 		return nil, nil
 	}
 	result := make(map[string]*pluginv1.ComponentValue, len(options))
 	for name, option := range options {
-		value, err := adapter.EncodeObject(option.Value)
+		resolved, present, err := provideroptions.InvocationValue(name, option, environment)
+		if err != nil {
+			return nil, err
+		}
+		if !present {
+			continue
+		}
+		value, err := adapter.EncodeObject(resolved)
 		if err != nil {
 			return nil, err
 		}
@@ -108,18 +114,15 @@ func operationOptions(options map[string]schema.ComponentProviderOption) (map[st
 }
 
 // providerOperation returns the mode and a copy of the options of the section that enabled a provider.
-func (s *Session) providerOperation(provider string) (string, map[string]*pluginv1.ComponentValue) {
+func (s *Session) providerOperation(provider string, environment map[string]string) (string, map[string]*pluginv1.ComponentValue, error) {
 	for _, request := range s.importProviders {
 		if request.Provider != provider || request.Operation == nil {
 			continue
 		}
-		options := make(map[string]*pluginv1.ComponentValue, len(request.Operation.Options))
-		for name, value := range request.Operation.Options {
-			options[name] = proto.Clone(value).(*pluginv1.ComponentValue)
-		}
-		return request.Operation.Mode, options
+		options, err := operationOptions(s.providerOptionValues[provider], environment)
+		return request.Operation.Mode, options, err
 	}
-	return provideroptions.ModeNative, nil
+	return provideroptions.ModeNative, nil, nil
 }
 
 // sortedSections lists the configured provider sections in stable order.
@@ -168,4 +171,18 @@ func (s *Session) providerSettings(name string) *pluginv1.ComponentValue {
 		}
 	}
 	return settings
+}
+
+func snapshotProviderOptions(options map[string]schema.ComponentProviderOption) (map[string]schema.ComponentProviderOption, error) {
+	result := make(map[string]schema.ComponentProviderOption, len(options))
+	for name, option := range options {
+		copied, err := merge.DeepCopyMap(map[string]any{"value": option.Value})
+		if err != nil {
+			return nil, err
+		}
+		option.Value = copied["value"]
+		option.EnvNames = slices.Clone(option.EnvNames)
+		result[name] = option
+	}
+	return result, nil
 }

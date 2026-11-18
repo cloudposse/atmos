@@ -38,6 +38,9 @@ type ComponentProviderOption struct {
 	Sensitive bool
 	// FromCLI distinguishes an explicit flag from an environment-derived value.
 	FromCLI bool
+	// Type and EnvNames retain the declaration for invocation-environment precedence before RPC.
+	Type     string
+	EnvNames []string
 }
 
 // ComponentConfigurationRuntime is an invocation-owned host service. It is not a wire contract.

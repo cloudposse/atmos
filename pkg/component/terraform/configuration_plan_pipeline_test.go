@@ -983,3 +983,14 @@ func TestConfigurationWorkdirDigestFailsForUnreadableFile(t *testing.T) {
 	_, err := configurationWorkdirDigest(root, filepath.Join(root, "reviewed.plan"))
 	require.ErrorIs(t, err, os.ErrPermission)
 }
+
+func TestApplyOfRestoredPlanRejectsANewRoleBeforeAssumingIt(t *testing.T) {
+	recorded := fakeAssume(t, nil)
+	project := newReviewedPlanProject(t)
+	planPath := project.reviewInDefaultWorkdir(t)
+	project.freshRunner(t, planPath)
+	project.iam = &schema.ComponentIAM{Role: "arn:aws:iam::1:role/unreviewed"}
+	_, _, err := project.freshApply(t, planPath, project.prepared())
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.Zero(t, recorded.calls, "a role absent from the reviewed preparation must never be assumed")
+}
