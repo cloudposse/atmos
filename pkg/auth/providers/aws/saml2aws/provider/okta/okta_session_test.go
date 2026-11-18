@@ -10,9 +10,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/cfg"
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/helper/credentials"
 )
 
 func TestCreateSession(t *testing.T) {
@@ -30,21 +31,23 @@ func TestCreateSession(t *testing.T) {
 		status     int
 		body       string
 		addErr     error
+		wantStored bool
 		wantErr    string
 		wantCookie string
 		wantToken  string
 	}{
-		{name: "active session", status: http.StatusOK, body: `{"id":"sid-1","status":"ACTIVE","sessionToken":"st"}`, wantCookie: "sid-1", wantToken: "st"},
+		{name: "active session", status: http.StatusOK, body: `{"id":"sid-1","status":"ACTIVE","sessionToken":"st"}`, wantStored: true, wantCookie: "sid-1", wantToken: "st"},
 		// The production status validator rejects these in HTTPClient.Do, before createSession inspects the status.
 		{name: "unauthorized", status: http.StatusUnauthorized, wantErr: "failed status: 401 Unauthorized"},
 		{name: "server error", status: http.StatusInternalServerError, wantErr: "failed status: 500 Internal Server Error"},
-		{name: "MFA enroll", status: http.StatusOK, body: `{"id":"sid-1","status":"MFA_ENROLL"}`, wantErr: "MFA_ENROLL"},
-		{name: "credential store failure", status: http.StatusOK, body: `{"id":"sid-1","status":"ACTIVE"}`, addErr: errors.New("keychain locked"), wantErr: "keychain locked"},
+		{name: "MFA enroll", status: http.StatusOK, body: `{"id":"sid-1","status":"MFA_ENROLL"}`, wantStored: true, wantErr: "MFA_ENROLL"},
+		{name: "credential store failure", status: http.StatusOK, body: `{"id":"sid-1","status":"ACTIVE"}`, addErr: errors.New("keychain locked"), wantStored: true, wantErr: "keychain locked"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Only an active session is stored; the error cases never reach the store.
-			withCredentialsHelperMock(t).EXPECT().Add(gomock.Any()).Return(tc.addErr).AnyTimes()
+			// Every HTTP 200 response stores the session cookie before its status is inspected, MFA_ENROLL
+			// included. Non-200 responses return before the store, so the mock fails on any Add for them.
+			helper := withCredentialsHelperMock(t)
 			ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, pathSessions, r.URL.Path)
 				w.WriteHeader(tc.status)
@@ -54,6 +57,9 @@ func TestCreateSession(t *testing.T) {
 
 			oc, loginDetails := setupTestClient(t, ts, "Auto")
 			withProductionStatusValidator(oc)
+			if tc.wantStored {
+				helper.EXPECT().Add(sessionCookieCredentials(loginDetails, "sid-1")).Return(tc.addErr).Times(1)
+			}
 			cookie, token, err := oc.createSession(loginDetails, "session-token")
 			if tc.wantErr != "" {
 				require.Error(t, err)
@@ -67,7 +73,7 @@ func TestCreateSession(t *testing.T) {
 	}
 
 	t.Run("MFA required is verified", func(t *testing.T) {
-		withCredentialsHelperMock(t).EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
+		helper := withCredentialsHelperMock(t)
 		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
 			case pathSessions:
@@ -85,11 +91,22 @@ func TestCreateSession(t *testing.T) {
 
 		oc, loginDetails := setupTestClient(t, ts, "Auto")
 		loginDetails.MFAToken = "111111"
+		// The session cookie is stored once, before MFA is verified.
+		helper.EXPECT().Add(sessionCookieCredentials(loginDetails, "sid-mfa")).Return(nil).Times(1)
 		cookie, token, err := oc.createSession(loginDetails, "session-token")
 		require.NoError(t, err)
 		assert.Equal(t, "sid-mfa", cookie)
 		assert.Equal(t, "st-after-mfa", token)
 	})
+}
+
+// sessionCookieCredentials is the credential createSession stores for the session cookie sid.
+func sessionCookieCredentials(loginDetails *creds.LoginDetails, sid string) *credentials.Credentials {
+	return &credentials.Credentials{
+		ServerURL: loginDetails.URL + "/sessionCookie",
+		Username:  loginDetails.Username,
+		Secret:    sid,
+	}
 }
 
 func TestValidateSession(t *testing.T) {
