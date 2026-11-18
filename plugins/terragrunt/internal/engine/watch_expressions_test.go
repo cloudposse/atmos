@@ -3,6 +3,7 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -394,4 +395,19 @@ terraform {
 }
 `)
 	require.Equal(t, []string{project.root}, result.Folders)
+}
+
+func TestWatchesMatchTerragruntRegexReplace(t *testing.T) {
+	for _, expression := range []string{`replace("config/prod.json", "/prod/", "dev")`, `replace("config/prod.json", "/(prod)/", "$${1}-dev")`} {
+		t.Run(expression, func(t *testing.T) {
+			project := newWatchProject(t)
+			result := project.track("inputs = { value = file(" + expression + ") }")
+			expected := "dev.json"
+			if strings.Contains(expression, "(prod)") {
+				expected = "prod-dev.json"
+			}
+			require.Contains(t, result.Files, filepath.Join(project.unit, "config", expected))
+			require.Empty(t, result.Folders)
+		})
+	}
 }

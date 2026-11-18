@@ -271,7 +271,7 @@ func TestConfigurationPlanRecordHoldsNoSensitiveGeneratedFiles(t *testing.T) {
 				{Path: "public.txt", Content: []byte("public-content"), IfExists: "overwrite"},
 				{Path: "obsolete.tf", IfExists: "remove"},
 			}
-			for _, file := range execCtx.preparedConfiguration.Files[:2] {
+			for _, file := range execCtx.preparedConfiguration.Files[:3] {
 				require.NoError(t, os.WriteFile(filepath.Join(execCtx.workingDir, file.Path), file.Content, 0o600))
 			}
 			require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
@@ -1149,4 +1149,57 @@ func TestConfigurationPlanPreservesReviewedOverwriteBytes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, reviewed, actual)
 	require.Equal(t, []byte("# original A"), execCtx.preparedConfiguration.Files[0].Content)
+}
+
+func TestSavedPlanBindsFilteredEnvironmentDefaults(t *testing.T) {
+	for _, explicitApply := range []bool{false, true} {
+		t.Run(fmt.Sprint(explicitApply), func(t *testing.T) {
+			config, info, execCtx, _, path := planFixture(t)
+			info.ComponentEnvSection = map[string]any{"PROVIDER_TOKEN": "stack-secret"}
+			execution := &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan", "apply"}, Environment: map[string]string{"PROVIDER_TOKEN": "provider-secret"}}}}
+			if explicitApply {
+				execution.Apply = &schema.ComponentExecution{}
+			}
+			execCtx.preparedConfiguration.Execution = execution
+			require.NoError(t, applyStackOverrides(config, info, execCtx.preparedConfiguration))
+			require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out", filepath.Base(path)}))
+			record, err := os.ReadFile(path + configurationPlanSuffix)
+			require.NoError(t, err)
+			require.NotContains(t, string(record), "provider-secret")
+			require.NotContains(t, string(record), "stack-secret")
+			info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+			_, err = restoreConfigurationPlan(t.Context(), config, info)
+			require.NoError(t, err)
+			info.ComponentEnvSection = nil
+			_, err = restoreConfigurationPlan(t.Context(), config, info)
+			if explicitApply {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+			}
+		})
+	}
+}
+
+func TestConfigurationPlanPreservesReviewedFileAbsence(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	execCtx.preparedConfiguration.Files = []schema.ComponentConfigurationFile{{Path: "override.tf", Content: []byte("# prepared but removed by before-hook"), IfExists: "overwrite"}}
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+	prepared, err := restoreConfigurationPlan(t.Context(), config, info)
+	require.NoError(t, err)
+	require.NoError(t, writePreparedConfiguration(execCtx.workingDir, prepared))
+	require.NoFileExists(t, filepath.Join(execCtx.workingDir, "override.tf"))
+	require.Equal(t, "overwrite", execCtx.preparedConfiguration.Files[0].IfExists)
+	// An empty file is different from an absent one and must survive restoration.
+	require.NoError(t, os.WriteFile(filepath.Join(execCtx.workingDir, "override.tf"), []byte{}, 0o600))
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "plan", false, ""
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+	prepared, err = restoreConfigurationPlan(t.Context(), config, info)
+	require.NoError(t, err)
+	require.NoError(t, writePreparedConfiguration(execCtx.workingDir, prepared))
+	data, err := os.ReadFile(filepath.Join(execCtx.workingDir, "override.tf"))
+	require.NoError(t, err)
+	require.Empty(t, data)
 }
