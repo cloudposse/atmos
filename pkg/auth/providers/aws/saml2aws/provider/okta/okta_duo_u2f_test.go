@@ -46,7 +46,8 @@ func TestChallengeDuoU2F(t *testing.T) {
 
 		resp, err := client.ChallengeU2F()
 		assert.Nil(t, resp)
-		assert.ErrorIs(t, err, &u2fhost.BadKeyHandleError{})
+		var badKeyErr *u2fhost.BadKeyHandleError
+		assert.ErrorAs(t, err, &badKeyErr)
 	})
 
 	t.Run("retry", func(t *testing.T) {

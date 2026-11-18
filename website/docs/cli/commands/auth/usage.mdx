@@ -256,7 +256,7 @@ The `driver` field controls how Atmos authenticates with your SAML identity prov
 
   :::info Manual Installation
   Manual Chromium installation is **not recommended** because:
-  - The browser version must match the Playwright version built into Atmos
+  - The browser version must match the active Playwright driver: the one built into Atmos, or the external driver selected by `PLAYWRIGHT_CLI_PATH` when it is set (its required Chromium revision can differ)
   - Different installation methods use different cache directories which may not be detected
   - The automatic download option handles everything correctly
 

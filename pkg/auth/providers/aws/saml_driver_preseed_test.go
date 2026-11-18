@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -549,6 +550,7 @@ func TestWritePreseedFileCopyError(t *testing.T) {
 	err = writePreseedFile(root, "node", errorReader{}, preseedFileMode)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not write file")
+	assert.NoFileExists(t, filepath.Join(root.Name(), "node"), "a half-written file must not look finished")
 }
 
 func TestWritePreseedFileOpenError(t *testing.T) {
@@ -827,8 +829,10 @@ func TestAuthenticate_BrowserIntegrityFailureStopsBeforeBrowserInstall(t *testin
 }
 
 // Negative path: a non-integrity seed failure (registry unreachable) with an already-installed driver
-// is non-fatal; Authenticate continues and the installed driver is reused untouched.
-func TestAuthenticate_BrowserOfflineSeedFailureReusesInstalledDriver(t *testing.T) {
+// is non-fatal; Authenticate continues and the installed driver file is preserved untouched.
+// The stub client returns before Playwright starts, so this does not prove the driver is usable;
+// TestAuthenticate_BrowserOfflineReusesUsableDriver covers offline reuse of a working driver.
+func TestAuthenticate_BrowserSeedFailureContinuesAndPreservesInstalledDriver(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -854,4 +858,36 @@ func TestAuthenticate_BrowserOfflineSeedFailureReusesInstalledDriver(t *testing.
 	content, readErr := os.ReadFile(cliPath)
 	require.NoError(t, readErr)
 	assert.Equal(t, "installed-cli", string(content))
+}
+
+// Offline reuse: with a usable driver (a fake CLI that the Node.js stand-in can run) already installed,
+// login prepares it without any download, patches its bundle, and the driver still answers its own
+// version check afterwards.
+func TestAuthenticate_BrowserOfflineReusesUsableDriver(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	bundlePath := seedFakePlaywrightDriver(t)
+
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	overridePreseedHosts(t, server.URL, server.URL)
+	errClient := errors.New("stub client reached")
+	clientCalls := stubNewSAMLClient(t, stubSAMLClient{err: errClient})
+
+	_, err := newBrowserSAMLProvider(t).Authenticate(context.Background())
+	require.ErrorIs(t, err, errClient)
+	assert.Equal(t, 1, *clientCalls)
+	assert.Zero(t, requests.Load(), "a usable installed driver is reused without any download")
+
+	data, readErr := os.ReadFile(bundlePath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(data), `pageError.location?.url || ""`, "the reused driver is patched")
+	cli, readErr := os.ReadFile(filepath.Join(filepath.Dir(filepath.Dir(bundlePath)), "cli.js"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "cli", string(cli))
 }

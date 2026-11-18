@@ -6,17 +6,24 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 )
 
+// Static validation errors. Atmos fork: the messages are unchanged from upstream, but callers can now match them with errors.Is.
+var (
+	ErrEmptyURL      = errors.New("empty URL")
+	ErrEmptyUsername = errors.New("empty username")
+	ErrEmptyPassword = errors.New("empty password")
+)
+
 type ValidateBase struct{}
 
 func (ac *ValidateBase) Validate(ld *creds.LoginDetails) error {
 	if ld.URL == "" {
-		return errors.New("empty URL")
+		return ErrEmptyURL
 	}
 	if ld.Username == "" {
-		return errors.New("empty username")
+		return ErrEmptyUsername
 	}
 	if ld.Password == "" {
-		return errors.New("empty password")
+		return ErrEmptyPassword
 	}
 	return nil
 }

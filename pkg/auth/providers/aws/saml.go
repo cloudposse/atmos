@@ -147,8 +147,10 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 	log.ConfigureLogrusForAtmos()
 
 	// Create config and client + login details.
-	samlConfig := p.createSAMLConfig()
-	loginDetails := p.createLoginDetails()
+	// Both use the driver selected above, so an implicit selection cannot change mid-attempt (for example
+	// when another process installs a browser) and reach the Browser client without its preparation.
+	samlConfig := p.createSAMLConfig(samlDriver)
+	loginDetails := p.createLoginDetails(samlDriver)
 
 	// Create the SAML client.
 	samlClient, err := newSAMLClient(samlConfig)
@@ -188,7 +190,7 @@ func (p *samlProvider) logAuthenticationStart(samlDriver string) {
 	log.Info("Starting SAML authentication", "provider", p.name, "url", p.url, logFieldDriver, samlDriver)
 	log.Debug("SAML configuration",
 		logFieldDriver, samlDriver,
-		"download_browser", p.shouldDownloadBrowser(),
+		"download_browser", p.shouldDownloadBrowser(samlDriver),
 		"requires_drivers", samlDriver == "Browser")
 }
 
@@ -235,12 +237,12 @@ func rolesFromAssertion(assertionB64 string) ([]*saml2aws.AWSRole, error) {
 	return roles, nil
 }
 
-// createSAMLConfig creates the saml2aws configuration.
-func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
+// createSAMLConfig creates the saml2aws configuration for the driver selected for this attempt.
+func (p *samlProvider) createSAMLConfig(samlDriver string) *cfg.IDPAccount {
 	return &cfg.IDPAccount{
 		URL:                   p.url,
 		Username:              p.config.Username,
-		Provider:              p.getDriver(),
+		Provider:              samlDriver,
 		MFA:                   "Auto",
 		SkipVerify:            false,
 		Timeout:               samlTimeoutSeconds, // 30 second timeout.
@@ -254,12 +256,12 @@ func (p *samlProvider) createSAMLConfig() *cfg.IDPAccount {
 	}
 }
 
-// createLoginDetails creates the login details for saml2aws.
-func (p *samlProvider) createLoginDetails() *creds.LoginDetails {
+// createLoginDetails creates the login details for saml2aws for the driver selected for this attempt.
+func (p *samlProvider) createLoginDetails(samlDriver string) *creds.LoginDetails {
 	loginDetails := &creds.LoginDetails{
 		URL:             p.url,
 		Username:        p.config.Username,
-		DownloadBrowser: p.shouldDownloadBrowser(), // Enable automatic driver installation.
+		DownloadBrowser: p.shouldDownloadBrowser(samlDriver), // Enable automatic driver installation.
 	}
 
 	// If password is provided in config, use it; otherwise prompt.
@@ -631,9 +633,16 @@ func (p *samlProvider) hasValidPlaywrightDrivers(path string) bool {
 		return false
 	}
 
-	// Check if there are any version subdirectories with content.
+	// Check if there are any browser revision directories with content.
 	for _, entry := range entries {
 		if !entry.IsDir() {
+			continue
+		}
+
+		// Playwright also keeps tools such as ffmpeg and winldd in the registry. They are not browsers, so
+		// a registry holding only a tool must not make an implicit Okta or Google login pick the Browser driver.
+		// Older browser revisions stay eligible: the exact-revision check decides whether a download is needed.
+		if !isPlaywrightBrowserDir(entry.Name()) {
 			continue
 		}
 
@@ -660,20 +669,29 @@ func (p *samlProvider) hasValidPlaywrightDrivers(path string) bool {
 	return false
 }
 
+// isPlaywrightBrowserDir reports whether a registry directory name (for example chromium-1248,
+// chromium_headless_shell-1248, firefox-1509 or webkit-2272) holds a Playwright browser rather than a tool.
+func isPlaywrightBrowserDir(name string) bool {
+	for _, browser := range []string{chromiumBrowserName, firefoxBrowserName, webkitBrowserName} {
+		if strings.HasPrefix(name, browser) {
+			return true
+		}
+	}
+	return false
+}
+
 // shouldDownloadBrowser determines if browser drivers should be auto-downloaded.
 // It checks if the user explicitly configured download_browser_driver, otherwise
 // it enables auto-download for the "Browser" driver when the Playwright-managed browser
 // that will be launched (Chromium by default, or the configured chromium, firefox or webkit
 // browser_type) is not installed. A system browser channel (chrome*, msedge*) or a
 // browser_executable_path is the user's own browser and is never downloaded.
-func (p *samlProvider) shouldDownloadBrowser() bool {
+func (p *samlProvider) shouldDownloadBrowser(samlDriver string) bool {
 	// If user explicitly set download_browser_driver, respect their choice.
 	if p.config.DownloadBrowserDriver {
 		log.Debug("Browser driver download explicitly enabled in config")
 		return true
 	}
-
-	samlDriver := p.getDriver()
 
 	// Only auto-download for "Browser" driver (others like GoogleApps, Okta don't need drivers).
 	if samlDriver != "Browser" {

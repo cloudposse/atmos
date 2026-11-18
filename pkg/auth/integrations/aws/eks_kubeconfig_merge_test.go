@@ -159,9 +159,9 @@ func TestEKSIntegration_FindClusterARN_RequiresWholeClusterName(t *testing.T) {
 			for _, arn := range tt.existing {
 				cfg.Clusters[arn] = &clientcmdapi.Cluster{Server: "https://example.eks.amazonaws.com"}
 			}
-			if len(tt.existing) > 0 {
-				writeKubeconfig(t, kubeconfigPath, cfg)
-			}
+			// Always write the file, so the empty case searches an existing kubeconfig with no clusters
+			// instead of failing on a missing file.
+			writeKubeconfig(t, kubeconfigPath, cfg)
 
 			mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
 			require.NoError(t, err)
@@ -170,6 +170,7 @@ func TestEKSIntegration_FindClusterARN_RequiresWholeClusterName(t *testing.T) {
 			arn, err := integration.findClusterARN(mgr)
 			if tt.wantErr {
 				require.Error(t, err)
+				assert.Contains(t, err.Error(), "no cluster ARN found", "the lookup failed because nothing matched, not because of the file")
 				assert.Empty(t, arn)
 				return
 			}

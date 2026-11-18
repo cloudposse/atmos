@@ -145,10 +145,11 @@ func TestFormBuildRequest(t *testing.T) {
 }
 
 func TestFormSubmit(t *testing.T) {
-	var gotForm url.Values
+	// The buffer lets the handler finish even if Submit fails and the test exits early.
+	gotFormCh := make(chan url.Values, 1)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.NoError(t, r.ParseForm())
-		gotForm = r.PostForm
+		gotFormCh <- r.PostForm
 		_, _ = w.Write([]byte("submitted"))
 	}))
 	defer ts.Close()
@@ -163,7 +164,7 @@ func TestFormSubmit(t *testing.T) {
 	body, err := io.ReadAll(res.Body)
 	require.NoError(t, err)
 	assert.Equal(t, "submitted", string(body))
-	assert.Equal(t, url.Values{"token": {"123"}}, gotForm)
+	assert.Equal(t, url.Values{"token": {"123"}}, <-gotFormCh)
 
 	// Invalid method fails while building the request.
 	badRes, err := (&Form{URL: ts.URL, Method: "BAD METHOD", Values: &url.Values{}}).Submit(client)
@@ -185,11 +186,15 @@ func TestFormSubmit(t *testing.T) {
 
 // Regression: a GET form submits its fields in the URL query, not in the body.
 func TestFormSubmitGetUsesQuery(t *testing.T) {
-	var gotQuery url.Values
-	var gotBody []byte
+	type captured struct {
+		query url.Values
+		body  []byte
+	}
+	// The buffer lets the handler finish even if Submit fails and the test exits early.
+	gotCh := make(chan captured, 1)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotQuery = r.URL.Query()
-		gotBody, _ = io.ReadAll(r.Body)
+		body, _ := io.ReadAll(r.Body)
+		gotCh <- captured{query: r.URL.Query(), body: body}
 		_, _ = w.Write([]byte("ok"))
 	}))
 	defer ts.Close()
@@ -197,13 +202,15 @@ func TestFormSubmitGetUsesQuery(t *testing.T) {
 	client, err := provider.NewHTTPClient(http.DefaultTransport, &provider.HTTPClientOptions{})
 	require.NoError(t, err)
 
-	form := &Form{URL: ts.URL + "/go?keep=1", Method: http.MethodGet, Values: &url.Values{"token": {"123"}}}
+	form := &Form{URL: ts.URL + "/go?keep=1&token=old", Method: http.MethodGet, Values: &url.Values{"token": {"123"}}}
 	res, err := form.Submit(client)
 	require.NoError(t, err)
 	defer res.Body.Close()
 
-	assert.Equal(t, url.Values{"keep": {"1"}, "token": {"123"}}, gotQuery)
-	assert.Empty(t, gotBody)
+	got := <-gotCh
+	// Atmos fork: the form fields replace the action query, so neither "keep" nor the old token survives.
+	assert.Equal(t, url.Values{"token": {"123"}}, got.query)
+	assert.Empty(t, got.body)
 }
 
 // Regression: a form without an action on a reader-based document must not panic on a nil document URL.
@@ -267,5 +274,37 @@ func TestNewFormFromDocumentResolvesRelativeAction(t *testing.T) {
 		form, err := NewFormFromResponse(res, "")
 		require.NoError(t, err)
 		assert.Equal(t, "https://idp.example.com/next", form.URL)
+	})
+}
+
+// Regression: a relative form action resolves against the first base[href], not the document URL.
+func TestNewFormFromDocumentUsesBaseHref(t *testing.T) {
+	tests := []struct {
+		name string
+		html string
+		want string
+	}{
+		{"absolute base", `<base href="https://sso.example.com/sso/"><form action="resume"></form>`, "https://sso.example.com/sso/resume"},
+		{"relative base", `<base href="/sso/"><form action="resume"></form>`, "https://idp.example.com/sso/resume"},
+		{"no base falls back to document URL", `<form action="resume"></form>`, "https://idp.example.com/login/resume"},
+		{"absolute action ignores base", `<base href="/sso/"><form action="https://other.example.com/x"></form>`, "https://other.example.com/x"},
+		{"unparsable base falls back to document URL", `<base href=":bad"><form action="resume"></form>`, "https://idp.example.com/login/resume"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := goquery.NewDocumentFromReader(strings.NewReader(tt.html))
+			require.NoError(t, err)
+			doc.Url = &url.URL{Scheme: "https", Host: "idp.example.com", Path: "/login/start"}
+			form, err := NewFormFromDocument(doc, "")
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, form.URL)
+		})
+	}
+
+	t.Run("relative base without document URL is an error", func(t *testing.T) {
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<base href="/sso/"><form action="resume"></form>`))
+		require.NoError(t, err)
+		_, err = NewFormFromDocument(doc, "")
+		require.Error(t, err)
 	})
 }

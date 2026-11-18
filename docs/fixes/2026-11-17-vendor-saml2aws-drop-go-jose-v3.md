@@ -36,7 +36,7 @@ the module graph or the binary. The copy also fixes the browser driver's timeout
 
 - **Kept:** the root package (`NewSAMLClient`, assertion and role parsing), `cfg`, `creds`, the shared `provider`
   HTTP client, the `Browser`, `GoogleApps`, `Okta` and `ADFS` drivers, and the helpers they use (`prompter`,
-  `page`, `cookiejar`, `dump`, `helper/credentials`).
+  `page`, `cookiejar`, `helper/credentials`).
 - **Dropped:** the 15 IdP drivers Atmos never documented (AzureAD, ADFS2, Ping, PingNTLM, PingOne, JumpCloud,
   OneLogin, Authentik, KeyCloak, Shibboleth, ShibbolethECP, F5APM, Akamai, Shell, NetIQ, Auth0), plus the
   ini-file `ConfigManager` (`~/.saml2aws`), which Atmos never used. `NewSAMLClient` returns
@@ -58,8 +58,10 @@ the module graph or the binary. The copy also fixes the browser driver's timeout
   - `playwright install` progress goes to stderr instead of stdout, where it corrupted `eval $(atmos auth env)`.
     Only the browser that will be launched is installed, not every Playwright browser.
   - The storage-state path is built with `filepath.Join` and `homedir.Dir()` instead of a forward-slash
-    `fmt.Sprintf`. Its directory is created with `0700` permissions, and the file, which holds IdP session cookies
-    and which Playwright writes as `0644`, is tightened to `0600` after saving.
+    `fmt.Sprintf`. Its directory is created with `0700` permissions. The file holds IdP session cookies, so the
+    session is saved through a private temporary file created with `0600` in that directory, and the temporary file
+    is renamed over the session file only after the save succeeds. A failed save leaves the prior session state in
+    place and removes the temporary file.
 - **Other upstream bugs found while adding tests** (each marked `// Atmos fork:` with a regression test):
   - ADFS: `checkResponse` called `log.Fatalf`, which exits the whole process, on an unnamed `<input>` or a
     `SAMLResponse` input with no value. It now skips unnamed inputs and returns an error.
@@ -125,14 +127,29 @@ the module graph or the binary. The copy also fixes the browser driver's timeout
   default, or `browser_type: firefox|webkit`), named in the driver's `package/browsers.json`, including
   per-platform `revisionOverrides`. It requires Playwright's `INSTALLATION_COMPLETE` marker so an interrupted
   download does not count. Playwright-managed `browser_type` values (`chromium`, `firefox`, `webkit`) no longer
-  turn auto-download off; only system channels (`chrome*`, `msedge*`) and `browser_executable_path` do. It looks only where the driver itself looks: `PLAYWRIGHT_BROWSERS_PATH` (including `0`),
-  then `$XDG_CACHE_HOME` or `~/.cache` on Linux, `~/Library/Caches` on macOS, and `%LOCALAPPDATA%` on Windows.
-  `getDriver` still uses the broader check, so users who rely on auto-detection are not silently switched from
-  the `Browser` driver to an API driver.
-- `saml_driver_preseed.go`: switched to the new Playwright module. It is kept because, unlike playwright-go's own
-  download, it verifies the npm tarball's `sha512` integrity. After pre-seeding it now applies playwright-go's
-  own `coreBundle.js` patch, which v0.6401 only applies on its own download path, so a pre-seeded driver no
-  longer runs unpatched.
+  turn auto-download off; only system channels (`chrome*`, `msedge*`) and `browser_executable_path` do. It looks
+  only where the driver itself looks: `PLAYWRIGHT_BROWSERS_PATH` (including `0`), then `$XDG_CACHE_HOME` or
+  `~/.cache` on Linux, `~/Library/Caches` on macOS, and `%LOCALAPPDATA%` on Windows. A relative registry path,
+  including a relative default cache directory, is resolved against `INIT_CWD` (or its `npm_config_` and
+  `npm_package_config_` forms) before the working directory, as Playwright does. An external
+  `PLAYWRIGHT_CLI_PATH` is followed through symlinks to find its `browsers.json` and the `.local-browsers`
+  directory, as Node does. On macOS, a failed CPU lookup is no longer treated as an Intel host: the required
+  browser is then undeterminable and the install check runs.
+  `getDriver` still uses the broader check (any installed browser revision, but not Playwright tools such as
+  `ffmpeg`), so users who rely on auto-detection are not silently switched from the `Browser` driver to an API
+  driver. The driver selected at the start of a login is used for the whole attempt (browser preparation, the
+  client configuration and the download decision), so a browser that another process installs mid-login cannot
+  switch an `Okta`, `GoogleApps` or `ADFS` attempt to `Browser`.
+- `saml_driver_preseed.go`: switched to the new Playwright module. It is kept because, unlike playwright-go's
+  own download, it verifies the npm tarball's `sha512` integrity. After pre-seeding it now applies the same
+  `coreBundle.js` patch playwright-go applies, which v0.6401 only applies on its own download path, so a
+  pre-seeded driver no longer runs unpatched. Atmos applies the patch itself instead of calling
+  `DownloadDriver`: the patched bundle is written to a staged file and renamed over the live one, so a failed
+  write or a concurrent login never sees a truncated bundle, and the call can never download an unverified
+  driver if the cache entry disappears. Seeding is all or nothing: if the Node.js download fails after the
+  playwright-core package was written, that package is removed again, so Playwright does not mistake the
+  half-seeded driver for a complete one and its own downloader can still run. A failed integrity check stays
+  fatal. With `PLAYWRIGHT_CLI_PATH` set, the unused bundled CLI is not fetched, but Node.js is still prepared.
 - `SAML2AWS_AUTO_BROWSER_DOWNLOAD` was dead: nothing read it, but `setupBrowserAutomation` set or unset it
   process-wide (clobbering a value the user exported) and `Environment()` exported it to subprocesses. Both are
   removed, along with the unused `IDPAccount.DownloadBrowser` field, and the two auth PRDs that claimed exporting
@@ -159,6 +176,26 @@ with a clear error when that provider logs in, instead of working. Other provide
 affected. The documented drivers are unchanged, and `Browser` works with any IdP that ends
 on the AWS SAML sign-in page.
 
+**Migration:** the supported `driver` values are `Browser`, `GoogleApps`, `Okta` and `ADFS` (case-sensitive).
+Change any other value, for example `AzureAD`, `KeyCloak` or `Ping`, to `driver: Browser`, or remove the `driver`
+line to let Atmos choose.
+
+```yaml
+auth:
+  providers:
+    my-saml:
+      kind: aws/saml
+      url: https://sso.example.com/saml
+      driver: Browser  # Was: KeyCloak (or any other removed driver).
+```
+
+**Browser downloads and offline hosts:** automatic browser downloads belong to the `Browser` driver only. An
+explicit `GoogleApps`, `Okta` or `ADFS` driver skips Playwright setup even when `download_browser_driver: true`
+is set. With `driver: Browser`, the system channels (`browser_type: chrome*` or `msedge*`) and
+`browser_executable_path` never download the user's own browser, but `download_browser_driver: true` still runs
+the Playwright installer before the launch, which can download the default Playwright-managed browsers. On an
+offline host that uses a system browser, leave `download_browser_driver` unset (the default).
+
 ## Validation
 
 - `go build ./...`: passes.
@@ -168,7 +205,7 @@ on the AWS SAML sign-in page.
 - `go test -count=1 ./pkg/auth/providers/aws/`: passes, including the new driver-validation and
   Chromium-revision tests and the updated tests that create fake browser installs.
 - `go test -race -count=1 -cover ./pkg/auth/providers/aws/...`: passes. Coverage of the vendored packages:
-  - 100%: root, `cfg`, `dump`, `helper/credentials`, `page`
+  - 100%: root, `cfg`, `helper/credentials`, `page`
   - `provider` 97.2%, `prompter` 96.6%, `provider/adfs` 95.8%, `cookiejar` 93.8%
   - `provider/googleapps` 89.5%, `provider/okta` 86.8%
   - `provider/browser` 69.1%. The rest needs a real browser and is covered by the opt-in integration tests.

@@ -304,10 +304,14 @@ func TestAuthenticate_WithSessions(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 		}
 
+		// The production validator rejects the 401 in HTTPClient.Do, before createSession sees it.
 		oc, loginDetails := f.client(false)
+		withProductionStatusValidator(oc)
 		_, err := oc.Authenticate(loginDetails)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid sessionToken")
+		assert.Contains(t, err.Error(), "error retrieving session response")
+		assert.Contains(t, err.Error(), "failed status: 401 Unauthorized")
+		assert.Zero(t, f.log.count(pathApp), "the app must not be requested after the session failed")
 	})
 
 	t.Run("transport error while fetching the app returns an error instead of panicking", func(t *testing.T) {

@@ -36,6 +36,9 @@ var (
 
 var errNoDeviceFound = fmt.Errorf("no U2F devices found. device might not be plugged in")
 
+// errU2FNoDevice is returned when a client has no device to challenge.
+var errU2FNoDevice = errors.New("no device found")
+
 // FidoClient represents a challenge and the device used to respond
 type FidoClient struct {
 	ChallengeNonce string
@@ -106,18 +109,29 @@ type u2fAuthResult struct {
 // blocked ChallengeU2F forever and the timeout below could never fire. The result channel is buffered
 // and never closed, so the goroutine can always deliver its result and exit, even after the caller stopped waiting.
 func (d *FidoClient) authenticateAsync(request *u2fhost.AuthenticateRequest) <-chan u2fAuthResult {
+	return authenticateDeviceAsync(d.Device, request)
+}
+
+// authenticateDeviceAsync runs one blocking Authenticate call on the device in its own goroutine.
+// Shared by the Okta FIDO and Duo U2F clients.
+func authenticateDeviceAsync(device u2fhost.Device, request *u2fhost.AuthenticateRequest) <-chan u2fAuthResult {
 	resultCh := make(chan u2fAuthResult, 1)
 	go func() {
-		response, err := d.Device.Authenticate(request)
+		response, err := device.Authenticate(request)
 		resultCh <- u2fAuthResult{response: response, err: err}
 	}()
 	return resultCh
 }
 
+// u2fTimeoutError builds the error returned when a U2F device does not answer in time.
+func u2fTimeoutError() error {
+	return fmt.Errorf("%w: failed to get authentication response after %d seconds", ErrU2FAuthTimeout, int(u2fAuthTimeout/time.Second))
+}
+
 // ChallengeU2F takes a FidoClient and returns a signed assertion to send to Okta
 func (d *FidoClient) ChallengeU2F() (*SignedAssertion, error) {
 	if d.Device == nil {
-		return nil, errors.New("no device found")
+		return nil, errU2FNoDevice
 	}
 	request := &u2fhost.AuthenticateRequest{
 		Challenge: d.ChallengeNonce,
@@ -128,6 +142,9 @@ func (d *FidoClient) ChallengeU2F() (*SignedAssertion, error) {
 	}
 	// do the change
 	prompted := false
+	// Atmos fork: the absolute deadline is also checked before another read is dispatched, because
+	// select picks randomly when the timeout and the ticker are both ready.
+	deadline := time.Now().Add(u2fAuthTimeout)
 	timeout := time.After(u2fAuthTimeout)
 	interval := time.NewTicker(u2fPollInterval)
 	var responsePayload *SignedAssertion
@@ -155,7 +172,7 @@ func (d *FidoClient) ChallengeU2F() (*SignedAssertion, error) {
 				<-pending
 				d.Device.Close()
 			}()
-			return nil, fmt.Errorf("%w: failed to get authentication response after %d seconds", ErrU2FAuthTimeout, int(u2fAuthTimeout/time.Second))
+			return nil, u2fTimeoutError()
 		}
 		response, err := result.response, result.err
 		if err == nil {
@@ -186,8 +203,11 @@ func (d *FidoClient) ChallengeU2F() (*SignedAssertion, error) {
 
 		select {
 		case <-timeout:
-			return nil, fmt.Errorf("%w: failed to get authentication response after %d seconds", ErrU2FAuthTimeout, int(u2fAuthTimeout/time.Second))
+			return nil, u2fTimeoutError()
 		case <-interval.C:
+			if !time.Now().Before(deadline) {
+				return nil, u2fTimeoutError()
+			}
 		}
 	}
 }

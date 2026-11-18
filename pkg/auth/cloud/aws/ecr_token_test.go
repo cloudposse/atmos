@@ -31,6 +31,9 @@ func serveECRAuthorization(t *testing.T, body string) func() string {
 	t.Setenv("AWS_PROFILE", "")
 	t.Setenv("AWS_IGNORE_CONFIGURED_ENDPOINT_URLS", "")
 	t.Setenv("AWS_MAX_ATTEMPTS", "1")
+	// A developer's CA bundle path that does not exist makes the SDK fail while loading its config,
+	// before it reaches the loopback HTTP fixture.
+	t.Setenv("AWS_CA_BUNDLE", "")
 	// Inherited FIPS or dual-stack endpoint policies make the SDK reject the custom fake endpoint.
 	t.Setenv("AWS_USE_FIPS_ENDPOINT", "false")
 	t.Setenv("AWS_USE_DUALSTACK_ENDPOINT", "false")

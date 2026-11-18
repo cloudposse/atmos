@@ -6,6 +6,7 @@ import (
 
 	u2fhost "github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
@@ -38,11 +39,20 @@ func TestNewU2FClient(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.title, func(t *testing.T) {
-			_, err := NewU2FClient(challengeNonce, appID, version, keyHandle, &MockDeviceFinder{&mocks.U2FDevice{}})
+			device := &mocks.U2FDevice{}
+			client, err := NewU2FClient(challengeNonce, appID, version, keyHandle, &MockDeviceFinder{device})
 			if test.err != nil {
-				assert.NotNil(t, err)
+				require.Error(t, err)
 				assert.Equal(t, test.err.Error(), err.Error())
+				return
 			}
+			require.NoError(t, err)
+			require.NotNil(t, client)
+			assert.Same(t, device, client.Device)
+			assert.Equal(t, challengeNonce, client.ChallengeNonce)
+			assert.Equal(t, appID, client.AppID)
+			assert.Equal(t, version, client.Facet)
+			assert.Equal(t, keyHandle, client.KeyHandle)
 		})
 	}
 }
@@ -63,7 +73,6 @@ func TestChallengeU2F(t *testing.T) {
 		t.Run(test.title, func(t *testing.T) {
 			device := &mocks.U2FDevice{}
 			mockDeviceFinder := &MockDeviceFinder{device}
-			device.On("Open").Return(nil)
 			request := &u2fhost.AuthenticateRequest{
 				Challenge:          "dGVzdAo",
 				AppId:              appID,
@@ -74,15 +83,20 @@ func TestChallengeU2F(t *testing.T) {
 				CheckOnly:          false,
 				WebAuthn:           false,
 			}
-			response := &u2fhost.AuthenticateResponse{}
-			device.On("Authenticate", request).Return(response, nil)
-			device.On("Close").Return(nil)
-			client, _ := NewU2FClient(challengeNonce, appID, facet, keyHandle, mockDeviceFinder)
-			_, err := client.ChallengeU2F()
+			response := &u2fhost.AuthenticateResponse{ClientData: "cd", SignatureData: "sig"}
+			device.On("Authenticate", request).Return(response, nil).Once()
+			device.On("Close").Return().Once()
+			client, err := NewU2FClient(challengeNonce, appID, facet, keyHandle, mockDeviceFinder)
+			require.NoError(t, err)
+			got, err := client.ChallengeU2F()
 			if test.err != nil {
-				assert.NotNil(t, err)
+				require.Error(t, err)
 				assert.Equal(t, test.err.Error(), err.Error())
+				return
 			}
+			require.NoError(t, err)
+			assert.JSONEq(t, `{"clientData":"cd","signatureData":"sig","keyHandle":""}`, got)
+			device.AssertExpectations(t)
 		})
 	}
 }

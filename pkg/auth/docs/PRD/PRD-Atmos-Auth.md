@@ -726,7 +726,10 @@ For identity chains (e.g., AWS SSO → Permission Set → Assume Role):
 5. **Caching Strategy**: Cache credentials at each step for performance
     - Provider credentials cached separately from identity credentials
     - Each identity's credentials cached with appropriate expiration
-    - Cache keys include full chain context to avoid conflicts
+    - Identity credential cache keys include full chain context to avoid conflicts
+    - The AWS IAM Identity Center (SSO) session token is cached separately, keyed by the portal start URL and
+      region only. Two SSO providers with the same start URL and region intentionally share one session entry,
+      even when their names or identity chains differ
 
 ### 4.3 Security Model
 
@@ -800,7 +803,7 @@ AWS IAM Identity Center uses the OAuth 2.0 device authorization flow. During aut
 
 #### AWS SAML
 
-The AWS SAML provider uses the `github.com/versent/saml2aws/v2` package with Playwright for browser automation to authenticate against SAML identity providers and assume AWS roles.
+The AWS SAML provider uses a vendored copy of the `saml2aws` library (`pkg/auth/providers/aws/saml2aws/`) with Playwright for browser automation to authenticate against SAML identity providers and assume AWS roles.
 
 **Basic Configuration:**
 
@@ -811,7 +814,7 @@ providers:
     url: https://accounts.google.com/o/saml2/initsso?idpid=C01abc23&spid=123456789&forceauthn=false
     region: us-east-1
     username: user@company.com
-    provider_type: GoogleApps # Optional: auto-detected if not specified
+    driver: GoogleApps # Optional: auto-detected if not specified
     download_browser_driver: true # Optional: auto-download Playwright drivers
 ```
 
@@ -825,7 +828,7 @@ providers:
     region: us-west-2
     username: john.doe@company.com
     password: "${SAML_PASSWORD}" # Optional: will prompt if not provided
-    provider_type: Okta
+    driver: Okta
     download_browser_driver: true
     session:
       duration: 1h
@@ -839,8 +842,18 @@ providers:
 - `Browser` - Generic browser-based SAML (auto-detected); use it for any other IdP
   (for example Azure AD, PingFederate, Keycloak, Auth0, OneLogin)
 
-The vendored SAML client supports only these four drivers. Other driver names are rejected
-with an "unsupported SAML driver" error.
+The vendored SAML client supports only these four drivers, set with the `driver` field (case-sensitive).
+Other driver names are rejected with an "unsupported SAML driver" error when the provider logs in, even though
+configuration validation succeeds. Migrate a removed driver to `driver: Browser`, for example replace
+`driver: KeyCloak` with:
+
+```yaml
+providers:
+  keycloak-saml:
+    kind: aws/saml
+    url: https://sso.example.com/realms/example/protocol/saml/clients/aws
+    driver: Browser # Was: KeyCloak.
+```
 
 **Environment Variables:**
 
@@ -848,7 +861,10 @@ with an "unsupported SAML driver" error.
 
 **Usage Notes:**
 
-- First run will download Playwright browser drivers automatically if `download_browser_driver: true`
+- Downloads are behavior of the `Browser` driver. With `driver: Browser`, the first run downloads the Playwright
+  browser drivers automatically if `download_browser_driver: true`, and also when the required Playwright-managed
+  browser revision is missing, even without the flag. An explicit `GoogleApps`, `Okta` or `ADFS` driver skips
+  Playwright setup even when the flag is set
   (`SAML2AWS_AUTO_BROWSER_DOWNLOAD` is not read by Atmos and does not force a download)
 - Browser automation handles MFA challenges automatically
 - Supports headless browser operation for CI/CD environments
@@ -1430,7 +1446,7 @@ providers:
     url: https://company.okta.com/app/amazon_aws/exk1234567890/sso/saml
     region: us-west-2
     username: john.doe@company.com
-    provider_type: Okta
+    driver: Okta
     download_browser_driver: true
     session:
       duration: 1h

@@ -41,6 +41,11 @@ type duoScenario struct {
 	statuses  []string
 	result    string
 
+	// hangStatusFrom makes every /frame/status request from this 1-based call on block until the client
+	// gives up or release is closed. Zero disables it.
+	hangStatusFrom int
+	release        chan struct{}
+
 	mu    sync.Mutex
 	log   requestLog
 	forms map[string][]url.Values
@@ -98,6 +103,13 @@ func (s *duoScenario) start(t *testing.T) *httptest.Server {
 			_, _ = fmt.Fprint(w, pick(s.prompts, call))
 		case "/frame/status":
 			s.recordForm(t, r)
+			if s.hangStatusFrom > 0 && call >= s.hangStatusFrom {
+				select {
+				case <-r.Context().Done():
+				case <-s.release:
+				}
+				return
+			}
 			_, _ = fmt.Fprint(w, pick(s.statuses, call))
 		case "/frame/result/txid-1":
 			s.recordForm(t, r)
@@ -418,14 +430,22 @@ func TestVerifyEndpointHealth_ReportFailureCancelsStatusRequest(t *testing.T) {
 
 	statusStarted := make(chan struct{})
 	statusCancelled := make(chan struct{})
+	// teardown releases the status handler if the test fails before the client cancels the request.
+	// It is separate from statusCancelled, so teardown cannot satisfy the cancellation assertion.
+	teardown := make(chan struct{})
 	duoServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Tell the report handler the status request is in flight before it fails the report.
 		close(statusStarted)
 		// check_endpoint_app_status blocks until the client gives up.
-		<-r.Context().Done()
-		close(statusCancelled)
+		select {
+		case <-r.Context().Done():
+			close(statusCancelled)
+		case <-teardown:
+		}
 	}))
+	// Deferred calls run last-in first-out: release the handler before the server waits for it.
 	defer duoServer.Close()
+	defer close(teardown)
 
 	endpoint := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/report" {

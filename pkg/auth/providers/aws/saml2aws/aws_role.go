@@ -61,6 +61,13 @@ func splitRoleARNs(role string) []string {
 	return tokens
 }
 
+// arnResourceHasPrefix reports whether the resource component of an ARN (everything after the fifth colon) starts with prefix.
+func arnResourceHasPrefix(arn, prefix string) bool {
+	const arnResourceField = 6 // arn:partition:service:region:account:resource.
+	fields := strings.SplitN(strings.TrimSpace(arn), ":", arnResourceField)
+	return len(fields) == arnResourceField && strings.HasPrefix(fields[arnResourceField-1], prefix)
+}
+
 func parseRole(role string) (*AWSRole, error) {
 	tokens := splitRoleARNs(role)
 
@@ -71,10 +78,12 @@ func parseRole(role string) (*AWSRole, error) {
 	awsRole := &AWSRole{}
 
 	for _, token := range tokens {
-		if strings.Contains(token, ":saml-provider") {
+		// Atmos fork: classify by the ARN resource type, not by text anywhere in the ARN, so a role path
+		// that contains "saml-provider/" is not mistaken for a SAML provider.
+		switch {
+		case arnResourceHasPrefix(token, "saml-provider/"):
 			awsRole.PrincipalARN = strings.TrimSpace(token)
-		}
-		if strings.Contains(token, ":role") {
+		case arnResourceHasPrefix(token, "role/"):
 			awsRole.RoleARN = strings.TrimSpace(token)
 		}
 	}

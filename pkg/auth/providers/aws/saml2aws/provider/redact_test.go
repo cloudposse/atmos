@@ -56,6 +56,25 @@ func TestRedactErrorWrappedQuotedURL(t *testing.T) {
 	require.ErrorIs(t, redacted, errTransport)
 	var urlErr *url.Error
 	require.ErrorAs(t, redacted, &urlErr)
+	// errors.As must expose the sanitized URL, not the original one with the session token.
+	assert.Equal(t, "https://idp.example/login", urlErr.URL)
+	require.ErrorIs(t, urlErr, errTransport)
+}
+
+// Regression: errors.As selects only the first *url.Error of a joined error, so user info in a later URL
+// error stayed in the displayed message.
+func TestRedactErrorJoinedURLErrors(t *testing.T) {
+	errTransport := errors.New("transport failed")
+	first := &url.Error{Op: "Get", URL: "https://idp.example/first", Err: errTransport}
+	second := &url.Error{Op: "Get", URL: "https://user:pa55word@idp.example/second", Err: errTransport} // gitleaks:allow -- Fake credentials proving redaction.
+	joined := errors.Join(first, second)
+
+	redacted := RedactError(joined)
+	assert.NotContains(t, redacted.Error(), "pa55word")
+	assert.NotContains(t, redacted.Error(), "user:")
+	assert.Contains(t, redacted.Error(), "https://idp.example/first")
+	assert.Contains(t, redacted.Error(), "https://idp.example/second")
+	require.ErrorIs(t, redacted, errTransport)
 }
 
 // The redacted cause still reports timeouts, so callers relying on (*url.Error).Timeout keep working.

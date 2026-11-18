@@ -8,9 +8,9 @@ identity provider and read the AWS roles from the SAML assertion.
 
 - Upstream is no longer maintained. The last release was v2.36.19 (March 2025), the last commit was in
   May 2025, and [Versent/saml2aws#1545](https://github.com/Versent/saml2aws/issues/1545) ("Still maintained?") has no reply.
-- Upstream pins `github.com/playwright-community/playwright-go` v0.5700.1, the last release under that module path.
-  It pulls in `github.com/go-jose/go-jose/v3`, which has an unfixed HIGH advisory (CVE-2026-116587 / GHSA-mgcc-cww5-fp2q)
-  that vulnerability scanners report against the Atmos binary.
+- Upstream v2.36.19 pins `github.com/playwright-community/playwright-go` v0.4702.0, and Atmos previously used v0.5700.1,
+  the last release under that module path. Both depend on `github.com/go-jose/go-jose/v3`, which has an unfixed HIGH
+  advisory (CVE-2026-116587 / GHSA-mgcc-cww5-fp2q) that vulnerability scanners report against the Atmos binary.
 - The upstream browser provider panics when the sign-in times out.
 
 ## What was kept
@@ -25,7 +25,7 @@ identity provider and read the AWS roles from the SAML assertion.
 | `provider/googleapps/` | `pkg/provider/googleapps` | `GoogleApps` driver |
 | `provider/okta/` | `pkg/provider/okta` | `Okta` driver |
 | `provider/adfs/` | `pkg/provider/adfs` | `ADFS` driver |
-| `prompter/`, `page/`, `cookiejar/`, `dump/`, `helper/credentials/` | same names under `pkg/` or `helper/` | Shared helpers used by the drivers |
+| `prompter/`, `page/`, `cookiejar/`, `helper/credentials/` | same names under `pkg/` or `helper/` | Shared helpers used by the drivers |
 | `mocks/` | `mocks` | Upstream mockery mocks used by the copied Okta and GoogleApps tests |
 
 ## Changes from upstream
@@ -37,7 +37,10 @@ identity provider and read the AWS roles from the SAML assertion.
   module path). That release no longer depends on `go-jose`.
 - **Browser driver fixes** (`provider/browser/browser.go`):
   - A timeout or error from `ExpectRequest` no longer dereferences a nil request (panic).
-  - A `PostData` error is returned instead of being swallowed by returning the wrong variable.
+  - A `PostData` error is returned instead of being swallowed by returning the wrong variable. An error recorded by
+    the `OnRequest` callback is also returned (joined with the wait error) when the wait then fails, so it is not
+    hidden behind a timeout. A recorded error does not unblock the wait: without a later request, the wait runs to
+    its timeout first, and a later valid assertion still wins.
   - The request callback and the caller no longer race on the captured data.
   - An empty capture returns `ErrNoSAMLResponse` instead of an empty assertion.
   - A sign-in request that reaches the `OnRequest` callback just before `ExpectRequest` starts listening is
@@ -106,7 +109,44 @@ identity provider and read the AWS roles from the SAML assertion.
     use the final response URL, so forms without an action submit to the page that served them.
   - `provider/http.go` caps each computed retry wait at `MaxRetryDelay` (the exponential backoff included), and
     redacts the URL in transport errors (`RedactError`) before they are logged or returned, so query-string session
-    tokens do not leak.
+    tokens do not leak. This covers requests sent through `HTTPClient.Do`; a request that calls the embedded
+    `http.Client` directly (for example the ADFS login page `Get`) is not redacted by it.
+  - `provider/http.go` also redacts the URL in the status validators' errors, caps `http_attempts_count` at
+    `MaxAttemptsCount` (1000, because retry-go v3 allocates per attempt up front), and `RedactError` sanitizes every
+    `*url.Error` in a joined error and exposes a sanitized `*url.Error` through `errors.As`.
+  - `aws_role.go` classifies each ARN by its resource type (`role/` or `saml-provider/` at the start of the ARN
+    resource), so a role path that mentions `saml-provider/` is not taken for the SAML provider.
+  - `saml.go` reads the Role and SessionDuration attributes from every `AttributeStatement`, not only the first.
+  - `page.Form` replaces the action's query with the GET form fields (as HTML does), and resolves a relative action
+    against the first `base[href]` before the page URL.
+  - `cookiejar` uses one host key for an IPv6 literal with and without a port.
+  - Browser: the sign-in endpoint is matched on the parsed URL (HTTPS, AWS sign-in host, port 443, path `/saml` or
+    below it, such as the per-provider `/saml/acs/<SAML-provider-ID>` endpoints) instead of an unanchored regular
+    expression, and the wait only completes for a request that carries a `SAMLResponse`.
+  - `provider.ValidateBase` returns the sentinel errors `ErrEmptyURL`, `ErrEmptyUsername` and `ErrEmptyPassword`
+    (same messages as before), so callers can match them with `errors.Is`.
+  - Okta: a form redirect submits the form that carried the `SAMLRequest`, `RelayState` or `SAMLResponse` input, and
+    the AWS assertion is read only from the form that posts to the AWS target. Unknown documents no longer log the
+    page HTML, and `authWithSession` reuses its first app response instead of fetching the app page twice.
+  - Okta: the push and Duo polling deadline also cancels the in-flight HTTP request, a `FAILURE` in the first Duo
+    status stops immediately, and the latest Duo `sid` is sent on each poll.
+  - Okta: the unverified Duo certifier connection bypasses proxies and can only dial loopback addresses, and Duo U2F
+    uses the same bounded wait as WebAuthn (its first read starts immediately; a timeout returns
+    `ErrU2FAuthTimeout`).
+  - Google Apps: a missing or unresponsive security key falls back to another factor when the page offers one, the
+    challenge chooser offers device push, and a form looked up by ID without a match takes one form's action and
+    fields instead of merging every form on the page. Directory-relative form actions are resolved against the page
+    URL, a failed phone-approval wait stops the flow, and a captcha after a resubmitted password is handled with the
+    same attempt budget.
+  - Google Apps: the captcha image is resolved against the page that contains it, the iTerm path no longer logs the
+    captcha URL, and an interrupted image download is an error. Opening a U2F device is bounded separately from the
+    touch timeout, which now also covers a blocked device read; the worker that owns the device closes it.
+  - ADFS: Azure MFA has a 5-minute overall deadline in addition to the poll cap, MFA forms use the action and inputs
+    of the form that owns the challenge, a configured full `IdpInitiatedSignOn.aspx` URL is reused as is, and a
+    response parse error stops authentication before MFA dispatch.
+  - Prompter: `Choose` returns survey's own row index (correct with duplicate labels), a survey panic on Ctrl+D with
+    no matches becomes an error, `Password` rejects blank input, `ParseResults` requires a completed `D` plus `OK`
+    pinentry answer, and `Run` stops and reaps pinentry on a parse error.
 - **Tests:** browser tests use `go.uber.org/mock` mocks of a narrow `samlPage` interface instead of a real browser.
   Real-browser tests are in `browser_integration_test.go` and only run with `RUN_PLAYWRIGHT_INTEGRATION=1`.
 

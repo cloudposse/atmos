@@ -3,6 +3,8 @@ package provider
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 )
 
@@ -15,13 +17,14 @@ func TestLoginDetails_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
 		fields  fields
-		wantErr bool
+		wantErr error
 	}{
-		// TODO: Add test cases.
-		{name: "hostname missing error", fields: fields{}, wantErr: true},
-		{name: "username missing error", fields: fields{URL: "id.example.com"}, wantErr: true},
-		{name: "password missing error", fields: fields{URL: "id.example.com", Username: "test"}, wantErr: true},
-		{name: "ok", fields: fields{URL: "id.example.com", Username: "test", Password: "test"}, wantErr: false},
+		// Each failing case sets every other field, so only the field under test can cause the failure.
+		{name: "hostname missing error", fields: fields{Username: "test", Password: "test"}, wantErr: ErrEmptyURL},
+		{name: "username missing error", fields: fields{URL: "id.example.com", Password: "test"}, wantErr: ErrEmptyUsername},
+		{name: "password missing error", fields: fields{URL: "id.example.com", Username: "test"}, wantErr: ErrEmptyPassword},
+		{name: "all missing reports the URL first", fields: fields{}, wantErr: ErrEmptyURL},
+		{name: "ok", fields: fields{URL: "id.example.com", Username: "test", Password: "test"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -31,9 +34,12 @@ func TestLoginDetails_Validate(t *testing.T) {
 				URL:      tt.fields.URL,
 			}
 			providerstub := &ValidateBase{}
-			if err := providerstub.Validate(ld); (err != nil) != tt.wantErr {
-				t.Errorf("LoginDetails.Validate() error = %v, wantErr %v", err, tt.wantErr)
+			err := providerstub.Validate(ld)
+			if tt.wantErr == nil {
+				assert.NoError(t, err)
+				return
 			}
+			assert.ErrorIs(t, err, tt.wantErr)
 		})
 	}
 }

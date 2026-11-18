@@ -302,6 +302,11 @@ func canonicalHost(host string) (string, error) {
 			return "", err
 		}
 	}
+	// Atmos fork: net.SplitHostPort strips the brackets of an IPv6 literal that has a port, but a literal without a
+	// port kept them, so one host was stored and looked up under two different keys.
+	if len(host) > 1 && host[0] == '[' && host[len(host)-1] == ']' {
+		host = host[1 : len(host)-1]
+	}
 	host = strings.TrimSuffix(host, ".")
 	return toASCII(host)
 }

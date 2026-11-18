@@ -161,7 +161,7 @@ func TestRequiredChromiumInstalled(t *testing.T) {
 		p := newTestSAMLProvider(t)
 		assert.True(t, p.playwrightDriversInstalled(), "some browser is installed")
 		assert.False(t, p.requiredBrowserInstalled(chromiumBrowserName), "but not the required revision")
-		assert.True(t, p.shouldDownloadBrowser(), "so the new revision must be downloaded")
+		assert.True(t, p.shouldDownloadBrowser(p.getDriver()), "so the new revision must be downloaded")
 	})
 
 	t.Run("empty revision directory", func(t *testing.T) {
@@ -181,7 +181,7 @@ func TestRequiredChromiumInstalled(t *testing.T) {
 
 		p := newTestSAMLProvider(t)
 		assert.False(t, p.requiredBrowserInstalled(chromiumBrowserName))
-		assert.True(t, p.shouldDownloadBrowser(), "download when the required revision cannot be determined")
+		assert.True(t, p.shouldDownloadBrowser(p.getDriver()), "download when the required revision cannot be determined")
 	})
 
 	t.Run("required revision installed disables auto-download", func(t *testing.T) {
@@ -189,7 +189,7 @@ func TestRequiredChromiumInstalled(t *testing.T) {
 		stubRequiredChromiumRevision(t, "1248")
 		installFakeBrowser(t, cacheDir, "chromium-1248")
 
-		assert.False(t, newTestSAMLProvider(t).shouldDownloadBrowser())
+		assert.False(t, shouldDownloadBrowserFor(newTestSAMLProvider(t)))
 	})
 }
 
@@ -205,7 +205,7 @@ func TestRequiredChromiumInstalled_PartialDownload(t *testing.T) {
 
 	p := newTestSAMLProvider(t)
 	assert.False(t, p.requiredBrowserInstalled(chromiumBrowserName))
-	assert.True(t, p.shouldDownloadBrowser(), "a partial download must be completed")
+	assert.True(t, p.shouldDownloadBrowser(p.getDriver()), "a partial download must be completed")
 }
 
 // Regression: PLAYWRIGHT_BROWSERS_PATH moves the browser directory for the driver, so the
@@ -220,7 +220,7 @@ func TestRequiredChromiumInstalled_PlaywrightBrowsersPath(t *testing.T) {
 
 		p := newTestSAMLProvider(t)
 		assert.True(t, p.requiredBrowserInstalled(chromiumBrowserName))
-		assert.False(t, p.shouldDownloadBrowser())
+		assert.False(t, p.shouldDownloadBrowser(p.getDriver()))
 	})
 
 	t.Run("installed only in the default directory the driver will not use", func(t *testing.T) {
@@ -231,7 +231,7 @@ func TestRequiredChromiumInstalled_PlaywrightBrowsersPath(t *testing.T) {
 
 		p := newTestSAMLProvider(t)
 		assert.False(t, p.requiredBrowserInstalled(chromiumBrowserName))
-		assert.True(t, p.shouldDownloadBrowser())
+		assert.True(t, p.shouldDownloadBrowser(p.getDriver()))
 	})
 
 	t.Run("zero means the driver package directory", func(t *testing.T) {
@@ -355,4 +355,82 @@ func TestPlaywrightManifestPath(t *testing.T) {
 	cliDir := t.TempDir()
 	t.Setenv("PLAYWRIGHT_CLI_PATH", filepath.Join(cliDir, "cli.js"))
 	assert.Equal(t, filepath.Join(cliDir, playwrightBrowserManifest), playwrightManifestPath(driverDir))
+}
+
+// Regression: a relative default cache directory (XDG_CACHE_HOME=cache on Linux, LOCALAPPDATA on Windows)
+// is resolved against INIT_CWD like the driver does, not against the working directory.
+func TestPlaywrightRegistryDirRelativeDefaultCacheUsesInitCwd(t *testing.T) {
+	switch runtime.GOOS {
+	case "linux":
+		t.Setenv("XDG_CACHE_HOME", "cache")
+	case windowsOS:
+		t.Setenv("LOCALAPPDATA", "cache")
+	default:
+		t.Skipf("the default cache directory is always absolute on %s", runtime.GOOS)
+	}
+	initCwd := t.TempDir()
+	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", "")
+	t.Setenv("INIT_CWD", initCwd)
+
+	got, err := playwrightRegistryDir()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(initCwd, "cache", playwrightCacheDir), got)
+
+	// Negative path: without INIT_CWD the working directory is used.
+	t.Setenv("INIT_CWD", "")
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	got, err = playwrightRegistryDir()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(cwd, "cache", playwrightCacheDir), got)
+}
+
+// Regression: Playwright also reads the npm config forms of INIT_CWD, in order.
+func TestPlaywrightRegistryDirInitCwdNpmEnvFallbacks(t *testing.T) {
+	configDir := t.TempDir()
+	packageDir := t.TempDir()
+	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", "browsers")
+	require.NoError(t, os.Unsetenv("INIT_CWD"))
+	t.Setenv("npm_config_init_cwd", configDir)
+	t.Setenv("npm_package_config_init_cwd", packageDir)
+
+	got, err := playwrightRegistryDir()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(configDir, "browsers"), got)
+
+	require.NoError(t, os.Unsetenv("npm_config_init_cwd"))
+	got, err = playwrightRegistryDir()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(packageDir, "browsers"), got)
+
+	// An empty INIT_CWD falls back to the working directory, as in Playwright.
+	t.Setenv("INIT_CWD", "")
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	got, err = playwrightRegistryDir()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(cwd, "browsers"), got)
+}
+
+// Regression: Node runs the target of a symlinked cli.js, so the package manifest and the
+// PLAYWRIGHT_BROWSERS_PATH=0 directory belong to the link target, not the link's directory.
+func TestPlaywrightManifestPathResolvesSymlinkedCLI(t *testing.T) {
+	targetDir := t.TempDir()
+	targetCLI := filepath.Join(targetDir, "cli.js")
+	require.NoError(t, os.WriteFile(targetCLI, []byte("cli"), 0o644))
+	linkCLI := filepath.Join(t.TempDir(), "cli.js")
+	if err := os.Symlink(targetCLI, linkCLI); err != nil {
+		t.Skipf("cannot create a symlink on this host: %v", err)
+	}
+	realDir, err := filepath.EvalSymlinks(targetDir)
+	require.NoError(t, err)
+
+	t.Setenv("PLAYWRIGHT_CLI_PATH", linkCLI)
+	assert.Equal(t, filepath.Join(realDir, playwrightBrowserManifest), playwrightManifestPath(t.TempDir()))
+
+	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", "0")
+	t.Setenv("PLAYWRIGHT_DRIVER_PATH", t.TempDir())
+	got, err := playwrightRegistryDir()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(realDir, playwrightLocalBrowsers), got)
 }

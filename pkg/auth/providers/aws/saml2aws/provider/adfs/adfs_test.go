@@ -2,6 +2,7 @@ package adfs
 
 import (
 	"bytes"
+	"crypto/x509"
 	"fmt"
 	"log"
 	"net/http"
@@ -111,6 +112,31 @@ func (f *fakeADFS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(f.responses[idx]))
 }
 
+// requests returns a consistent snapshot of the GET query and the POST request paths seen so far.
+func (f *fakeADFS) requests() (url.Values, []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.getQuery, append([]string(nil), f.paths...)
+}
+
+// setLoginHTML publishes the login page under the fixture lock, for pages that need the server URL.
+func (f *fakeADFS) setLoginHTML(html string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.loginHTML = html
+}
+
+// newAbortServer starts a loopback server, owned for the whole test, that drops every connection
+// without replying. It gives a stable endpoint on which every request fails.
+func newAbortServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	ts := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic(http.ErrAbortHandler)
+	}))
+	t.Cleanup(ts.Close)
+	return ts
+}
+
 func (f *fakeADFS) postedForms() []url.Values {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -199,11 +225,12 @@ func TestAuthenticateSuccessRelativeAction(t *testing.T) {
 	assert.Equal(t, testSAMLAssertion, assertion)
 
 	// The IdP-initiated sign-on request targets the AWS relying party.
-	assert.Equal(t, cfg.DefaultAmazonWebservicesURN, fake.getQuery.Get("loginToRp"))
+	getQuery, paths := fake.requests()
+	assert.Equal(t, cfg.DefaultAmazonWebservicesURN, getQuery.Get("loginToRp"))
 
 	// The relative action was resolved against the ADFS URL, preserving its query.
-	require.Len(t, fake.paths, 1)
-	assert.Equal(t, "/adfs/ls/?client-request-id=abc", fake.paths[0])
+	require.Len(t, paths, 1)
+	assert.Equal(t, "/adfs/ls/?client-request-id=abc", paths[0])
 
 	posts := fake.postedForms()
 	require.Len(t, posts, 1)
@@ -233,28 +260,28 @@ func TestAuthenticateSuccessRelativeActionWithoutLeadingSlash(t *testing.T) {
 		assertion, err := newTestClient(t).Authenticate(loginDetails(ts.URL, ""))
 		require.NoError(t, err, action)
 		assert.Equal(t, testSAMLAssertion, assertion)
-		require.Len(t, fake.paths, 1)
-		assert.Equal(t, wantPath, fake.paths[0], action)
+		_, paths := fake.requests()
+		require.Len(t, paths, 1)
+		assert.Equal(t, wantPath, paths[0], action)
 	}
 }
 
 func TestAuthenticateSuccessAbsoluteAction(t *testing.T) {
 	fake := &fakeADFS{responses: []string{samlResponsePage}}
 	ts := newTestServer(t, fake)
-	fake.loginHTML = loginPage(ts.URL + "/adfs/ls/absolute")
+	fake.setLoginHTML(loginPage(ts.URL + "/adfs/ls/absolute"))
 
 	assertion, err := newTestClient(t).Authenticate(loginDetails(ts.URL, ""))
 	require.NoError(t, err)
 	assert.Equal(t, testSAMLAssertion, assertion)
-	require.Len(t, fake.paths, 1)
-	assert.Equal(t, "/adfs/ls/absolute", fake.paths[0])
+	_, paths := fake.requests()
+	require.Len(t, paths, 1)
+	assert.Equal(t, "/adfs/ls/absolute", paths[0])
 }
 
 func TestAuthenticateErrors(t *testing.T) {
-	// A server that is closed immediately yields a URL nothing listens on.
-	closed := httptest.NewServer(http.NotFoundHandler())
-	closedURL := closed.URL
-	closed.Close()
+	// Every request to this server fails, and the test keeps ownership of its port.
+	closedURL := newAbortServer(t).URL
 
 	tests := []struct {
 		name      string
@@ -311,7 +338,7 @@ func TestAuthenticateErrors(t *testing.T) {
 			useFastAzurePolling(t)
 			fake := &fakeADFS{responses: tt.responses}
 			ts := newTestServer(t, fake)
-			fake.loginHTML = tt.loginHTML(ts)
+			fake.setLoginHTML(tt.loginHTML(ts))
 			serverURL := ts.URL
 			if tt.serverURL != nil {
 				serverURL = tt.serverURL(ts)
@@ -335,6 +362,9 @@ func TestAuthenticateRejectsUntrustedCertificate(t *testing.T) {
 	_, err = client.Authenticate(loginDetails(ts.URL, ""))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get adfs page")
+	// The failure is the certificate check, not some other transport error.
+	var unknownAuthority x509.UnknownAuthorityError
+	assert.ErrorAs(t, err, &unknownAuthority)
 	assert.Empty(t, fake.postedForms())
 }
 
@@ -387,9 +417,10 @@ func TestAuthenticateMFAPrompt(t *testing.T) {
 			assert.Equal(t, testSAMLAssertion, assertion)
 
 			// The OTP form is submitted to its own action, not the login form's.
-			require.Len(t, fake.paths, 2)
-			assert.Equal(t, "/adfs/ls/", fake.paths[0])
-			assert.Equal(t, "/adfs/ls/mfa", fake.paths[1])
+			_, paths := fake.requests()
+			require.Len(t, paths, 2)
+			assert.Equal(t, "/adfs/ls/", paths[0])
+			assert.Equal(t, "/adfs/ls/mfa", paths[1])
 
 			posts := fake.postedForms()
 			require.Len(t, posts, 2)
@@ -421,7 +452,8 @@ func TestAuthenticateMFAPromptsWhenTokenMissingOrConsumed(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, testSAMLAssertion, assertion)
 
-	assert.Equal(t, []string{"/adfs/ls/", "/adfs/ls/mfa", "/adfs/ls/mfa"}, fake.paths)
+	_, paths := fake.requests()
+	assert.Equal(t, []string{"/adfs/ls/", "/adfs/ls/mfa", "/adfs/ls/mfa"}, paths)
 
 	posts := fake.postedForms()
 	require.Len(t, posts, 3)

@@ -2,8 +2,10 @@ package prompter
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -116,8 +118,11 @@ func TestValidateAndSetPrompterDefaultAliasesResetPinentry(t *testing.T) {
 	}
 
 	require.NoError(t, ValidateAndSetPrompter("pinentry"))
+	active := ActivePrompter
 	require.Error(t, ValidateAndSetPrompter("invalid"))
 	assert.IsType(t, &PinentryPrompter{}, ActivePrompter)
+	// The very same instance stays configured, not a replacement of the same type.
+	assert.Same(t, active, ActivePrompter)
 }
 
 // scannerErrReader returns data and then a read error.
@@ -210,6 +215,60 @@ func TestChecksPinentryPrompterReturnsNoCodeGivenErroneousFakePinentryOutput(t *
 	assert.Error(t, err)
 	assert.True(t, runner.HasRun)
 	assert.Equal(t, pinentryOutput, "")
+}
+
+// Regression: output without a completed GETPIN answer was returned as a code, or as an empty success.
+func TestParseResultsRequiresCompletedAnswer(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		want   string
+		wantIs error
+	}{
+		{name: "data and the final OK", input: "OK greeting\nOK\nD 424242\nOK\n", want: "424242"},
+		{name: "data without the final OK", input: "OK greeting\nOK\nD 424242\n", wantIs: errPinentryIncomplete},
+		{name: "greeting and SETPROMPT acknowledgment only", input: "OK Pleased to meet you\nOK\n", wantIs: errPinentryIncomplete},
+		{name: "empty output", input: "", wantIs: errPinentryIncomplete},
+		{name: "a later data line must be completed too", input: "D 111111\nOK\nD 222222\n", wantIs: errPinentryIncomplete},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseResults(strings.NewReader(tt.input))
+			if tt.wantIs != nil {
+				require.ErrorIs(t, err, tt.wantIs)
+				assert.Empty(t, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// Regression: a parse failure left the child blocked on a full pipe, so Run never returned.
+func TestRealPinentryRunnerStopsChildOnParseError(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	t.Setenv(fakePinentryEnv, "err-flood")
+
+	type result struct {
+		out string
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		out, err := NewRealPinentryRunner(exe).Run(expectedPinentryInput)
+		done <- result{out, err}
+	}()
+
+	select {
+	case res := <-done:
+		require.Error(t, res.err)
+		assert.Contains(t, res.err.Error(), "error while running pinentry: 1 failed")
+		assert.Empty(t, res.out)
+	case <-time.After(30 * time.Second):
+		t.Fatal("Run did not return after a parse error")
+	}
 }
 
 func TestParseOutputShouldThrowError(t *testing.T) {

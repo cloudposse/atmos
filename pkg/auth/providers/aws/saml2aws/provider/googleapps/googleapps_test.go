@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/PuerkitoBio/goquery"
@@ -209,23 +211,41 @@ func TestSMSChallengePage(t *testing.T) {
 	step2, err := os.ReadFile("example/challenge-sms.html")
 	require.Nil(t, err)
 
-	calls := 0
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func() { calls++ }()
-		err := r.ParseForm()
-		require.Nil(t, err)
+	var calls atomic.Int32
+	var mu sync.Mutex
+	var problems []string
+	reportProblem := func(w http.ResponseWriter, problem string) {
+		mu.Lock()
+		problems = append(problems, problem)
+		mu.Unlock()
+		http.Error(w, problem, http.StatusBadRequest)
+	}
 
-		switch calls {
-		case 0:
-			_, _ = w.Write(step1)
+	// The handler runs on the server goroutine, so it reports problems as an HTTP error and the test
+	// goroutine fails on them, instead of calling FailNow from the handler.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			reportProblem(w, "failed to parse form")
+			return
+		}
+
+		switch calls.Add(1) {
 		case 1:
-			require.Equal(t, r.Form.Get("SendMethod"), "SMS")
-			_, _ = w.Write(step2)
+			_, _ = w.Write(step1)
 		case 2:
-			require.Equal(t, r.Form.Get("Pin"), "000000")
+			if r.Form.Get("SendMethod") != "SMS" {
+				reportProblem(w, "SendMethod is not SMS")
+				return
+			}
+			_, _ = w.Write(step2)
+		case 3:
+			if r.Form.Get("Pin") != "000000" {
+				reportProblem(w, "Pin is not 000000")
+				return
+			}
 			_, _ = w.Write(step2)
 		default:
-			require.Fail(t, "too many calls")
+			reportProblem(w, "too many calls")
 		}
 	}))
 	defer ts.Close()
@@ -238,7 +258,10 @@ func TestSMSChallengePage(t *testing.T) {
 	challengeDoc, err := kc.loadChallengePage(ts.URL, "https://accounts.google.com/signin/challenge/sl/password", authForm, loginDetails)
 	require.Nil(t, err)
 	require.NotNil(t, challengeDoc)
-	require.Equal(t, 3, calls)
+	require.EqualValues(t, 3, calls.Load())
+	mu.Lock()
+	defer mu.Unlock()
+	require.Empty(t, problems)
 }
 
 func TestExtractDataAttributes(t *testing.T) {
@@ -252,14 +275,17 @@ func TestExtractDataAttributes(t *testing.T) {
 	require.Equal(t, "https://apis.google.com/js/base.js", dataAttrs["data-gapi-url"])
 }
 
+// The wrong-password page is served through the fake login flow, so the test fails if Authenticate stops
+// reporting the password error (for example by reporting a missing SAML assertion instead).
 func TestWrongPassword(t *testing.T) {
-	passwordErrorId := "passwordError"
-	html := `<html><body><span class="Qx8Abe" id="` + passwordErrorId + `">Wrong password. Try again or click Forgot password to reset it.</span></body></html>`
+	html := `<html><body><span class="Qx8Abe" id="passwordError">Wrong password. Try again or click Forgot password to reset it.</span></body></html>`
 
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
-	require.Nil(t, err)
-	txt := doc.Selection.Find("#" + passwordErrorId).Text()
-	require.NotEqual(t, "", txt)
+	f := newFakeGoogle(t, passwordFlowRoutes(t, static(html)))
+	kc, loginDetails := f.client()
+
+	got, err := kc.Authenticate(loginDetails)
+	require.EqualError(t, err, "Password error")
+	require.Empty(t, got)
 }
 
 func TestMustEnable2StepVerification(t *testing.T) {

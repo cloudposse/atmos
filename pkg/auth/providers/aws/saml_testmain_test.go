@@ -12,7 +12,9 @@ import (
 const fakePlaywrightNodeEnv = "_ATMOS_TEST_FAKE_PLAYWRIGHT_NODE_VERSION"
 
 func TestMain(m *testing.M) {
-	if version := os.Getenv(fakePlaywrightNodeEnv); version != "" {
+	// Only act as Node.js for the driver's `<cli.js> --version` probe, so a normal `go test` process that
+	// inherits the variable still runs the tests.
+	if version := os.Getenv(fakePlaywrightNodeEnv); version != "" && len(os.Args) == 3 && os.Args[2] == "--version" {
 		_, _ = os.Stdout.WriteString("Version " + version + "\n")
 		os.Exit(0)
 	}

@@ -5,18 +5,46 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	u2fhost "github.com/marshallbrekka/go-u2fhost"
 	"github.com/pkg/errors"
 )
 
-const (
-	maxOpenRetries = 10
-	retryDelay     = 200 * time.Millisecond
+const maxOpenRetries = 10
+
+// Atmos fork: the retry delay and the touch timeout are package variables so tests can shorten them.
+// The production values are unchanged.
+var (
+	retryDelay      = 200 * time.Millisecond
+	u2fTouchTimeout = 25 * time.Second
+
+	// u2fOpenTimeout bounds how long opening a device may block on the HID initialization exchange.
+	u2fOpenTimeout = 10 * time.Second
+
+	// u2fPollInterval is how often the device is asked for a signature while waiting for a touch.
+	u2fPollInterval = 250 * time.Millisecond // gitleaks:allow -- Poll interval, not a secret.
 )
 
+// Atmos fork: HID enumeration goes through a package variable so tests can supply fake devices.
+// The default is the real enumeration.
+var listU2FDevices = func() []u2fhost.Device {
+	hidDevices := u2fhost.Devices()
+	devices := make([]u2fhost.Device, 0, len(hidDevices))
+	for _, device := range hidDevices {
+		devices = append(devices, device)
+	}
+	return devices
+}
+
 var errNoDeviceFound = fmt.Errorf("no U2F devices found. device might not be plugged in")
+
+// errU2FOpenTimeout is returned when a device does not finish opening in time.
+var errU2FOpenTimeout = errors.New("timed out opening the U2F device")
+
+// errU2FTouchTimeout is returned when the user does not touch the device in time.
+var errU2FTouchTimeout = errors.New("failed to get authentication response after 25 seconds")
 
 // U2FClient represents a challenge and the device used to respond
 type U2FClient struct {
@@ -46,7 +74,7 @@ func NewU2FClient(challengeNonce, appID, facet, keyHandle string, deviceFinder D
 	for retryCount < maxOpenRetries {
 		device, err = deviceFinder.findDevice()
 		if err != nil {
-			if errors.Is(err, errNoDeviceFound) {
+			if errors.Is(err, errNoDeviceFound) || errors.Is(err, errU2FOpenTimeout) {
 				return nil, err
 			}
 
@@ -67,20 +95,24 @@ func NewU2FClient(challengeNonce, appID, facet, keyHandle string, deviceFinder D
 	return nil, fmt.Errorf("failed to create client: %w. exceeded max retries of %d", err, maxOpenRetries)
 }
 
-// ChallengeU2F takes a U2FClient and returns a signed assertion to send to Google
+// ChallengeU2F takes a U2FClient and returns a signed assertion to send to Google.
+//
+// Atmos fork: the device is owned by one worker goroutine that always closes it when its last read
+// ends. The touch timeout is enforced by the caller, so a key that stops answering HID reads cannot block
+// the caller (which can then offer another factor). The handle is never closed concurrently with a read.
 func (d *U2FClient) ChallengeU2F() (string, error) {
 	if d.Device == nil {
 		return "", errors.New("no device found")
 	}
-	// Atmos fork: the device is closed on every return, including an invalid challenge.
-	defer d.Device.Close()
 
 	challenge, err := b64Safe(d.ChallengeNonce)
 	if err != nil {
+		d.Device.Close()
 		return "", errors.Wrap(err, "invalid U2F challenge nonce")
 	}
 	keyHandle, err := b64Safe(d.KeyHandle)
 	if err != nil {
+		d.Device.Close()
 		return "", errors.Wrap(err, "invalid U2F key handle")
 	}
 	request := &u2fhost.AuthenticateRequest{
@@ -89,16 +121,41 @@ func (d *U2FClient) ChallengeU2F() (string, error) {
 		AppId:     d.AppID,
 		KeyHandle: keyHandle,
 	}
-	// do the change
-	prompted := false
-	timeout := time.After(time.Second * 25)
-	interval := time.NewTicker(time.Millisecond * 250)
 
+	type outcome struct {
+		response string
+		err      error
+	}
+	stop := make(chan struct{})
+	done := make(chan outcome, 1)
+	go func() {
+		response, err := d.authenticateUntilStopped(request, stop)
+		// The device is closed before the result is published, and only after its last read returned.
+		d.Device.Close()
+		done <- outcome{response: response, err: err}
+	}()
+
+	timer := time.NewTimer(u2fTouchTimeout)
+	defer timer.Stop()
+	select {
+	case result := <-done:
+		return result.response, result.err
+	case <-timer.C:
+		// Tell the worker to stop; it closes the device when its current read returns.
+		close(stop)
+		return "", errU2FTouchTimeout
+	}
+}
+
+// authenticateUntilStopped polls the device for a signed response until it succeeds, fails or stop is closed.
+func (d *U2FClient) authenticateUntilStopped(request *u2fhost.AuthenticateRequest, stop <-chan struct{}) (string, error) {
+	prompted := false
+	interval := time.NewTicker(u2fPollInterval)
 	defer interval.Stop()
 	for {
 		select {
-		case <-timeout:
-			return "", errors.New("failed to get authentication response after 25 seconds")
+		case <-stop:
+			return "", errU2FTouchTimeout
 		case <-interval.C:
 			response, err := d.Device.Authenticate(request)
 			if err == nil {
@@ -129,15 +186,14 @@ type U2FDeviceFinder struct{}
 
 func (*U2FDeviceFinder) findDevice() (u2fhost.Device, error) {
 	var err error
-	allDevices := u2fhost.Devices()
+	allDevices := listU2FDevices()
 	if len(allDevices) == 0 {
 		return nil, errNoDeviceFound
 	}
 
 	for i, device := range allDevices {
-		err = device.Open()
+		err = openDevice(device, u2fOpenTimeout)
 		if err != nil {
-			device.Close()
 			continue
 		}
 
@@ -155,4 +211,51 @@ func b64Safe(data string) (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(val), nil
+}
+
+// openDevice opens the device, giving up after timeout.
+//
+// Atmos fork: a key can open at the OS level but never answer the HID initialization request, which
+// blocked Open forever. The Open call runs in a goroutine that owns the handle: it closes the device when Open
+// fails, and also when Open succeeds after the caller gave up. The caller never closes the device itself.
+func openDevice(device u2fhost.Device, timeout time.Duration) error {
+	var (
+		mu        sync.Mutex
+		abandoned bool
+	)
+	result := make(chan error, 1)
+
+	go func() {
+		err := device.Open()
+		if err != nil {
+			device.Close()
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if abandoned {
+			if err == nil {
+				device.Close()
+			}
+			return
+		}
+		result <- err
+	}()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case err := <-result:
+		return err
+	case <-timer.C:
+		mu.Lock()
+		defer mu.Unlock()
+		// The worker may have finished between the timer firing and the lock being taken.
+		select {
+		case err := <-result:
+			return err
+		default:
+		}
+		abandoned = true
+		return errU2FOpenTimeout
+	}
 }

@@ -3,6 +3,7 @@ package prompter
 import (
 	"io"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -40,6 +41,17 @@ func runFakePinentry(mode string) int {
 		return 0
 	case "cancel":
 		_, _ = os.Stdout.WriteString("OK Pleased to meet you\nOK\nERR 83886179 Operation cancelled\n")
+		return 0
+	case "err-flood":
+		// An error followed by more output than a pipe holds: the reader stops at the error and
+		// leaves the rest unread.
+		_, _ = os.Stdout.WriteString("ERR 1 failed\n")
+		chunk := strings.Repeat("x", 1023) + "\n"
+		for range 4096 {
+			if _, err := os.Stdout.WriteString(chunk); err != nil {
+				break
+			}
+		}
 		return 0
 	case "crash":
 		_, _ = os.Stdout.WriteString("OK Pleased to meet you\nOK\nD 424242\n")

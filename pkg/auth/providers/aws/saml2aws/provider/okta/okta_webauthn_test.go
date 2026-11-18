@@ -2,7 +2,10 @@ package okta
 
 import (
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	u2fhost "github.com/marshallbrekka/go-u2fhost"
@@ -13,11 +16,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
 )
 
-type fidoClientTests struct {
-	title string
-	err   error
-}
-
 type MockDeviceFinder struct {
 	device *mocks.U2FDevice
 }
@@ -27,68 +25,50 @@ func (m *MockDeviceFinder) findDevice() (u2fhost.Device, error) {
 }
 
 func TestNewFidoClient(t *testing.T) {
-	challengeNonce := "challengeNonce"
-	appID := "appID"
-	version := "version"
-	keyHandle := "keyHandle"
-	stateToken := "stateToken"
-	tests := []fidoClientTests{
-		{
-			title: "Returns new client successfully if device found",
-			err:   nil,
-		},
-	}
+	device := &mocks.U2FDevice{}
 
-	for _, test := range tests {
-		t.Run(test.title, func(t *testing.T) {
-			_, err := NewFidoClient(challengeNonce, appID, version, keyHandle, stateToken, &MockDeviceFinder{&mocks.U2FDevice{}})
-			if test.err != nil {
-				assert.NotNil(t, err)
-				assert.Equal(t, test.err.Error(), err.Error())
-			}
-		})
-	}
+	client, err := NewFidoClient("challengeNonce", "appID", "version", "keyHandle", "stateToken", &MockDeviceFinder{device})
+	require.NoError(t, err)
+	assert.Same(t, device, client.Device)
+	assert.Equal(t, "challengeNonce", client.ChallengeNonce)
+	assert.Equal(t, "appID", client.AppID)
+	assert.Equal(t, "version", client.Version)
+	assert.Equal(t, "keyHandle", client.KeyHandle)
+	assert.Equal(t, "stateToken", client.StateToken)
 }
 
 func TestChallengeWebAuthnU2F(t *testing.T) {
-	challengeNonce := "challengeNonce"
-	appID := "appID"
-	version := "version"
-	keyHandle := "keyHandle"
-	stateToken := "stateToken"
-	tests := []fidoClientTests{
-		{
-			title: "Returns signed assertion from device",
-			err:   nil,
-		},
+	request := &u2fhost.AuthenticateRequest{
+		Challenge:          "challengeNonce",
+		AppId:              "appID",
+		Facet:              "https://appID",
+		KeyHandle:          "keyHandle",
+		ChannelIdPublicKey: nil,
+		ChannelIdUnused:    false,
+		CheckOnly:          false,
+		WebAuthn:           true,
+	}
+	response := &u2fhost.AuthenticateResponse{
+		ClientData:        "exampleClientData",
+		SignatureData:     "exampleSignatureData",
+		AuthenticatorData: "exampleAuthenticatorData",
 	}
 
-	for _, test := range tests {
-		t.Run(test.title, func(t *testing.T) {
-			device := &mocks.U2FDevice{}
-			mockDeviceFinder := &MockDeviceFinder{device}
-			device.On("Open").Return(nil)
-			request := &u2fhost.AuthenticateRequest{
-				Challenge:          challengeNonce,
-				AppId:              appID,
-				Facet:              "https://" + appID,
-				KeyHandle:          keyHandle,
-				ChannelIdPublicKey: nil,
-				ChannelIdUnused:    false,
-				CheckOnly:          false,
-				WebAuthn:           true,
-			}
-			response := &u2fhost.AuthenticateResponse{}
-			device.On("Authenticate", request).Return(response, nil)
-			device.On("Close").Return(nil)
-			client, _ := NewFidoClient(challengeNonce, appID, version, keyHandle, stateToken, mockDeviceFinder)
-			_, err := client.ChallengeU2F()
-			if test.err != nil {
-				assert.NotNil(t, err)
-				assert.Equal(t, test.err.Error(), err.Error())
-			}
-		})
-	}
+	device := &mocks.U2FDevice{}
+	device.On("Open").Return(nil)
+	device.On("Authenticate", request).Return(response, nil)
+	device.On("Close").Return(nil)
+	client, err := NewFidoClient("challengeNonce", "appID", "version", "keyHandle", "stateToken", &MockDeviceFinder{device})
+	require.NoError(t, err)
+
+	got, err := client.ChallengeU2F()
+	require.NoError(t, err)
+	assert.Equal(t, &SignedAssertion{
+		StateToken:        "stateToken", // gitleaks:allow -- Fake state token in a test fixture.
+		ClientData:        "exampleClientData",
+		SignatureData:     "exampleSignatureData",
+		AuthenticatorData: "exampleAuthenticatorData",
+	}, got)
 }
 
 // scriptedDeviceFinder returns the configured errors in order, then the device.
@@ -192,39 +172,40 @@ func TestFidoClientChallengeU2F_PresenceTimeoutBetweenPolls(t *testing.T) {
 
 // Regression: a device whose Authenticate read never returns must not block ChallengeU2F past its timeout,
 // and the device must not be closed while that read is still in flight.
+// The test runs in a synctest bubble: time is virtual, a regression that waits on the blocked read fails as
+// a deadlock instead of hanging, and synctest.Wait lets every runnable goroutine settle before the checks.
 func TestFidoClientChallengeU2F_HungDeviceTimesOut(t *testing.T) {
 	origTimeout, origInterval := u2fAuthTimeout, u2fPollInterval
-	u2fAuthTimeout, u2fPollInterval = 100*time.Millisecond, 5*time.Millisecond
+	u2fAuthTimeout, u2fPollInterval = 100*time.Millisecond, 5*time.Millisecond // gitleaks:allow -- Test timing variables, not secrets.
 	t.Cleanup(func() { u2fAuthTimeout, u2fPollInterval = origTimeout, origInterval })
 
-	release := make(chan struct{})
-	closed := make(chan struct{})
-	device := &mocks.U2FDevice{}
-	device.On("Authenticate", mock.Anything).Run(func(mock.Arguments) { <-release }).Return(nil, fmt.Errorf("device unplugged")).Once()
-	device.On("Close").Run(func(mock.Arguments) { close(closed) }).Return().Once()
+	synctest.Test(t, func(t *testing.T) {
+		release := make(chan struct{})
+		var releaseOnce sync.Once
+		releaseRead := func() { releaseOnce.Do(func() { close(release) }) }
+		// Release the read exactly once, including when an assertion below fails.
+		defer releaseRead()
 
-	client := &FidoClient{Device: device}
-	start := time.Now()
-	got, err := client.ChallengeU2F()
-	require.ErrorIs(t, err, ErrU2FAuthTimeout)
-	assert.Contains(t, err.Error(), "failed to get authentication response")
-	assert.Nil(t, got)
-	assert.Less(t, time.Since(start), 5*time.Second)
+		var closed atomic.Bool
+		device := &mocks.U2FDevice{}
+		device.On("Authenticate", mock.Anything).Run(func(mock.Arguments) { <-release }).Return(nil, fmt.Errorf("device unplugged")).Once()
+		device.On("Close").Run(func(mock.Arguments) { closed.Store(true) }).Return().Once()
 
-	select {
-	case <-closed:
-		t.Fatal("device was closed while its Authenticate read was still in flight")
-	case <-time.After(50 * time.Millisecond):
-	}
+		got, err := (&FidoClient{Device: device}).ChallengeU2F()
+		require.ErrorIs(t, err, ErrU2FAuthTimeout)
+		assert.Contains(t, err.Error(), "failed to get authentication response")
+		assert.Nil(t, got)
 
-	// Once the blocked read returns, the abandoned call closes the device exactly once.
-	close(release)
-	select {
-	case <-closed:
-	case <-time.After(5 * time.Second):
-		t.Fatal("device was never closed after the blocked read returned")
-	}
-	device.AssertExpectations(t)
+		// The read is still blocked: let all runnable goroutines settle, then the device must still be open.
+		synctest.Wait()
+		assert.False(t, closed.Load(), "device was closed while its Authenticate read was still in flight")
+
+		// Once the blocked read returns, the abandoned call closes the device exactly once.
+		releaseRead()
+		synctest.Wait()
+		assert.True(t, closed.Load(), "device was never closed after the blocked read returned")
+		device.AssertExpectations(t)
+	})
 }
 
 // Negative path: a device that answers in time is closed by ChallengeU2F itself and the call does not time out.

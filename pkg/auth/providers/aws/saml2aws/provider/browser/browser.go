@@ -309,11 +309,6 @@ var getSAMLResponse = func(page samlPage, loginDetails *creds.LoginDetails, clie
 
 	logger.WithField("URL", loginDetails.URL).Info("opening browser")
 
-	signinRe, err := signinRegex()
-	if err != nil {
-		return "", err
-	}
-
 	// record stores the request body. Atmos fork: a captured SAMLResponse is never replaced by a later
 	// request that carries none (for example a GET to the same URL, whose body is empty), which upstream
 	// overwrote and then waited for another request until the timeout.
@@ -327,7 +322,7 @@ var getSAMLResponse = func(page samlPage, loginDetails *creds.LoginDetails, clie
 	}
 
 	page.OnRequest(func(request playwright.Request) {
-		if signinRe.MatchString(request.URL()) {
+		if isSigninURL(request.URL()) {
 			postData, postErr := request.PostData()
 			record(postData, postErr)
 		}
@@ -348,7 +343,9 @@ var getSAMLResponse = func(page samlPage, loginDetails *creds.LoginDetails, clie
 	capturedByCallback := func() bool {
 		mu.Lock()
 		defer mu.Unlock()
-		return data != ""
+		// Atmos fork: only a usable SAMLResponse counts as a capture, not any non-empty body such as
+		// "RelayState=state" or a recorded body-read error.
+		return dataErr == nil && hasSAMLResponse(data)
 	}
 	if !capturedByCallback() {
 		// Atmos fork: the sign-in request can reach the OnRequest callback after the check
@@ -356,7 +353,7 @@ var getSAMLResponse = func(page samlPage, loginDetails *creds.LoginDetails, clie
 		// and upstream waited for the full timeout and failed. The callback passed to
 		// ExpectRequest runs once the waiter listens and ends the wait when the request was
 		// already captured, and a failed wait still uses a request the callback captured.
-		r, err := page.ExpectRequest(signinRe, func() error {
+		r, err := page.ExpectRequest(signinRequestWithAssertion, func() error {
 			if capturedByCallback() {
 				return errSAMLRequestCaptured
 			}
@@ -366,6 +363,11 @@ var getSAMLResponse = func(page samlPage, loginDetails *creds.LoginDetails, clie
 		case (err != nil || r == nil) && capturedByCallback():
 			// Use the request captured by the OnRequest callback.
 		case err != nil:
+			// Atmos fork: a body-read error recorded by the OnRequest callback is kept next to the wait error.
+			if recordedErr := recordedError(&mu, &dataErr); recordedErr != nil {
+				return "", errors.Join(fmt.Errorf("reading the AWS sign-in request body: %w", recordedErr),
+					fmt.Errorf("waiting for the AWS sign-in request: %w", err))
+			}
 			return "", fmt.Errorf("waiting for the AWS sign-in request: %w", err)
 		case r == nil:
 			return "", ErrNoSAMLResponse
@@ -446,11 +448,50 @@ var autoFill = func(page playwright.Page, loginDetails *creds.LoginDetails) erro
 	}
 }
 
-func signinRegex() (*regexp.Regexp, error) {
-	// https://docs.aws.amazon.com/general/latest/gr/signin-service.html
-	// https://docs.amazonaws.cn/en_us/aws/latest/userguide/endpoints-Ningxia.html
-	// https://docs.amazonaws.cn/en_us/aws/latest/userguide/endpoints-Beijing.html
-	return regexp.Compile(`https:\/\/((.*\.)?signin\.(aws\.amazon\.com|amazonaws-us-gov\.com|amazonaws\.cn))\/saml`)
+// signinHostPattern matches the AWS sign-in hostnames, including regional endpoints.
+// https://docs.aws.amazon.com/general/latest/gr/signin-service.html
+// https://docs.amazonaws.cn/en_us/aws/latest/userguide/endpoints-Ningxia.html
+// https://docs.amazonaws.cn/en_us/aws/latest/userguide/endpoints-Beijing.html
+var signinHostPattern = regexp.MustCompile(`^(?:[a-z0-9-]+\.)*signin\.(?:aws\.amazon\.com|amazonaws-us-gov\.com|amazonaws\.cn)$`)
+
+// signinPath is the path of the AWS SAML sign-in endpoint.
+const signinPath = "/saml"
+
+// isSigninURL reports whether raw is the AWS SAML sign-in endpoint.
+// Atmos fork: upstream matched an unanchored regular expression against the whole URL string, so AWS sign-in
+// text inside another request's query string also matched and could end the login early. The URL is parsed
+// and its scheme, hostname, port and path are checked instead.
+func isSigninURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" {
+		return false
+	}
+	if port := u.Port(); port != "" && port != "443" {
+		return false
+	}
+	// The path is /saml or below it: IAM SAML providers can use per-provider ACS endpoints such as
+	// /saml/acs/<SAML-provider-ID>, which upstream's unanchored pattern also accepted.
+	pathOK := u.Path == signinPath || strings.HasPrefix(u.Path, signinPath+"/")
+	return pathOK && signinHostPattern.MatchString(strings.ToLower(u.Hostname()))
+}
+
+// signinRequestWithAssertion is the ExpectRequest predicate: a request to the AWS sign-in endpoint that carries
+// a SAMLResponse. Atmos fork: upstream matched on the URL alone, so an earlier request to the same URL without an
+// assertion (for example a GET or a RelayState-only POST) ended the wait before the real assertion arrived.
+// A request whose body cannot be read also ends the wait, so the read error is reported instead of a timeout.
+func signinRequestWithAssertion(request playwright.Request) bool {
+	if !isSigninURL(request.URL()) {
+		return false
+	}
+	postData, err := request.PostData()
+	return err != nil || hasSAMLResponse(postData)
+}
+
+// recordedError returns the body-read error recorded by the OnRequest callback, if any.
+func recordedError(mu *sync.Mutex, recorded *error) error {
+	mu.Lock()
+	defer mu.Unlock()
+	return *recorded
 }
 
 func (cl *Client) Validate(loginDetails *creds.LoginDetails) error {

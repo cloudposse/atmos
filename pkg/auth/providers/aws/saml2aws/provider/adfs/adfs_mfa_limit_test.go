@@ -27,12 +27,17 @@ func TestAuthenticateMFAPromptAttemptLimit(t *testing.T) {
 	require.ErrorIs(t, err, ErrMFAAttemptsExceeded)
 	assert.Empty(t, assertion)
 
-	// One login POST plus one POST per allowed code; the configured token counts as the first code.
+	// The expectations are independent of the production constant: five codes are allowed, so one login
+	// POST plus five code POSTs; the configured token is the first code, so four are prompted for.
+	const (
+		wantCodes   = 5
+		wantPrompts = 4
+	)
 	posts := fake.postedForms()
-	require.Len(t, posts, 1+maxMFAPromptAttempts)
+	require.Len(t, posts, 1+wantCodes)
 	assert.Equal(t, []string{"111111"}, posts[1]["VerificationCode"])
-	assert.Equal(t, []string{"999999"}, posts[maxMFAPromptAttempts]["VerificationCode"])
-	pr.AssertNumberOfCalls(t, "RequestSecurityCode", maxMFAPromptAttempts-1)
+	assert.Equal(t, []string{"999999"}, posts[wantCodes]["VerificationCode"])
+	pr.AssertNumberOfCalls(t, "RequestSecurityCode", wantPrompts)
 }
 
 // Regression: a server that keeps returning the Azure MFA wait page was polled forever.
@@ -51,8 +56,8 @@ func TestAuthenticateAzureMFAPollLimit(t *testing.T) {
 			assertion, err := newTestClient(t).Authenticate(loginDetails(ts.URL, ""))
 			require.ErrorIs(t, err, ErrMFAAttemptsExceeded)
 			assert.Empty(t, assertion)
-			// One login POST plus one POST per allowed poll.
-			assert.Len(t, fake.postedForms(), 1+maxAzureMFAPolls)
+			// One login POST plus 300 polls (a test-local limit, independent of the production constant).
+			assert.Len(t, fake.postedForms(), 301)
 		})
 	}
 }

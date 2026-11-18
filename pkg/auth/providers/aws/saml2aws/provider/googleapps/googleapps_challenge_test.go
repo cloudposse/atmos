@@ -173,6 +173,11 @@ const (
 )
 
 // securityKeyPage renders a U2F challenge page, optionally with one key handle and an app id.
+// withoutSkipForm removes the "try another way" form from a challengePage.
+func withoutSkipForm(page string) string {
+	return strings.Replace(page, `<form method="POST" action="/signin/challenge/skip"><input type="hidden" name="challengeId" value="7"></form>`, "", 1)
+}
+
 func securityKeyPage(withKeyHandle bool) string {
 	ui := `{"1":[["` + testKeyHandle + `","{\"appid\":\"https://www.gstatic.com/securitykey/origins.json\"}"]]}`
 	if !withKeyHandle {
@@ -225,11 +230,25 @@ func TestChallenge_SecurityKey(t *testing.T) {
 		assert.Zero(t, f.count("/signin/challenge/sk/5"))
 	})
 
-	t.Run("no device plugged in", func(t *testing.T) {
+	t.Run("no device plugged in and no other factor offered", func(t *testing.T) {
 		withDeviceFinder(t, &scriptedDeviceFinder{err: errNoDeviceFound})
-		_, _, err := runChallenge(t, securityKeyPage(true), map[string]pageHandler{}, &creds.LoginDetails{})
-		require.Error(t, err)
+		_, _, err := runChallenge(t, withoutSkipForm(securityKeyPage(true)), map[string]pageHandler{}, &creds.LoginDetails{})
+		require.ErrorIs(t, err, errNoDeviceFound)
 		assert.Contains(t, err.Error(), "Failed to prompt for second factor")
+	})
+
+	// Regression: with no security key attached the flow stopped, even when the page offered another factor.
+	t.Run("no device plugged in falls back to another factor", func(t *testing.T) {
+		withDeviceFinder(t, &scriptedDeviceFinder{err: errNoDeviceFound})
+		chooser := `<form action="/signin/challenge/totp/9" data-challengeentry="9"><input name="challengeId" value="9"></form>`
+		f, got, err := runChallenge(t, securityKeyPage(true), map[string]pageHandler{
+			"/signin/challenge/skip":   static(chooser),
+			"/signin/challenge/totp/9": static(samlPage),
+		}, &creds.LoginDetails{})
+		require.NoError(t, err)
+		assert.Equal(t, testSAMLResponse, got)
+		assert.Equal(t, 1, f.count("/signin/challenge/skip"))
+		assert.Zero(t, f.count("/signin/challenge/sk/5"))
 	})
 
 	t.Run("page without key handles", func(t *testing.T) {

@@ -48,29 +48,30 @@ var darwinHostInfo = darwinKernelInfo
 // It mirrors calculatePlatform in playwright-core 1.64 (packages/utils/hostPlatform.ts).
 // An empty result means the platform is unknown, so no override applies. A wrong guess is safe:
 // the browser is then reported missing and `playwright install`, which skips an installed browser,
-// runs once more.
-func playwrightHostPlatform() string {
+// runs once more. A macOS host whose kernel information cannot be read is reported as an error
+// instead of a guess, so the caller treats the required browser as undeterminable.
+func playwrightHostPlatform() (string, error) {
 	if override := os.Getenv(playwrightHostPlatformOverrideEnv); override != "" { //nolint:forbidigo // Third-party (Playwright) env var, read the same way the driver reads it.
-		return override
+		return override, nil
 	}
 
 	switch runtime.GOOS {
 	case "darwin":
 		release, cpuBrand, err := darwinHostInfo()
 		if err != nil {
-			return ""
+			return "", err
 		}
-		return macHostPlatform(release, cpuBrand)
+		return macHostPlatform(release, cpuBrand), nil
 	case "linux":
 		osRelease, err := os.ReadFile(linuxOSReleasePath)
 		if err != nil {
 			osRelease = nil
 		}
-		return linuxHostPlatform(runtime.GOARCH, string(osRelease))
+		return linuxHostPlatform(runtime.GOARCH, string(osRelease)), nil
 	case windowsOS:
-		return "win64"
+		return "win64", nil
 	default:
-		return ""
+		return "", nil
 	}
 }
 

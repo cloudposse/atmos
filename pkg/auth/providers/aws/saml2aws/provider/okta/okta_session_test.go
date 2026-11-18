@@ -34,8 +34,9 @@ func TestCreateSession(t *testing.T) {
 		wantToken  string
 	}{
 		{name: "active session", status: http.StatusOK, body: `{"id":"sid-1","status":"ACTIVE","sessionToken":"st"}`, wantCookie: "sid-1", wantToken: "st"},
-		{name: "unauthorized", status: http.StatusUnauthorized, wantErr: "invalid sessionToken"},
-		{name: "server error", status: http.StatusInternalServerError, wantErr: "HTTP Code: 500"},
+		// The production status validator rejects these in HTTPClient.Do, before createSession inspects the status.
+		{name: "unauthorized", status: http.StatusUnauthorized, wantErr: "failed status: 401 Unauthorized"},
+		{name: "server error", status: http.StatusInternalServerError, wantErr: "failed status: 500 Internal Server Error"},
 		{name: "MFA enroll", status: http.StatusOK, body: `{"id":"sid-1","status":"MFA_ENROLL"}`, wantErr: "MFA_ENROLL"},
 		{name: "credential store failure", status: http.StatusOK, body: `{"id":"sid-1","status":"ACTIVE"}`, addErr: errors.New("keychain locked"), wantErr: "keychain locked"},
 	}
@@ -50,6 +51,7 @@ func TestCreateSession(t *testing.T) {
 			defer ts.Close()
 
 			oc, loginDetails := setupTestClient(t, ts, "Auto")
+			withProductionStatusValidator(oc)
 			cookie, token, err := oc.createSession(loginDetails, "session-token")
 			if tc.wantErr != "" {
 				require.Error(t, err)
@@ -102,7 +104,8 @@ func TestValidateSession(t *testing.T) {
 	}{
 		{name: "active", status: http.StatusOK, body: `{"status":"ACTIVE"}`},
 		{name: "unknown status is accepted", status: http.StatusOK, body: `{"status":"SOMETHING"}`},
-		{name: "invalid session", status: http.StatusNotFound, wantErr: "invalid okta session"},
+		// The production status validator rejects the 404 in HTTPClient.Do, before validateSession inspects the status.
+		{name: "invalid session", status: http.StatusNotFound, wantErr: "failed status: 404 Not Found"},
 		{name: "MFA enroll", status: http.StatusOK, body: `{"status":"MFA_ENROLL"}`, wantErr: "MFA_ENROLL"},
 		{name: "MFA required with unsupported factor", status: http.StatusOK, body: `{"status":"MFA_REQUIRED"}`, wantErr: "error verifying MFA"},
 	}
@@ -120,6 +123,7 @@ func TestValidateSession(t *testing.T) {
 			defer ts.Close()
 
 			oc, loginDetails := setupTestClient(t, ts, "Auto")
+			withProductionStatusValidator(oc)
 			loginDetails.OktaSessionCookie = "sid-1"
 			err := oc.validateSession(loginDetails)
 			if tc.wantErr != "" {
