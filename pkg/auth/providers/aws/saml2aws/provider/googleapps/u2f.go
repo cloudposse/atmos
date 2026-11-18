@@ -46,7 +46,7 @@ func NewU2FClient(challengeNonce, appID, facet, keyHandle string, deviceFinder D
 	for retryCount < maxOpenRetries {
 		device, err = deviceFinder.findDevice()
 		if err != nil {
-			if err == errNoDeviceFound {
+			if errors.Is(err, errNoDeviceFound) {
 				return nil, err
 			}
 
@@ -64,13 +64,13 @@ func NewU2FClient(challengeNonce, appID, facet, keyHandle string, deviceFinder D
 		}, nil
 	}
 
-	return nil, fmt.Errorf("failed to create client: %s. exceeded max retries of %d", err, maxOpenRetries)
+	return nil, fmt.Errorf("failed to create client: %w. exceeded max retries of %d", err, maxOpenRetries)
 }
 
 // ChallengeU2F takes a U2FClient and returns a signed assertion to send to Google
 func (d *U2FClient) ChallengeU2F() (string, error) {
 	if d.Device == nil {
-		return "", errors.New("No Device Found")
+		return "", errors.New("no device found")
 	}
 	// Atmos fork: the device is closed on every return, including an invalid challenge.
 	defer d.Device.Close()
@@ -98,7 +98,7 @@ func (d *U2FClient) ChallengeU2F() (string, error) {
 	for {
 		select {
 		case <-timeout:
-			return "", errors.New("Failed to get authentication response after 25 seconds")
+			return "", errors.New("failed to get authentication response after 25 seconds")
 		case <-interval.C:
 			response, err := d.Device.Authenticate(request)
 			if err == nil {
@@ -110,8 +110,9 @@ func (d *U2FClient) ChallengeU2F() (string, error) {
 				return string(responseJSON), nil
 			}
 
-			switch err.(type) {
-			case *u2fhost.TestOfUserPresenceRequiredError:
+			var presenceErr *u2fhost.TestOfUserPresenceRequiredError
+			switch {
+			case errors.As(err, &presenceErr):
 				if !prompted {
 					log.Println("Touch the flashing U2F device to authenticate...")
 					prompted = true
@@ -143,7 +144,7 @@ func (*U2FDeviceFinder) findDevice() (u2fhost.Device, error) {
 		return allDevices[i], nil
 	}
 
-	return nil, fmt.Errorf("failed to open fido U2F device: %s", err)
+	return nil, fmt.Errorf("failed to open fido U2F device: %w", err)
 }
 
 // b64Safe re-encodes standard base64 data as unpadded URL-safe base64.

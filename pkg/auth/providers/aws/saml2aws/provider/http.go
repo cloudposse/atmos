@@ -51,13 +51,12 @@ func NewDefaultTransport(skipVerify bool) *http.Transport {
 		DialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
-			DualStack: true,
 		}).DialContext,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{MinVersion: MinTLSVersion, InsecureSkipVerify: skipVerify},
+		TLSClientConfig:       &tls.Config{MinVersion: MinTLSVersion, InsecureSkipVerify: skipVerify}, //nolint:gosec // Skipping verification is an explicit, user-configured opt-in (skip_verify).
 	}
 }
 
@@ -164,7 +163,7 @@ func (hc *HTTPClient) doWithRetry(req *http.Request) (*http.Response, error) {
 			}
 			attempted = true
 			hc.logHTTPRequest(req)
-			clientResp, err := hc.Client.Do(req)
+			clientResp, err := hc.Client.Do(req) //nolint:bodyclose // The response is returned to the caller, which closes the body.
 			if err != nil {
 				return err
 			}
@@ -180,7 +179,7 @@ func (hc *HTTPClient) doWithRetry(req *http.Request) (*http.Response, error) {
 			func(n uint, err error) {
 				logrus.
 					WithField("Attempt #", n).
-					WithField("Caused by", fmt.Errorf("%v", err)).
+					WithField("Caused by", err).
 					Debug("Retry")
 			}),
 	)

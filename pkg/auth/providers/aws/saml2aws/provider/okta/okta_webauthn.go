@@ -13,7 +13,7 @@ import (
 
 const (
 	MaxOpenRetries = 10
-	RetryDelayMS   = 200 * time.Millisecond
+	RetryDelay     = 200 * time.Millisecond
 )
 
 var errNoDeviceFound = fmt.Errorf("no U2F devices found. device might not be plugged in")
@@ -55,12 +55,12 @@ func NewFidoClient(challengeNonce, appID, version, keyHandle, stateToken string,
 	for retryCount < MaxOpenRetries {
 		device, err = deviceFinder.findDevice()
 		if err != nil {
-			if err == errNoDeviceFound {
+			if errors.Is(err, errNoDeviceFound) {
 				return FidoClient{}, err
 			}
 
 			retryCount++
-			time.Sleep(RetryDelayMS)
+			time.Sleep(RetryDelay)
 			continue
 		}
 
@@ -74,13 +74,13 @@ func NewFidoClient(challengeNonce, appID, version, keyHandle, stateToken string,
 		}, nil
 	}
 
-	return FidoClient{}, fmt.Errorf("failed to create client: %s. exceeded max retries of %d", err, MaxOpenRetries)
+	return FidoClient{}, fmt.Errorf("failed to create client: %w. exceeded max retries of %d", err, MaxOpenRetries)
 }
 
 // ChallengeU2F takes a FidoClient and returns a signed assertion to send to Okta
 func (d *FidoClient) ChallengeU2F() (*SignedAssertion, error) {
 	if d.Device == nil {
-		return nil, errors.New("No Device Found")
+		return nil, errors.New("no device found")
 	}
 	request := &u2fhost.AuthenticateRequest{
 		Challenge: d.ChallengeNonce,
@@ -102,7 +102,7 @@ func (d *FidoClient) ChallengeU2F() (*SignedAssertion, error) {
 	for {
 		select {
 		case <-timeout:
-			return nil, errors.New("Failed to get authentication response after 25 seconds")
+			return nil, errors.New("failed to get authentication response after 25 seconds")
 		case <-interval.C:
 			response, err := d.Device.Authenticate(request)
 			if err == nil {
@@ -116,8 +116,9 @@ func (d *FidoClient) ChallengeU2F() (*SignedAssertion, error) {
 				return responsePayload, nil
 			}
 
-			switch err.(type) {
-			case *u2fhost.TestOfUserPresenceRequiredError:
+			var presenceErr *u2fhost.TestOfUserPresenceRequiredError
+			switch {
+			case errors.As(err, &presenceErr):
 				if !prompted {
 					log.Println("Touch the flashing U2F device to authenticate...")
 					prompted = true
@@ -155,7 +156,7 @@ func (*U2FDeviceFinder) findDevice() (u2fhost.Device, error) {
 		return allDevices[i], nil
 	}
 
-	return nil, fmt.Errorf("failed to open fido U2F device: %s", err)
+	return nil, fmt.Errorf("failed to open fido U2F device: %w", err)
 }
 
 // ChallengeSystemWebAuthn challenges the system level WebAuthn API (e.g. Windows Hello) and

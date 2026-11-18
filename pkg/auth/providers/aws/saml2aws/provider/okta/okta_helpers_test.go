@@ -199,7 +199,7 @@ func offlineTestClient(t *testing.T) (*Client, *creds.LoginDetails) {
 	t.Helper()
 
 	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // Test servers use self-signed certificates.
+	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	opts := &provider.HTTPClientOptions{IsWithRetries: false}
 	client, err := provider.NewHTTPClient(tr, opts)
 	require.NoError(t, err)

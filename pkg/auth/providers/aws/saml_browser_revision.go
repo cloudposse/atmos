@@ -16,18 +16,18 @@ import (
 )
 
 const (
-	// chromiumBrowserName is the Chromium entry name in Playwright's browsers.json.
+	// Chromium entry name in Playwright's browsers.json.
 	chromiumBrowserName = "chromium"
-	// firefoxBrowserName is the Firefox entry name in Playwright's browsers.json.
+	// Firefox entry name in Playwright's browsers.json.
 	firefoxBrowserName = "firefox"
-	// webkitBrowserName is the WebKit entry name in Playwright's browsers.json.
+	// WebKit entry name in Playwright's browsers.json.
 	webkitBrowserName = "webkit"
-	// playwrightBrowserManifest is the browser manifest shipped in the playwright-core package.
+	// Browser manifest shipped in the playwright-core package.
 	playwrightBrowserManifest = "browsers.json"
-	// playwrightInstallMarker is the file Playwright writes into a browser directory once the
+	// File Playwright writes into a browser directory once the
 	// browser is fully extracted. A directory without it is a partial download.
 	playwrightInstallMarker = "INSTALLATION_COMPLETE"
-	// playwrightLocalBrowsers is the in-package browser directory used when PLAYWRIGHT_BROWSERS_PATH=0.
+	// In-package browser directory used when PLAYWRIGHT_BROWSERS_PATH=0.
 	playwrightLocalBrowsers = ".local-browsers"
 )
 
@@ -43,7 +43,7 @@ var requiredBrowserDir = func(browserName string) (string, error) {
 }
 
 // playwrightManifestPath returns the browsers.json path of the Playwright driver.
-// playwright-core keeps browsers.json next to cli.js, so an external PLAYWRIGHT_CLI_PATH
+// The playwright-core package keeps browsers.json next to cli.js, so an external PLAYWRIGHT_CLI_PATH
 // (for example a distro-packaged driver) also moves the manifest.
 func playwrightManifestPath(driverDir string) string {
 	if cliPath := os.Getenv("PLAYWRIGHT_CLI_PATH"); cliPath != "" { //nolint:forbidigo // Third-party (playwright-go) env var, read the same way the library reads it.
@@ -81,10 +81,10 @@ func readBrowserDir(manifestPath, browserName, hostPlatform string) (string, err
 		}
 		if override := browser.RevisionOverrides[hostPlatform]; hostPlatform != "" && override != "" {
 			prefix := browser.Name + "_" + hostPlatform + "_special"
-			return strings.ReplaceAll(prefix, "-", "_") + "-" + override, nil
+			return strings.ReplaceAll(prefix, dashSeparator, "_") + dashSeparator + override, nil
 		}
 		if browser.Revision != "" {
-			return strings.ReplaceAll(browser.Name, "-", "_") + "-" + browser.Revision, nil
+			return strings.ReplaceAll(browser.Name, dashSeparator, "_") + dashSeparator + browser.Revision, nil
 		}
 	}
 

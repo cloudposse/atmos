@@ -63,7 +63,7 @@ func parseRole(role string) (*AWSRole, error) {
 	tokens := splitRoleARNs(role)
 
 	if len(tokens) != 2 {
-		return nil, fmt.Errorf("Invalid role string only %d tokens", len(tokens))
+		return nil, fmt.Errorf("invalid role string only %d tokens", len(tokens))
 	}
 
 	awsRole := &AWSRole{}
@@ -78,11 +78,11 @@ func parseRole(role string) (*AWSRole, error) {
 	}
 
 	if awsRole.PrincipalARN == "" {
-		return nil, fmt.Errorf("Unable to locate PrincipalARN in: %s", role)
+		return nil, fmt.Errorf("unable to locate PrincipalARN in: %s", role)
 	}
 
 	if awsRole.RoleARN == "" {
-		return nil, fmt.Errorf("Unable to locate RoleARN in: %s", role)
+		return nil, fmt.Errorf("unable to locate RoleARN in: %s", role)
 	}
 
 	return awsRole, nil

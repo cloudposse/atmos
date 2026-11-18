@@ -36,12 +36,12 @@ func NewDUOU2FClient(challengeNonce, appID, version, keyHandle, stateToken strin
 	for retryCount < MaxOpenRetries {
 		device, err = deviceFinder.findDevice()
 		if err != nil {
-			if err == errNoDeviceFound {
+			if errors.Is(err, errNoDeviceFound) {
 				return nil, err
 			}
 
 			retryCount++
-			time.Sleep(RetryDelayMS)
+			time.Sleep(RetryDelay)
 			continue
 		}
 
@@ -55,13 +55,13 @@ func NewDUOU2FClient(challengeNonce, appID, version, keyHandle, stateToken strin
 		}, nil
 	}
 
-	return nil, fmt.Errorf("failed to create client: %s. exceeded max retries of %d", err, MaxOpenRetries)
+	return nil, fmt.Errorf("failed to create client: %w. exceeded max retries of %d", err, MaxOpenRetries)
 }
 
 // ChallengeU2F takes a FidoClient and returns a signed assertion to send to Okta
 func (d *DUOU2FClient) ChallengeU2F() (*ResponseData, error) {
 	if d.Device == nil {
-		return nil, errors.New("No Device Found")
+		return nil, errors.New("no device found")
 	}
 	request := &u2fhost.AuthenticateRequest{
 		Challenge: d.ChallengeNonce,
@@ -83,7 +83,7 @@ func (d *DUOU2FClient) ChallengeU2F() (*ResponseData, error) {
 	for {
 		select {
 		case <-timeout:
-			return nil, errors.New("Failed to get authentication response after 25 seconds")
+			return nil, errors.New("failed to get authentication response after 25 seconds")
 		case <-interval.C:
 			response, err := d.Device.Authenticate(request)
 			if err == nil {
@@ -99,8 +99,9 @@ func (d *DUOU2FClient) ChallengeU2F() (*ResponseData, error) {
 				return responsePayload, nil
 			}
 
-			switch err.(type) {
-			case *u2fhost.TestOfUserPresenceRequiredError:
+			var presenceErr *u2fhost.TestOfUserPresenceRequiredError
+			switch {
+			case errors.As(err, &presenceErr):
 				if !prompted {
 					fmt.Fprintf(os.Stderr, "\nTouch the flashing U2F device to authenticate...\n")
 					prompted = true

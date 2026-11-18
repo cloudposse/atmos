@@ -130,7 +130,7 @@ func TestFidoClientChallengeU2F_Behavior(t *testing.T) {
 	t.Run("missing device", func(t *testing.T) {
 		client := &FidoClient{}
 		_, err := client.ChallengeU2F()
-		assert.EqualError(t, err, "No Device Found")
+		assert.EqualError(t, err, "no device found")
 	})
 
 	t.Run("waits for user presence and HID errors before succeeding", func(t *testing.T) {

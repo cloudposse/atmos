@@ -179,9 +179,10 @@ func (cl *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 	// Default browser is Chromium as it is widely supported for Identity providers,
 	// It can also be set to the other playwright browsers: Firefox and WebKit
 	browserType := pw.Chromium
-	if cl.BrowserType == "firefox" {
+	switch cl.BrowserType {
+	case "firefox":
 		browserType = pw.Firefox
-	} else if cl.BrowserType == "webkit" {
+	case "webkit":
 		browserType = pw.WebKit
 	}
 

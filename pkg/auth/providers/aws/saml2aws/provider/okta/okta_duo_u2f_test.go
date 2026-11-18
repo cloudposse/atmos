@@ -91,6 +91,6 @@ func TestNewDUOU2FClient_DeviceDiscovery(t *testing.T) {
 	t.Run("missing device", func(t *testing.T) {
 		client := &DUOU2FClient{}
 		_, err := client.ChallengeU2F()
-		assert.EqualError(t, err, "No Device Found")
+		assert.EqualError(t, err, "no device found")
 	})
 }

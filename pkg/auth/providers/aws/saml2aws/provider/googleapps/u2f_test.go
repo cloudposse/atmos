@@ -135,7 +135,7 @@ func TestNewU2FClient_DeviceDiscovery(t *testing.T) {
 func TestU2FClientChallengeU2F_Behavior(t *testing.T) {
 	t.Run("missing device", func(t *testing.T) {
 		_, err := (&U2FClient{}).ChallengeU2F()
-		assert.EqualError(t, err, "No Device Found")
+		assert.EqualError(t, err, "no device found")
 	})
 
 	t.Run("waits for user presence then returns the JSON response", func(t *testing.T) {

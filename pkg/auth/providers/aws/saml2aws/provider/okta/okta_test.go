@@ -440,7 +440,7 @@ func setupTestDuoHttpServer(t *testing.T, duoFactor string) *httptest.Server {
 				"color_depth":                 {"24"},
 				"flash_version":               {""},
 				"is_cef_browser":              {"false"},
-				"is_ie_compatability_mode":    {""},
+				"is_ie_compatability_mode":    {""}, //nolint:misspell // Duo's actual (misspelled) form field name.
 				"is_ipad_os":                  {"false"},
 				"java_version":                {""},
 				"parent":                      {"https://host-from-argument/signin/verify/duo/web"},
@@ -588,10 +588,10 @@ func setupTestDuoHttpServer(t *testing.T, duoFactor string) *httptest.Server {
 
 				var requestBody interface{} = nil
 				err = json.Unmarshal(body, &requestBody)
-				assert.Equal(t, map[string]interface{}(map[string]interface{}{
+				assert.Equal(t, map[string]interface{}{
 					"rememberDevice": "true",
 					"stateToken":     "TOKEN_1",
-				}), requestBody)
+				}, requestBody)
 				assert.Nil(t, err)
 
 				_, err = fmt.Fprintf(w, `{
@@ -631,10 +631,10 @@ func setupTestDuoHttpServer(t *testing.T, duoFactor string) *httptest.Server {
 
 				var requestBody interface{} = nil
 				err = json.Unmarshal(body, &requestBody)
-				assert.Equal(t, map[string]interface{}(map[string]interface{}{
+				assert.Equal(t, map[string]interface{}{
 					"rememberDevice": "true",
 					"stateToken":     "TOKEN_1",
-				}), requestBody)
+				}, requestBody)
 				assert.Nil(t, err)
 
 				_, err = w.Write([]byte(`{

@@ -38,6 +38,7 @@ func TestClientDoGetOK(t *testing.T) {
 
 	res, err := hc.Do(req)
 	require.Nil(t, err)
+	defer res.Body.Close()
 
 	require.Equal(t, 200, res.StatusCode)
 }
@@ -62,6 +63,7 @@ func TestClientDisableRedirect(t *testing.T) {
 
 	res, err := hc.Do(req)
 	require.Nil(t, err)
+	defer res.Body.Close()
 	require.Equal(t, 302, res.StatusCode)
 }
 
@@ -82,6 +84,7 @@ func TestClientDoResponseCheck(t *testing.T) {
 
 	res, err := hc.Do(req)
 	require.Error(t, err)
+	defer res.Body.Close()
 	require.Equal(t, 400, res.StatusCode)
 
 	// Regression: the rejected response's body is closed, since callers discard the response on error.
@@ -242,7 +245,10 @@ func TestClientDoTransportErrorSkipsResponseCheck(t *testing.T) {
 	req, err := http.NewRequest(http.MethodGet, "http://example.invalid", nil)
 	require.NoError(t, err)
 
-	_, err = hc.Do(req)
+	res, err := hc.Do(req)
+	if res != nil {
+		_ = res.Body.Close()
+	}
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errTransport)
 	assert.False(t, checked)

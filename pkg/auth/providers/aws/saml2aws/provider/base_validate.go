@@ -10,13 +10,13 @@ type ValidateBase struct{}
 
 func (ac *ValidateBase) Validate(ld *creds.LoginDetails) error {
 	if ld.URL == "" {
-		return errors.New("Empty URL")
+		return errors.New("empty URL")
 	}
 	if ld.Username == "" {
-		return errors.New("Empty username")
+		return errors.New("empty username")
 	}
 	if ld.Password == "" {
-		return errors.New("Empty password")
+		return errors.New("empty password")
 	}
 	return nil
 }

@@ -39,7 +39,7 @@ func encode(prefix, s string) (string, error) {
 	for _, r := range s {
 		if r < utf8.RuneSelf {
 			b++
-			output = append(output, byte(r))
+			output = append(output, byte(r)) //nolint:gosec // r < utf8.RuneSelf, so it fits in a byte.
 		} else {
 			remaining++
 		}

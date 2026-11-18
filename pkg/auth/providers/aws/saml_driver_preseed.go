@@ -37,7 +37,7 @@ import (
 // playwright-go's isUpToDateDriver() check passes and its dead download path
 // never runs — for Atmos's own install call and for the vendored saml2aws browser provider.
 //
-// playwright-go v0.6401+ downloads from the same npm and nodejs.org sources itself,
+// The playwright-go v0.6401+ releases download from the same npm and nodejs.org sources itself,
 // but does not verify what it downloads. The pre-seed is kept because it checks the
 // npm tarball's sha512 integrity before extracting it.
 const (

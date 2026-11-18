@@ -38,22 +38,22 @@ func TestParseAWSRolesErrors(t *testing.T) {
 		{
 			name:    "single token",
 			role:    "arn:aws:iam::123456789012:role/admin",
-			wantErr: "Invalid role string only 1 tokens",
+			wantErr: "invalid role string only 1 tokens",
 		},
 		{
 			name:    "three tokens",
 			role:    "arn:aws:iam::1:role/a,arn:aws:iam::1:saml-provider/b,arn:aws:iam::1:role/c",
-			wantErr: "Invalid role string only 3 tokens",
+			wantErr: "invalid role string only 3 tokens",
 		},
 		{
 			name:    "missing principal",
 			role:    "arn:aws:iam::123456789012:role/admin,arn:aws:iam::123456789012:role/other",
-			wantErr: "Unable to locate PrincipalARN",
+			wantErr: "unable to locate PrincipalARN",
 		},
 		{
 			name:    "missing role",
 			role:    "arn:aws:iam::123456789012:saml-provider/a,arn:aws:iam::123456789012:saml-provider/b",
-			wantErr: "Unable to locate RoleARN",
+			wantErr: "unable to locate RoleARN",
 		},
 	}
 
