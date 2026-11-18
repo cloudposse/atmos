@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -202,4 +203,57 @@ func TestGetTerraformStateRejectsConfigurationOwnedBackend(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
 	require.ErrorContains(t, err, "does not support state lookup")
 	require.Nil(t, value)
+}
+
+// TestPreExecutionEnvPreservesConfigurationRouting checks prepared-environment reuse,
+// workspace validation before secret injection, and ordinary/dry-run assembly.
+func TestPreExecutionEnvPreservesConfigurationRouting(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		configuration bool
+		dryRun        bool
+		workspace     string
+		invalidSecret bool
+	}{
+		{name: "prepared environment", configuration: true, workspace: "stage"},
+		{name: "workspace error before secret encoding", configuration: true, workspace: "other", invalidSecret: true},
+		{name: "secret encoding error", configuration: true, workspace: "stage", invalidSecret: true},
+		{name: "ordinary component", workspace: "other"},
+		{name: "ordinary dry run", dryRun: true, workspace: "other"},
+		{name: "configuration dry run", configuration: true, dryRun: true, workspace: "other"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, config, info := configurationExecution(t)
+			info.ComponentSettingsSection["configuration"] = tc.configuration
+			info.DryRun = tc.dryRun
+			info.TerraformWorkspace = "stage"
+			info.SanitizedEnv = []string{"TF_WORKSPACE=" + tc.workspace}
+			info.ComponentEnvList = []string{"TF_IN_AUTOMATION=true", "PREPARED=value"}
+			info.ComponentEnvSection["FROM_COMPONENT"] = "visible"
+			info.TerraformSecretVarKeys = map[string]bool{"token": true}
+			info.ComponentVarsSection = map[string]any{"token": "secret-env-fixture"}
+			if tc.invalidSecret {
+				info.ComponentVarsSection["token"] = make(chan int)
+			}
+
+			err := assemblePreExecutionEnvVars(config, info, nil)
+			switch tc.name {
+			case "workspace error before secret encoding":
+				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+				require.Equal(t, []string{"TF_IN_AUTOMATION=true", "PREPARED=value"}, info.ComponentEnvList)
+			case "secret encoding error":
+				var encodingErr *json.UnsupportedTypeError
+				require.ErrorAs(t, err, &encodingErr)
+				require.Equal(t, []string{"TF_IN_AUTOMATION=true", "PREPARED=value"}, info.ComponentEnvList)
+			case "prepared environment":
+				require.NoError(t, err)
+				require.Equal(t, []string{"TF_IN_AUTOMATION=true", "PREPARED=value", "TF_VAR_token=secret-env-fixture"}, info.ComponentEnvList)
+			default:
+				require.NoError(t, err)
+				require.Contains(t, info.ComponentEnvList, "FROM_COMPONENT=visible")
+				require.Equal(t, "TF_IN_AUTOMATION=true", info.ComponentEnvList[0])
+				require.Equal(t, "TF_VAR_token=secret-env-fixture", info.ComponentEnvList[len(info.ComponentEnvList)-1])
+			}
+		})
+	}
 }
