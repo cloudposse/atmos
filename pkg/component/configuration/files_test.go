@@ -201,3 +201,29 @@ func TestWriteFileRejectsAliasIntroducedAfterPreflight(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "state", string(content))
 }
+
+func TestWriteFilesOverwritePreservesOtherHardLinks(t *testing.T) {
+	root := t.TempDir()
+	state := filepath.Join(root, "terraform.tfstate")
+	generated := filepath.Join(root, "generated.tf")
+	require.NoError(t, os.WriteFile(state, []byte("protected state"), 0o600))
+	require.NoError(t, os.Link(state, generated))
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{{Path: "generated.tf", Content: []byte("replacement"), IfExists: "overwrite", Mode: 0o755}}))
+	content, err := os.ReadFile(state)
+	require.NoError(t, err)
+	require.Equal(t, "protected state", string(content))
+	content, err = os.ReadFile(generated)
+	require.NoError(t, err)
+	require.Equal(t, "replacement", string(content))
+	oldInfo, err := os.Stat(state)
+	require.NoError(t, err)
+	newInfo, err := os.Stat(generated)
+	require.NoError(t, err)
+	require.False(t, os.SameFile(oldInfo, newInfo))
+	if runtime.GOOS != "windows" {
+		require.Equal(t, os.FileMode(0o600), oldInfo.Mode().Perm())
+	}
+	entries, err := os.ReadDir(root)
+	require.NoError(t, err)
+	require.Len(t, entries, 2, "temporary replacement is removed")
+}

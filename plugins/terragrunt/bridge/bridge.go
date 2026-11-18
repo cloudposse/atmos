@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -90,11 +91,15 @@ type scopedExec struct {
 }
 
 func (e scopedExec) LookPath(file string) (string, error) {
+	return e.lookPath(file, runtime.GOOS)
+}
+
+func (e scopedExec) lookPath(file, platform string) (string, error) {
 	if filepath.IsAbs(file) || strings.ContainsAny(file, `/\`) {
 		return e.Exec.LookPath(file)
 	}
 	suffixes := []string{""}
-	if runtime.GOOS == "windows" && filepath.Ext(file) == "" {
+	if platform == "windows" && filepath.Ext(file) == "" {
 		extensions := e.environment["PATHEXT"]
 		if extensions == "" {
 			extensions = ".COM;.EXE;.BAT;.CMD"
@@ -108,7 +113,7 @@ func (e scopedExec) LookPath(file string) (string, error) {
 		}
 		for _, suffix := range suffixes {
 			candidate := filepath.Join(directory, file+suffix)
-			if resolved, err := e.Exec.LookPath(candidate); err == nil {
+			if resolved, err := e.exactCandidate(candidate, platform); err == nil {
 				return resolved, nil
 			}
 		}
@@ -128,4 +133,20 @@ func (e scopedExec) Command(ctx context.Context, name string, args ...string) ve
 		return vexec.NewMemExec(func(context.Context, vexec.Invocation) vexec.Result { return vexec.Result{Err: err} }).Command(ctx, name, args...)
 	}
 	return e.Exec.Command(ctx, path, args...)
+}
+
+// exactCandidate avoids os/exec applying ambient PATHEXT to an already selected
+// Windows suffix. Invocation suffix order must determine the executable.
+func (e scopedExec) exactCandidate(candidate, platform string) (string, error) {
+	if platform == "windows" {
+		info, err := os.Stat(candidate)
+		if err != nil {
+			return "", err
+		}
+		if !info.Mode().IsRegular() {
+			return "", exec.ErrNotFound
+		}
+		return candidate, nil
+	}
+	return e.Exec.LookPath(candidate)
 }

@@ -242,6 +242,14 @@ func (d *projectDiscovery) visit(path string, placement *unitPlacement, depth in
 }
 
 func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement *unitPlacement, depth int) error {
+	for _, source := range resolved.OwnedSources {
+		d.templates[source] = true
+	}
+	for _, path := range resolved.OwnedPaths {
+		if physical, err := canonicalPath(path); err == nil {
+			d.generated[physical] = true
+		}
+	}
 	files := append(slices.Clone(placement.files), resolved.Files...)
 	for _, child := range slices.Sorted(maps.Keys(resolved.StackConfigs)) {
 		source := resolved.StackSources[child]
@@ -268,6 +276,9 @@ func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement *uni
 
 func (d *projectDiscovery) visitUnit(path string, resolved *model.Resolution, placement *unitPlacement) error {
 	if len(resolved.Folders) == 0 {
+		if placement.generationRoot != "" {
+			return discoveryError(d.root, path, "MISSING_TERRAFORM_SOURCE", errInlineModuleSource)
+		}
 		// Shared include, not a runnable local-source unit.
 		return d.checkInlineModule(path)
 	}
@@ -295,6 +306,7 @@ func (d *projectDiscovery) checkInlineModule(path string) error {
 
 func checkIdentityCollisions(inventory []model.DiscoveredUnit) error {
 	identities := map[string]string{}
+	paths := map[string]string{}
 	for i := range inventory {
 		unit := &inventory[i]
 		key := unit.Stack + "\x00" + unit.Name
@@ -302,6 +314,10 @@ func checkIdentityCollisions(inventory []model.DiscoveredUnit) error {
 			return fmt.Errorf("%w %s/%s: %s and %s", errIdentityCollision, unit.Stack, unit.Name, previous, unit.Config.Path)
 		}
 		identities[key] = unit.Config.Path
+		if previous, exists := paths[unit.Config.Path]; exists {
+			return fmt.Errorf("%w at %s: %s and %s/%s", errIdentityCollision, unit.Config.Path, previous, unit.Stack, unit.Name)
+		}
+		paths[unit.Config.Path] = unit.Stack + "/" + unit.Name
 	}
 	return nil
 }
@@ -374,6 +390,10 @@ func stackResolution(pctx *config.ParsingContext, stack *config.StackConfig, pat
 		Stacks: map[string]string{}, StackSources: map[string]string{}, StackConfigs: map[string]string{},
 	}
 	for _, unit := range stack.Units {
+		result.OwnedPaths = append(result.OwnedPaths, filepath.Join(unit.GeneratedPath(dir), unitFile))
+		if unit.Source != "" {
+			result.OwnedSources = append(result.OwnedSources, localPath(dir, unit.Source))
+		}
 		if !unit.IsEnabled() {
 			continue
 		}
@@ -422,7 +442,7 @@ func (e *unitEvaluator) resolveUnitInventory(ctx context.Context) (*model.Resolu
 	if cfg.Terraform != nil && cfg.Terraform.Source != nil {
 		result.Folders = []string{localPath(filepath.Dir(e.path), *cfg.Terraform.Source)}
 	}
-	if result.OutputDependencies, err = outputDependencies(cfg, e.path); err != nil {
+	if result.OutputDependencies, err = outputDependencies(e.environment, cfg, e.path); err != nil {
 		return nil, err
 	}
 	if result.Dependencies, err = orderDependencies(e.environment, cfg, e.path); err != nil {
@@ -431,7 +451,7 @@ func (e *unitEvaluator) resolveUnitInventory(ctx context.Context) (*model.Resolu
 	return result, nil
 }
 
-func outputDependencies(cfg *config.TerragruntConfig, path string) ([]string, error) {
+func outputDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string) ([]string, error) {
 	var result []string
 	for _, dep := range cfg.TerragruntDependencies {
 		if (dep.Enabled != nil && !*dep.Enabled) || (dep.SkipOutputs != nil && *dep.SkipOutputs) {
@@ -440,11 +460,7 @@ func outputDependencies(cfg *config.TerragruntConfig, path string) ([]string, er
 		if !dep.ConfigPath.IsKnown() || dep.ConfigPath.IsNull() {
 			continue
 		}
-		dependency := localPath(filepath.Dir(path), dep.ConfigPath.AsString())
-		if filepath.Ext(dependency) != ".hcl" {
-			dependency = filepath.Join(dependency, unitFile)
-		}
-		physical, err := canonicalPath(dependency)
+		physical, err := dependencyConfigPath(environment, path, dep.ConfigPath.AsString())
 		if err != nil {
 			return nil, err
 		}
@@ -459,21 +475,25 @@ func orderDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConf
 	}
 	var result []string
 	for _, dependency := range cfg.Dependencies.Paths {
-		if !filepath.IsAbs(dependency) {
-			dependency = filepath.Join(filepath.Dir(path), dependency)
-		}
-		info, err := environment.FS.Stat(dependency)
-		if err != nil {
-			return nil, err
-		}
-		if info.IsDir() {
-			dependency = filepath.Join(dependency, unitFile)
-		}
-		physical, err := canonicalPath(dependency)
+		physical, err := dependencyConfigPath(environment, path, dependency)
 		if err != nil {
 			return nil, fmt.Errorf("native adapter dependency must target a unit: %w", err)
 		}
 		result = append(result, physical)
 	}
 	return result, nil
+}
+
+// dependencyConfigPath uses the active overlay, not a suffix heuristic, for both
+// output-reading and ordering edges so their physical identities cannot diverge.
+func dependencyConfigPath(environment *atmosbridge.Venv, path, dependency string) (string, error) {
+	dependency = localPath(filepath.Dir(path), dependency)
+	info, err := environment.FS.Stat(dependency)
+	if err != nil {
+		return "", err
+	}
+	if info.IsDir() {
+		dependency = config.GetDefaultConfigPath(environment.FS, dependency)
+	}
+	return canonicalPath(dependency)
 }

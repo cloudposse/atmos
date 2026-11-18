@@ -505,5 +505,14 @@ func overrideComponentConfigurations(r *jsonschema.Reflector, root *jsonschema.S
 	reflected.Version = ""
 	reflected.ID = ""
 	root.Definitions["ComponentConfiguration"] = reflected
-	terraform.AdditionalProperties = &jsonschema.Schema{If: &jsonschema.Schema{Type: typeObject}, Then: &jsonschema.Schema{Ref: "#/$defs/ComponentConfiguration"}}
+	// A mapping opts in when either marker is present. Express presence as the
+	// negation of both markers being absent, without requiring fields in partial
+	// configuration fragments.
+	unclaimed := jsonschema.NewProperties()
+	unclaimed.Set("enabled", jsonschema.FalseSchema)
+	unclaimed.Set("provider", jsonschema.FalseSchema)
+	terraform.AdditionalProperties = &jsonschema.Schema{
+		If:   &jsonschema.Schema{Type: typeObject, Not: &jsonschema.Schema{Properties: unclaimed}},
+		Then: &jsonschema.Schema{Ref: "#/$defs/ComponentConfiguration"},
+	}
 }

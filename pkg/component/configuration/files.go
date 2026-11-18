@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -66,7 +67,7 @@ func validateFile(file schema.ComponentConfigurationFile) error {
 	return nil
 }
 
-func writeFile(root *os.Root, file schema.ComponentConfigurationFile) error {
+func writeFile(root *os.Root, file schema.ComponentConfigurationFile) (result error) {
 	if err := validateFile(file); err != nil {
 		return err
 	}
@@ -76,25 +77,49 @@ func writeFile(root *os.Root, file schema.ComponentConfigurationFile) error {
 	}
 	defer directory.Close()
 	mode := writtenMode(file)
-	output, err := openGeneratedFile(directory, filepath.Base(file.Path), file.IfExists, mode)
+	output, temporary, err := openGeneratedFile(directory, filepath.Base(file.Path), file.IfExists, mode, !file.Sensitive && file.Mode == 0)
 	if err != nil {
 		return generatedFileError(file.Path, err)
 	}
 	if output == nil {
 		return nil
 	}
+	if temporary != "" {
+		defer func() {
+			result = errors.Join(result, generatedFileError(file.Path, removeGeneratedTemporary(directory, temporary)))
+		}()
+	}
+	if err := writeGeneratedContent(output, file, mode); err != nil {
+		return generatedFileError(file.Path, err)
+	}
+	if temporary != "" {
+		if err := validateDestination(directory, filepath.Base(file.Path)); err != nil {
+			return generatedFileError(file.Path, err)
+		}
+		return generatedFileError(file.Path, directory.Rename(temporary, filepath.Base(file.Path)))
+	}
+	return nil
+}
+
+func removeGeneratedTemporary(directory *os.Root, name string) error {
+	err := directory.Remove(name)
+	if errors.Is(err, os.ErrNotExist) {
+		// A successful rename already consumed the temporary entry.
+		return nil
+	}
+	return err
+}
+
+func writeGeneratedContent(output *os.File, file schema.ComponentConfigurationFile, mode os.FileMode) error {
 	if file.Sensitive {
 		atmosio.RegisterSecretValue(string(file.Content))
 	}
-	// Restrict permissions before truncating or writing any sensitive content.
+	// Restrict permissions before writing any sensitive content.
 	if err := applyMode(output, file, mode); err != nil {
-		return generatedFileError(file.Path, errors.Join(err, output.Close()))
-	}
-	if err := output.Truncate(0); err != nil {
-		return generatedFileError(file.Path, errors.Join(err, output.Close()))
+		return errors.Join(err, output.Close())
 	}
 	_, writeErr := output.Write(file.Content)
-	return generatedFileError(file.Path, errors.Join(writeErr, output.Close()))
+	return errors.Join(writeErr, output.Close())
 }
 
 func generatedFileError(path string, err error) error {
@@ -174,35 +199,33 @@ func openDestinationChild(root *os.Root, name string, create bool) (*os.Root, er
 	return child, nil
 }
 
-// openGeneratedFile never truncates while opening. The final handle must match
-// the inspected ordinary file, so replacing the leaf with a symlink cannot
-// redirect an overwrite. Exclusive creation provides the same guarantee for new files.
-func openGeneratedFile(root *os.Root, name, policy string, mode os.FileMode) (*os.File, error) {
+// openGeneratedFile replaces existing entries through a fresh inode under the
+// pinned parent. No chmod or write touches an inode shared by other hard links.
+// Exclusive creation retains the no-clobber guarantee for new destinations.
+func openGeneratedFile(root *os.Root, name, policy string, mode os.FileMode, preserveMode bool) (*os.File, string, error) {
 	before, err := root.Lstat(name)
 	if errors.Is(err, os.ErrNotExist) {
-		return root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+		output, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+		return output, "", err
 	}
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if !before.Mode().IsRegular() {
-		return nil, errUtils.ErrPluginInvalidConfig
+		return nil, "", errUtils.ErrPluginInvalidConfig
 	}
 	if policy == "skip" {
-		return nil, nil
+		return nil, "", nil
 	}
 	if policy == "error" {
-		return nil, os.ErrExist
+		return nil, "", os.ErrExist
 	}
-	output, err := root.OpenFile(name, os.O_WRONLY, mode)
-	if err != nil {
-		return nil, err
+	if preserveMode {
+		mode = before.Mode().Perm()
 	}
-	after, err := output.Stat()
-	if err != nil || !os.SameFile(before, after) {
-		return nil, errors.Join(errUtils.ErrPluginInvalidConfig, err, output.Close())
-	}
-	return output, nil
+	temporary := ".atmos-generated-" + rand.Text()
+	output, err := root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	return output, temporary, err
 }
 
 // IsRuntimeArtifact reserves Terraform state, lock files and workdir metadata.
