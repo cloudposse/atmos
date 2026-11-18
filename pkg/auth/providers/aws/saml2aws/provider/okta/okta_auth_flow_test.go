@@ -402,7 +402,7 @@ func TestFollow(t *testing.T) {
 			page: func(target string) string {
 				return fmt.Sprintf(`<form method="post" action="%s"><input name="other" value="x"/></form>`, target)
 			},
-			wantErr: "Unknown document type",
+			wantErr: "unknown document type",
 		},
 		{
 			name:    "page without forms or state token",

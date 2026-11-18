@@ -94,7 +94,7 @@ func (ia *IDPAccount) Validate() error {
 	}
 
 	if ia.Provider == "" {
-		return errors.New("Provider empty in idp account")
+		return errors.New("provider empty in idp account")
 	}
 
 	if ia.Provider != "Browser" {
@@ -104,7 +104,7 @@ func (ia *IDPAccount) Validate() error {
 	}
 
 	if ia.Profile == "" {
-		return errors.New("Profile empty in idp account")
+		return errors.New("profile empty in idp account")
 	}
 
 	if err := prompter.ValidateAndSetPrompter(ia.Prompter); err != nil {

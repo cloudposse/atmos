@@ -16,11 +16,11 @@ import (
 )
 
 const (
-	// authExecChildEnv turns the test binary into the child process `auth exec` runs.
+	// Turns the test binary into the child process `auth exec` runs.
 	authExecChildEnv = "_ATMOS_TEST_AUTH_EXEC_CHILD"
-	// authExecChildReportEnv names the file the child writes its observations to.
+	// Names the file the child writes its observations to.
 	authExecChildReportEnv = "_ATMOS_TEST_AUTH_EXEC_REPORT"
-	// authExecChildExitEnv is the exit code the child terminates with.
+	// Exit code the child terminates with.
 	authExecChildExitEnv = "_ATMOS_TEST_AUTH_EXEC_EXIT"
 )
 

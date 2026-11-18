@@ -135,7 +135,10 @@ func TestClientDoWithRetry_StopsOnCancelledContext(t *testing.T) {
 	require.NoError(t, err)
 
 	start := time.Now()
-	_, err = hc.Do(req)
+	resp, err := hc.Do(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
 	require.Error(t, err)
 	assert.Less(t, time.Since(start), 10*time.Second)
 	assert.Equal(t, int32(1), tr.calls.Load())

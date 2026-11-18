@@ -54,9 +54,9 @@ func TestIDPAccountValidate(t *testing.T) {
 		{name: "browser does not need MFA", mutate: func(a *IDPAccount) { a.Provider = "Browser"; a.MFA = "" }},
 		{name: "missing URL", mutate: func(a *IDPAccount) { a.URL = "" }, wantErr: "URL empty"},
 		{name: "unparseable URL", mutate: func(a *IDPAccount) { a.URL = "://bad" }, wantErr: "URL parse failed"},
-		{name: "missing provider", mutate: func(a *IDPAccount) { a.Provider = "" }, wantErr: "Provider empty"},
+		{name: "missing provider", mutate: func(a *IDPAccount) { a.Provider = "" }, wantErr: "provider empty"},
 		{name: "missing MFA", mutate: func(a *IDPAccount) { a.MFA = "" }, wantErr: "MFA empty"},
-		{name: "missing profile", mutate: func(a *IDPAccount) { a.Profile = "" }, wantErr: "Profile empty"},
+		{name: "missing profile", mutate: func(a *IDPAccount) { a.Profile = "" }, wantErr: "profile empty"},
 		{name: "invalid prompter", mutate: func(a *IDPAccount) { a.Prompter = "nope" }, wantErr: "is not valid"},
 	}
 

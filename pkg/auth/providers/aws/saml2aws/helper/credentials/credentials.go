@@ -40,7 +40,7 @@ type Helper interface {
 // IsErrCredentialsNotFound returns true if the error
 // was caused by not having a set of credentials in a store.
 func IsErrCredentialsNotFound(err error) bool {
-	return err == ErrCredentialsNotFound
+	return errors.Is(err, ErrCredentialsNotFound)
 }
 
 type defaultHelper struct{}

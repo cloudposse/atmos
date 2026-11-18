@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	// legacyAutoDownloadEnv is the saml2aws CLI variable that Atmos used to set. Nothing reads it.
+	// Legacy saml2aws CLI variable that Atmos used to set. Nothing reads it.
 	legacyAutoDownloadEnv = "SAML2AWS_AUTO_BROWSER_DOWNLOAD"
-	// testHostPlatform is the Playwright host platform the browser download tests pin.
+	// Playwright host platform the browser download tests pin.
 	testHostPlatform = "mac14-arm64"
 )
 
@@ -127,7 +127,7 @@ func TestShouldDownloadBrowser_ExecutablePathNeverDownloads(t *testing.T) {
 }
 
 // Regression: SAML2AWS_AUTO_BROWSER_DOWNLOAD is only read by the saml2aws CLI, which Atmos does not
-// use. setupBrowserAutomation used to set and unset it process-wide, clobbering a value the user
+// use. The setupBrowserAutomation function used to set and unset it process-wide, clobbering a value the user
 // exported, although nothing read it.
 func TestSetupBrowserAutomation_LeavesLegacyAutoDownloadEnvAlone(t *testing.T) {
 	for _, download := range []bool{true, false} {

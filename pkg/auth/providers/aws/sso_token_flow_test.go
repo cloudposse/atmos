@@ -113,17 +113,22 @@ var (
 	}
 )
 
-func tokenReply(accessToken, refreshToken string, expiresIn int) fakeOIDCResponse {
+// tokenReplyExpiresIn is the token lifetime, in seconds, that every fake token reply reports.
+const tokenReplyExpiresIn = 3600
+
+func tokenReply(accessToken, refreshToken string) fakeOIDCResponse {
 	body, _ := json.Marshal(map[string]any{
 		"accessToken":  accessToken,
 		"refreshToken": refreshToken,
-		"expiresIn":    expiresIn,
+		"expiresIn":    tokenReplyExpiresIn,
 		"tokenType":    "Bearer",
 	})
 	return fakeOIDCResponse{status: http.StatusOK, body: string(body)}
 }
 
 func TestPollForAccessToken(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		responses     []fakeOIDCResponse
@@ -135,7 +140,7 @@ func TestPollForAccessToken(t *testing.T) {
 	}{
 		{
 			name:        "token issued on first poll",
-			responses:   []fakeOIDCResponse{tokenReply("access-1", "refresh-1", 3600)},
+			responses:   []fakeOIDCResponse{tokenReply("access-1", "refresh-1")},
 			expiresIn:   600,
 			wantCalls:   1,
 			wantAccess:  "access-1",
@@ -143,7 +148,7 @@ func TestPollForAccessToken(t *testing.T) {
 		},
 		{
 			name:        "authorization pending is retried until the user approves",
-			responses:   []fakeOIDCResponse{pendingReply, tokenReply("access-2", "", 3600)},
+			responses:   []fakeOIDCResponse{pendingReply, tokenReply("access-2", "")},
 			expiresIn:   600,
 			wantCalls:   2,
 			wantAccess:  "access-2",
@@ -151,7 +156,7 @@ func TestPollForAccessToken(t *testing.T) {
 		},
 		{
 			name:          "terminal OIDC error stops polling",
-			responses:     []fakeOIDCResponse{accessDeniedReply, tokenReply("never", "", 3600)},
+			responses:     []fakeOIDCResponse{accessDeniedReply, tokenReply("never", "")},
 			expiresIn:     600,
 			wantCalls:     1,
 			wantErrSubstr: "Failed to create AWS SSO access token",
@@ -223,7 +228,7 @@ func newRefreshTestProvider(t *testing.T, endpoint string) *ssoProvider {
 }
 
 func TestSSOProviderAuthenticate_RefreshesExpiredTokenWithoutBrowser(t *testing.T) {
-	srv := newFakeOIDCServer(t, tokenReply("new-access", "rotated-refresh", 3600))
+	srv := newFakeOIDCServer(t, tokenReply("new-access", "rotated-refresh"))
 	p := newRefreshTestProvider(t, srv.URL)
 
 	registrationExpiry := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)

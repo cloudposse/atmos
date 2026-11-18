@@ -42,7 +42,7 @@ func ValidateAndSetPrompter(prmptCfg string) error {
 		return nil
 	}
 
-	return fmt.Errorf("Prompter %s is not valid.", prmptCfg)
+	return fmt.Errorf("prompter %s is not valid", prmptCfg)
 }
 
 // RequestSecurityCode request a security code to be entered by the user

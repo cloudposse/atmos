@@ -95,7 +95,7 @@ func (r *RealPinentryRunner) Run(command string) (output string, err error) {
 	// process and closes the stdout pipe, which may happen before all output was read
 	// (os/exec forbids calling Wait before reads from StdoutPipe complete). Start the
 	// process, read its output, then Wait, sequentially.
-	cmd := exec.Command(r.PinentryBin, "--ttyname", "/dev/tty")
+	cmd := exec.Command(r.PinentryBin, "--ttyname", "/dev/tty") //nolint:gosec // Binary is the configured pinentry program; arguments are fixed.
 	cmd.Stdin = strings.NewReader(command)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
@@ -117,7 +117,7 @@ func (r *RealPinentryRunner) Run(command string) (output string, err error) {
 }
 
 // ParseResults parses the standard output of the pinentry command and determine the
-// user input, or wheter the program yielded any error
+// user input, or whether the program yielded any error
 func ParseResults(pinEntryOutput io.Reader) (output string, err error) {
 	scanner := bufio.NewScanner(pinEntryOutput)
 	for scanner.Scan() {
@@ -127,13 +127,13 @@ func ParseResults(pinEntryOutput io.Reader) (output string, err error) {
 			output = line[2:]
 		}
 		if strings.HasPrefix(line, "ERR ") {
-			return "", fmt.Errorf("Error while running pinentry: %s", line[4:])
+			return "", fmt.Errorf("error while running pinentry: %s", line[4:])
 		}
 	}
 
 	// Atmos fork: upstream ignored scanner.Err(), so a read failure after "D <code>" returned the code as a success.
 	if scanErr := scanner.Err(); scanErr != nil {
-		return "", fmt.Errorf("Error while reading pinentry output: %w", scanErr)
+		return "", fmt.Errorf("error while reading pinentry output: %w", scanErr)
 	}
 
 	return output, err

@@ -252,6 +252,7 @@ func (kc *Client) iTermCaptchaPrompt(captchaPictureURL string) (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "unable to fetch captcha image")
 	}
+	defer imgResp.Body.Close()
 	var buf bytes.Buffer
 	b64Encoder := b64.NewEncoder(b64.StdEncoding, &buf)
 	_, _ = io.Copy(b64Encoder, imgResp.Body)
@@ -312,6 +313,7 @@ func (kc *Client) loadFirstPage(loginDetails *creds.LoginDetails) (string, url.V
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to make request to login form")
 	}
+	defer res.Body.Close()
 
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
@@ -346,6 +348,7 @@ func (kc *Client) loadLoginPage(submitURL string, referer string, authForm url.V
 	if err != nil {
 		return "", nil, errors.Wrap(err, "failed to make request to login form")
 	}
+	defer res.Body.Close()
 
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
@@ -382,6 +385,7 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to make request to login form")
 	}
+	defer res.Body.Close()
 
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
@@ -583,6 +587,7 @@ func (kc *Client) loadAlternateChallengePage(submitURL string, referer string, a
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to make request to login form")
 	}
+	defer res.Body.Close()
 
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
@@ -674,6 +679,7 @@ func (kc *Client) loadResponsePage(submitURL string, referer string, responseFor
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to make request to login form")
 	}
+	defer res.Body.Close()
 
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {

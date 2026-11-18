@@ -166,13 +166,19 @@ func TestFormSubmit(t *testing.T) {
 	assert.Equal(t, url.Values{"token": {"123"}}, gotForm)
 
 	// Invalid method fails while building the request.
-	_, err = (&Form{URL: ts.URL, Method: "BAD METHOD", Values: &url.Values{}}).Submit(client)
+	badRes, err := (&Form{URL: ts.URL, Method: "BAD METHOD", Values: &url.Values{}}).Submit(client)
+	if badRes != nil {
+		_ = badRes.Body.Close()
+	}
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error building request")
 
 	// A server that is no longer listening fails while submitting.
 	ts.Close()
-	_, err = form.Submit(client)
+	closedRes, err := form.Submit(client)
+	if closedRes != nil {
+		_ = closedRes.Body.Close()
+	}
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error submitting form")
 }
