@@ -60,6 +60,71 @@ func TestRunCIHooksForNodePreservesDetailedPlanStatus(t *testing.T) {
 	}
 }
 
+func TestRunHooksOnErrorPreservesDetailedPlanStatus(t *testing.T) {
+	command := newErrorPathCITestCommand(t)
+	withGitHubActionsDetection(t)
+	initOutputTestIO(t)
+	for _, test := range []struct {
+		name       string
+		event      h.HookEvent
+		err        error
+		hasChanges bool
+		hasErrors  bool
+		ciExitCode int
+	}{
+		{"changed plan", h.AfterTerraformPlan, fmt.Errorf("plan: %w", errUtils.ExitCodeError{Code: 2}), true, false, 2},
+		{"failed plan", h.AfterTerraformPlan, errUtils.ExitCodeError{Code: 1}, false, true, 1},
+		{"init failure", h.AfterTerraformPlan, errUtils.AsPrerequisiteError(fmt.Errorf("init failed: %w", errUtils.ExitCodeError{Code: 2})), false, true, 1},
+		{"before hook failure", h.AfterTerraformPlan, fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2})), false, true, 1},
+		{"policy failure", h.AfterTerraformPlan, errors.Join(errUtils.ExitCodeError{Code: 2}, errUtils.ErrPolicyDenied), false, true, 1},
+		{"apply exit two", h.AfterTerraformApply, errUtils.ExitCodeError{Code: 2}, false, true, 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			outputPath := filepath.Join(t.TempDir(), "output")
+			summaryPath := filepath.Join(t.TempDir(), "summary")
+			t.Setenv("GITHUB_OUTPUT", outputPath)
+			t.Setenv("GITHUB_STEP_SUMMARY", summaryPath)
+			runHooksOnErrorWithOutput(test.event, command, []string{"probe"}, test.err, "")
+			output, err := os.ReadFile(outputPath)
+			require.NoError(t, err)
+			require.Contains(t, string(output), fmt.Sprintf("exit_code=%d\n", test.ciExitCode))
+			require.Contains(t, string(output), fmt.Sprintf("has_changes=%t\n", test.hasChanges))
+			require.Contains(t, string(output), fmt.Sprintf("has_errors=%t\n", test.hasErrors))
+			if test.hasErrors {
+				summary, err := os.ReadFile(summaryPath)
+				require.NoError(t, err)
+				require.Contains(t, string(summary), test.err.Error(), "CI retains the original failure cause")
+			}
+		})
+	}
+}
+
+func newErrorPathCITestCommand(t *testing.T) *cobra.Command {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "components", "terraform", "probe"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(`base_path: .
+components:
+  terraform:
+    base_path: components/terraform
+stacks:
+  base_path: stacks
+  included_paths: ['*.yaml']
+  name_template: '{{ .vars.stage }}'
+ci:
+  enabled: true
+  checks: {enabled: false}
+`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte("vars: {stage: dev}\ncomponents: {terraform: {probe: {}}}\n"), 0o600))
+	t.Chdir(root)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	command := newHookTestCmd()
+	require.NoError(t, command.Flags().Set("stack", "dev"))
+	require.NoError(t, command.Flags().Set("ci", "true"))
+	return command
+}
+
 func TestTerraformHookOutcomePreservesDetailedPlanStatus(t *testing.T) {
 	for _, test := range []struct {
 		name   string

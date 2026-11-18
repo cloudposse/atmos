@@ -39,11 +39,11 @@ func processExecTag(strFunc, nodeValue string) (any, error) {
 }
 
 // processIncludeTag processes the !include tag.
-func processIncludeTag(nodeTag, nodeValue, strFunc string) (any, error) {
+func processIncludeTag(nodeTag, nodeValue string) (any, error) {
 	includeValue, err := u.UnmarshalYAML[map[any]any](fmt.Sprintf("%s: %s %s", "include_data", nodeTag, nodeValue))
 	if err != nil {
-		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
-		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, nodeValue, err)
+		log.Debug(failedToProcess, functionKey, nodeTag+" "+redactIncludeValue(nodeValue), "error", err)
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, redactIncludeValue(nodeValue), err)
 	}
 	if includeValue != nil {
 		if data, ok := includeValue[includeDataKey]; ok {
@@ -149,7 +149,7 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 		// !literal keeps the value exactly as written.
 		return node.Value, nil
 	case u.AtmosYamlFuncInclude, u.AtmosYamlFuncIncludeRaw:
-		return processIncludeTag(node.Tag, node.Value, strFunc)
+		return processIncludeTag(node.Tag, node.Value)
 	default:
 		return processGitScalarNodeValue(node, strFunc)
 	}
@@ -323,11 +323,11 @@ func handleExec(node *yaml.Node, v *viper.Viper, currentPath string) error {
 
 // handleInclude Process the !include tag and set the value in Viper , returns an error if the processing fails, warns if the value is empty.
 func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
-	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
+	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, redactIncludeValue(node.Value))
 	includeValue, err := u.UnmarshalYAML[map[any]any](fmt.Sprintf("%s: %s %s", includeDataKey, node.Tag, node.Value))
 	if err != nil {
 		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
-		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, redactIncludeValue(node.Value), err)
 	}
 	if includeValue == nil {
 		log.Debug(emptyValueWarning, functionKey, strFunc)
@@ -344,7 +344,7 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 
 func storeIncludeValue(node *yaml.Node, v *viper.Viper, currentPath string, data any) error {
 	if err := node.Encode(data); err != nil {
-		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, redactIncludeValue(node.Value), err)
 	}
 	encodeDevcontainerKeys(node, currentPath)
 	if err := node.Decode(&data); err != nil {
@@ -352,7 +352,7 @@ func storeIncludeValue(node *yaml.Node, v *viper.Viper, currentPath string, data
 	}
 	v.Set(currentPath, data)
 	if err := node.Encode(data); err != nil {
-		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, redactIncludeValue(node.Value), err)
 	}
 	if err := preserveEmptyGitPushRetry(node, v, currentPath); err != nil {
 		return err

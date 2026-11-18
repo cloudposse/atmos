@@ -24,6 +24,9 @@ const (
 )
 
 func TestMain(m *testing.M) {
+	if delay, err := time.ParseDuration(os.Getenv("_ATMOS_ASCIICAST_STARTUP_DELAY")); err == nil {
+		time.Sleep(delay)
+	}
 	if os.Getenv(asciicastHelperEnv) == "1" {
 		runAsciicastToolHelper()
 		os.Exit(0)

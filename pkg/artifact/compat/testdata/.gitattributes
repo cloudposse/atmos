@@ -1,0 +1,2 @@
+# Frozen compatibility fixtures are byte-exact; never normalize line endings or treat them as text.
+* -text
