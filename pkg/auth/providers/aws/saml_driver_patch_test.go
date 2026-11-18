@@ -103,6 +103,7 @@ func TestPatchPlaywrightDriver_UnexpectedBundleFails(t *testing.T) {
 
 	err := patchPlaywrightDriver()
 	require.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+	require.ErrorIs(t, err, errUtils.ErrPlaywrightDriverBundle)
 
 	data, readErr := os.ReadFile(bundlePath)
 	require.NoError(t, readErr)

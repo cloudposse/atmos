@@ -347,6 +347,8 @@ func TestGenerateFullURLIfRelative(t *testing.T) {
 		{name: "relative path", destination: "/signin/x", current: "https://accounts.google.com/a/b?c=d", want: "https://accounts.google.com/signin/x"},
 		{name: "absolute URL", destination: "https://other.example.com/x", current: "https://accounts.google.com/", want: "https://other.example.com/x"},
 		{name: "empty destination", destination: "", current: "https://accounts.google.com/", want: ""},
+		// An unparseable destination is passed through unchanged, as upstream did, even with a valid page URL.
+		{name: "unparseable destination", destination: "%zz/next", current: "https://accounts.google.com/", want: "%zz/next"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

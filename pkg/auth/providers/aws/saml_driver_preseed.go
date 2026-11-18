@@ -54,6 +54,9 @@ const (
 	windowsOS = "windows"
 )
 
+// playwrightPackageDir is the npm package directory inside the driver directory (it holds cli.js).
+const playwrightPackageDir = "package"
+
 // Download hosts are variables so tests can point them at local servers.
 var (
 	npmRegistryBase = "https://registry.npmjs.org"
@@ -63,7 +66,7 @@ var (
 )
 
 // externalPlaywrightCLI reports whether PLAYWRIGHT_CLI_PATH selects an externally managed driver CLI.
-// playwright-go then neither downloads nor patches the driver, so Atmos must not either.
+// In that case playwright-go neither downloads nor patches the driver, so Atmos must not either.
 func externalPlaywrightCLI() bool {
 	return os.Getenv("PLAYWRIGHT_CLI_PATH") != "" //nolint:forbidigo // Third-party (playwright-go) env var, read the same way the library reads it.
 }
@@ -89,7 +92,7 @@ func ensurePlaywrightDriver() error {
 
 	seededCore := false
 	if !externalPlaywrightCLI() {
-		if _, err := os.Stat(filepath.Join(driverDir, "package", "cli.js")); err != nil {
+		if _, err := os.Stat(filepath.Join(driverDir, playwrightPackageDir, "cli.js")); err != nil {
 			seededCore = true
 			if err := seedPlaywrightCore(driverDir, driver.Version); err != nil {
 				removeSeededPackage(driverDir)
@@ -112,7 +115,7 @@ func ensurePlaywrightDriver() error {
 // removeSeededPackage removes the driver package written by a failed seeding attempt. It runs only
 // when package/cli.js did not exist before the attempt, so nothing usable is removed.
 func removeSeededPackage(driverDir string) {
-	if err := os.RemoveAll(filepath.Join(driverDir, "package")); err != nil {
+	if err := os.RemoveAll(filepath.Join(driverDir, playwrightPackageDir)); err != nil {
 		log.Debug("Could not remove the partially seeded Playwright driver", "dir", driverDir, "error", err)
 	}
 }
@@ -152,10 +155,10 @@ func patchPlaywrightDriver() error {
 	if _, err := playwright.NewDriver(opts); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrPlaywrightDriverSeed, err)
 	}
-	if _, err := os.Stat(filepath.Join(opts.DriverDirectory, "package", "cli.js")); err != nil {
+	if _, err := os.Stat(filepath.Join(opts.DriverDirectory, playwrightPackageDir, "cli.js")); err != nil {
 		return nil
 	}
-	if err := patchDriverBundle(filepath.Join(opts.DriverDirectory, "package", "lib", "coreBundle.js")); err != nil {
+	if err := patchDriverBundle(filepath.Join(opts.DriverDirectory, playwrightPackageDir, "lib", "coreBundle.js")); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrPlaywrightDriverSeed, err)
 	}
 	return nil
@@ -175,20 +178,9 @@ func patchDriverBundle(bundlePath string) error {
 		return fmt.Errorf("could not stat driver bundle: %w", err)
 	}
 
-	changed := false
-	for _, replacement := range playwrightBundleReplacements {
-		original := []byte(replacement.original)
-		patched := []byte(replacement.patched)
-		if !bytes.Contains(data, original) && !bytes.Contains(data, patched) {
-			return fmt.Errorf("could not patch driver bundle: expected pageError location pattern %q or %q", replacement.original, replacement.patched)
-		}
-		if bytes.Contains(data, original) {
-			data = bytes.ReplaceAll(data, original, patched)
-			changed = true
-		}
-	}
-	if !changed {
-		return nil
+	data, changed, err := applyBundleReplacements(data)
+	if err != nil || !changed {
+		return err
 	}
 
 	staged, err := os.CreateTemp(filepath.Dir(bundlePath), ".coreBundle-*.tmp")
@@ -205,6 +197,25 @@ func patchDriverBundle(bundlePath string) error {
 		return fmt.Errorf("could not publish the patched driver bundle: %w", err)
 	}
 	return nil
+}
+
+// applyBundleReplacements applies playwrightBundleReplacements to data. It reports whether anything
+// changed, and fails when a pattern is present in neither its original nor its patched form.
+func applyBundleReplacements(data []byte) ([]byte, bool, error) {
+	changed := false
+	for _, replacement := range playwrightBundleReplacements {
+		original := []byte(replacement.original)
+		patched := []byte(replacement.patched)
+		if !bytes.Contains(data, original) && !bytes.Contains(data, patched) {
+			return nil, false, fmt.Errorf("%w: expected pageError location pattern %q or %q",
+				errUtils.ErrPlaywrightDriverBundle, replacement.original, replacement.patched)
+		}
+		if bytes.Contains(data, original) {
+			data = bytes.ReplaceAll(data, original, patched)
+			changed = true
+		}
+	}
+	return data, changed, nil
 }
 
 // writeStagedBundle writes data to the staged file, applies mode and closes it.
