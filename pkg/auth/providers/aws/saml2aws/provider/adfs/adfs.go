@@ -119,9 +119,11 @@ func (ac *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 
 	if authSubmitURL == "" {
 		return samlAssertion, fmt.Errorf("unable to locate IDP authentication form submit URL")
-	} else if strings.HasPrefix(authSubmitURL, "/") {
+	} else {
 		//
-		// The server returned a relative URL. Make it absolute.
+		// Atmos fork: resolve every action against the login page URL. Upstream resolved only actions that start
+		// with "/", so "?step=password" or "step=password" reached the HTTP client without a scheme.
+		// ResolveReference leaves absolute URLs unchanged.
 		//
 		parsedUrl, err := url.Parse(adfsURL)
 		if err != nil {
@@ -153,7 +155,10 @@ func (ac *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 			mfaPromptAttempts++
 			otpForm := url.Values{}
 			if mfaToken == "" {
-				mfaToken = prompter.RequestSecurityCode("000000")
+				mfaToken, err = prompter.RequestSecurityCode("000000")
+				if err != nil {
+					return samlAssertion, errors.Wrap(err, "error reading the MFA code")
+				}
 			}
 
 			doc.Find("input").Each(func(i int, s *goquery.Selection) {

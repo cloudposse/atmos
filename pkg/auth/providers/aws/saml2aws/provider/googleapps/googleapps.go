@@ -34,6 +34,12 @@ var errCaptchaImageNotFound = errors.New("captcha image not found but requested"
 // errCaptchaAttemptsExceeded is returned when Google keeps asking for a captcha.
 var errCaptchaAttemptsExceeded = errors.New("captcha still requested after the maximum number of attempts")
 
+// errMFATransitionsExceeded is returned when Google keeps sending the user back to a challenge selection page.
+var errMFATransitionsExceeded = errors.New("2-step verification did not complete after the maximum number of challenge transitions")
+
+// maxMFATransitions bounds how many challenge selection pages one authentication attempt follows.
+const maxMFATransitions = 10
+
 // maxCaptchaAttempts bounds how many captcha answers are submitted before giving up.
 const maxCaptchaAttempts = 5
 
@@ -68,6 +74,10 @@ type Client struct {
 	provider.ValidateBase
 
 	client *provider.HTTPClient
+
+	// mfaTransitions counts the challenge selection pages followed during the current authentication attempt.
+	// Atmos fork: upstream followed them recursively without a limit.
+	mfaTransitions int
 }
 
 // New create a new Google Apps Client
@@ -86,6 +96,8 @@ func New(idpAccount *cfg.IDPAccount) (*Client, error) {
 
 // Authenticate logs into Google Apps and returns a SAML response
 func (kc *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error) {
+	kc.mfaTransitions = 0
+
 	// Get the first page
 	authURL, authForm, err := kc.loadFirstPage(loginDetails)
 	if err != nil {
@@ -98,25 +110,25 @@ func (kc *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 	authForm.Set("Email", loginDetails.Username)
 
 	// Post email address w/o password, then Get the password-input page
-	passwordURL, passwordForm, err := kc.loadLoginPage(authURL+"?hl=en&loc=US", loginDetails.URL+"&hl=en&loc=US", authForm)
+	passwordURL, passwordForm, err := kc.loadLoginPage(withLocale(authURL), withLocale(loginDetails.URL), authForm)
 	if err != nil {
 		// if failed, try with "identifier"
 		authForm.Set("Email", "") // Clear previous key
 		authForm.Set("identifier", loginDetails.Username)
-		passwordURL, passwordForm, err = kc.loadLoginPage(authURL+"?hl=en&loc=US", loginDetails.URL+"&hl=en&loc=US", authForm)
+		passwordURL, passwordForm, err = kc.loadLoginPage(withLocale(authURL), withLocale(loginDetails.URL), authForm)
 		if err != nil {
 			return "", errors.Wrap(err, "error loading login page")
 		}
 	}
 
-	logger.Debugf("loginURL: %s", passwordURL)
+	logger.Debugf("loginURL: %s", provider.RedactRawURL(passwordURL))
 
 	passwordForm.Set("Passwd", loginDetails.Password)
 	passwordForm.Set("TrustDevice", "on")
 
 	referingURL := passwordURL
 
-	responseDoc, err := kc.loadChallengePage(passwordURL+"?hl=en&loc=US", referingURL, passwordForm, loginDetails)
+	responseDoc, err := kc.loadChallengePage(withLocale(passwordURL), referingURL, passwordForm, loginDetails)
 	if err != nil {
 		return "", errors.Wrap(err, "error loading challenge page")
 	}
@@ -162,7 +174,7 @@ func (kc *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 			return "", errors.Wrap(err, "error extracting captcha")
 		}
 
-		logger.Debugf("captchaURL: %s", captchaURL)
+		logger.Debugf("captchaURL: %s", provider.RedactRawURL(captchaURL))
 
 		_, captchaV1 := captchaForm["Passwd"]
 		if captchaV1 {
@@ -170,7 +182,7 @@ func (kc *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 		}
 		captchaForm.Set(captchaInputId, captcha)
 
-		responseDoc, err = kc.loadChallengePage(captchaURL+"?hl=en&loc=US", captchaURL, captchaForm, loginDetails)
+		responseDoc, err = kc.loadChallengePage(withLocale(captchaURL), captchaURL, captchaForm, loginDetails)
 		if err != nil {
 			return "", errors.Wrap(err, "error loading challenge page")
 		}
@@ -191,7 +203,7 @@ func (kc *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 
 		loginForm.Set("Passwd", loginDetails.Password)
 
-		responseDoc, err = kc.loadChallengePage(loginURL+"?hl=en&loc=US", loginURL, loginForm, loginDetails)
+		responseDoc, err = kc.loadChallengePage(withLocale(loginURL), loginURL, loginForm, loginDetails)
 		if err != nil {
 			return "", errors.Wrap(err, "error loading challenge page")
 		}
@@ -230,7 +242,7 @@ func (kc *Client) tryDisplayCaptcha(captchaPictureURL string) (string, error) {
 		// Use iTerm to show the image if available
 		return kc.iTermCaptchaPrompt(captchaPictureURL)
 	} else {
-		return simpleCaptchaPrompt(captchaPictureURL), nil
+		return simpleCaptchaPrompt(captchaPictureURL)
 	}
 }
 
@@ -254,16 +266,42 @@ func (kc *Client) iTermCaptchaPrompt(captchaPictureURL string) (string, error) {
 	} else {
 		fmt.Fprintf(os.Stderr, "\033]1337;File=width=40;preserveAspectRatio=1;inline=1;:%s\a\n", buf.String())
 	}
-	return prompter.String("Captcha", ""), nil
+	return prompter.String("Captcha", "")
 }
 
-func simpleCaptchaPrompt(captchaPictureURL string) string {
+func simpleCaptchaPrompt(captchaPictureURL string) (string, error) {
 	log.Println("Open this link in a browser:\n", captchaPictureURL)
 	return prompter.String("Captcha", "")
 }
 
+// withLocale returns rawURL with hl=en and loc=US set in its query.
+//
+// Atmos fork: upstream concatenated "?hl=en&loc=US" (or "&hl=en&loc=US") onto the URL, which appended the
+// parameters to the value of the last existing query parameter when the URL already had a query string.
+// The other query parameters are kept byte for byte, and any existing hl or loc parameter is replaced.
+func withLocale(rawURL string) string {
+	base, fragment, hasFragment := strings.Cut(rawURL, "#")
+	base, query, _ := strings.Cut(base, "?")
+
+	var kept []string
+	for _, pair := range strings.Split(query, "&") {
+		name, _, _ := strings.Cut(pair, "=")
+		if pair == "" || name == "hl" || name == "loc" {
+			continue
+		}
+		kept = append(kept, pair)
+	}
+	kept = append(kept, "hl=en", "loc=US")
+
+	result := base + "?" + strings.Join(kept, "&")
+	if hasFragment {
+		result += "#" + fragment
+	}
+	return result
+}
+
 func (kc *Client) loadFirstPage(loginDetails *creds.LoginDetails) (string, url.Values, error) {
-	firstPageURL := loginDetails.URL + "&hl=en&loc=US"
+	firstPageURL := withLocale(loginDetails.URL)
 
 	req, err := http.NewRequest("GET", firstPageURL, nil)
 	if err != nil {
@@ -377,14 +415,17 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 			return nil, errors.Wrap(err, "unable to extract challenge form")
 		}
 
-		logger.Debugf("secondActionURL: %s", secondActionURL)
+		logger.Debugf("secondActionURL: %s", provider.RedactRawURL(secondActionURL))
 
 		switch {
 		case strings.Contains(secondActionURL, "challenge/totp"): // handle TOTP challenge
 
 			token := loginDetails.MFAToken
 			if token == "" {
-				token = prompter.RequestSecurityCode("000000")
+				var err error
+				if token, err = prompter.RequestSecurityCode("000000"); err != nil {
+					return nil, errors.Wrap(err, "failed to read the TOTP code")
+				}
 			}
 
 			responseForm.Set("Pin", token)
@@ -410,10 +451,13 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 					return nil, errors.Wrap(err, "unable to extract challenge form")
 				}
 
-				logger.Debugf("After sms request secondActionURL: %s", secondActionURL)
+				logger.Debugf("After sms request secondActionURL: %s", provider.RedactRawURL(secondActionURL))
 			}
 
-			token := prompter.StringRequired("Enter SMS token: G-")
+			token, err := prompter.StringRequired("Enter SMS token: G-")
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to read the SMS token")
+			}
 
 			responseForm.Set("Pin", token)
 			responseForm.Set("TrustDevice", "on") // Don't ask again on this computer
@@ -424,7 +468,10 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 		// "challenge/sk" first, which also matches skotp URLs and made this case unreachable.
 		case strings.Contains(secondActionURL, "challenge/skotp"): // handle one-time HOTP challenge
 			log.Println("Get a one-time code by visiting https://g.co/sc on another device where you can use your security key")
-			token := prompter.RequestSecurityCode("000 000")
+			token, err := prompter.RequestSecurityCode("000 000")
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to read the one-time code")
+			}
 
 			responseForm.Set("Pin", token)
 			responseForm.Set("TrustDevice", "on") // Don't ask again on this computer
@@ -469,10 +516,12 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 
 			log.Println("Open the Google App, and tap 'Yes' on the prompt to sign in")
 
-			_, err := kc.postJSON(fmt.Sprintf("https://content.googleapis.com/cryptauth/v1/authzen/awaittx?alt=json&key=%s", dataAttrs["data-api-key"]), waitValues, submitURL)
+			waitRes, err := kc.postJSON(fmt.Sprintf("https://content.googleapis.com/cryptauth/v1/authzen/awaittx?alt=json&key=%s", dataAttrs["data-api-key"]), waitValues, submitURL)
 			if err != nil {
 				return nil, errors.Wrap(err, "unable to extract post wait tx form")
 			}
+			// Atmos fork: the response body was never closed, which prevents connection reuse.
+			_ = waitRes.Body.Close()
 
 			// responseForm.Set("Pin", token)
 			responseForm.Set("TrustDevice", "on") // Don't ask again on this computer
@@ -549,6 +598,13 @@ func (kc *Client) loadAlternateChallengePage(submitURL string, referer string, a
 }
 
 func (kc *Client) loadChallengeEntryPage(doc *goquery.Document, submitURL string, loginDetails *creds.LoginDetails) (*goquery.Document, error) {
+	// Atmos fork: every challenge cycle (including the skip and alternate-factor paths) passes through here,
+	// so one budget bounds the recursion that upstream left unlimited.
+	kc.mfaTransitions++
+	if kc.mfaTransitions > maxMFATransitions {
+		return nil, errMFATransitionsExceeded
+	}
+
 	var challengeEntry string
 
 	doc.Find("form[data-challengeentry]").EachWithBreak(func(i int, s *goquery.Selection) bool {
@@ -622,6 +678,14 @@ func (kc *Client) loadResponsePage(submitURL string, referer string, responseFor
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "error parsing login page html document")
+	}
+
+	// Atmos fork: NewDocumentFromReader leaves doc.Url nil, and later steps (for example a captcha
+	// in the MFA response) dereference it. Use the final request URL, falling back to the submit URL.
+	if res.Request != nil && res.Request.URL != nil {
+		doc.Url = res.Request.URL
+	} else if doc.Url, err = url.Parse(submitURL); err != nil {
+		return nil, errors.Wrap(err, "failed to define URL for html doc")
 	}
 
 	return doc, nil
@@ -730,12 +794,18 @@ func extractInputsByFormQuery(doc *goquery.Document, formQuery string) (url.Valu
 	return formData, actionURL, nil
 }
 
+// normalizeSpace trims s and collapses every run of whitespace into a single space.
+func normalizeSpace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
 func extractNodeText(doc *goquery.Document, tag, txt string) string {
 	var res string
 
 	doc.Find(tag).Each(func(i int, s *goquery.Selection) {
-		if s.Text() == txt {
-			res = s.Text()
+		// Atmos fork: compare with whitespace normalized, because headings are often wrapped in newlines and indentation.
+		if normalizeSpace(s.Text()) == normalizeSpace(txt) {
+			res = normalizeSpace(s.Text())
 		}
 	})
 
@@ -765,6 +835,10 @@ func extractKeyHandles(doc *goquery.Document, challengeTxt string) (string, []st
 		if ok {
 			firstIdx := strings.Index(val, "{")
 			lastIdx := strings.LastIndex(val, "}")
+			// Atmos fork: upstream sliced with unchecked indexes and panicked on values without a JSON object, such as "[]".
+			if firstIdx < 0 || lastIdx < firstIdx {
+				return
+			}
 			obj := []byte(val[firstIdx : lastIdx+1])
 			_ = json.Unmarshal(obj, &result) // ignore the error and continue
 			// Key handles

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -82,6 +83,11 @@ func TestClientDoResponseCheck(t *testing.T) {
 	res, err := hc.Do(req)
 	require.Error(t, err)
 	require.Equal(t, 400, res.StatusCode)
+
+	// Regression: the rejected response's body is closed, since callers discard the response on error.
+	_, readErr := res.Body.Read(make([]byte, 1))
+	require.Error(t, readErr)
+	assert.NotErrorIs(t, readErr, io.EOF)
 }
 
 var errTransport = errors.New("transport failure")
@@ -139,6 +145,9 @@ func TestBuildHttpClientOpts(t *testing.T) {
 		{name: "explicit values", attempts: "3", delay: "5", wantRetries: true, wantCount: 3, wantDelay: 5 * time.Second},
 		{name: "invalid values fall back", attempts: "many", delay: "soon", wantRetries: false, wantCount: DefaultAttemptsCount, wantDelay: DefaultRetryDelay},
 		{name: "negative values fall back", attempts: "-1", delay: "-2", wantRetries: false, wantCount: DefaultAttemptsCount, wantDelay: DefaultRetryDelay},
+		// Regression (code-scanning: incorrect integer conversion): a huge delay overflowed time.Duration.
+		{name: "delay is capped", attempts: "2", delay: "4000000000", wantRetries: true, wantCount: 2, wantDelay: MaxRetryDelay},
+		{name: "delay beyond 32 bits falls back", attempts: "2", delay: "18446744073709551615", wantRetries: true, wantCount: 2, wantDelay: DefaultRetryDelay},
 	}
 
 	for _, tt := range tests {
@@ -305,47 +314,81 @@ func TestResponseValidators(t *testing.T) {
 	}
 }
 
-func TestClientDoDumpsContent(t *testing.T) {
+// Regression: upstream's DUMP_CONTENT switch printed full requests and responses (password form
+// bodies, session cookies, SAML assertions), and the debug log printed full URLs, whose query
+// strings can carry session tokens. Neither may reach the logs.
+func TestClientDoDoesNotLogSecrets(t *testing.T) {
+	const (
+		secretBody  = "Passwd=hunter2"
+		secretQuery = "sessionToken=secret-session-token"
+		secretReply = "SAMLResponse=secret-assertion"
+	)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("response-body"))
+		_, _ = w.Write([]byte(secretReply))
 	}))
 	defer ts.Close()
 
-	tests := []struct {
-		name     string
-		dump     string
-		wantDump bool
-	}{
-		{name: "enabled", dump: "true", wantDump: true},
-		{name: "disabled", dump: "false", wantDump: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("DUMP_CONTENT", tt.dump)
-			logs := captureLog(t)
+	for _, dumpContent := range []string{"true", ""} {
+		t.Run("DUMP_CONTENT="+dumpContent, func(t *testing.T) {
+			t.Setenv("DUMP_CONTENT", dumpContent)
+			stdLog := captureLog(t)
+			logrusLog := captureLogrus(t)
 
 			hc, err := NewHTTPClient(http.DefaultTransport, &HTTPClientOptions{})
 			require.NoError(t, err)
-			req, err := http.NewRequest(http.MethodPost, ts.URL+"/submit", strings.NewReader("request-body"))
+			req, err := http.NewRequest(http.MethodPost, ts.URL+"/submit?"+secretQuery, strings.NewReader(secretBody))
 			require.NoError(t, err)
 
 			res, err := hc.Do(req)
 			require.NoError(t, err)
 			defer res.Body.Close()
 
-			// The response body must remain readable after it has been dumped.
+			// The response body is untouched for the caller.
 			body, err := io.ReadAll(res.Body)
 			require.NoError(t, err)
-			assert.Equal(t, "response-body", string(body))
+			assert.Equal(t, secretReply, string(body))
 
-			if tt.wantDump {
-				assert.Contains(t, logs.String(), "POST /submit HTTP/1.1")
-				assert.Contains(t, logs.String(), "request-body")
-				assert.Contains(t, logs.String(), "response-body")
-			} else {
-				assert.Empty(t, logs.String())
+			logs := stdLog.String() + logrusLog.String()
+			assert.Contains(t, logs, "/submit", "the request is still logged at debug level")
+			for _, secret := range []string{"hunter2", "secret-session-token", "secret-assertion"} {
+				assert.NotContains(t, logs, secret)
 			}
 		})
 	}
+}
+
+// captureLogrus captures the global logrus output at debug level for the test.
+func captureLogrus(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	origOut, origLevel := logrus.StandardLogger().Out, logrus.GetLevel()
+	logrus.SetOutput(&buf)
+	logrus.SetLevel(logrus.DebugLevel)
+	t.Cleanup(func() {
+		logrus.SetOutput(origOut)
+		logrus.SetLevel(origLevel)
+	})
+	return &buf
+}
+
+func TestRedactURL(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want string
+	}{
+		{raw: "https://idp.example.com/login", want: "https://idp.example.com/login"},
+		{raw: "https://idp.example.com/login/sessionCookieRedirect?token=secret&redirectUrl=x", want: "https://idp.example.com/login/sessionCookieRedirect"},
+		{raw: "https://user:pass@idp.example.com/path#otp=123456", want: "https://idp.example.com/path"},
+		{raw: "/relative/path?code=1", want: "/relative/path"},
+		{raw: "", want: ""},
+		{raw: "http://[::1:bad", want: "[unparseable URL]"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.raw, func(t *testing.T) {
+			assert.Equal(t, tt.want, RedactRawURL(tt.raw))
+		})
+	}
+
+	assert.Empty(t, RedactURL(nil))
 }

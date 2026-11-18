@@ -218,6 +218,26 @@ func TestAuthenticateSuccessRelativeAction(t *testing.T) {
 	assert.False(t, hasHidden)
 }
 
+// Regression: relative actions that do not start with "/" are resolved against the login page URL.
+func TestAuthenticateSuccessRelativeActionWithoutLeadingSlash(t *testing.T) {
+	for action, wantPath := range map[string]string{
+		"?step=password": "/adfs/ls/IdpInitiatedSignOn.aspx?step=password",
+		"step=password":  "/adfs/ls/step=password",
+	} {
+		fake := &fakeADFS{
+			loginHTML: loginPage(action),
+			responses: []string{samlResponsePage},
+		}
+		ts := newTestServer(t, fake)
+
+		assertion, err := newTestClient(t).Authenticate(loginDetails(ts.URL, ""))
+		require.NoError(t, err, action)
+		assert.Equal(t, testSAMLAssertion, assertion)
+		require.Len(t, fake.paths, 1)
+		assert.Equal(t, wantPath, fake.paths[0], action)
+	}
+}
+
 func TestAuthenticateSuccessAbsoluteAction(t *testing.T) {
 	fake := &fakeADFS{responses: []string{samlResponsePage}}
 	ts := newTestServer(t, fake)

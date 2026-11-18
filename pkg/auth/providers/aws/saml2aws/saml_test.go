@@ -3,6 +3,7 @@ package saml2aws
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -358,4 +359,53 @@ func TestExtractFunctionsRejectMalformedXML(t *testing.T) {
 	roles, err := ExtractAwsRoles(malformed)
 	assert.Error(t, err)
 	assert.Empty(t, roles)
+}
+
+// Regression: children are matched by namespace URI, so a prefix on the children that differs from
+// the Assertion's prefix (or a default namespace) is accepted.
+func TestExtractMixedPrefixAndDefaultNamespaces(t *testing.T) {
+	const roleAttr = `<%[1]sAttribute Name="https://aws.amazon.com/SAML/Attributes/Role"><%[1]sAttributeValue>arn:aws:iam::1:saml-provider/idp,arn:aws:iam::1:role/r</%[1]sAttributeValue></%[1]sAttribute>` +
+		`<%[1]sAttribute Name="https://aws.amazon.com/SAML/Attributes/SessionDuration"><%[1]sAttributeValue>900</%[1]sAttributeValue></%[1]sAttribute>`
+	ns := `urn:oasis:names:tc:SAML:2.0:assertion`
+
+	tests := []struct {
+		name string
+		xml  string
+	}{
+		{
+			name: "same prefix",
+			xml:  `<saml:Assertion xmlns:saml="` + ns + `"><saml:AttributeStatement>` + sprintfPrefix(roleAttr, "saml:") + `</saml:AttributeStatement></saml:Assertion>`,
+		},
+		{
+			name: "different prefix bound to the same namespace",
+			xml:  `<saml:Assertion xmlns:saml="` + ns + `" xmlns:s="` + ns + `"><s:AttributeStatement>` + sprintfPrefix(roleAttr, "s:") + `</s:AttributeStatement></saml:Assertion>`,
+		},
+		{
+			name: "default namespace children",
+			xml:  `<saml:Assertion xmlns:saml="` + ns + `"><AttributeStatement xmlns="` + ns + `">` + sprintfPrefix(roleAttr, "") + `</AttributeStatement></saml:Assertion>`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			roles, err := ExtractAwsRoles([]byte(tt.xml))
+			require.NoError(t, err)
+			require.Len(t, roles, 1)
+			assert.Equal(t, "arn:aws:iam::1:saml-provider/idp,arn:aws:iam::1:role/r", roles[0])
+
+			duration, err := ExtractSessionDuration([]byte(tt.xml))
+			require.NoError(t, err)
+			assert.Equal(t, int64(900), duration)
+		})
+	}
+}
+
+func sprintfPrefix(format, prefix string) string {
+	return strings.ReplaceAll(format, "%[1]s", prefix)
+}
+
+// A child in a different namespace is not an AttributeStatement of the assertion.
+func TestExtractRolesIgnoresForeignNamespaceChildren(t *testing.T) {
+	xml := `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:x="urn:other"><x:AttributeStatement/></saml:Assertion>`
+	_, err := ExtractAwsRoles([]byte(xml))
+	require.ErrorIs(t, err, ErrMissingElement{Tag: attributeStatementTag})
 }

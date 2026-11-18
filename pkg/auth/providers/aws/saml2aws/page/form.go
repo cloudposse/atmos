@@ -19,6 +19,26 @@ type Form struct {
 }
 
 func (form *Form) BuildRequest() (*http.Request, error) {
+	// Atmos fork: a GET form submits its fields in the URL query; upstream always sent them in the body.
+	if strings.EqualFold(form.Method, http.MethodGet) {
+		target, err := url.Parse(form.URL)
+		if err != nil {
+			return nil, errors.Wrap(err, "error building request")
+		}
+		query := target.Query()
+		for name, vals := range *form.Values {
+			for _, val := range vals {
+				query.Add(name, val)
+			}
+		}
+		target.RawQuery = query.Encode()
+		req, err := http.NewRequest(http.MethodGet, target.String(), nil)
+		if err != nil {
+			return nil, errors.Wrap(err, "error building request")
+		}
+		return req, nil
+	}
+
 	values := strings.NewReader(form.Values.Encode())
 	req, err := http.NewRequest(form.Method, form.URL, values)
 	if err != nil {
@@ -55,8 +75,11 @@ func NewFormFromDocument(doc *goquery.Document, formFilter string) (*Form, error
 	attrValue, ok := formSelection.Attr("action")
 	if ok {
 		form.URL = attrValue
-	} else {
+	} else if doc.Url != nil {
 		form.URL = doc.Url.String()
+	} else {
+		// Atmos fork: goquery leaves doc.Url nil for reader-based documents; upstream dereferenced it.
+		return nil, fmt.Errorf("form has no action and the document has no URL to fall back to")
 	}
 
 	attrValue, ok = formSelection.Attr("method")
@@ -86,6 +109,10 @@ func NewFormFromResponse(res *http.Response, formFilter string) (*Form, error) {
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build document from response")
+	}
+	// Atmos fork: reader-based documents have no URL, so supply the request URL as the fallback form action.
+	if doc.Url == nil && res.Request != nil {
+		doc.Url = res.Request.URL
 	}
 	return NewFormFromDocument(doc, formFilter)
 }

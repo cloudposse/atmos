@@ -1,10 +1,12 @@
 package prompter
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // creates a fake runner so we can perform unit tests
@@ -40,14 +42,14 @@ type FakeDefaultPrompter struct {
 }
 
 // all the functions to implement the Prompter interface
-func (f *FakeDefaultPrompter) RequestSecurityCode(p string) string {
+func (f *FakeDefaultPrompter) RequestSecurityCode(p string) (string, error) {
 	f.CalledRequestSecurityCode = true
-	return ""
+	return "", nil
 }
 
-func (f *FakeDefaultPrompter) Choose(p string, option []string) int {
+func (f *FakeDefaultPrompter) Choose(p string, option []string) (int, error) {
 	f.CalledChoose = true
-	return 0
+	return 0, nil
 }
 
 func (f *FakeDefaultPrompter) ChooseWithDefault(p string, d string, c []string) (string, error) {
@@ -55,19 +57,19 @@ func (f *FakeDefaultPrompter) ChooseWithDefault(p string, d string, c []string) 
 	return "", nil
 }
 
-func (f *FakeDefaultPrompter) String(p string, defaultValue string) string {
+func (f *FakeDefaultPrompter) String(p string, defaultValue string) (string, error) {
 	f.CalledString = true
-	return ""
+	return "", nil
 }
 
-func (f *FakeDefaultPrompter) StringRequired(p string) string {
+func (f *FakeDefaultPrompter) StringRequired(p string) (string, error) {
 	f.CalledStringRequired = true
-	return ""
+	return "", nil
 }
 
-func (f *FakeDefaultPrompter) Password(p string) string {
+func (f *FakeDefaultPrompter) Password(p string) (string, error) {
 	f.CalledPassword = true
-	return ""
+	return "", nil
 }
 
 func (f *FakeDefaultPrompter) Display(p string) {
@@ -99,6 +101,43 @@ func TestValidateAndSetPrompterShouldWorkWithInputForCli(t *testing.T) {
 	}
 }
 
+// Regression: selecting a default alias after pinentry resets the active prompter, and an invalid
+// value leaves the active prompter unchanged.
+func TestValidateAndSetPrompterDefaultAliasesResetPinentry(t *testing.T) {
+	oldPrompter := ActivePrompter
+	defer func() { ActivePrompter = oldPrompter }()
+
+	for _, alias := range []string{"", "default", "survey"} {
+		require.NoError(t, ValidateAndSetPrompter("pinentry"))
+		assert.IsType(t, &PinentryPrompter{}, ActivePrompter)
+
+		require.NoError(t, ValidateAndSetPrompter(alias))
+		assert.IsType(t, &CliPrompter{}, ActivePrompter)
+	}
+
+	require.NoError(t, ValidateAndSetPrompter("pinentry"))
+	require.Error(t, ValidateAndSetPrompter("invalid"))
+	assert.IsType(t, &PinentryPrompter{}, ActivePrompter)
+}
+
+// scannerErrReader returns data and then a read error.
+type scannerErrReader struct{ done bool }
+
+func (r *scannerErrReader) Read(p []byte) (int, error) {
+	if r.done {
+		return 0, errors.New("read failed")
+	}
+	r.done = true
+	return copy(p, "D 123456\n"), nil
+}
+
+// Regression: a reader failure after "D <code>" must not return the code as a successful result.
+func TestParseResultsReturnsScannerError(t *testing.T) {
+	output, err := ParseResults(&scannerErrReader{})
+	require.Error(t, err)
+	assert.Empty(t, output)
+}
+
 func TestValidateAndSetPrompterShouldWorkWithInputForPinentry(t *testing.T) {
 	// backing up the current prompters for the other tests
 	oldPrompter := ActivePrompter
@@ -117,19 +156,19 @@ func TestChecksPinentryPrompterDefault(t *testing.T) {
 	fakeDefaultPrompter := &FakeDefaultPrompter{}
 	p.DefaultPrompter = fakeDefaultPrompter
 
-	_ = p.Choose("random", []string{"1", "2"})
+	_, _ = p.Choose("random", []string{"1", "2"})
 	assert.True(t, fakeDefaultPrompter.CalledChoose)
 
 	_, _ = p.ChooseWithDefault("random", "random", []string{"1", "2"})
 	assert.True(t, fakeDefaultPrompter.CalledChooseWithDefault)
 
-	_ = p.String("random", "random")
+	_, _ = p.String("random", "random")
 	assert.True(t, fakeDefaultPrompter.CalledString)
 
-	_ = p.StringRequired("random")
+	_, _ = p.StringRequired("random")
 	assert.True(t, fakeDefaultPrompter.CalledStringRequired)
 
-	_ = p.Password("random")
+	_, _ = p.Password("random")
 	assert.True(t, fakeDefaultPrompter.CalledPassword)
 
 	p.Display("random")
@@ -141,8 +180,9 @@ func TestChecksPinentryPrompterCallsPinentryForRequestSecurityCode(t *testing.T)
 	runner := &FakePinentryRunner{}
 	p.Runner = runner
 	runner.FakeOutput = "random_code"
-	pinentryOutput := p.RequestSecurityCode("000000")
+	pinentryOutput, err := p.RequestSecurityCode("000000")
 
+	assert.NoError(t, err)
 	assert.True(t, runner.HasRun)
 	assert.Equal(t, pinentryOutput, "random_code")
 	assert.Equal(t, runner.PassedInput, "SETPROMPT Security token [000000]\nGETPIN\n")
@@ -153,8 +193,9 @@ func TestChecksPinentryPrompterReturnsRightCodeGivenFakePinentryOutput(t *testin
 	runner := &FakePinentryRunner{}
 	p.Runner = runner
 	runner.FakePinentryOutput = "OK This line should get ignored\nOK This line should too\nD 654321\nOK Final\n"
-	pinentryOutput := p.RequestSecurityCode("000000")
+	pinentryOutput, err := p.RequestSecurityCode("000000")
 
+	assert.NoError(t, err)
 	assert.True(t, runner.HasRun)
 	assert.Equal(t, pinentryOutput, "654321")
 }
@@ -164,8 +205,9 @@ func TestChecksPinentryPrompterReturnsNoCodeGivenErroneousFakePinentryOutput(t *
 	runner := &FakePinentryRunner{}
 	p.Runner = runner
 	runner.FakePinentryOutput = "OK This line should get ignored\nOK This line should too\nERR This is an error\nD 654321\nOK Final\n"
-	pinentryOutput := p.RequestSecurityCode("000000")
+	pinentryOutput, err := p.RequestSecurityCode("000000")
 
+	assert.Error(t, err)
 	assert.True(t, runner.HasRun)
 	assert.Equal(t, pinentryOutput, "")
 }

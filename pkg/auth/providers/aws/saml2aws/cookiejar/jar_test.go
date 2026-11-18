@@ -1359,3 +1359,21 @@ func TestIssue26247(t *testing.T) {
 		}
 	}
 }
+
+// Regression: the default cookie path must not be percent-decoded a second time, or a cookie set
+// without a Path is not returned for its originating URL.
+func TestDefaultPathNotDoubleDecoded(t *testing.T) {
+	if got, want := defaultPath("/a%20b/login"), "/a%20b"; got != want {
+		t.Errorf("defaultPath: got %q, want %q", got, want)
+	}
+
+	jar := newTestJar()
+	u, err := url.Parse("https://idp.example.com/a%2520b/login")
+	if err != nil {
+		t.Fatal(err)
+	}
+	jar.SetCookies(u, []*http.Cookie{{Name: "sid", Value: "1"}})
+	if got := jar.Cookies(u); len(got) != 1 || got[0].Name != "sid" {
+		t.Errorf("Cookies(%v) = %v, want the sid cookie", u, got)
+	}
+}

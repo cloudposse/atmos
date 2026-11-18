@@ -38,6 +38,9 @@ func isolatedBrowserCacheDir(t *testing.T) (string, string) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", "")
+	t.Setenv("npm_config_playwright_browsers_path", "")
+	t.Setenv("npm_package_config_playwright_browsers_path", "")
+	t.Setenv("INIT_CWD", "")
 	xdgCache := filepath.Join(home, ".xdg-cache")
 	t.Setenv("XDG_CACHE_HOME", xdgCache)
 	homedir.Reset()
@@ -129,6 +132,7 @@ func TestReadBrowserDirMissingFile(t *testing.T) {
 func TestRequiredBrowserDirFromDriverDirectory(t *testing.T) {
 	driverDir := t.TempDir()
 	t.Setenv("PLAYWRIGHT_DRIVER_PATH", driverDir)
+	t.Setenv("PLAYWRIGHT_CLI_PATH", "")
 	require.NoError(t, os.MkdirAll(filepath.Join(driverDir, "package"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(driverDir, "package", playwrightBrowserManifest),
 		[]byte(`{"browsers":[{"name":"chromium","revision":"4321"}]}`), 0o600))
@@ -235,6 +239,7 @@ func TestRequiredChromiumInstalled_PlaywrightBrowsersPath(t *testing.T) {
 		stubRequiredChromiumRevision(t, "1248")
 		driverDir := t.TempDir()
 		t.Setenv("PLAYWRIGHT_DRIVER_PATH", driverDir)
+		t.Setenv("PLAYWRIGHT_CLI_PATH", "")
 		t.Setenv("PLAYWRIGHT_BROWSERS_PATH", "0")
 		installFakeBrowser(t, filepath.Join(driverDir, "package", playwrightLocalBrowsers), "chromium-1248")
 
@@ -282,12 +287,42 @@ func TestPlaywrightDefaultCacheDir(t *testing.T) {
 // A relative PLAYWRIGHT_BROWSERS_PATH is resolved against the working directory, like the driver does.
 func TestPlaywrightRegistryDirRelativeBrowsersPath(t *testing.T) {
 	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", "browsers")
+	t.Setenv("INIT_CWD", "")
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
 
 	got, err := playwrightRegistryDir()
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(cwd, "browsers"), got)
+}
+
+// Regression: a relative PLAYWRIGHT_BROWSERS_PATH resolves against INIT_CWD before the working directory.
+func TestPlaywrightRegistryDirRelativeBrowsersPathUsesInitCwd(t *testing.T) {
+	initCwd := t.TempDir()
+	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", "browsers")
+	t.Setenv("INIT_CWD", initCwd)
+
+	got, err := playwrightRegistryDir()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(initCwd, "browsers"), got)
+}
+
+// Regression: Playwright also reads the npm config forms of PLAYWRIGHT_BROWSERS_PATH, in order.
+func TestPlaywrightRegistryDirNpmEnvFallbacks(t *testing.T) {
+	configDir := t.TempDir()
+	packageDir := t.TempDir()
+	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", "")
+	t.Setenv("npm_config_playwright_browsers_path", configDir)
+	t.Setenv("npm_package_config_playwright_browsers_path", packageDir)
+
+	got, err := playwrightRegistryDir()
+	require.NoError(t, err)
+	assert.Equal(t, configDir, got)
+
+	t.Setenv("npm_config_playwright_browsers_path", "")
+	got, err = playwrightRegistryDir()
+	require.NoError(t, err)
+	assert.Equal(t, packageDir, got)
 }
 
 // An external PLAYWRIGHT_CLI_PATH moves browsers.json with cli.js.

@@ -331,6 +331,32 @@ func TestGetSAMLResponseUsesCallbackCaptureWhenExpectRequestMissesIt(t *testing.
 	assert.Equal(t, testAssertion, got)
 }
 
+// Regression: a later request to the sign-in URL without a SAMLResponse (for example a GET) must not
+// replace an assertion that was already captured.
+func TestGetSAMLResponseKeepsCapturedAssertionOnLaterEmptyRequest(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	page := NewMocksamlPage(ctrl)
+	post := NewMockRequest(ctrl)
+	get := NewMockRequest(ctrl)
+	client := newTestClient(t)
+
+	var handler func(playwright.Request)
+	page.EXPECT().OnRequest(gomock.Any()).Do(func(fn func(playwright.Request)) { handler = fn })
+	page.EXPECT().Goto(testIdPURL).DoAndReturn(func(string, ...playwright.PageGotoOptions) (playwright.Response, error) {
+		handler(post)
+		handler(get)
+		return nil, nil
+	})
+	post.EXPECT().URL().Return(testSigninURL)
+	post.EXPECT().PostData().Return(samlPostBody(testAssertion), nil)
+	get.EXPECT().URL().Return(testSigninURL)
+	get.EXPECT().PostData().Return("", nil)
+
+	got, err := getSAMLResponse(page, &creds.LoginDetails{URL: testIdPURL}, client)
+	require.NoError(t, err)
+	assert.Equal(t, testAssertion, got)
+}
+
 // The callback passed to ExpectRequest runs once the waiter listens. It lets the wait continue
 // while nothing was captured, and ends it as soon as the OnRequest callback captured the request.
 func TestGetSAMLResponseExpectRequestCallbackEndsWaitWhenCaptured(t *testing.T) {

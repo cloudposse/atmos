@@ -19,10 +19,10 @@ type recordingPrompter struct {
 	chooseResult string
 }
 
-func (r *recordingPrompter) RequestSecurityCode(pattern string) string {
+func (r *recordingPrompter) RequestSecurityCode(pattern string) (string, error) {
 	r.calls = append(r.calls, "RequestSecurityCode")
 	r.lastPrompt = pattern
-	return "123456"
+	return "123456", nil
 }
 
 func (r *recordingPrompter) ChooseWithDefault(pr, def string, options []string) (string, error) {
@@ -31,28 +31,28 @@ func (r *recordingPrompter) ChooseWithDefault(pr, def string, options []string) 
 	return r.chooseResult, nil
 }
 
-func (r *recordingPrompter) Choose(pr string, options []string) int {
+func (r *recordingPrompter) Choose(pr string, options []string) (int, error) {
 	r.calls = append(r.calls, "Choose")
 	r.lastPrompt, r.lastOptions = pr, options
-	return len(options) - 1
+	return len(options) - 1, nil
 }
 
-func (r *recordingPrompter) StringRequired(pr string) string {
+func (r *recordingPrompter) StringRequired(pr string) (string, error) {
 	r.calls = append(r.calls, "StringRequired")
 	r.lastPrompt = pr
-	return "required"
+	return "required", nil
 }
 
-func (r *recordingPrompter) String(pr, def string) string {
+func (r *recordingPrompter) String(pr, def string) (string, error) {
 	r.calls = append(r.calls, "String")
 	r.lastPrompt, r.lastDefault = pr, def
-	return "value"
+	return "value", nil
 }
 
-func (r *recordingPrompter) Password(pr string) string {
+func (r *recordingPrompter) Password(pr string) (string, error) {
 	r.calls = append(r.calls, "Password")
 	r.lastPrompt = pr
-	return "secret"
+	return "secret", nil
 }
 
 func (r *recordingPrompter) Display(pr string) {
@@ -73,19 +73,29 @@ func useRecordingPrompter(t *testing.T) *recordingPrompter {
 func TestPackageFunctionsDelegateToActivePrompter(t *testing.T) {
 	rec := useRecordingPrompter(t)
 
-	assert.Equal(t, "123456", RequestSecurityCode("000000"))
+	code, err := RequestSecurityCode("000000")
+	require.NoError(t, err)
+	assert.Equal(t, "123456", code)
 	assert.Equal(t, "000000", rec.lastPrompt)
 
-	assert.Equal(t, 1, Choose("Pick", []string{"a", "b"}))
+	index, err := Choose("Pick", []string{"a", "b"})
+	require.NoError(t, err)
+	assert.Equal(t, 1, index)
 	assert.Equal(t, []string{"a", "b"}, rec.lastOptions)
 
-	assert.Equal(t, "required", StringRequired("Username"))
+	required, err := StringRequired("Username")
+	require.NoError(t, err)
+	assert.Equal(t, "required", required)
 	assert.Equal(t, "Username", rec.lastPrompt)
 
-	assert.Equal(t, "value", String("Region", "us-east-1"))
+	value, err := String("Region", "us-east-1")
+	require.NoError(t, err)
+	assert.Equal(t, "value", value)
 	assert.Equal(t, "us-east-1", rec.lastDefault)
 
-	assert.Equal(t, "secret", Password("Password"))
+	secret, err := Password("Password")
+	require.NoError(t, err)
+	assert.Equal(t, "secret", secret)
 	assert.Equal(t, "Password", rec.lastPrompt)
 
 	Display("hello")
@@ -181,17 +191,20 @@ func TestPinentryPrompterEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		mode string
-		want string
+		mode    string
+		want    string
+		wantErr bool
 	}{
 		{mode: "ok", want: "424242"},
-		{mode: "cancel", want: ""},
+		{mode: "cancel", want: "", wantErr: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.mode, func(t *testing.T) {
 			t.Setenv(fakePinentryEnv, tt.mode)
-			assert.Equal(t, tt.want, NewPinentryPrompter(exe).RequestSecurityCode("000000"))
+			got, err := NewPinentryPrompter(exe).RequestSecurityCode("000000")
+			assert.Equal(t, tt.wantErr, err != nil)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

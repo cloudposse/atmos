@@ -15,6 +15,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -271,8 +272,9 @@ func TestSSOProviderAuthenticate_RefreshesExpiredTokenWithoutBrowser(t *testing.
 }
 
 func TestSSOProviderAuthenticate_FailedRefreshInNonInteractiveSessionFails(t *testing.T) {
-	if isTTY() {
-		t.Skipf("stderr is a terminal; the device-authorization fallback would start an interactive flow")
+	// The production gate is isInteractive (which also honors force-tty), not isTTY alone.
+	if isInteractive() {
+		t.Skipf("the session is interactive (stderr is a terminal or force-tty is set); the device-authorization fallback would start an interactive flow")
 	}
 
 	srv := newFakeOIDCServer(t, fakeOIDCResponse{
@@ -295,6 +297,8 @@ func TestSSOProviderAuthenticate_FailedRefreshInNonInteractiveSessionFails(t *te
 	require.Error(t, err)
 	assert.Nil(t, creds)
 	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	// Registration failures also wrap ErrAuthenticationFailed, so assert the intended rejection.
+	assert.Contains(t, cockroachErrors.GetAllDetails(err), "AWS SSO device flow requires an interactive terminal (TTY) for user authorization")
 	assert.Equal(t, int32(1), srv.calls.Load(), "refresh is attempted exactly once before giving up")
 }
 

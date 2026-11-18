@@ -31,13 +31,15 @@ func NewCli() *CliPrompter {
 }
 
 // RequestSecurityCode request a security code to be entered by the user
-func (cli *CliPrompter) RequestSecurityCode(pattern string) string {
+func (cli *CliPrompter) RequestSecurityCode(pattern string) (string, error) {
 	token := ""
 	prompt := &survey.Input{
 		Message: fmt.Sprintf("Security Token [%s]", pattern),
 	}
-	_ = survey.AskOne(prompt, &token, survey.WithValidator(survey.Required), stdioOption())
-	return token
+	if err := survey.AskOne(prompt, &token, survey.WithValidator(survey.Required), stdioOption()); err != nil {
+		return "", err
+	}
+	return token, nil
 }
 
 // ChooseWithDefault given the choice return the option selected with a default
@@ -48,7 +50,10 @@ func (cli *CliPrompter) ChooseWithDefault(pr string, defaultValue string, option
 		Options: options,
 		Default: defaultValue,
 	}
-	_ = survey.AskOne(prompt, &selected, survey.WithValidator(survey.Required), stdioOption())
+	// Atmos fork: propagate prompt failures (for example Ctrl+C) instead of discarding them.
+	if err := survey.AskOne(prompt, &selected, survey.WithValidator(survey.Required), stdioOption()); err != nil {
+		return "", err
+	}
 
 	// return the selected element index
 	for i, option := range options {
@@ -60,52 +65,61 @@ func (cli *CliPrompter) ChooseWithDefault(pr string, defaultValue string, option
 }
 
 // Choose given the choice return the option selected
-func (cli *CliPrompter) Choose(pr string, options []string) int {
+func (cli *CliPrompter) Choose(pr string, options []string) (int, error) {
 	selected := ""
 	prompt := &survey.Select{
 		Message: pr,
 		Options: options,
 	}
-	_ = survey.AskOne(prompt, &selected, survey.WithValidator(survey.Required), stdioOption())
+	// Atmos fork: propagate prompt failures instead of silently selecting the first option.
+	if err := survey.AskOne(prompt, &selected, survey.WithValidator(survey.Required), stdioOption()); err != nil {
+		return 0, err
+	}
 
 	// return the selected element index
 	for i, option := range options {
 		if selected == option {
-			return i
+			return i, nil
 		}
 	}
-	return 0
+	return 0, errors.New("bad input")
 }
 
 // String prompt for string with a default
-func (cli *CliPrompter) String(pr string, defaultValue string) string {
+func (cli *CliPrompter) String(pr string, defaultValue string) (string, error) {
 	val := ""
 	prompt := &survey.Input{
 		Message: pr,
 		Default: defaultValue,
 	}
-	_ = survey.AskOne(prompt, &val, stdioOption())
-	return val
+	if err := survey.AskOne(prompt, &val, stdioOption()); err != nil {
+		return "", err
+	}
+	return val, nil
 }
 
 // StringRequired prompt for string which is required
-func (cli *CliPrompter) StringRequired(pr string) string {
+func (cli *CliPrompter) StringRequired(pr string) (string, error) {
 	val := ""
 	prompt := &survey.Input{
 		Message: pr,
 	}
-	_ = survey.AskOne(prompt, &val, survey.WithValidator(survey.Required), stdioOption())
-	return val
+	if err := survey.AskOne(prompt, &val, survey.WithValidator(survey.Required), stdioOption()); err != nil {
+		return "", err
+	}
+	return val, nil
 }
 
 // Password prompt for password which is required
-func (cli *CliPrompter) Password(pr string) string {
+func (cli *CliPrompter) Password(pr string) (string, error) {
 	val := ""
 	prompt := &survey.Password{
 		Message: pr,
 	}
-	_ = survey.AskOne(prompt, &val, stdioOption())
-	return val
+	if err := survey.AskOne(prompt, &val, stdioOption()); err != nil {
+		return "", err
+	}
+	return val, nil
 }
 
 func (cli *CliPrompter) Display(pr string) {

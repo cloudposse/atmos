@@ -9,8 +9,9 @@ type Prompter struct {
 	mock.Mock
 }
 
-// Choose provides a mock function with given fields: _a0, _a1
-func (_m *Prompter) Choose(_a0 string, _a1 []string) int {
+// Choose provides a mock function with given fields: _a0, _a1.
+// Atmos fork: returns (int, error); a missing error return value means nil.
+func (_m *Prompter) Choose(_a0 string, _a1 []string) (int, error) {
 	ret := _m.Called(_a0, _a1)
 
 	var r0 int
@@ -20,7 +21,7 @@ func (_m *Prompter) Choose(_a0 string, _a1 []string) int {
 		r0 = ret.Get(0).(int)
 	}
 
-	return r0
+	return r0, mockError(ret, 1)
 }
 
 // ChooseWithDefault provides a mock function with given fields: _a0, _a1, _a2
@@ -52,8 +53,9 @@ func (_m *Prompter) Display(_a0 string) {
 	_m.Called(_a0)
 }
 
-// Password provides a mock function with given fields: _a0
-func (_m *Prompter) Password(_a0 string) string {
+// Password provides a mock function with given fields: _a0.
+// Atmos fork: returns (string, error); a missing error return value means nil.
+func (_m *Prompter) Password(_a0 string) (string, error) {
 	ret := _m.Called(_a0)
 
 	var r0 string
@@ -63,11 +65,12 @@ func (_m *Prompter) Password(_a0 string) string {
 		r0 = ret.Get(0).(string)
 	}
 
-	return r0
+	return r0, mockError(ret, 1)
 }
 
-// RequestSecurityCode provides a mock function with given fields: _a0
-func (_m *Prompter) RequestSecurityCode(_a0 string) string {
+// RequestSecurityCode provides a mock function with given fields: _a0.
+// Atmos fork: returns (string, error); a missing error return value means nil.
+func (_m *Prompter) RequestSecurityCode(_a0 string) (string, error) {
 	ret := _m.Called(_a0)
 
 	var r0 string
@@ -77,11 +80,12 @@ func (_m *Prompter) RequestSecurityCode(_a0 string) string {
 		r0 = ret.Get(0).(string)
 	}
 
-	return r0
+	return r0, mockError(ret, 1)
 }
 
-// String provides a mock function with given fields: _a0, _a1
-func (_m *Prompter) String(_a0 string, _a1 string) string {
+// String provides a mock function with given fields: _a0, _a1.
+// Atmos fork: returns (string, error); a missing error return value means nil.
+func (_m *Prompter) String(_a0 string, _a1 string) (string, error) {
 	ret := _m.Called(_a0, _a1)
 
 	var r0 string
@@ -91,11 +95,12 @@ func (_m *Prompter) String(_a0 string, _a1 string) string {
 		r0 = ret.Get(0).(string)
 	}
 
-	return r0
+	return r0, mockError(ret, 1)
 }
 
-// StringRequired provides a mock function with given fields: _a0
-func (_m *Prompter) StringRequired(_a0 string) string {
+// StringRequired provides a mock function with given fields: _a0.
+// Atmos fork: returns (string, error); a missing error return value means nil.
+func (_m *Prompter) StringRequired(_a0 string) (string, error) {
 	ret := _m.Called(_a0)
 
 	var r0 string
@@ -105,7 +110,15 @@ func (_m *Prompter) StringRequired(_a0 string) string {
 		r0 = ret.Get(0).(string)
 	}
 
-	return r0
+	return r0, mockError(ret, 1)
+}
+
+// mockError returns the error at index i of ret, or nil when the expectation did not set one.
+func mockError(ret mock.Arguments, i int) error {
+	if len(ret) <= i {
+		return nil
+	}
+	return ret.Error(i)
 }
 
 // NewPrompter creates a new instance of Prompter. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

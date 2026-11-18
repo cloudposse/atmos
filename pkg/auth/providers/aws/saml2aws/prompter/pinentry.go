@@ -45,15 +45,15 @@ func NewRealPinentryRunner(bin string) *RealPinentryRunner {
 
 // RequestSecurityCode for PinentryPrompter is creating a query for pinentry
 // and sends it to the pinentry bin.
-func (p *PinentryPrompter) RequestSecurityCode(pattern string) (output string) {
+func (p *PinentryPrompter) RequestSecurityCode(pattern string) (string, error) {
 	commandTemplate := "SETPROMPT %s\nGETPIN\n"
 	prompt := fmt.Sprintf(defaultPinentryDialog, pattern)
 	command := fmt.Sprintf(commandTemplate, prompt)
-	if output, err := p.Runner.Run(command); err != nil {
-		return ""
-	} else {
-		return output
+	output, err := p.Runner.Run(command)
+	if err != nil {
+		return "", err
 	}
+	return output, nil
 }
 
 // ChooseWithDefault is running the default CLI ChooseWithDefault
@@ -62,22 +62,22 @@ func (p *PinentryPrompter) ChooseWithDefault(prompt string, def string, choices 
 }
 
 // Choose is running the default CLI Choose
-func (p *PinentryPrompter) Choose(pr string, options []string) int {
+func (p *PinentryPrompter) Choose(pr string, options []string) (int, error) {
 	return p.DefaultPrompter.Choose(pr, options)
 }
 
 // StringRequired is runniner the default Cli StringRequired
-func (p *PinentryPrompter) StringRequired(pr string) string {
+func (p *PinentryPrompter) StringRequired(pr string) (string, error) {
 	return p.DefaultPrompter.StringRequired(pr)
 }
 
 // String is runniner the default Cli String
-func (p *PinentryPrompter) String(pr string, defaultValue string) string {
+func (p *PinentryPrompter) String(pr string, defaultValue string) (string, error) {
 	return p.DefaultPrompter.String(pr, defaultValue)
 }
 
 // Password is runniner the default Cli Password
-func (p *PinentryPrompter) Password(pr string) string {
+func (p *PinentryPrompter) Password(pr string) (string, error) {
 	return p.DefaultPrompter.Password(pr)
 }
 
@@ -129,6 +129,11 @@ func ParseResults(pinEntryOutput io.Reader) (output string, err error) {
 		if strings.HasPrefix(line, "ERR ") {
 			return "", fmt.Errorf("Error while running pinentry: %s", line[4:])
 		}
+	}
+
+	// Atmos fork: upstream ignored scanner.Err(), so a read failure after "D <code>" returned the code as a success.
+	if scanErr := scanner.Err(); scanErr != nil {
+		return "", fmt.Errorf("Error while reading pinentry output: %w", scanErr)
 	}
 
 	return output, err

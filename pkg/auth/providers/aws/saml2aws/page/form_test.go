@@ -172,3 +172,42 @@ func TestFormSubmit(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error submitting form")
 }
+
+// Regression: a GET form submits its fields in the URL query, not in the body.
+func TestFormSubmitGetUsesQuery(t *testing.T) {
+	var gotQuery url.Values
+	var gotBody []byte
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query()
+		gotBody, _ = io.ReadAll(r.Body)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer ts.Close()
+
+	client, err := provider.NewHTTPClient(http.DefaultTransport, &provider.HTTPClientOptions{})
+	require.NoError(t, err)
+
+	form := &Form{URL: ts.URL + "/go?keep=1", Method: http.MethodGet, Values: &url.Values{"token": {"123"}}}
+	res, err := form.Submit(client)
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	assert.Equal(t, url.Values{"keep": {"1"}, "token": {"123"}}, gotQuery)
+	assert.Empty(t, gotBody)
+}
+
+// Regression: a form without an action on a reader-based document must not panic on a nil document URL.
+func TestNewFormFromResponseMissingDocumentURL(t *testing.T) {
+	const body = `<form id="f"><input name="k" value="v"/></form>`
+
+	res := &http.Response{Body: io.NopCloser(strings.NewReader(body))}
+	_, err := NewFormFromResponse(res, "#f")
+	require.Error(t, err)
+
+	reqURL, perr := url.Parse("https://idp.example.com/login")
+	require.NoError(t, perr)
+	res = &http.Response{Body: io.NopCloser(strings.NewReader(body)), Request: &http.Request{URL: reqURL}}
+	form, err := NewFormFromResponse(res, "#f")
+	require.NoError(t, err)
+	assert.Equal(t, "https://idp.example.com/login", form.URL)
+}

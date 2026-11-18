@@ -77,3 +77,17 @@ func TestParseAWSRolesGovCloudAndWhitespace(t *testing.T) {
 		assert.Equal(t, "arn:aws-us-gov:iam::123456789012:saml-provider/idp", roles[0].PrincipalARN)
 	}
 }
+
+// Regression: IAM permits commas in role names, so a comma only separates ARNs when another ARN follows.
+func TestParseAWSRolesCommaInRoleName(t *testing.T) {
+	for _, role := range []string{
+		"arn:aws:iam::123456789012:role/admin,ops,arn:aws:iam::123456789012:saml-provider/idp",
+		"arn:aws:iam::123456789012:saml-provider/idp,arn:aws:iam::123456789012:role/admin,ops",
+	} {
+		roles, err := ParseAWSRoles([]string{role})
+		if assert.NoError(t, err) && assert.Len(t, roles, 1) {
+			assert.Equal(t, "arn:aws:iam::123456789012:role/admin,ops", roles[0].RoleARN)
+			assert.Equal(t, "arn:aws:iam::123456789012:saml-provider/idp", roles[0].PrincipalARN)
+		}
+	}
+}
