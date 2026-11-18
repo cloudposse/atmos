@@ -229,5 +229,14 @@ offline host that uses a system browser, leave `download_browser_driver` unset (
 - A pre-release review of the rest of Atmos Auth (code already merged to `main`, outside this change) found
   bugs that are tracked in #3720 and will be fixed in a separate branch. Four of them are regressions new
   since v1.234.1.
+- Review suggestions on the vendored code that were intentionally not applied, with their reasons, are listed in
+  the "Review findings not adopted" section of `pkg/auth/providers/aws/saml2aws/README.md`.
+- Two review suggestions outside the vendored code were also not applied. The `.gitleaksignore` entry for
+  `okta_webauthn_test.go` line 172 stays, because it covers an already-pushed commit where that line is a timing
+  value. A controlled-clock test of the SSO token polling needs a clock seam in `sso.go`, which is not part of this
+  change.
+- Release archives ship only the binary, without license files for any component. Whether to add the `NOTICE`
+  and license files to release artifacts is a release packaging decision for the maintainers; it predates this
+  change.
 - None of the known issues in the code this change touches are left open: the upstream quirks found during review
   (ADFS MFA loop, `logger.Fatal`, captcha selection and retry, `HttpAttemptsCount: "0"`) are fixed above.

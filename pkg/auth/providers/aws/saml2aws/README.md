@@ -150,6 +150,26 @@ identity provider and read the AWS roles from the SAML assertion.
 - **Tests:** browser tests use `go.uber.org/mock` mocks of a narrow `samlPage` interface instead of a real browser.
   Real-browser tests are in `browser_integration_test.go` and only run with `RUN_PLAYWRIGHT_INTEGRATION=1`.
 
+## Review findings not adopted
+
+These review suggestions were considered and intentionally not applied:
+
+- **Okta error sentinels stay package-local.** `errMFAPollTimeout`, `errU2FNoDevice` and the exported
+  `ErrU2FAuthTimeout` are defined in the Okta package instead of `errors/errors.go`, so the fork stays a
+  self-contained unit. Callers still match them with `errors.Is`.
+- **A U2F or WebAuthn read that started before the deadline is accepted.** The deadline is checked after each poll
+  tick, so no new read starts after it expires. A read that started in time and returns a valid assertion slightly
+  after the deadline is kept, because rejecting it would discard a valid credential. The first read always starts,
+  since the device must be asked at least once.
+- **Default cookie paths use the unescaped request path.** The `cookiejar` package matches Go's `net/http/cookiejar`
+  and upstream, which use `URL.Path`. Switching to `EscapedPath()` would change matching for servers that send
+  unescaped `Path` attributes. Escaped slashes in identity provider cookie paths are rare, and this is not a security
+  issue.
+- **License notices in release artifacts are not changed here.** `LICENSE.md`, `ATTRIBUTIONS.md`,
+  `cookiejar/LICENSE` and the repository `NOTICE` carry the MIT and Go BSD notices. Release archives currently ship
+  only the binary, with no license files for any component (the Atmos Apache license included). That predates this
+  fork and is a release packaging decision for the maintainers.
+
 ## Updating
 
 Upstream is unmaintained, so there is nothing to sync. Treat this package as Atmos code: fix bugs here and add tests.
