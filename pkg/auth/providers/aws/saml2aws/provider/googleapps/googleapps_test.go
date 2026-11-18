@@ -204,7 +204,7 @@ func TestChallengePage(t *testing.T) {
 func TestSMSChallengePage(t *testing.T) {
 	// Atmos fork: restore the global prompter after the test instead of leaking the mock.
 	pr := withMockPrompter(t)
-	pr.Mock.On("StringRequired", "Enter SMS token: G-").Return("000000")
+	pr.EXPECT().StringRequired("Enter SMS token: G-").Return("000000", nil).MinTimes(1) // Unlimited, but at least one call (the former testify AssertExpectations contract).
 
 	step1, err := os.ReadFile("example/challenge-sms-send.html")
 	require.Nil(t, err)

@@ -7,6 +7,7 @@ import (
 	"github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
 )
@@ -37,13 +38,13 @@ func TestChallengeDuoU2F(t *testing.T) {
 	// Each challenge closes its device, so every subtest opens a fresh device and client.
 	tests := []struct {
 		name  string
-		setup func(device *mocks.U2FDevice)
+		setup func(device *mocks.MockU2FDevice)
 		check func(t *testing.T, resp *ResponseData, err error)
 	}{
 		{
 			name: "error",
-			setup: func(device *mocks.U2FDevice) {
-				device.On("Authenticate", request).Return(nil, &u2fhost.BadKeyHandleError{}).Once()
+			setup: func(device *mocks.MockU2FDevice) {
+				device.EXPECT().Authenticate(request).Return(nil, &u2fhost.BadKeyHandleError{}).Times(1)
 			},
 			check: func(t *testing.T, resp *ResponseData, err error) {
 				assert.Nil(t, resp)
@@ -53,9 +54,9 @@ func TestChallengeDuoU2F(t *testing.T) {
 		},
 		{
 			name: "retry",
-			setup: func(device *mocks.U2FDevice) {
-				device.On("Authenticate", request).Return(nil, &u2fhost.TestOfUserPresenceRequiredError{}).Once()
-				device.On("Authenticate", request).Return(response, nil).Once()
+			setup: func(device *mocks.MockU2FDevice) {
+				device.EXPECT().Authenticate(request).Return(nil, &u2fhost.TestOfUserPresenceRequiredError{}).Times(1)
+				device.EXPECT().Authenticate(request).Return(response, nil).Times(1)
 			},
 			check: func(t *testing.T, resp *ResponseData, err error) {
 				assert.NoError(t, err)
@@ -64,8 +65,8 @@ func TestChallengeDuoU2F(t *testing.T) {
 		},
 		{
 			name: "success",
-			setup: func(device *mocks.U2FDevice) {
-				device.On("Authenticate", request).Return(response, nil).Once()
+			setup: func(device *mocks.MockU2FDevice) {
+				device.EXPECT().Authenticate(request).Return(response, nil).Times(1)
 			},
 			check: func(t *testing.T, resp *ResponseData, err error) {
 				require.NoError(t, err)
@@ -78,37 +79,42 @@ func TestChallengeDuoU2F(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			device := &mocks.U2FDevice{}
-			device.On("Close").Return().Once()
+			ctrl := gomock.NewController(t)
+			device := mocks.NewMockU2FDevice(ctrl)
+			// The challenge closes its own device exactly once, and every scripted read is used: the
+			// controller verifies both when the subtest ends.
+			device.EXPECT().Close().Times(1)
 			tc.setup(device)
 
-			client, err := NewDUOU2FClient(challengeNonce, appID, version, keyHandle, stateToken, &MockDeviceFinder{device})
+			client, err := NewDUOU2FClient(challengeNonce, appID, version, keyHandle, stateToken, finderFor(ctrl, device))
 			require.NoError(t, err)
 			require.Same(t, device, client.Device)
 
 			resp, err := client.ChallengeU2F()
 			tc.check(t, resp, err)
-			// The challenge closes its own device exactly once, and every scripted read was used.
-			device.AssertExpectations(t)
-			device.AssertNumberOfCalls(t, "Close", 1)
 		})
 	}
 }
 
 func TestNewDUOU2FClient_DeviceDiscovery(t *testing.T) {
 	t.Run("no device plugged in fails immediately", func(t *testing.T) {
-		finder := &scriptedDeviceFinder{errs: []error{errNoDeviceFound}}
+		// Exactly one discovery attempt; the controller verifies the count.
+		finder := failingFinder(gomock.NewController(t), errNoDeviceFound)
 		_, err := NewDUOU2FClient("nonce", "app", "v", "kh", "st", finder)
 		assert.ErrorIs(t, err, errNoDeviceFound)
-		assert.Equal(t, 1, finder.calls)
 	})
 
 	t.Run("transient open error is retried", func(t *testing.T) {
-		device := &mocks.U2FDevice{}
-		finder := &scriptedDeviceFinder{errs: []error{fmt.Errorf("device busy")}, device: device}
+		ctrl := gomock.NewController(t)
+		device := mocks.NewMockU2FDevice(ctrl)
+		finder := NewMockDeviceFinder(ctrl)
+		// The first call fails and the second finds the device: exactly two calls, in order.
+		gomock.InOrder(
+			finder.EXPECT().findDevice().Return(nil, fmt.Errorf("device busy")).Times(1),
+			finder.EXPECT().findDevice().Return(device, nil).Times(1),
+		)
 		client, err := NewDUOU2FClient("nonce", "app", "v", "kh", "st", finder)
 		assert.NoError(t, err)
-		assert.Equal(t, 2, finder.calls)
 		assert.Same(t, device, client.Device)
 		assert.Equal(t, "app", client.AppID)
 	})

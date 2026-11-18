@@ -1,5 +1,8 @@
 package prompter
 
+// Atmos fork: the PinentryRunner mock is generated with mockgen.
+//go:generate go run go.uber.org/mock/mockgen -source=$GOFILE -destination=mock_pinentry_test.go -package=$GOPACKAGE
+
 import (
 	"bufio"
 	"errors"

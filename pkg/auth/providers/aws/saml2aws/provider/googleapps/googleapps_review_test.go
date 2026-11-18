@@ -117,7 +117,7 @@ func TestChallenge_PhoneApprovalHTTPError(t *testing.T) {
 func TestAuthenticate_CaptchaAfterPasswordResubmission(t *testing.T) {
 	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
 	pr := withMockPrompter(t)
-	pr.On("String", "Captcha", "").Return("solved-captcha").Once()
+	pr.EXPECT().String("Captcha", "").Return("solved-captcha", nil).Times(1)
 
 	routes := passwordFlowRoutes(t, static(fixture(t, "form-password-challengeid-2.html")))
 	routes["/signin/challenge/pwd/2"] = static(fixture(t, "captcha.html"))
@@ -138,7 +138,7 @@ func TestAuthenticate_CaptchaAfterPasswordResubmission(t *testing.T) {
 func TestAuthenticate_CaptchaBudgetSharedAcrossPasswordResubmission(t *testing.T) {
 	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
 	pr := withMockPrompter(t)
-	pr.On("String", "Captcha", "").Return("answer")
+	pr.EXPECT().String("Captcha", "").Return("answer", nil).MinTimes(1) // Unlimited, but at least one call (the former testify AssertExpectations contract).
 
 	routes := passwordFlowRoutes(t, static(fixture(t, "form-password-challengeid-2.html")))
 	routes["/signin/challenge/pwd/2"] = static(fixture(t, "captcha.html"))
@@ -156,7 +156,7 @@ func TestSolveCaptchasResolvesImageAgainstThePageThatContainsIt(t *testing.T) {
 	t.Setenv("TERM_PROGRAM", "iTerm.app")
 	t.Setenv("TERM", "xterm-256color")
 	pr := withMockPrompter(t)
-	pr.On("String", "Captcha", "").Return("solved-captcha").Once()
+	pr.EXPECT().String("Captcha", "").Return("solved-captcha", nil).Times(1)
 
 	other := newFakeGoogle(t, map[string]pageHandler{
 		"/Captcha": static("png"),
@@ -185,7 +185,7 @@ func TestSolveCaptchasResolvesImageAgainstThePageThatContainsIt(t *testing.T) {
 func TestITermCaptchaPrompt(t *testing.T) {
 	t.Run("the challenge URL is not logged", func(t *testing.T) {
 		pr := withMockPrompter(t)
-		pr.On("String", "Captcha", "").Return("answer").Once()
+		pr.EXPECT().String("Captcha", "").Return("answer", nil).Times(1)
 		f := newFakeGoogle(t, map[string]pageHandler{"/Captcha": static("png")})
 		logs := captureStdLog(t)
 

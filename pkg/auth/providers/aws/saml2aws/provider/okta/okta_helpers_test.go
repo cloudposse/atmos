@@ -14,6 +14,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/helper/credentials"
@@ -34,55 +35,34 @@ func withFastPolling(t *testing.T) {
 }
 
 // withMockPrompter installs a mock prompter and restores the previous one when the test ends.
-// A mock without expectations panics on any call, which makes unexpected prompts fail the test.
-func withMockPrompter(t *testing.T) *mocks.Prompter {
+// A mock without expectations fails the test on any call, which makes unexpected prompts fail the test.
+// The controller verifies the expectations when the test ends.
+func withMockPrompter(t *testing.T) *mocks.MockPrompter {
 	t.Helper()
 
 	orig := prompter.ActivePrompter
-	pr := &mocks.Prompter{}
+	pr := mocks.NewMockPrompter(gomock.NewController(t))
 	prompter.SetPrompter(pr)
-	t.Cleanup(func() {
-		prompter.SetPrompter(orig)
-		pr.AssertExpectations(t)
-	})
+	t.Cleanup(func() { prompter.SetPrompter(orig) })
 	return pr
 }
 
 // withMockDevice makes the Okta and Duo U2F flows use the given mock device instead of real hardware.
-func withMockDevice(t *testing.T, device *mocks.U2FDevice) {
+// The flows may look the device up any number of times; the device mock's own expectations verify its use.
+func withMockDevice(t *testing.T, device *mocks.MockU2FDevice) {
 	t.Helper()
 
-	orig := newU2FDeviceFinder
-	newU2FDeviceFinder = func() DeviceFinder { return &MockDeviceFinder{device} }
-	t.Cleanup(func() { newU2FDeviceFinder = orig })
+	withDeviceFinder(t, anyTimesFinderFor(gomock.NewController(t), device))
 }
 
-// recordingHelper is a credentials.Helper that records stored credentials.
-type recordingHelper struct {
-	mu     sync.Mutex
-	added  []credentials.Credentials
-	addErr error
-}
+// withCredentialsHelperMock installs a credentials.Helper mock for the duration of a test. The Okta provider
+// only stores the session cookie through it (Add); any other call fails the test because it has no expectation.
+func withCredentialsHelperMock(t *testing.T) *mocks.MockHelper {
+	t.Helper()
 
-func (h *recordingHelper) Add(c *credentials.Credentials) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.added = append(h.added, *c)
-	return h.addErr
-}
-
-func (h *recordingHelper) Delete(string) error { return nil }
-
-func (h *recordingHelper) Get(string) (string, string, error) {
-	return "", "", credentials.ErrCredentialsNotFound
-}
-
-func (h *recordingHelper) SupportsCredentialStorage() bool { return true }
-
-func (h *recordingHelper) stored() []credentials.Credentials {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return append([]credentials.Credentials(nil), h.added...)
+	h := mocks.NewMockHelper(gomock.NewController(t))
+	withCredentialsHelper(t, h)
+	return h
 }
 
 // withCredentialsHelper swaps the global credentials helper for the duration of a test.

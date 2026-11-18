@@ -9,8 +9,8 @@ import (
 
 	u2fhost "github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
 )
@@ -35,49 +35,46 @@ func TestFindDevice(t *testing.T) {
 	})
 
 	t.Run("first device that opens is returned", func(t *testing.T) {
-		first := &mocks.U2FDevice{}
-		first.On("Open").Return(nil).Once()
-		second := &mocks.U2FDevice{}
+		ctrl := gomock.NewController(t)
+		first := mocks.NewMockU2FDevice(ctrl)
+		first.EXPECT().Open().Return(nil).Times(1)
+		// The device that was not needed is never opened: it has no expectations, so any call fails the test.
+		second := mocks.NewMockU2FDevice(ctrl)
 		useU2FDevices(t, first, second)
 
 		dev, err := (&U2FDeviceFinder{}).findDevice()
 		require.NoError(t, err)
 		assert.Same(t, first, dev)
-		// The device that was not needed is never opened.
-		second.AssertNotCalled(t, "Open")
-		first.AssertExpectations(t)
 	})
 
 	t.Run("a device that fails to open is closed and the next one is used", func(t *testing.T) {
-		broken := &mocks.U2FDevice{}
-		broken.On("Open").Return(errBusy).Once()
-		broken.On("Close").Return().Once()
-		working := &mocks.U2FDevice{}
-		working.On("Open").Return(nil).Once()
+		ctrl := gomock.NewController(t)
+		broken := mocks.NewMockU2FDevice(ctrl)
+		broken.EXPECT().Open().Return(errBusy).Times(1)
+		broken.EXPECT().Close().Times(1)
+		working := mocks.NewMockU2FDevice(ctrl)
+		working.EXPECT().Open().Return(nil).Times(1)
 		useU2FDevices(t, broken, working)
 
 		dev, err := (&U2FDeviceFinder{}).findDevice()
 		require.NoError(t, err)
 		assert.Same(t, working, dev)
-		broken.AssertExpectations(t)
-		working.AssertExpectations(t)
 	})
 
 	t.Run("every device failing to open reports the last error", func(t *testing.T) {
-		a := &mocks.U2FDevice{}
-		a.On("Open").Return(errors.New("first failure")).Once()
-		a.On("Close").Return().Once()
-		b := &mocks.U2FDevice{}
-		b.On("Open").Return(errBusy).Once()
-		b.On("Close").Return().Once()
+		ctrl := gomock.NewController(t)
+		a := mocks.NewMockU2FDevice(ctrl)
+		a.EXPECT().Open().Return(errors.New("first failure")).Times(1)
+		a.EXPECT().Close().Times(1)
+		b := mocks.NewMockU2FDevice(ctrl)
+		b.EXPECT().Open().Return(errBusy).Times(1)
+		b.EXPECT().Close().Times(1)
 		useU2FDevices(t, a, b)
 
 		dev, err := (&U2FDeviceFinder{}).findDevice()
 		require.ErrorIs(t, err, errBusy)
 		assert.Contains(t, err.Error(), "failed to open fido U2F device")
 		assert.Nil(t, dev)
-		a.AssertExpectations(t)
-		b.AssertExpectations(t)
 	})
 }
 
@@ -87,12 +84,12 @@ func TestNewU2FClientGivesUpAfterMaxRetries(t *testing.T) {
 	t.Cleanup(func() { retryDelay = orig })
 
 	errBusy := errors.New("device busy")
-	finder := &scriptedDeviceFinder{err: errBusy}
+	// Discovery is attempted exactly maxOpenRetries times; the controller verifies the count.
+	finder := failingFinder(gomock.NewController(t), errBusy, maxOpenRetries)
 	client, err := NewU2FClient("nonce", "app", "facet", "kh", finder)
 	require.ErrorIs(t, err, errBusy)
 	assert.Contains(t, err.Error(), "exceeded max retries")
 	assert.Nil(t, client)
-	assert.Equal(t, maxOpenRetries, finder.calls)
 }
 
 func TestChallengeU2FTimesOutWithoutTouch(t *testing.T) {
@@ -101,9 +98,9 @@ func TestChallengeU2FTimesOutWithoutTouch(t *testing.T) {
 	t.Cleanup(func() { u2fTouchTimeout = orig })
 
 	closed := make(chan struct{})
-	device := &mocks.U2FDevice{}
-	device.On("Close").Run(func(mock.Arguments) { close(closed) }).Return().Once()
-	device.On("Authenticate", mock.Anything).Return(nil, &u2fhost.TestOfUserPresenceRequiredError{}).Maybe()
+	device := mocks.NewMockU2FDevice(gomock.NewController(t))
+	device.EXPECT().Close().Do(func() { close(closed) }).Times(1)
+	device.EXPECT().Authenticate(gomock.Any()).Return(nil, &u2fhost.TestOfUserPresenceRequiredError{}).AnyTimes()
 
 	client := &U2FClient{Device: device, ChallengeNonce: "dGVzdAo=", KeyHandle: "dGVzdAo="}
 	got, err := client.ChallengeU2F()
@@ -143,18 +140,18 @@ func TestChallengeU2FTimeoutCoversBlockedRead(t *testing.T) {
 	var readReturned atomic.Bool
 	closed := make(chan struct{})
 
-	device := &mocks.U2FDevice{}
-	device.On("Authenticate", mock.Anything).Run(func(mock.Arguments) {
+	device := mocks.NewMockU2FDevice(gomock.NewController(t))
+	device.EXPECT().Authenticate(gomock.Any()).Do(func(*u2fhost.AuthenticateRequest) {
 		close(readStarted)
 		<-releaseRead
 		readReturned.Store(true)
-	}).Return(nil, errors.New("read aborted")).Once()
-	device.On("Close").Run(func(mock.Arguments) {
+	}).Return(nil, errors.New("read aborted")).Times(1)
+	device.EXPECT().Close().Do(func() {
 		if !readReturned.Load() {
 			closedDuringRead.Store(true)
 		}
 		close(closed)
-	}).Return().Once()
+	}).Times(1)
 
 	client := &U2FClient{Device: device, ChallengeNonce: "dGVzdAo=", KeyHandle: "dGVzdAo="}
 	result := make(chan error, 1)
@@ -202,9 +199,9 @@ func TestFindDeviceBoundsBlockedOpen(t *testing.T) {
 
 	releaseOpen := make(chan struct{})
 	closed := make(chan struct{})
-	hung := &mocks.U2FDevice{}
-	hung.On("Open").Run(func(mock.Arguments) { <-releaseOpen }).Return(nil).Once()
-	hung.On("Close").Run(func(mock.Arguments) { close(closed) }).Return().Once()
+	hung := mocks.NewMockU2FDevice(gomock.NewController(t))
+	hung.EXPECT().Open().Do(func() { <-releaseOpen }).Return(nil).Times(1)
+	hung.EXPECT().Close().Do(func() { close(closed) }).Times(1)
 	useU2FDevices(t, hung)
 
 	dev, err := (&U2FDeviceFinder{}).findDevice()
@@ -234,9 +231,9 @@ func TestFindDeviceKeepsOpenTimeoutWhenALaterDeviceFails(t *testing.T) {
 
 	errBusy := errors.New("device busy")
 	hung, release := newHungU2FDevice(t)
-	busy := &mocks.U2FDevice{}
-	busy.On("Open").Return(errBusy).Once()
-	busy.On("Close").Return().Once()
+	busy := mocks.NewMockU2FDevice(gomock.NewController(t))
+	busy.EXPECT().Open().Return(errBusy).Times(1)
+	busy.EXPECT().Close().Times(1)
 	useU2FDevices(t, hung, busy)
 	t.Cleanup(release)
 
@@ -244,13 +241,11 @@ func TestFindDeviceKeepsOpenTimeoutWhenALaterDeviceFails(t *testing.T) {
 	assert.Nil(t, dev)
 	require.ErrorIs(t, err, errU2FOpenTimeout)
 	require.ErrorIs(t, err, errBusy)
-	busy.AssertExpectations(t)
 
-	// NewU2FClient takes its non-retryable path for the combined error.
-	finder := &scriptedDeviceFinder{err: err}
+	// NewU2FClient takes its non-retryable path for the combined error: exactly one discovery attempt.
+	finder := failingFinder(gomock.NewController(t), err, 1)
 	_, err = NewU2FClient("nonce", "app", "facet", "kh", finder)
 	require.ErrorIs(t, err, errU2FOpenTimeout)
-	assert.Equal(t, 1, finder.calls)
 }
 
 // A device that opens after an earlier device timed out is still used.
@@ -260,8 +255,8 @@ func TestFindDeviceUsesALaterDeviceAfterOpenTimeout(t *testing.T) {
 	t.Cleanup(func() { u2fOpenTimeout = orig })
 
 	hung, release := newHungU2FDevice(t)
-	working := &mocks.U2FDevice{}
-	working.On("Open").Return(nil).Once()
+	working := mocks.NewMockU2FDevice(gomock.NewController(t))
+	working.EXPECT().Open().Return(nil).Times(1)
 	useU2FDevices(t, hung, working)
 	t.Cleanup(release)
 
@@ -272,14 +267,16 @@ func TestFindDeviceUsesALaterDeviceAfterOpenTimeout(t *testing.T) {
 
 // newHungU2FDevice returns a device whose Open blocks until release is called. Release unblocks Open and
 // waits, bounded, for the worker that owns the pending Open to close the device.
-func newHungU2FDevice(t *testing.T) (*mocks.U2FDevice, func()) {
+// The device's controller is created here, so a release registered with t.Cleanup afterwards runs before
+// the controller verifies the expectations.
+func newHungU2FDevice(t *testing.T) (*mocks.MockU2FDevice, func()) {
 	t.Helper()
 
 	releaseOpen := make(chan struct{})
 	closed := make(chan struct{})
-	hung := &mocks.U2FDevice{}
-	hung.On("Open").Run(func(mock.Arguments) { <-releaseOpen }).Return(nil).Once()
-	hung.On("Close").Run(func(mock.Arguments) { close(closed) }).Return().Once()
+	hung := mocks.NewMockU2FDevice(gomock.NewController(t))
+	hung.EXPECT().Open().Do(func() { <-releaseOpen }).Return(nil).Times(1)
+	hung.EXPECT().Close().Do(func() { close(closed) }).Times(1)
 	release := func() {
 		close(releaseOpen)
 		select {
@@ -302,15 +299,15 @@ func TestAuthenticateUntilStoppedDoesNotReadAfterStop(t *testing.T) {
 	for range 20 {
 		var reads atomic.Int32
 		stop := make(chan struct{})
-		device := &mocks.U2FDevice{}
-		device.On("Authenticate", mock.Anything).Run(func(mock.Arguments) {
+		device := mocks.NewMockU2FDevice(gomock.NewController(t))
+		device.EXPECT().Authenticate(gomock.Any()).Do(func(*u2fhost.AuthenticateRequest) {
 			if reads.Add(1) == 1 {
 				close(stop)
 				// Let several poll intervals elapse so a tick is pending next to stop when the loop selects
 				// again. This only lets the ticker advance; it does not synchronize goroutines.
 				<-time.After(10 * u2fPollInterval)
 			}
-		}).Return(nil, &u2fhost.TestOfUserPresenceRequiredError{})
+		}).Return(nil, &u2fhost.TestOfUserPresenceRequiredError{}).AnyTimes() // The read count is asserted below.
 
 		client := &U2FClient{Device: device}
 		_, err := client.authenticateUntilStopped(&u2fhost.AuthenticateRequest{}, stop)
@@ -320,19 +317,18 @@ func TestAuthenticateUntilStoppedDoesNotReadAfterStop(t *testing.T) {
 }
 
 func TestNewU2FClientDoesNotRetryOpenTimeout(t *testing.T) {
-	finder := &scriptedDeviceFinder{err: fmt.Errorf("wrapped: %w", errU2FOpenTimeout)}
+	// Exactly one discovery attempt; the controller verifies the count.
+	finder := failingFinder(gomock.NewController(t), fmt.Errorf("wrapped: %w", errU2FOpenTimeout), 1)
 	_, err := NewU2FClient("nonce", "app", "facet", "kh", finder)
 	require.ErrorIs(t, err, errU2FOpenTimeout)
-	assert.Equal(t, 1, finder.calls)
 }
 
 func TestChallengeU2FInvalidKeyHandle(t *testing.T) {
-	device := &mocks.U2FDevice{}
-	device.On("Close").Return().Once()
+	device := mocks.NewMockU2FDevice(gomock.NewController(t))
+	device.EXPECT().Close().Times(1)
 
 	client := &U2FClient{Device: device, ChallengeNonce: "dGVzdAo=", KeyHandle: "not base64!"}
 	_, err := client.ChallengeU2F()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid U2F key handle")
-	device.AssertExpectations(t)
 }

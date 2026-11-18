@@ -11,8 +11,8 @@ import (
 
 	"github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
@@ -72,7 +72,7 @@ func TestVerifyMfa_PassCodeFactors(t *testing.T) {
 			pr := withMockPrompter(t)
 			expectedCode := tc.mfaToken
 			if tc.prompted != "" {
-				pr.On("RequestSecurityCode", "000000").Return(tc.prompted).Once()
+				pr.EXPECT().RequestSecurityCode("000000").Return(tc.prompted, nil).Times(1)
 				expectedCode = tc.prompted
 			}
 
@@ -105,7 +105,7 @@ func TestVerifyMfa_PassCodeFactors(t *testing.T) {
 
 func TestVerifyMfa_Yubikey(t *testing.T) {
 	pr := withMockPrompter(t)
-	pr.On("Password", "Press the button on your yubikey").Return("yubi-otp").Once()
+	pr.EXPECT().Password("Press the button on your yubikey").Return("yubi-otp", nil).Times(1)
 
 	vs := newVerifyServer(t, func(_ string, _ int, body map[string]any) string {
 		assert.Equal(t, "yubi-otp", body["passCode"])
@@ -133,11 +133,11 @@ func TestVerifyMfa_OptionSelection(t *testing.T) {
 	t.Run("auto with several factors prompts with labelled options", func(t *testing.T) {
 		vs := newVerifyServer(t, successOn("totp"))
 		pr := withMockPrompter(t)
-		pr.On("Choose", "Select which MFA option to use", []string{
+		pr.EXPECT().Choose("Select which MFA option to use", []string{
 			"PUSH MFA authentication - push",
 			"TOTP MFA authentication - Authenticator App (totp)",
 			"UNSUPPORTED: ACME CARRIER-PIGEON",
-		}).Return(1).Once()
+		}).Return(1, nil).Times(1)
 
 		oc, _ := offlineTestClient(t)
 		resp := mfaRequiredResponse(t, "state-1",
@@ -170,10 +170,10 @@ func TestVerifyMfa_OptionSelection(t *testing.T) {
 	t.Run("several factors of the configured type prompt for one of them", func(t *testing.T) {
 		vs := newVerifyServer(t, successOn("second"))
 		pr := withMockPrompter(t)
-		pr.On("Choose", "Multiple OKTA MFA options found. Select which MFA option to use", []string{
+		pr.EXPECT().Choose("Multiple OKTA MFA options found. Select which MFA option to use", []string{
 			"Okta MFA authentication - first",
 			"Okta MFA authentication - second",
-		}).Return(1).Once()
+		}).Return(1, nil).Times(1)
 
 		oc, _ := offlineTestClient(t)
 		oc.mfa = "OKTA"
@@ -276,13 +276,13 @@ func webauthnChallenge(nextHref, credentialID string) string {
 
 func TestVerifyMfa_FidoWebAuthn(t *testing.T) {
 	t.Run("signed assertion is posted to the next link", func(t *testing.T) {
-		device := &mocks.U2FDevice{}
+		device := mocks.NewMockU2FDevice(gomock.NewController(t))
 		withMockDevice(t, device)
-		device.On("Close").Return()
-		device.On("Authenticate", mock.MatchedBy(func(r *u2fhost.AuthenticateRequest) bool {
+		device.EXPECT().Close().MinTimes(1) // Unlimited, but at least one call (the former testify AssertExpectations contract).
+		device.EXPECT().Authenticate(gomock.Cond(func(r *u2fhost.AuthenticateRequest) bool {
 			return r.Challenge == "nonce-cred-1" && r.AppId == "okta.example.com" &&
 				r.Facet == "https://okta.example.com" && r.KeyHandle == "cred-1" && r.WebAuthn
-		})).Return(&u2fhost.AuthenticateResponse{ClientData: "cd", SignatureData: "sig", AuthenticatorData: "ad"}, nil).Once()
+		})).Return(&u2fhost.AuthenticateResponse{ClientData: "cd", SignatureData: "sig", AuthenticatorData: "ad"}, nil).Times(1)
 
 		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
@@ -305,20 +305,19 @@ func TestVerifyMfa_FidoWebAuthn(t *testing.T) {
 		got, err := verifyMfa(oc, "okta.example.com", &creds.LoginDetails{}, resp)
 		require.NoError(t, err)
 		assert.Equal(t, "fido-st", got)
-		device.AssertExpectations(t)
 	})
 
 	t.Run("bad key handle falls through to the next FIDO device", func(t *testing.T) {
-		device := &mocks.U2FDevice{}
+		device := mocks.NewMockU2FDevice(gomock.NewController(t))
 		withMockDevice(t, device)
-		device.On("Close").Return()
-		device.On("Authenticate", mock.MatchedBy(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == "cred-a" })).
-			Return(nil, &u2fhost.BadKeyHandleError{}).Once()
-		device.On("Authenticate", mock.MatchedBy(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == "cred-b" })).
-			Return(&u2fhost.AuthenticateResponse{ClientData: "cd-b"}, nil).Once()
+		device.EXPECT().Close().MinTimes(1) // Unlimited, but at least one call (the former testify AssertExpectations contract).
+		device.EXPECT().Authenticate(gomock.Cond(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == "cred-a" })).
+			Return(nil, &u2fhost.BadKeyHandleError{}).Times(1)
+		device.EXPECT().Authenticate(gomock.Cond(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == "cred-b" })).
+			Return(&u2fhost.AuthenticateResponse{ClientData: "cd-b"}, nil).Times(1)
 
 		pr := withMockPrompter(t)
-		pr.On("Choose", "Multiple FIDO MFA options found. Select which MFA option to use", mock.Anything).Return(0).Once()
+		pr.EXPECT().Choose("Multiple FIDO MFA options found. Select which MFA option to use", gomock.Any()).Return(0, nil).Times(1)
 
 		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
@@ -344,21 +343,20 @@ func TestVerifyMfa_FidoWebAuthn(t *testing.T) {
 		got, err := verifyMfa(oc, "okta.example.com", &creds.LoginDetails{}, resp)
 		require.NoError(t, err)
 		assert.Equal(t, "fido-b", got)
-		device.AssertExpectations(t)
 	})
 
 	// Regression: with the default "Auto" setting the next FIDO device was never searched for.
 	t.Run("bad key handle falls through to the next FIDO device with Auto", func(t *testing.T) {
-		device := &mocks.U2FDevice{}
+		device := mocks.NewMockU2FDevice(gomock.NewController(t))
 		withMockDevice(t, device)
-		device.On("Close").Return()
-		device.On("Authenticate", mock.MatchedBy(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == "cred-a" })).
-			Return(nil, &u2fhost.BadKeyHandleError{}).Once()
-		device.On("Authenticate", mock.MatchedBy(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == "cred-b" })).
-			Return(&u2fhost.AuthenticateResponse{ClientData: "cd-b"}, nil).Once()
+		device.EXPECT().Close().AnyTimes()
+		device.EXPECT().Authenticate(gomock.Cond(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == "cred-a" })).
+			Return(nil, &u2fhost.BadKeyHandleError{}).Times(1)
+		device.EXPECT().Authenticate(gomock.Cond(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == "cred-b" })).
+			Return(&u2fhost.AuthenticateResponse{ClientData: "cd-b"}, nil).Times(1)
 
 		pr := withMockPrompter(t)
-		pr.On("Choose", "Select which MFA option to use", mock.Anything).Return(0).Once()
+		pr.EXPECT().Choose("Select which MFA option to use", gomock.Any()).Return(0, nil).Times(1)
 
 		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
@@ -386,10 +384,10 @@ func TestVerifyMfa_FidoWebAuthn(t *testing.T) {
 	})
 
 	t.Run("bad key handle on the only device fails", func(t *testing.T) {
-		device := &mocks.U2FDevice{}
+		device := mocks.NewMockU2FDevice(gomock.NewController(t))
 		withMockDevice(t, device)
-		device.On("Close").Return()
-		device.On("Authenticate", mock.Anything).Return(nil, &u2fhost.BadKeyHandleError{}).Once()
+		device.EXPECT().Close().AnyTimes()
+		device.EXPECT().Authenticate(gomock.Any()).Return(nil, &u2fhost.BadKeyHandleError{}).Times(1)
 
 		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = fmt.Fprint(w, webauthnChallenge("https://"+r.Host+"/finish", "cred-a"))
@@ -405,10 +403,10 @@ func TestVerifyMfa_FidoWebAuthn(t *testing.T) {
 	})
 
 	t.Run("device error other than bad key handle fails", func(t *testing.T) {
-		device := &mocks.U2FDevice{}
+		device := mocks.NewMockU2FDevice(gomock.NewController(t))
 		withMockDevice(t, device)
-		device.On("Close").Return()
-		device.On("Authenticate", mock.Anything).Return(nil, fmt.Errorf("device unplugged")).Once()
+		device.EXPECT().Close().AnyTimes()
+		device.EXPECT().Authenticate(gomock.Any()).Return(nil, fmt.Errorf("device unplugged")).Times(1)
 
 		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = fmt.Fprint(w, webauthnChallenge("https://"+r.Host+"/finish", "cred-a"))
@@ -445,7 +443,7 @@ func TestVerifyMfa_PromptFailureStopsAuthentication(t *testing.T) {
 
 	t.Run("option selection", func(t *testing.T) {
 		pr := withMockPrompter(t)
-		pr.On("Choose", "Select which MFA option to use", mock.Anything).Return(0, errPrompt).Once()
+		pr.EXPECT().Choose("Select which MFA option to use", gomock.Any()).Return(0, errPrompt).Times(1)
 
 		vs := newVerifyServer(t, func(string, int, map[string]any) string {
 			t.Error("no verify request is expected after a failed prompt")
@@ -462,7 +460,7 @@ func TestVerifyMfa_PromptFailureStopsAuthentication(t *testing.T) {
 
 	t.Run("security code", func(t *testing.T) {
 		pr := withMockPrompter(t)
-		pr.On("RequestSecurityCode", "000000").Return("", errPrompt).Once()
+		pr.EXPECT().RequestSecurityCode("000000").Return("", errPrompt).Times(1)
 
 		// Only the challenge request is made; the code is never submitted.
 		vs := newVerifyServer(t, func(string, int, map[string]any) string {

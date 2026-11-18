@@ -9,8 +9,8 @@ import (
 
 	"github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
@@ -139,7 +139,7 @@ func TestVerifyMfa_DuoFailureModes(t *testing.T) {
 		option  string
 		setup   func(t *testing.T, d *duoFake)
 		fault   func(*http.Request) faultKind
-		prompt  func(pr *mocks.Prompter)
+		prompt  func(pr *mocks.MockPrompter)
 		wantErr string
 	}{
 		{name: "duo host that cannot be requested", option: "Duo Push", setup: func(_ *testing.T, d *duoFake) { d.host = "bad host" }, wantErr: "error building authentication request"},
@@ -157,15 +157,17 @@ func TestVerifyMfa_DuoFailureModes(t *testing.T) {
 		{name: "endpoint health validation fails", option: "Duo Push", setup: func(_ *testing.T, d *duoFake) { d.auth = []string{duoEndpointHealthPage} }, fault: faultAt(faultTransport, "/alive", 0), wantErr: "couldn't validate endpoint health"},
 		{
 			name: "option prompt failure",
-			prompt: func(pr *mocks.Prompter) {
-				pr.On("Choose", "Select a DUO MFA Option", mock.Anything).Return(0, errPrompt).Once()
+			prompt: func(pr *mocks.MockPrompter) {
+				pr.EXPECT().Choose("Select a DUO MFA Option", gomock.Any()).Return(0, errPrompt).Times(1)
 			},
 			wantErr: "error selecting the DUO MFA option",
 		},
 		{
-			name:    "passcode prompt failure",
-			option:  "Passcode",
-			prompt:  func(pr *mocks.Prompter) { pr.On("StringRequired", "Enter passcode").Return("", errPrompt).Once() },
+			name:   "passcode prompt failure",
+			option: "Passcode",
+			prompt: func(pr *mocks.MockPrompter) {
+				pr.EXPECT().StringRequired("Enter passcode").Return("", errPrompt).Times(1)
+			},
 			wantErr: "error reading the DUO passcode",
 		},
 		{name: "prompt transport failure", option: "Duo Push", fault: faultAt(faultTransport, "/frame/prompt", 1), wantErr: "error retrieving verify response"},
@@ -204,12 +206,12 @@ func TestVerifyMfa_DuoFailureModes(t *testing.T) {
 
 func TestVerifyMfa_DuoU2FFailureModes(t *testing.T) {
 	signed := &u2fhost.AuthenticateResponse{ClientData: "cd", SignatureData: "sig"}
-	signOK := func(d *mocks.U2FDevice) { d.On("Authenticate", mock.Anything).Return(signed, nil).Once() }
+	signOK := func(d *mocks.MockU2FDevice) { d.EXPECT().Authenticate(gomock.Any()).Return(signed, nil).Times(1) }
 
 	tests := []struct {
 		name    string
-		finder  func(d *mocks.U2FDevice) DeviceFinder
-		device  func(d *mocks.U2FDevice)
+		finder  func(ctrl *gomock.Controller) DeviceFinder
+		device  func(d *mocks.MockU2FDevice)
 		setup   func(d *duoFake)
 		fault   func(*http.Request) faultKind
 		wantErr string
@@ -217,14 +219,14 @@ func TestVerifyMfa_DuoU2FFailureModes(t *testing.T) {
 	}{
 		{
 			name:    "no U2F device is plugged in",
-			finder:  func(*mocks.U2FDevice) DeviceFinder { return &scriptedDeviceFinder{errs: []error{errNoDeviceFound}} },
+			finder:  func(ctrl *gomock.Controller) DeviceFinder { return failingFinder(ctrl, errNoDeviceFound) },
 			wantIs:  errNoDeviceFound,
 			wantErr: "no U2F device",
 		},
 		{
 			name: "device rejects the challenge",
-			device: func(d *mocks.U2FDevice) {
-				d.On("Authenticate", mock.Anything).Return(nil, errors.New("device refused")).Once()
+			device: func(d *mocks.MockU2FDevice) {
+				d.EXPECT().Authenticate(gomock.Any()).Return(nil, errors.New("device refused")).Times(1)
 			},
 			wantErr: "device refused",
 		},
@@ -241,14 +243,15 @@ func TestVerifyMfa_DuoU2FFailureModes(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			device := &mocks.U2FDevice{}
-			device.On("Close").Maybe().Return()
+			ctrl := gomock.NewController(t)
+			device := mocks.NewMockU2FDevice(ctrl)
+			device.EXPECT().Close().AnyTimes()
 			if tc.device != nil {
 				tc.device(device)
 			}
-			var finder DeviceFinder = &MockDeviceFinder{device}
+			var finder DeviceFinder = anyTimesFinderFor(ctrl, device)
 			if tc.finder != nil {
-				finder = tc.finder(device)
+				finder = tc.finder(ctrl)
 			}
 			withDeviceFinder(t, finder)
 
@@ -267,15 +270,14 @@ func TestVerifyMfa_DuoU2FFailureModes(t *testing.T) {
 			if tc.wantIs != nil {
 				assert.ErrorIs(t, err, tc.wantIs)
 			}
-			device.AssertExpectations(t)
 		})
 	}
 
 	t.Run("a new sid from the U2F status is used for the result request", func(t *testing.T) {
-		device := &mocks.U2FDevice{}
-		device.On("Close").Return()
+		device := mocks.NewMockU2FDevice(gomock.NewController(t))
+		device.EXPECT().Close().AnyTimes()
 		signOK(device)
-		withDeviceFinder(t, &MockDeviceFinder{device})
+		withMockDevice(t, device)
 
 		d := newDuoFake()
 		d.auth = []string{duoU2FAuthPage}

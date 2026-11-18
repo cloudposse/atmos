@@ -8,100 +8,55 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
 )
 
-// recordingPrompter records the arguments it was called with.
-type recordingPrompter struct {
-	calls        []string
-	lastPrompt   string
-	lastDefault  string
-	lastOptions  []string
-	chooseResult string
-}
-
-func (r *recordingPrompter) RequestSecurityCode(pattern string) (string, error) {
-	r.calls = append(r.calls, "RequestSecurityCode")
-	r.lastPrompt = pattern
-	return "123456", nil
-}
-
-func (r *recordingPrompter) ChooseWithDefault(pr, def string, options []string) (string, error) {
-	r.calls = append(r.calls, "ChooseWithDefault")
-	r.lastPrompt, r.lastDefault, r.lastOptions = pr, def, options
-	return r.chooseResult, nil
-}
-
-func (r *recordingPrompter) Choose(pr string, options []string) (int, error) {
-	r.calls = append(r.calls, "Choose")
-	r.lastPrompt, r.lastOptions = pr, options
-	return len(options) - 1, nil
-}
-
-func (r *recordingPrompter) StringRequired(pr string) (string, error) {
-	r.calls = append(r.calls, "StringRequired")
-	r.lastPrompt = pr
-	return "required", nil
-}
-
-func (r *recordingPrompter) String(pr, def string) (string, error) {
-	r.calls = append(r.calls, "String")
-	r.lastPrompt, r.lastDefault = pr, def
-	return "value", nil
-}
-
-func (r *recordingPrompter) Password(pr string) (string, error) {
-	r.calls = append(r.calls, "Password")
-	r.lastPrompt = pr
-	return "secret", nil
-}
-
-func (r *recordingPrompter) Display(pr string) {
-	r.calls = append(r.calls, "Display")
-	r.lastPrompt = pr
-}
-
-// useRecordingPrompter installs a recording prompter for the duration of a test.
-func useRecordingPrompter(t *testing.T) *recordingPrompter {
+// useMockPrompter installs a mock prompter for the duration of a test. The controller verifies the
+// expectations when the test ends.
+func useMockPrompter(t *testing.T) *mocks.MockPrompter {
 	t.Helper()
 	orig := ActivePrompter
-	rec := &recordingPrompter{chooseResult: "picked"}
-	SetPrompter(rec)
+	pr := mocks.NewMockPrompter(gomock.NewController(t))
+	SetPrompter(pr)
 	t.Cleanup(func() { SetPrompter(orig) })
-	return rec
+	return pr
 }
 
 func TestPackageFunctionsDelegateToActivePrompter(t *testing.T) {
-	rec := useRecordingPrompter(t)
+	pr := useMockPrompter(t)
+	// Each package function delegates exactly once, in this order, with the caller's arguments.
+	gomock.InOrder(
+		pr.EXPECT().RequestSecurityCode("000000").Return("123456", nil).Times(1),
+		pr.EXPECT().Choose("Pick", []string{"a", "b"}).Return(1, nil).Times(1),
+		pr.EXPECT().StringRequired("Username").Return("required", nil).Times(1),
+		pr.EXPECT().String("Region", "us-east-1").Return("value", nil).Times(1),
+		pr.EXPECT().Password("Password").Return("secret", nil).Times(1),
+		pr.EXPECT().Display("hello").Times(1),
+	)
 
 	code, err := RequestSecurityCode("000000")
 	require.NoError(t, err)
 	assert.Equal(t, "123456", code)
-	assert.Equal(t, "000000", rec.lastPrompt)
 
 	index, err := Choose("Pick", []string{"a", "b"})
 	require.NoError(t, err)
 	assert.Equal(t, 1, index)
-	assert.Equal(t, []string{"a", "b"}, rec.lastOptions)
 
 	required, err := StringRequired("Username")
 	require.NoError(t, err)
 	assert.Equal(t, "required", required)
-	assert.Equal(t, "Username", rec.lastPrompt)
 
 	value, err := String("Region", "us-east-1")
 	require.NoError(t, err)
 	assert.Equal(t, "value", value)
-	assert.Equal(t, "us-east-1", rec.lastDefault)
 
 	secret, err := Password("Password")
 	require.NoError(t, err)
 	assert.Equal(t, "secret", secret)
-	assert.Equal(t, "Password", rec.lastPrompt)
 
 	Display("hello")
-	assert.Equal(t, "hello", rec.lastPrompt)
-
-	assert.Equal(t, []string{"RequestSecurityCode", "Choose", "StringRequired", "String", "Password", "Display"}, rec.calls)
 }
 
 func TestChooseWithDefault(t *testing.T) {
@@ -118,14 +73,13 @@ func TestChooseWithDefault(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := useRecordingPrompter(t)
+			pr := useMockPrompter(t)
+			// The active prompter receives the prompt, the resolved default and the options exactly once.
+			pr.EXPECT().ChooseWithDefault("Pick a role", tt.wantDefault, tt.options).Return("picked", nil).Times(1)
 
 			got, err := ChooseWithDefault("Pick a role", tt.def, tt.options)
 			require.NoError(t, err)
 			assert.Equal(t, "picked", got)
-			assert.Equal(t, "Pick a role", rec.lastPrompt)
-			assert.Equal(t, tt.wantDefault, rec.lastDefault)
-			assert.Equal(t, tt.options, rec.lastOptions)
 		})
 	}
 }
