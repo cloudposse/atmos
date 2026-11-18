@@ -1,5 +1,7 @@
 package store
 
+import "context"
+
 // Store defines the common interface for all store implementations.
 //
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_store.go -package=store
@@ -30,6 +32,21 @@ type FieldStore interface {
 	GetField(stack, component, key, field string) (any, error)
 	// GetKeyField retrieves a named field from a document addressed directly by key.
 	GetKeyField(key, field string) (any, error)
+}
+
+// ContextStore optionally cancels a store read while retaining ownership of
+// authentication cleanup. Existing Store implementations remain compatible.
+type ContextStore interface {
+	Store
+	GetContext(context.Context, string, string, string) (any, error)
+	GetKeyContext(context.Context, string) (any, error)
+}
+
+// ContextFieldStore is the context-aware exact-field counterpart to FieldStore.
+type ContextFieldStore interface {
+	FieldStore
+	GetFieldContext(context.Context, string, string, string, string) (any, error)
+	GetKeyFieldContext(context.Context, string, string) (any, error)
 }
 
 // DeletableStore extends Store with the ability to remove a value. Backends that support

@@ -71,7 +71,7 @@ func (d *DockerRuntime) Build(ctx context.Context, config *BuildConfig) error {
 
 	cmd := d.command(ctx, args...)
 	applyCommandEnv(cmd, bakeCommandEnv(d.env, config))
-	output, err := cmd.CombinedOutput()
+	output, err := runBuildCommand(ctx, cmd, config.Output)
 	if err != nil {
 		return fmt.Errorf("%w: docker build failed: %w: %s", errUtils.ErrContainerRuntimeOperation, err, string(output))
 	}
@@ -479,7 +479,11 @@ func parseDockerPort(portStr string) (PortBinding, bool) {
 	if !ok {
 		return PortBinding{}, false
 	}
-	return PortBinding{ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, true
+	bind := ""
+	if idx := strings.LastIndex(strings.TrimSpace(left), ":"); idx >= 0 {
+		bind = strings.Trim(strings.TrimSpace(left)[:idx], "[]")
+	}
+	return PortBinding{Bind: bind, ContainerPort: containerPort, HostPort: hostPort, Protocol: protocol}, true
 }
 
 func parseDockerContainerPort(portStr string) (int, string, bool) {

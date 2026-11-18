@@ -43,7 +43,7 @@ func TestCloneFreshBuildsFullArgs(t *testing.T) {
 	require.Len(t, runner.calls, 1)
 	assert.Equal(t, []string{
 		"clone", "--depth", "1", "--filter", "blob:none", "--single-branch",
-		"--branch", "main", "--recurse-submodules", "--",
+		"--branch", "main", "--recurse-submodules", "--origin", "origin", "--",
 		"https://github.com/acme/deploy.git", workdir,
 	}, runner.calls[0].args)
 
@@ -66,7 +66,7 @@ func TestCloneFreshMinimalArgs(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, runner.calls, 1)
-	assert.Equal(t, []string{"clone", "--", "https://github.com/acme/deploy.git", workdir}, runner.calls[0].args)
+	assert.Equal(t, []string{"clone", "--origin", "origin", "--", "https://github.com/acme/deploy.git", workdir}, runner.calls[0].args)
 }
 
 // TestCloneReconcileRemoteSync covers syncRemoteURL's three non-error

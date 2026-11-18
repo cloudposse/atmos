@@ -2,7 +2,10 @@ package emulator
 
 import (
 	"fmt"
+	"net"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -72,23 +75,30 @@ func (e *Endpoint) NetworkIP() (string, bool) {
 	return "", false
 }
 
-// loopbackHostToIPv4 rewrites a loopback or wildcard host to the IPv4 loopback
-// literal 127.0.0.1, leaving real hostnames untouched. We connect to a host port
-// that a container runtime published for the emulator; on Linux, Docker publishes
-// that port on IPv4 0.0.0.0 only, while "localhost" resolves to IPv6 ::1 first.
-// A connection to ::1 against an IPv4-only published port does not refuse — it
-// hangs — so clients (e.g. Terraform's AWS SDK) stall until they time out. This
-// bites GitHub Actions Linux runners in particular; locally Docker Desktop also
-// binds [::], which masks it. 127.0.0.1 reaches a published port on every
-// platform, so normalizing loopback to it is always safe. An empty host means
-// "not set", which we also treat as loopback.
+// loopbackHostToIPv4 rewrites an unset, "localhost", or wildcard host to the IPv4
+// loopback literal 127.0.0.1, leaving real hostnames untouched. We connect to a
+// host port that a container runtime published for the emulator; on Linux, Docker
+// publishes that port on IPv4 0.0.0.0 only, while "localhost" resolves to IPv6 ::1
+// first. A connection to ::1 against an IPv4-only published port does not
+// refuse — it hangs — so clients (e.g. Terraform's AWS SDK) stall until they time
+// out. This bites GitHub Actions Linux runners in particular; locally Docker
+// Desktop also binds [::], which masks it. 127.0.0.1 reaches a port published on
+// all interfaces on every platform, so normalizing to it is always safe. An empty
+// host means "not set", which we also treat as loopback. An explicit IPv6 address
+// such as ::1 is kept (without brackets): a port bound only to ::1 is unreachable
+// over IPv4.
 func loopbackHostToIPv4(host string) string {
 	switch host {
-	case "", "localhost", "::1", "[::1]", "::", "[::]", "0.0.0.0":
+	case "", "localhost", "::", "[::]", "0.0.0.0":
 		return "127.0.0.1"
 	default:
-		return host
+		return strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
 	}
+}
+
+// hostPort joins the normalized endpoint host and port, bracketing IPv6 literals.
+func (e *Endpoint) hostPort(port int) string {
+	return net.JoinHostPort(loopbackHostToIPv4(e.Host), strconv.Itoa(port))
 }
 
 // URL builds a scheme://host:port URL for the primary host port. Returns "" when
@@ -100,7 +110,7 @@ func (e *Endpoint) URL(scheme string) string {
 	if !ok {
 		return ""
 	}
-	return fmt.Sprintf("%s://%s:%d", scheme, loopbackHostToIPv4(e.Host), port)
+	return fmt.Sprintf("%s://%s", scheme, e.hostPort(port))
 }
 
 // Authority returns the live "host:port" (no scheme) for the primary host port,
@@ -113,7 +123,7 @@ func (e *Endpoint) Authority() string {
 	if !ok {
 		return ""
 	}
-	return fmt.Sprintf("%s:%d", loopbackHostToIPv4(e.Host), port)
+	return e.hostPort(port)
 }
 
 // Profile is what a driver advertises for a live emulator. Consumers subscribe

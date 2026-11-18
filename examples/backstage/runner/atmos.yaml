@@ -1,0 +1,13 @@
+# Atmos configuration for the Gitea Actions runner container. It only defines the
+# `runner register` custom command that the container entrypoint runs before it starts
+# the runner daemon.
+commands:
+  - name: runner
+    description: Manage the Gitea Actions runner
+    commands:
+      - name: register
+        description: Register the runner with Gitea unless it is already registered
+        steps:
+          - type: script
+            interpreter: starlark
+            source: /opt/runner/register.star

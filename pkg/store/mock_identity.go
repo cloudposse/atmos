@@ -169,6 +169,104 @@ func (mr *MockEnvironmentAuthContextResolverMockRecorder) ResolveGCPAuthContext(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveGCPAuthContext", reflect.TypeOf((*MockEnvironmentAuthContextResolver)(nil).ResolveGCPAuthContext), ctx, identityName)
 }
 
+// MockScopedEnvironmentAuthContextResolver is a mock of ScopedEnvironmentAuthContextResolver interface.
+type MockScopedEnvironmentAuthContextResolver struct {
+	ctrl     *gomock.Controller
+	recorder *MockScopedEnvironmentAuthContextResolverMockRecorder
+	isgomock struct{}
+}
+
+// MockScopedEnvironmentAuthContextResolverMockRecorder is the mock recorder for MockScopedEnvironmentAuthContextResolver.
+type MockScopedEnvironmentAuthContextResolverMockRecorder struct {
+	mock *MockScopedEnvironmentAuthContextResolver
+}
+
+// NewMockScopedEnvironmentAuthContextResolver creates a new mock instance.
+func NewMockScopedEnvironmentAuthContextResolver(ctrl *gomock.Controller) *MockScopedEnvironmentAuthContextResolver {
+	mock := &MockScopedEnvironmentAuthContextResolver{ctrl: ctrl}
+	mock.recorder = &MockScopedEnvironmentAuthContextResolverMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockScopedEnvironmentAuthContextResolver) EXPECT() *MockScopedEnvironmentAuthContextResolverMockRecorder {
+	return m.recorder
+}
+
+// ResolveAWSAuthContext mocks base method.
+func (m *MockScopedEnvironmentAuthContextResolver) ResolveAWSAuthContext(ctx context.Context, identityName string) (*AWSAuthConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveAWSAuthContext", ctx, identityName)
+	ret0, _ := ret[0].(*AWSAuthConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResolveAWSAuthContext indicates an expected call of ResolveAWSAuthContext.
+func (mr *MockScopedEnvironmentAuthContextResolverMockRecorder) ResolveAWSAuthContext(ctx, identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveAWSAuthContext", reflect.TypeOf((*MockScopedEnvironmentAuthContextResolver)(nil).ResolveAWSAuthContext), ctx, identityName)
+}
+
+// ResolveAzureAuthContext mocks base method.
+func (m *MockScopedEnvironmentAuthContextResolver) ResolveAzureAuthContext(ctx context.Context, identityName string) (*AzureAuthConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveAzureAuthContext", ctx, identityName)
+	ret0, _ := ret[0].(*AzureAuthConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResolveAzureAuthContext indicates an expected call of ResolveAzureAuthContext.
+func (mr *MockScopedEnvironmentAuthContextResolverMockRecorder) ResolveAzureAuthContext(ctx, identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveAzureAuthContext", reflect.TypeOf((*MockScopedEnvironmentAuthContextResolver)(nil).ResolveAzureAuthContext), ctx, identityName)
+}
+
+// ResolveEnvironmentAuthContext mocks base method.
+func (m *MockScopedEnvironmentAuthContextResolver) ResolveEnvironmentAuthContext(ctx context.Context, identityName string) (*EnvironmentAuthConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveEnvironmentAuthContext", ctx, identityName)
+	ret0, _ := ret[0].(*EnvironmentAuthConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResolveEnvironmentAuthContext indicates an expected call of ResolveEnvironmentAuthContext.
+func (mr *MockScopedEnvironmentAuthContextResolverMockRecorder) ResolveEnvironmentAuthContext(ctx, identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveEnvironmentAuthContext", reflect.TypeOf((*MockScopedEnvironmentAuthContextResolver)(nil).ResolveEnvironmentAuthContext), ctx, identityName)
+}
+
+// ResolveGCPAuthContext mocks base method.
+func (m *MockScopedEnvironmentAuthContextResolver) ResolveGCPAuthContext(ctx context.Context, identityName string) (*GCPAuthConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveGCPAuthContext", ctx, identityName)
+	ret0, _ := ret[0].(*GCPAuthConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResolveGCPAuthContext indicates an expected call of ResolveGCPAuthContext.
+func (mr *MockScopedEnvironmentAuthContextResolverMockRecorder) ResolveGCPAuthContext(ctx, identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveGCPAuthContext", reflect.TypeOf((*MockScopedEnvironmentAuthContextResolver)(nil).ResolveGCPAuthContext), ctx, identityName)
+}
+
+// WithEnvironmentAuthContext mocks base method.
+func (m *MockScopedEnvironmentAuthContextResolver) WithEnvironmentAuthContext(arg0 context.Context, arg1 string, arg2 func(context.Context, *EnvironmentAuthConfig) error) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WithEnvironmentAuthContext", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WithEnvironmentAuthContext indicates an expected call of WithEnvironmentAuthContext.
+func (mr *MockScopedEnvironmentAuthContextResolverMockRecorder) WithEnvironmentAuthContext(arg0, arg1, arg2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithEnvironmentAuthContext", reflect.TypeOf((*MockScopedEnvironmentAuthContextResolver)(nil).WithEnvironmentAuthContext), arg0, arg1, arg2)
+}
+
 // MockIdentityAwareStore is a mock of IdentityAwareStore interface.
 type MockIdentityAwareStore struct {
 	ctrl     *gomock.Controller
@@ -259,4 +357,110 @@ func (m *MockIdentityAwareStore) SetAuthContext(resolver AuthContextResolver, id
 func (mr *MockIdentityAwareStoreMockRecorder) SetAuthContext(resolver, identityName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetAuthContext", reflect.TypeOf((*MockIdentityAwareStore)(nil).SetAuthContext), resolver, identityName)
+}
+
+// MockOperationIdentityStore is a mock of OperationIdentityStore interface.
+type MockOperationIdentityStore struct {
+	ctrl     *gomock.Controller
+	recorder *MockOperationIdentityStoreMockRecorder
+	isgomock struct{}
+}
+
+// MockOperationIdentityStoreMockRecorder is the mock recorder for MockOperationIdentityStore.
+type MockOperationIdentityStoreMockRecorder struct {
+	mock *MockOperationIdentityStore
+}
+
+// NewMockOperationIdentityStore creates a new mock instance.
+func NewMockOperationIdentityStore(ctrl *gomock.Controller) *MockOperationIdentityStore {
+	mock := &MockOperationIdentityStore{ctrl: ctrl}
+	mock.recorder = &MockOperationIdentityStoreMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockOperationIdentityStore) EXPECT() *MockOperationIdentityStoreMockRecorder {
+	return m.recorder
+}
+
+// Get mocks base method.
+func (m *MockOperationIdentityStore) Get(stack, component, key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", stack, component, key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockOperationIdentityStoreMockRecorder) Get(stack, component, key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockOperationIdentityStore)(nil).Get), stack, component, key)
+}
+
+// GetKey mocks base method.
+func (m *MockOperationIdentityStore) GetKey(key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetKey", key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetKey indicates an expected call of GetKey.
+func (mr *MockOperationIdentityStoreMockRecorder) GetKey(key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKey", reflect.TypeOf((*MockOperationIdentityStore)(nil).GetKey), key)
+}
+
+// ResetAuthContext mocks base method.
+func (m *MockOperationIdentityStore) ResetAuthContext() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ResetAuthContext")
+}
+
+// ResetAuthContext indicates an expected call of ResetAuthContext.
+func (mr *MockOperationIdentityStoreMockRecorder) ResetAuthContext() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetAuthContext", reflect.TypeOf((*MockOperationIdentityStore)(nil).ResetAuthContext))
+}
+
+// Set mocks base method.
+func (m *MockOperationIdentityStore) Set(stack, component, key string, value any) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Set", stack, component, key, value)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Set indicates an expected call of Set.
+func (mr *MockOperationIdentityStoreMockRecorder) Set(stack, component, key, value any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockOperationIdentityStore)(nil).Set), stack, component, key, value)
+}
+
+// SetAuthContext mocks base method.
+func (m *MockOperationIdentityStore) SetAuthContext(resolver AuthContextResolver, identityName string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetAuthContext", resolver, identityName)
+}
+
+// SetAuthContext indicates an expected call of SetAuthContext.
+func (mr *MockOperationIdentityStoreMockRecorder) SetAuthContext(resolver, identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetAuthContext", reflect.TypeOf((*MockOperationIdentityStore)(nil).SetAuthContext), resolver, identityName)
+}
+
+// UsesOperationIdentity mocks base method.
+func (m *MockOperationIdentityStore) UsesOperationIdentity() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UsesOperationIdentity")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// UsesOperationIdentity indicates an expected call of UsesOperationIdentity.
+func (mr *MockOperationIdentityStoreMockRecorder) UsesOperationIdentity() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UsesOperationIdentity", reflect.TypeOf((*MockOperationIdentityStore)(nil).UsesOperationIdentity))
 }

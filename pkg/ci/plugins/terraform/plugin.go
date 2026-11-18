@@ -212,13 +212,14 @@ func (p *Plugin) getOutputVariables(result *plugin.OutputResult, command string)
 	return vars
 }
 
-// getArtifactKey generates the artifact storage key for a command using the KeyPattern.
+// getArtifactKey generates the artifact storage key for a command using the default KeyPattern.
+// The key layout is fixed and not user-configurable: S3 listing prefixes, source-tree
+// references, and the `atmos terraform planfile` commands all depend on it.
 // Returns an error if required fields (Stack, Component, SHA) are empty.
 func (p *Plugin) getArtifactKey(info *schema.ConfigAndStacksInfo, ciCtx *provider.Context) (string, error) {
 	defer perf.Track(nil, "terraform.Plugin.getArtifactKey")()
 
 	pattern := planfile.DefaultKeyPattern()
-	// TODO: override from config if set via components.terraform.planfiles.key_pattern.
 
 	keyCtx := &planfile.KeyContext{}
 	if info != nil {

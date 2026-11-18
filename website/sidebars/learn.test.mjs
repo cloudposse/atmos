@@ -6,7 +6,7 @@ import {
   filterItems,
 } from "../src/components/SidebarNavigator/navigation.mjs";
 
-test("Learn exposes its overview through the heading above its six learning sections", () => {
+test("Learn exposes its overview through the heading above its eight learning sections", () => {
   assert.deepEqual(sidebars.docs[0], {
     type: "doc",
     id: "learn/index",
@@ -19,23 +19,24 @@ test("Learn exposes its overview through the heading above its six learning sect
       .map((item) => item.label),
     [
       "Get Started",
+      "Migration Guides",
       "Learn Atmos",
       "Your First Stack",
       "Quick Start",
+      "Tutorials",
       "Best Practices",
       "Troubleshoot",
     ],
   );
 });
 
-test("Migration Guides starts expanded while Task Runners remains collapsible and closed", () => {
+test("Migration Guides and Task Runners start collapsible and closed", () => {
   const before = structuredClone(sidebars.docs);
   const prepared = prepareItems(sidebars.docs, "/intro");
-  const getStarted = prepared.find((item) => item.label === "Get Started");
-  const migration = getStarted.items.find(
+  const migration = prepared.find(
     (item) => item.label === "Migration Guides",
   );
-  assert.equal(migration.collapsed, false);
+  assert.equal(migration.collapsed, true);
   assert.equal(migration.collapsible, true);
   assert.equal(
     migration.items.find((item) => item.label === "Task Runners").collapsed,

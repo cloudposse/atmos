@@ -24,8 +24,18 @@ func gitTestEnv(t *testing.T) []string {
 	cfg := "[init]\n\tdefaultBranch = main\n[user]\n\tname = Global User\n\temail = global@example.com\n"
 	require.NoError(t, os.WriteFile(globalCfg, []byte(cfg), 0o600))
 
+	env := make([]string, 0, len(os.Environ()))
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		switch key {
+		case "GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+			"GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES":
+			continue
+		}
+		env = append(env, entry)
+	}
 	return append(
-		os.Environ(),
+		env,
 		"GIT_CONFIG_GLOBAL="+globalCfg,
 		"GIT_CONFIG_SYSTEM=/dev/null",
 		"GIT_CONFIG_NOSYSTEM=1",
@@ -33,11 +43,39 @@ func gitTestEnv(t *testing.T) []string {
 	)
 }
 
+// TestGitTestEnvIsolatesObjectStorage verifies inherited overrides cannot redirect
+// object writes or make temporary repositories depend on external object stores.
+func TestGitTestEnvIsolatesObjectStorage(t *testing.T) {
+	requireGitBinary(t)
+
+	externalObjects := t.TempDir()
+	for _, key := range []string{
+		"GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_COMMON_DIR",
+		"GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	} {
+		t.Setenv(key, externalObjects)
+	}
+	env := gitTestEnv(t)
+	repo := t.TempDir()
+	gitRun(t, env, "", "init", repo)
+	file := filepath.Join(repo, "content.txt")
+	writeFile(t, file, "isolated object storage\n")
+	sha := strings.TrimSpace(gitRun(t, env, repo, "hash-object", "-w", file))
+	require.Contains(t, []int{40, 64}, len(sha))
+	assert.FileExists(t, filepath.Join(repo, ".git", "objects", sha[:2], sha[2:]))
+	entries, err := os.ReadDir(externalObjects)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "Git must not write to the inherited object store")
+	for _, entry := range env {
+		assert.False(t, strings.HasPrefix(entry, "GIT_ALTERNATE_OBJECT_DIRECTORIES="))
+	}
+}
+
 // gitRun executes a raw git command for test setup/verification.
 func gitRun(t *testing.T, env []string, dir string, args ...string) string {
 	t.Helper()
 
-	result, err := atmosgit.NewExecRunner().Run(context.Background(), "git", args, atmosgit.RunOptions{Dir: dir, Env: env})
+	result, err := atmosgit.NewExecRunner().Run(context.Background(), "git", args, &atmosgit.RunOptions{Dir: dir, Env: env})
 	require.NoError(t, err, "git %v: stderr tail: %s", args, result.StderrTail)
 	return result.Stdout
 }

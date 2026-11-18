@@ -146,9 +146,21 @@ func addMetadata(args []string, config *CreateConfig) []string {
 
 // publishArg returns the `-p` publish value for a port binding. A HostPort of 0
 // means "auto-assign": the container engine picks a free host port (read back
-// later via inspect). We omit the host side in that case — passing a literal `0`
+// later via inspect). We leave out the host port in that case — passing a literal `0`
 // makes Podman reject the spec ("port numbers must be between 1 and 65535").
 func publishArg(port PortBinding) string {
+	if port.Bind != "" {
+		bind := port.Bind
+		// IPv6 addresses need brackets to distinguish address colons from ports.
+		if strings.Contains(bind, ":") && !strings.HasPrefix(bind, "[") {
+			bind = "[" + bind + "]"
+		}
+		hostPort := ""
+		if port.HostPort != 0 {
+			hostPort = strconv.Itoa(port.HostPort)
+		}
+		return fmt.Sprintf("%s:%s:%d/%s", bind, hostPort, port.ContainerPort, port.Protocol)
+	}
 	if port.HostPort == 0 {
 		return fmt.Sprintf("%d/%s", port.ContainerPort, port.Protocol)
 	}
@@ -287,14 +299,8 @@ func buildBuildArgs(config *BuildConfig) []string {
 		if config.Driver != nil {
 			args = append(args, "--builder", effectiveDriverName(config.Driver))
 		}
-		if config.Cache != nil {
-			for _, entry := range config.Cache.From {
-				args = append(args, "--cache-from", joinAttrs(entry))
-			}
-			for _, entry := range config.Cache.To {
-				args = append(args, "--cache-to", joinAttrs(entry))
-			}
-		}
+		args = appendBuildCacheArgs(args, config.Cache, false)
+
 		if config.Load {
 			args = append(args, "--load")
 		}
@@ -334,14 +340,7 @@ func buildBakeArgs(config *BuildConfig) []string {
 	if config.Driver != nil {
 		args = append(args, "--builder", effectiveDriverName(config.Driver))
 	}
-	if config.Cache != nil {
-		for _, entry := range config.Cache.From {
-			args = append(args, "--set", "*.cache-from="+joinAttrs(entry))
-		}
-		for _, entry := range config.Cache.To {
-			args = append(args, "--set", "*.cache-to="+joinAttrs(entry))
-		}
-	}
+	args = appendBuildCacheArgs(args, config.Cache, true)
 
 	for _, file := range appendFile(config.Bake.File, config.Bake.Files) {
 		args = append(args, "--file", file)
@@ -665,4 +664,24 @@ func runCommand(cmd *exec.Cmd, runtimeName string) error {
 		return fmt.Errorf("%w: %s exec exited with code %d: %w", errUtils.ErrContainerRuntimeOperation, runtimeName, exitErr.ExitCode(), err)
 	}
 	return fmt.Errorf("%w: %s exec failed: %w", errUtils.ErrContainerRuntimeOperation, runtimeName, err)
+}
+
+// appendBuildCacheArgs adds cache imports and exports using build or bake syntax.
+func appendBuildCacheArgs(args []string, cache *CacheConfig, bake bool) []string {
+	if cache == nil {
+		return args
+	}
+	fromFlag, toFlag := "--cache-from", "--cache-to"
+	fromPrefix, toPrefix := "", ""
+	if bake {
+		fromFlag, toFlag = "--set", "--set"
+		fromPrefix, toPrefix = "*.cache-from=", "*.cache-to="
+	}
+	for _, entry := range cache.From {
+		args = append(args, fromFlag, fromPrefix+joinAttrs(entry))
+	}
+	for _, entry := range cache.To {
+		args = append(args, toFlag, toPrefix+joinAttrs(entry))
+	}
+	return args
 }

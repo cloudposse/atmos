@@ -230,3 +230,96 @@ func TestSharedSecretDependenciesAndDepthLimit(t *testing.T) {
 	}
 	require.ErrorIs(t, validateGraph(config, "identity:identity-0", make(map[string]bool)), errUtils.ErrInvalidAuthConfig)
 }
+
+func TestReadSecretPassesCancellationToContextualStores(t *testing.T) {
+	for _, field := range []bool{false, true} {
+		for _, scoped := range []bool{false, true} {
+			t.Run(fmt.Sprintf("field=%v/scoped=%v", field, scoped), func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				backend := contextualSecretStore(t, ctx, field, scoped, nil)
+				config := secretConfig(backend)
+				ref := config.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)
+				if field {
+					ref["field"] = "apiToken"
+				}
+				if scoped {
+					ref["stack"], ref["component"] = "dev", "app"
+				}
+				reader := Factory(config)("vault", map[string]any{"kind": "secrets/store"})
+				value, err := reader.ReadSecret(ctx, "token")
+				require.NoError(t, err)
+				require.Equal(t, "synthetic-selected", value)
+			})
+		}
+	}
+}
+
+func contextualSecretStore(t *testing.T, ctx context.Context, field, scoped bool, backendErr error) store.Store {
+	t.Helper()
+	if field {
+		return contextualFieldSecretStore(t, ctx, scoped, backendErr)
+	}
+	contextual := store.NewMockContextStore(gomock.NewController(t))
+	if scoped {
+		contextual.EXPECT().GetContext(ctx, "dev", "app", "private/path").Return("synthetic-selected", backendErr)
+	} else {
+		contextual.EXPECT().GetKeyContext(ctx, "private/path").Return("synthetic-selected", backendErr)
+	}
+	return contextual
+}
+
+func contextualFieldSecretStore(t *testing.T, ctx context.Context, scoped bool, backendErr error) store.Store {
+	t.Helper()
+	contextual := store.NewMockContextFieldStore(gomock.NewController(t))
+	if scoped {
+		contextual.EXPECT().GetFieldContext(ctx, "dev", "app", "private/path", "apiToken").Return("synthetic-selected", backendErr)
+	} else {
+		contextual.EXPECT().GetKeyFieldContext(ctx, "private/path", "apiToken").Return("synthetic-selected", backendErr)
+	}
+	return contextual
+}
+
+func TestReadSecretSanitizesContextualReadErrors(t *testing.T) {
+	diagnostic := errors.New("private-backend-diagnostic")
+	for _, tt := range []struct {
+		name               string
+		backendErr         error
+		canceled, deadline bool
+	}{
+		{name: "canceled", backendErr: context.Canceled, canceled: true},
+		{name: "deadline", backendErr: context.DeadlineExceeded, deadline: true},
+		{name: "wrapped cancellation", backendErr: fmt.Errorf("private-backend-diagnostic: %w", context.Canceled), canceled: true},
+		{name: "joined cancellation", backendErr: errors.Join(diagnostic, context.Canceled), canceled: true},
+		{name: "joined deadline", backendErr: errors.Join(diagnostic, context.DeadlineExceeded), deadline: true},
+		{name: "both context causes", backendErr: errors.Join(diagnostic, context.Canceled, context.DeadlineExceeded), canceled: true, deadline: true},
+		{name: "non context failure", backendErr: diagnostic},
+	} {
+		for _, field := range []bool{false, true} {
+			for _, scoped := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/field=%v/scoped=%v", tt.name, field, scoped), func(t *testing.T) {
+					ctx := t.Context()
+					backend := contextualSecretStore(t, ctx, field, scoped, tt.backendErr)
+					config := secretConfig(backend)
+					ref := config.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)
+					if field {
+						ref["field"] = "apiToken"
+					}
+					if scoped {
+						ref["stack"], ref["component"] = "dev", "app"
+					}
+					reader := Factory(config)("vault", map[string]any{"kind": "secrets/store"})
+					value, err := reader.ReadSecret(ctx, "token")
+					require.NoError(t, ctx.Err(), "the cancellation cause must come from the backend")
+					require.Empty(t, value, "a backend value must not escape its error")
+					require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+					require.Equal(t, tt.canceled, errors.Is(err, context.Canceled))
+					require.Equal(t, tt.deadline, errors.Is(err, context.DeadlineExceeded))
+					require.NotErrorIs(t, err, diagnostic, "the original backend error must not remain reachable")
+					require.NotContains(t, err.Error(), "private-backend-diagnostic")
+					require.NotContains(t, err.Error(), "synthetic-selected")
+				})
+			}
+		}
+	}
+}

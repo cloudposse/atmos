@@ -29,6 +29,9 @@ func resolveStoreAuth(ac *schema.AtmosConfiguration, info *schema.ConfigAndStack
 	// store uses whatever credentials are ambient in the environment. Make that explicit instead of
 	// silently ignoring the pin.
 	if authdeferred.AuthDisabled(ac.AuthManager) || (info != nil && info.AuthDisabled) {
+		if scoped, ok := s.(store.OperationIdentityStore); ok && scoped.UsesOperationIdentity() {
+			return store.ErrIdentityNotConfigured
+		}
 		warnPinnedIdentityBypassed(ac, name)
 		return nil
 	}
@@ -44,6 +47,19 @@ func resolveStoreAuth(ac *schema.AtmosConfiguration, info *schema.ConfigAndStack
 		if requested != cfg.IdentityFlagSelectValue && requested != cfg.IdentityFlagDisabledValue {
 			identity = requested
 		}
+	}
+	if scoped, ok := s.(store.OperationIdentityStore); ok && scoped.UsesOperationIdentity() {
+		if identity == "" {
+			return store.ErrIdentityNotConfigured
+		}
+		manager, ok := ac.AuthManager.(auth.AuthManager)
+		if !ok {
+			return store.ErrAuthContextNotAvailable
+		}
+		// Do not eagerly authenticate: the store must own the complete lifetime,
+		// including acquisition failure, cancellation and identity logout.
+		s.SetAuthContext(authbridge.NewResolver(manager, info), identity)
+		return nil
 	}
 	resolved, err := authdeferred.Credentials(ac, info, identity).Resolve()
 	if err != nil {

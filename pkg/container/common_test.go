@@ -1574,3 +1574,28 @@ func TestBuildImageInspectArgs(t *testing.T) {
 		buildImageInspectArgs("alpine:latest"),
 	)
 }
+
+func TestPublishArg_HostInterface(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name string
+		port PortBinding
+		want string
+	}{
+		{"default interface", PortBinding{HostPort: 8080, ContainerPort: 80, Protocol: "tcp"}, "8080:80/tcp"},
+		{"default auto port", PortBinding{ContainerPort: 80, Protocol: "tcp"}, "80/tcp"},
+		{"IPv4 loopback", PortBinding{Bind: "127.0.0.1", HostPort: 8080, ContainerPort: 80, Protocol: "tcp"}, "127.0.0.1:8080:80/tcp"},
+		{"IPv4 auto port", PortBinding{Bind: "127.0.0.1", ContainerPort: 80, Protocol: "tcp"}, "127.0.0.1::80/tcp"},
+		{"IPv6 loopback", PortBinding{Bind: "::1", HostPort: 5353, ContainerPort: 53, Protocol: "udp"}, "[::1]:5353:53/udp"},
+		{"IPv6 bracketed", PortBinding{Bind: "[::1]", HostPort: 8080, ContainerPort: 80, Protocol: "tcp"}, "[::1]:8080:80/tcp"},
+		{"IPv6 auto port", PortBinding{Bind: "::1", ContainerPort: 80, Protocol: "tcp"}, "[::1]::80/tcp"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, publishArg(tt.port))
+			// Both Docker and Podman use this argument builder.
+			assert.Equal(t, []string{"-p", tt.want}, addResourceBindings(nil, &CreateConfig{Ports: []PortBinding{tt.port}}))
+		})
+	}
+}

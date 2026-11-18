@@ -1,0 +1,44 @@
+---
+slug: operation-scoped-vault-identities
+title: "Operation-Scoped Vault and OpenBao Identities"
+authors: [noeljackson]
+tags: [feature, security]
+---
+Temporary Vault and OpenBao reader tokens can outlive the lookup that needs them. The opt-in [operation lifetime for identity-backed stores](/cli/configuration/secrets#track-1--secret-stores-secret-true) gives that lookup a fresh reader identity and completes logout before returning values to its consumer.
+<!--truncate-->
+
+## The Problem
+
+A reusable authentication session is useful for repeated commands, but a temporary reader token may need a shorter lifetime: acquire it, fetch the requested secret, and revoke it before another command receives the value. A failed read or an interrupted command needs the same cleanup boundary.
+
+## The Fix
+
+The new `options.identity_lifetime: operation` setting is being prepared in [PR #3668](https://github.com/cloudposse/atmos/pull/3668) and has not been released. It takes effect only when explicitly configured on a HashiCorp Vault or OpenBao store.
+
+Each operation authenticates the selected target identity afresh and logs out that operation's credentials before returning. Existing sessions for the same target identity, reusable provider sessions, and ancestor identity sessions are preserved. If cleanup fails, Atmos returns an error and withholds read, list, and existence results.
+
+Graceful SIGINT/SIGTERM cancellation gives credential acquisition and cleanup bounded time to finish. Remote revocation depends on the configured identity revoking its token during logout. Forced termination, an unreachable issuer, or an ambiguous network response can prevent confirmed revocation, so short server-enforced token TTLs remain necessary.
+
+## How to Use It
+
+Configure a dedicated [native auth identity](/cli/configuration/secrets#track-1--secret-stores-secret-true) that emits `environment/v1` credentials containing `VAULT_TOKEN` and revokes its issued token on logout. Pin that identity to the store and set its lifetime:
+
+```yaml
+stores:
+  vault-secrets:
+    type: hashicorp-vault
+    secret: true
+    identity: vault-reader
+    options:
+      address: https://vault.example.com
+      mount: secret
+      identity_lifetime: operation
+```
+
+Operation lifetime requires an explicit store identity and an authentication manager that supports operation ownership. Authentication failures do not fall back to static or ambient tokens. The default `identity_lifetime: session` keeps the existing reusable-session behavior.
+
+See the [secret-store configuration guide](/cli/configuration/secrets#track-1--secret-stores-secret-true) for the identity and cleanup requirements, and the [official secret-store authentication example](/cli/configuration/plugins#official-secret-store-authentication) for connecting fetched values to a command's environment.
+
+## Get Involved
+
+Review [PR #3668](https://github.com/cloudposse/atmos/pull/3668) and share feedback on identity isolation, cancellation, and cleanup behavior before release.

@@ -248,6 +248,8 @@ func TestShouldUseColorInCI(t *testing.T) {
 }
 
 func TestFormatInCIUsesColorUnlessDisabled(t *testing.T) {
+	// TERM=dumb deliberately disables automatic styling, even in CI.
+	t.Setenv("TERM", "xterm-256color")
 	t.Setenv("CI", "true")
 	t.Setenv("NO_COLOR", "")
 

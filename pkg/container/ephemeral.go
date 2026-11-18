@@ -298,7 +298,7 @@ func BuildEphemeralPreview(runtimeName string, config *EphemeralConfig) string {
 	args = appendEphemeralPreviewFlags(args, config)
 	args = appendEphemeralPreviewMounts(args, config)
 	for _, port := range config.Ports {
-		args = append(args, "-p", fmt.Sprintf("%d:%d/%s", port.HostPort, port.ContainerPort, port.Protocol))
+		args = append(args, "-p", publishArg(port))
 	}
 	args = append(args, config.RunArgs...)
 	args = append(args, config.Image)

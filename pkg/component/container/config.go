@@ -178,25 +178,12 @@ func (s *ContainerSpec) CommandArgs() ([]string, error) {
 }
 
 // Ports maps the structured run port specs onto runtime PortBindings.
-func (s *ContainerSpec) Ports() []ctr.PortBinding {
+func (s *ContainerSpec) Ports() ([]ctr.PortBinding, error) {
 	defer perf.Track(nil, "container.ContainerSpec.Ports")()
-
 	if s.Run == nil {
-		return nil
+		return nil, nil
 	}
-	ports := make([]ctr.PortBinding, 0, len(s.Run.Ports))
-	for _, p := range s.Run.Ports {
-		protocol := p.Protocol
-		if protocol == "" {
-			protocol = defaultProtocol
-		}
-		ports = append(ports, ctr.PortBinding{
-			HostPort:      p.Host,
-			ContainerPort: p.Container,
-			Protocol:      protocol,
-		})
-	}
-	return ports
+	return ctr.PortBindingsFromSchema(s.Run.Ports)
 }
 
 // RunArgs returns additional runtime arguments, including explicit port bindings.

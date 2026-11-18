@@ -1,0 +1,21 @@
+commands:
+  # Opt-in recording: requires `atmos portal up` and merges a new demo PR.
+  # Do not include this live, stateful recording in the bulk generator.
+  - name: casts generate examples backstage service-catalog
+    description: Record Backstage tests and a live Gitea provisioning flow (requires portal up)
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - name: setup
+        type: shell
+        command: atmos casts setup
+      - name: record
+        type: script
+        source: scripts/casts/backstage-service-catalog.star
+  - name: casts validate examples backstage service-catalog
+    description: Validate the saved Backstage recording without running the demo
+    steps:
+      - name: validate
+        type: script
+        env:
+          CAST_VALIDATE: 'true'
+        source: scripts/casts/backstage-service-catalog.star

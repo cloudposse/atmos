@@ -59,6 +59,8 @@ type EnvSetter interface {
 
 // BuildConfig represents container image build configuration.
 type BuildConfig struct {
+	// Output receives live build diagnostics; nil keeps capture-only behavior.
+	Output     io.Writer
 	Dockerfile string
 	Context    string
 	Engine     string
@@ -185,6 +187,7 @@ type Mount struct {
 
 // PortBinding represents a port mapping.
 type PortBinding struct {
+	Bind          string // optional host interface for publishing (IPv4 or IPv6)
 	ContainerPort int
 	HostPort      int
 	Protocol      string // tcp, udp

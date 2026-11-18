@@ -71,6 +71,38 @@ func reachableHostForPublishedPorts() string {
 	return "localhost"
 }
 
+// publishedPortsHost returns the host to read published ports from. When Atmos
+// runs on the container host itself and the primary port is bound to a specific
+// interface, that interface is the only address the port listens on, so it wins
+// over the generic localhost default.
+func publishedPortsHost(bindings map[int]container.PortBinding) string {
+	host := reachableHostForPublishedPorts()
+	if host != "localhost" || strings.TrimSpace(envString(envEmulatorEndpointHost)) != "" {
+		return host
+	}
+	primary := 0
+	for port := range bindings {
+		if primary == 0 || port < primary {
+			primary = port
+		}
+	}
+	if bind := normalizeBindAddress(bindings[primary].Bind); bind != "" {
+		return bind
+	}
+	return host
+}
+
+func normalizeBindAddress(address string) string {
+	bind := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(address), "["), "]")
+	if ip := net.ParseIP(bind); ip != nil && ip.IsUnspecified() {
+		if ip.To4() == nil {
+			return "::1"
+		}
+		return ""
+	}
+	return bind
+}
+
 // hostDockerInternalResolves reports whether hostDockerInternal resolves to at
 // least one address from inside the current container -- the signal that it's
 // actually usable here, rather than assuming it based on platform alone.

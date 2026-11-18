@@ -126,7 +126,12 @@ func (e *EKSIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	}
 
 	// Write cluster config.
-	changed, err := mgr.WriteClusterConfig(awsCloud.BuildKubeClusterInfo(info, e.identity), e.cluster.Alias, updateMode)
+	clusterInfo, err := awsCloud.BuildKubeClusterInfo(info, e.identity)
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEKSIntegrationFailed, err)
+	}
+
+	changed, err := mgr.WriteClusterConfig(clusterInfo, e.cluster.Alias, updateMode)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}

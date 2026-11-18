@@ -743,14 +743,14 @@ func TestFindAllStackConfigsInPathsForStack(t *testing.T) {
 	atmosConfig, err := InitCliConfig(configAndStacksInfo, true)
 	assert.NoError(t, err)
 
-	_, relativePaths, _, err := FindAllStackConfigsInPathsForStack(
-		atmosConfig,
+	stackFiles, err := FindAllStackConfigsInPathsForStack(
+		&atmosConfig,
 		"nonprod",
 		atmosConfig.IncludeStackAbsolutePaths,
 		atmosConfig.ExcludeStackAbsolutePaths,
 	)
 	assert.NoError(t, err)
-	assert.Equal(t, "deploy/nonprod.yaml", relativePaths[0])
+	assert.Equal(t, "deploy/nonprod.yaml", stackFiles.RelativePaths[0])
 }
 
 func TestFindAllStackConfigsInPaths(t *testing.T) {

@@ -1,0 +1,20 @@
+---
+title: Plan on Pull Request
+slug: /integrations/gitea-actions/plan-on-pull-request
+description: Review infrastructure changes before merging a pull request. Run an Atmos plan in Gitea Actions and publish the results as job summaries, commit statuses, and pull request comments.
+---
+
+import EmbedFile from '@site/src/components/EmbedFile'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Review infrastructure changes before merging a pull request. Run an Atmos plan in Gitea Actions and publish the results as job summaries, commit statuses, and pull request comments.
+</Intro>
+
+Complete [Setup and Authentication](/integrations/gitea-actions/setup) first.
+
+## Workflow
+
+<EmbedFile filePath="examples/gitea-actions/workflows/plan.yml" />
+
+The plan reports an `atmos/plan/<stack>/<component>` commit status and posts one pull request comment per component and stack, updating it on later pushes. Atmos updates only comments created by the token's account.

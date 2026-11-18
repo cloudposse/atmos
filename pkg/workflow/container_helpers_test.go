@@ -274,11 +274,13 @@ func TestConvertWorkflowMounts_ExpandsHome(t *testing.T) {
 }
 
 func TestConvertWorkflowPorts(t *testing.T) {
-	ports := convertWorkflowPorts([]schema.ContainerPort{
-		{Host: 8080, Container: 80},
+	ports, err := convertWorkflowPorts([]schema.ContainerPort{
+		{Host: "127.0.0.1:8080", Container: 80},
 		{Host: 53, Container: 53, Protocol: "udp"},
 	})
+	require.NoError(t, err)
 	require.Len(t, ports, 2)
+	assert.Equal(t, "127.0.0.1", ports[0].Bind)
 	assert.Equal(t, "tcp", ports[0].Protocol) // defaulted.
 	assert.Equal(t, 8080, ports[0].HostPort)
 	assert.Equal(t, "udp", ports[1].Protocol)
@@ -352,7 +354,8 @@ func TestBuildEphemeralStepConfig(t *testing.T) {
 		Env:     map[string]string{"C": "9"},
 	}
 
-	got := buildEphemeralStepConfig(params, cfg, "/abs/work")
+	got, err := buildEphemeralStepConfig(params, cfg, "/abs/work")
+	require.NoError(t, err)
 	assert.Equal(t, "atmos-step-build", got.Name)
 	assert.Equal(t, "alpine", got.Image)
 	assert.Equal(t, []string{"/bin/bash", "-lc", "echo hi"}, got.Command)
@@ -544,4 +547,24 @@ func TestExecShell_DryRunWhenIDEqualsName(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Nil(t, fake.command) // Exec not called.
+}
+
+func TestWorkflowContainersRejectInvalidHost(t *testing.T) {
+	cfg := &schema.WorkflowContainer{Image: "alpine", Ports: []schema.ContainerPort{{Host: "localhost:8080", Container: 80}}}
+	params := &ContainerStepParams{
+		WorkflowDef: &schema.WorkflowDefinition{Container: cfg},
+		Step:        &schema.WorkflowStep{Name: "test", Container: cfg},
+		DryRun:      true,
+	}
+	t.Run("workflow container", func(t *testing.T) {
+		session, err := StartWorkflowContainer(context.Background(), params)
+		require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+		require.ErrorContains(t, err, "ports[0].host")
+		assert.Nil(t, session)
+	})
+	t.Run("step override", func(t *testing.T) {
+		err := RunStepContainerOverride(context.Background(), params)
+		require.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+		require.ErrorContains(t, err, "ports[0].host")
+	})
 }

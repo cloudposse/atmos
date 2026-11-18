@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/filesystem"
@@ -28,25 +29,26 @@ import (
 // Exported so other config-loading packages (e.g. pkg/config/adapters) can sanitize import
 // paths before logging them.
 func SanitizeImport(s string) string {
-	// Handle go-getter style URLs with :: separator (e.g., git::https://...).
-	parts := strings.SplitN(s, "::", 2)
-	var prefix string
-	urlPart := s
+	// Handle go-getter style URLs with :: separator (e.g., git::https://...). The prefix is only
+	// recognized when a scheme follows it, so a "::" inside a password never splits the credential.
+	prefix, urlPart := artifact.SplitGetterPrefix(s)
 
-	if len(parts) == 2 {
-		prefix = parts[0] + "::"
-		urlPart = parts[1]
+	// An import that holds an "@" is a credential-bearing URL unless it is provably a local path or
+	// an SCP-style git address. It is redacted by the helper every include error shares: the
+	// userinfo ends at the last "@" of the authority, and a value that cannot be proven free of a
+	// credential is replaced as a whole.
+	if strings.Contains(urlPart, "@") && !isLocalPath(urlPart) && !artifact.IsSCPAddress(urlPart) {
+		urlPart = artifact.RedactURL(urlPart)
+		if urlPart == artifact.RedactedValue {
+			return urlPart
+		}
 	}
 
 	u, err := url.Parse(urlPart)
 	if err != nil {
-		// Unparsable; return as-is (might be SCP-style git).
-		return s
-	}
-
-	// Clear credentials regardless of scheme.
-	if u.User != nil {
-		u.User = nil
+		// Unparsable; keep the text (it might be SCP-style git) but never a query, which may hold tokens.
+		before, _, _ := strings.Cut(prefix+urlPart, "?")
+		return before
 	}
 
 	// Clear query params (may contain tokens/credentials).
@@ -55,6 +57,14 @@ func SanitizeImport(s string) string {
 	}
 
 	return prefix + u.String()
+}
+
+// isLocalPath reports whether an import is a file system path, which is never a URL.
+func isLocalPath(s string) bool {
+	if strings.Contains(s, "://") || strings.HasPrefix(s, "//") {
+		return false
+	}
+	return strings.HasPrefix(s, "/") || strings.HasPrefix(s, "./") || strings.HasPrefix(s, "../") || strings.HasPrefix(s, "~/")
 }
 
 type importTypes int
@@ -124,7 +134,7 @@ func processConfigImportsWithFSAndBasePathSource(source *schema.AtmosConfigurati
 
 	log.Debug("processConfigImports resolved paths", "count", len(resolvedPaths))
 
-	return mergeResolvedImports(resolvedPaths, dst, fs)
+	return mergeResolvedImports(resolvedPaths, dst, fs, tempDir)
 }
 
 // mergeResolvedImports merges each resolved import file into dst and returns the
@@ -132,7 +142,7 @@ func processConfigImportsWithFSAndBasePathSource(source *schema.AtmosConfigurati
 // An optional import (SkipIfMissing) that fails to merge or re-read is skipped so a single
 // bad import does not abort the whole configuration load; a required import that fails to
 // merge returns errUtils.ErrRequiredImportFailed (fail closed).
-func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs filesystem.FileSystem) (string, error) {
+func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs filesystem.FileSystem, temporaryRoots ...string) (string, error) {
 	basePathSourceDir := ""
 	for _, resolvedPath := range resolvedPaths {
 		// Trace: log what we're about to merge (sanitized).
@@ -149,6 +159,10 @@ func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs fi
 			continue
 		}
 		log.Trace("successfully merged config from import", "import", SanitizeImport(resolvedPath.ImportPaths), keyFilePath, resolvedPath.FilePath)
+		if resolvedPath.ImportType != LOCAL || pathInsideAnyRoot(resolvedPath.FilePath, temporaryRoots) {
+			// Downloaded imports live in a temporary directory that is removed after loading.
+			mergedFilesReg.markEphemeral(dst, resolvedPath.FilePath)
+		}
 		content, readErr := fs.ReadFile(resolvedPath.FilePath)
 		if readErr != nil {
 			log.Warn("error re-reading resolved import for base_path detection", "import", SanitizeImport(resolvedPath.ImportPaths), keyFilePath, resolvedPath.FilePath, "error", readErr)
@@ -160,6 +174,17 @@ func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs fi
 		}
 	}
 	return basePathSourceDir, nil
+}
+
+// pathInsideAnyRoot identifies downloaded files by their actual location, not import ancestry.
+func pathInsideAnyRoot(path string, roots []string) bool {
+	for _, root := range roots {
+		rel, err := filepath.Rel(root, path)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
+			return true
+		}
+	}
+	return false
 }
 
 // ProcessImportsFromAdapter is the public entry point for adapters to process nested imports.

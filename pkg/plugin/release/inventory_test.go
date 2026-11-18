@@ -25,14 +25,14 @@ func TestInventoryUsesRecordedSourceAndCleansEachPackage(t *testing.T) {
 			var factoryEntries []releaseplan.Entry
 			expected := []*pluginoci.Release{{Name: "first"}, {Name: "second"}}
 			for index, entry := range entries {
-				runner.EXPECT().Run(gomock.Any(), "git", []string{"rev-parse", "--verify", "--end-of-options", entry.Source + "^{commit}"}, pkgit.RunOptions{}).Return(pkgit.RunResult{Stdout: entry.Source + "\n"}, nil)
-				runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), pkgit.RunOptions{}).DoAndReturn(func(_ context.Context, _ string, args []string, _ pkgit.RunOptions) (pkgit.RunResult, error) {
+				runner.EXPECT().Run(gomock.Any(), "git", []string{"rev-parse", "--verify", "--end-of-options", entry.Source + "^{commit}"}, &pkgit.RunOptions{}).Return(pkgit.RunResult{Stdout: entry.Source + "\n"}, nil)
+				runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), &pkgit.RunOptions{}).DoAndReturn(func(_ context.Context, _ string, args []string, _ *pkgit.RunOptions) (pkgit.RunResult, error) {
 					require.Equal(t, []string{"worktree", "add", "--detach"}, args[:3])
 					require.Equal(t, entry.Source, args[4])
 					require.NoDirExists(t, args[3])
 					return pkgit.RunResult{}, os.Mkdir(args[3], 0o700)
 				})
-				runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), pkgit.RunOptions{}).DoAndReturn(func(ctx context.Context, _ string, args []string, _ pkgit.RunOptions) (pkgit.RunResult, error) {
+				runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), &pkgit.RunOptions{}).DoAndReturn(func(ctx context.Context, _ string, args []string, _ *pkgit.RunOptions) (pkgit.RunResult, error) {
 					require.NoError(t, ctx.Err())
 					require.Equal(t, []string{"worktree", "remove", "--force"}, args[:3])
 					return pkgit.RunResult{}, nil
@@ -77,7 +77,7 @@ func TestInventoryFailuresAlwaysCleanUpAndStop(t *testing.T) {
 			defer cancel()
 			entry := releaseplan.Entry{Name: "example", Path: "plugins/example", Source: "source"}
 			expected := errUtils.ErrPluginBuild
-			resolve := runner.EXPECT().Run(gomock.Any(), "git", []string{"rev-parse", "--verify", "--end-of-options", "source^{commit}"}, pkgit.RunOptions{})
+			resolve := runner.EXPECT().Run(gomock.Any(), "git", []string{"rev-parse", "--verify", "--end-of-options", "source^{commit}"}, &pkgit.RunOptions{})
 			switch phase {
 			case "resolve":
 				resolve.Return(pkgit.RunResult{}, expected)
@@ -86,14 +86,14 @@ func TestInventoryFailuresAlwaysCleanUpAndStop(t *testing.T) {
 				expected = errUtils.ErrPluginInvalidConfig
 			default:
 				resolve.Return(pkgit.RunResult{Stdout: "source"}, nil)
-				runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), pkgit.RunOptions{}).DoAndReturn(func(_ context.Context, _ string, args []string, _ pkgit.RunOptions) (pkgit.RunResult, error) {
+				runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), &pkgit.RunOptions{}).DoAndReturn(func(_ context.Context, _ string, args []string, _ *pkgit.RunOptions) (pkgit.RunResult, error) {
 					require.Equal(t, []string{"worktree", "add", "--detach"}, args[:3])
 					if phase == "add" {
 						return pkgit.RunResult{}, expected
 					}
 					return pkgit.RunResult{}, nil
 				})
-				runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), pkgit.RunOptions{}).DoAndReturn(func(cleanup context.Context, _ string, args []string, _ pkgit.RunOptions) (pkgit.RunResult, error) {
+				runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), &pkgit.RunOptions{}).DoAndReturn(func(cleanup context.Context, _ string, args []string, _ *pkgit.RunOptions) (pkgit.RunResult, error) {
 					require.NoError(t, cleanup.Err(), "cancelled releases must still remove worktrees")
 					require.Equal(t, []string{"worktree", "remove", "--force"}, args[:3])
 					if phase == "cleanup" {
@@ -142,7 +142,7 @@ func TestInventoryRejectsInvalidInputs(t *testing.T) {
 	_, err = RunInventory(ctx, []releaseplan.Entry{{}}, factory)
 	require.ErrorIs(t, err, context.Canceled)
 	runner := NewMockRunner(gomock.NewController(t))
-	runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), pkgit.RunOptions{}).Return(pkgit.RunResult{Stdout: "source"}, nil)
+	runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), &pkgit.RunOptions{}).Return(pkgit.RunResult{Stdout: "source"}, nil)
 	_, err = RunInventory(t.Context(), []releaseplan.Entry{{Path: "valid", Source: "source"}}, factory, WithInventoryRunner(runner), WithInventoryTemporaryDirectory(filepath.Join(t.TempDir(), "absent")))
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
@@ -157,11 +157,11 @@ func TestCurrentInventoryHeadFetchesCurrentDefaultBranch(t *testing.T) {
 				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 				return
 			}
-			fetch := runner.EXPECT().Run(gomock.Any(), "git", []string{"fetch", "--no-tags", "origin", "HEAD"}, pkgit.RunOptions{})
+			fetch := runner.EXPECT().Run(gomock.Any(), "git", []string{"fetch", "--no-tags", "origin", "HEAD"}, &pkgit.RunOptions{})
 			if phase == "fetch" {
 				fetch.Return(pkgit.RunResult{}, failure)
 			} else {
-				resolve := runner.EXPECT().Run(gomock.Any(), "git", []string{"rev-parse", "--verify", "FETCH_HEAD^{commit}"}, pkgit.RunOptions{})
+				resolve := runner.EXPECT().Run(gomock.Any(), "git", []string{"rev-parse", "--verify", "FETCH_HEAD^{commit}"}, &pkgit.RunOptions{})
 				switch phase {
 				case "success":
 					resolve.Return(pkgit.RunResult{Stdout: "latest-accepted-commit\n"}, nil)

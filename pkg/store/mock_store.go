@@ -10,6 +10,7 @@
 package store
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "go.uber.org/mock/gomock"
@@ -262,6 +263,232 @@ func (m *MockFieldStore) Set(stack, component, key string, value any) error {
 func (mr *MockFieldStoreMockRecorder) Set(stack, component, key, value any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockFieldStore)(nil).Set), stack, component, key, value)
+}
+
+// MockContextStore is a mock of ContextStore interface.
+type MockContextStore struct {
+	ctrl     *gomock.Controller
+	recorder *MockContextStoreMockRecorder
+	isgomock struct{}
+}
+
+// MockContextStoreMockRecorder is the mock recorder for MockContextStore.
+type MockContextStoreMockRecorder struct {
+	mock *MockContextStore
+}
+
+// NewMockContextStore creates a new mock instance.
+func NewMockContextStore(ctrl *gomock.Controller) *MockContextStore {
+	mock := &MockContextStore{ctrl: ctrl}
+	mock.recorder = &MockContextStoreMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockContextStore) EXPECT() *MockContextStoreMockRecorder {
+	return m.recorder
+}
+
+// Get mocks base method.
+func (m *MockContextStore) Get(stack, component, key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", stack, component, key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockContextStoreMockRecorder) Get(stack, component, key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockContextStore)(nil).Get), stack, component, key)
+}
+
+// GetContext mocks base method.
+func (m *MockContextStore) GetContext(arg0 context.Context, arg1, arg2, arg3 string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetContext", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetContext indicates an expected call of GetContext.
+func (mr *MockContextStoreMockRecorder) GetContext(arg0, arg1, arg2, arg3 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetContext", reflect.TypeOf((*MockContextStore)(nil).GetContext), arg0, arg1, arg2, arg3)
+}
+
+// GetKey mocks base method.
+func (m *MockContextStore) GetKey(key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetKey", key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetKey indicates an expected call of GetKey.
+func (mr *MockContextStoreMockRecorder) GetKey(key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKey", reflect.TypeOf((*MockContextStore)(nil).GetKey), key)
+}
+
+// GetKeyContext mocks base method.
+func (m *MockContextStore) GetKeyContext(arg0 context.Context, arg1 string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetKeyContext", arg0, arg1)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetKeyContext indicates an expected call of GetKeyContext.
+func (mr *MockContextStoreMockRecorder) GetKeyContext(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKeyContext", reflect.TypeOf((*MockContextStore)(nil).GetKeyContext), arg0, arg1)
+}
+
+// Set mocks base method.
+func (m *MockContextStore) Set(stack, component, key string, value any) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Set", stack, component, key, value)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Set indicates an expected call of Set.
+func (mr *MockContextStoreMockRecorder) Set(stack, component, key, value any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockContextStore)(nil).Set), stack, component, key, value)
+}
+
+// MockContextFieldStore is a mock of ContextFieldStore interface.
+type MockContextFieldStore struct {
+	ctrl     *gomock.Controller
+	recorder *MockContextFieldStoreMockRecorder
+	isgomock struct{}
+}
+
+// MockContextFieldStoreMockRecorder is the mock recorder for MockContextFieldStore.
+type MockContextFieldStoreMockRecorder struct {
+	mock *MockContextFieldStore
+}
+
+// NewMockContextFieldStore creates a new mock instance.
+func NewMockContextFieldStore(ctrl *gomock.Controller) *MockContextFieldStore {
+	mock := &MockContextFieldStore{ctrl: ctrl}
+	mock.recorder = &MockContextFieldStoreMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockContextFieldStore) EXPECT() *MockContextFieldStoreMockRecorder {
+	return m.recorder
+}
+
+// Get mocks base method.
+func (m *MockContextFieldStore) Get(stack, component, key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", stack, component, key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockContextFieldStoreMockRecorder) Get(stack, component, key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockContextFieldStore)(nil).Get), stack, component, key)
+}
+
+// GetField mocks base method.
+func (m *MockContextFieldStore) GetField(stack, component, key, field string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetField", stack, component, key, field)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetField indicates an expected call of GetField.
+func (mr *MockContextFieldStoreMockRecorder) GetField(stack, component, key, field any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetField", reflect.TypeOf((*MockContextFieldStore)(nil).GetField), stack, component, key, field)
+}
+
+// GetFieldContext mocks base method.
+func (m *MockContextFieldStore) GetFieldContext(arg0 context.Context, arg1, arg2, arg3, arg4 string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFieldContext", arg0, arg1, arg2, arg3, arg4)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetFieldContext indicates an expected call of GetFieldContext.
+func (mr *MockContextFieldStoreMockRecorder) GetFieldContext(arg0, arg1, arg2, arg3, arg4 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFieldContext", reflect.TypeOf((*MockContextFieldStore)(nil).GetFieldContext), arg0, arg1, arg2, arg3, arg4)
+}
+
+// GetKey mocks base method.
+func (m *MockContextFieldStore) GetKey(key string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetKey", key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetKey indicates an expected call of GetKey.
+func (mr *MockContextFieldStoreMockRecorder) GetKey(key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKey", reflect.TypeOf((*MockContextFieldStore)(nil).GetKey), key)
+}
+
+// GetKeyField mocks base method.
+func (m *MockContextFieldStore) GetKeyField(key, field string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetKeyField", key, field)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetKeyField indicates an expected call of GetKeyField.
+func (mr *MockContextFieldStoreMockRecorder) GetKeyField(key, field any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKeyField", reflect.TypeOf((*MockContextFieldStore)(nil).GetKeyField), key, field)
+}
+
+// GetKeyFieldContext mocks base method.
+func (m *MockContextFieldStore) GetKeyFieldContext(arg0 context.Context, arg1, arg2 string) (any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetKeyFieldContext", arg0, arg1, arg2)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetKeyFieldContext indicates an expected call of GetKeyFieldContext.
+func (mr *MockContextFieldStoreMockRecorder) GetKeyFieldContext(arg0, arg1, arg2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKeyFieldContext", reflect.TypeOf((*MockContextFieldStore)(nil).GetKeyFieldContext), arg0, arg1, arg2)
+}
+
+// Set mocks base method.
+func (m *MockContextFieldStore) Set(stack, component, key string, value any) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Set", stack, component, key, value)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Set indicates an expected call of Set.
+func (mr *MockContextFieldStoreMockRecorder) Set(stack, component, key, value any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockContextFieldStore)(nil).Set), stack, component, key, value)
 }
 
 // MockDeletableStore is a mock of DeletableStore interface.

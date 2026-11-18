@@ -21,11 +21,15 @@ func validateBuildAction(step *schema.WorkflowStep) error {
 	if !isValidContainerBuildEngine(build.Engine) {
 		return invalidContainerField(step, "build.engine", build.Engine, "Build engine must be `buildx` or empty for the runtime default")
 	}
+	return validateBuildxAction(step, &build)
+}
+
+func validateBuildxAction(step *schema.WorkflowStep, build *schema.ContainerBuildStep) error {
 	if build.Load && build.Bake != nil {
 		return invalidContainerField(step, "build.load", "true", "Use `build.bake.load` when `build.bake` is configured")
 	}
-	if (build.Driver != nil || build.Cache != nil) && build.Engine != containerBuildEngineBuildx && build.Bake == nil {
-		return invalidContainerField(step, "build.engine", build.Engine, "Buildx driver and cache configuration require `engine: buildx`")
+	if err := validateBuildxDriverCache(step, build); err != nil {
+		return err
 	}
 	if build.Load && build.Engine != containerBuildEngineBuildx {
 		return invalidContainerField(step, "build.engine", build.Engine, "Buildx load configuration requires `engine: buildx`")
@@ -106,13 +110,11 @@ func (h *ContainerHandler) buildBuildConfig(step *schema.WorkflowStep, vars *Var
 	if err != nil {
 		return nil, err
 	}
-	dockerfile, err := resolveOptional(vars, defaultString(build.Dockerfile, "Dockerfile"), "build.dockerfile", step.Name)
+	dockerfile, err := resolveBuildDockerfile(step, vars, contextDir)
 	if err != nil {
 		return nil, err
 	}
-	if dockerfile != "" && !filepath.IsAbs(dockerfile) {
-		dockerfile = filepath.Join(contextDir, dockerfile)
-	}
+
 	target, err := resolveOptional(vars, build.Target, "build.target", step.Name)
 	if err != nil {
 		return nil, err
@@ -291,4 +293,23 @@ func resolveBakeFiles(h *ContainerHandler, step *schema.WorkflowStep, vars *Vari
 		resolved[i] = anchored
 	}
 	return resolved, nil
+}
+
+func resolveBuildDockerfile(step *schema.WorkflowStep, vars *Variables, contextDir string) (string, error) {
+	build := effectiveBuildStep(step)
+	dockerfile, err := resolveOptional(vars, defaultString(build.Dockerfile, "Dockerfile"), "build.dockerfile", step.Name)
+	if err != nil {
+		return "", err
+	}
+	if dockerfile != "" && !filepath.IsAbs(dockerfile) {
+		dockerfile = filepath.Join(contextDir, dockerfile)
+	}
+	return dockerfile, nil
+}
+
+func validateBuildxDriverCache(step *schema.WorkflowStep, build *schema.ContainerBuildStep) error {
+	if (build.Driver != nil || build.Cache != nil) && build.Engine != containerBuildEngineBuildx && build.Bake == nil {
+		return invalidContainerField(step, "build.engine", build.Engine, "Buildx driver and cache configuration require `engine: buildx`")
+	}
+	return nil
 }

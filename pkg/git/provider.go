@@ -2,6 +2,8 @@ package git
 
 import (
 	"context"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // SigningMode controls commit signing behavior.
@@ -42,6 +44,9 @@ type CloneOptions struct {
 	RepoContext
 	// URI is the remote repository URI.
 	URI string
+	// Ref selects a detached checkout of a branch, tag, ref, or commit SHA.
+	// Mutually exclusive with Branch.
+	Ref string
 	// Depth is the shallow-clone depth; 0 means full history.
 	Depth int
 	// Filter is an optional partial-clone filter spec (e.g. "blob:none").
@@ -167,6 +172,8 @@ type InitOptions struct {
 
 // PushOptions configures Push.
 type PushOptions struct {
+	// Retry overrides the legacy retry count with the shared policy.
+	Retry *schema.RetryConfig
 	RepoContext
 	// Retries bounds the rebase-and-retry loop on non-fast-forward rejection.
 	Retries int

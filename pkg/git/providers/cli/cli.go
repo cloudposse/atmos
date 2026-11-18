@@ -70,11 +70,11 @@ func (p *Provider) SwapStderr(w io.Writer) func() {
 
 // run invokes git with the repository context applied.
 func (p *Provider) run(ctx context.Context, dir string, env []string, args ...string) (atmosgit.RunResult, error) {
-	return p.runner.Run(ctx, gitCommand, args, atmosgit.RunOptions{Dir: dir, Env: env, Stderr: p.stderr})
+	return p.runner.Run(ctx, gitCommand, args, &atmosgit.RunOptions{Dir: dir, Env: env, Stderr: p.stderr})
 }
 
 func (p *Provider) runQuiet(ctx context.Context, dir string, env []string, args ...string) (atmosgit.RunResult, error) {
-	return p.runner.Run(ctx, gitCommand, args, atmosgit.RunOptions{Dir: dir, Env: env, Stderr: p.stderr})
+	return p.runner.Run(ctx, gitCommand, args, &atmosgit.RunOptions{Dir: dir, Env: env, Stderr: p.stderr})
 }
 
 // Clone reconciles a repository workdir: a fresh clone when the workdir is
@@ -83,11 +83,40 @@ func (p *Provider) runQuiet(ctx context.Context, dir string, env []string, args 
 // be stale).
 func (p *Provider) Clone(ctx context.Context, opts *atmosgit.CloneOptions) error {
 	defer perf.Track(nil, "cli.Provider.Clone")()
+	if opts.Ref != "" && opts.Branch != "" {
+		return fmt.Errorf("%w: clone ref and branch are mutually exclusive", errUtils.ErrInvalidConfig)
+	}
+
+	if opts.Ref != "" {
+		for _, arg := range opts.ExtraArgs {
+			name, _, _ := strings.Cut(arg, "=")
+			if cloneRemoteShortOption(arg) || (strings.HasPrefix(name, "--") && len(name) > 2 && strings.Index("--origin", name) == 0) {
+				return fmt.Errorf("%w: git clone remote passthrough is incompatible with ref; configure the remote instead", errUtils.ErrInvalidConfig)
+			}
+		}
+	}
 
 	if isGitWorktree(opts.Workdir) {
 		return p.reconcile(ctx, opts)
 	}
 	return p.cloneFresh(ctx, opts)
+}
+
+// cloneRemoteShortOption detects -o in Git short-option clusters. Options that
+// take a value consume the rest of their argument rather than further flags.
+func cloneRemoteShortOption(arg string) bool {
+	if !strings.HasPrefix(arg, "-") || strings.HasPrefix(arg, "--") {
+		return false
+	}
+	for _, flag := range arg[1:] {
+		if flag == 'o' {
+			return true
+		}
+		if strings.ContainsRune("bcju", flag) {
+			return false
+		}
+	}
+	return false
 }
 
 // cloneFresh performs the initial clone into an absent workdir.
@@ -96,6 +125,18 @@ func (p *Provider) cloneFresh(ctx context.Context, opts *atmosgit.CloneOptions) 
 		return fmt.Errorf("creating workdir parent for %q: %w", opts.Workdir, err)
 	}
 
+	result, err := p.run(ctx, "", opts.Env, cloneArgs(opts)...)
+	if err != nil {
+		return classify(err, result, "clone")
+	}
+	if opts.Ref != "" {
+		return p.checkoutRef(ctx, opts)
+	}
+	return nil
+}
+
+// cloneArgs builds clone flags before the URI and workdir positional arguments.
+func cloneArgs(opts *atmosgit.CloneOptions) []string {
 	args := []string{"clone"}
 	if opts.Depth > 0 {
 		args = append(args, "--depth", fmt.Sprintf("%d", opts.Depth))
@@ -106,22 +147,26 @@ func (p *Provider) cloneFresh(ctx context.Context, opts *atmosgit.CloneOptions) 
 	if opts.SingleBranch {
 		args = append(args, "--single-branch")
 	}
-	if opts.Branch != "" {
+	if opts.Ref != "" {
+		args = append(args, "--no-checkout")
+	} else if opts.Branch != "" {
 		args = append(args, "--branch", opts.Branch)
 	}
 	if opts.Submodules {
 		args = append(args, "--recurse-submodules")
 	}
+	// Match later fetches even when Git's clone.defaultRemoteName is configured.
+	args = append(args, "--origin", remoteOrDefault(opts.Remote))
 	// Native passthrough args are flags for git clone, so they must precede
 	// the "--" separating flags from the URI/workdir positionals.
 	args = append(args, opts.ExtraArgs...)
+	if opts.Ref != "" {
+		// Keep fetch consistent even if Git accepts another spelling of --origin.
+		args = append(args, "--origin", remoteOrDefault(opts.Remote))
+	}
 	args = append(args, "--", opts.URI, opts.Workdir)
 
-	result, err := p.run(ctx, "", opts.Env, args...)
-	if err != nil {
-		return classify(err, result, "clone")
-	}
-	return nil
+	return args
 }
 
 // reconcile brings an existing workdir up to date: sync the remote URL with
@@ -134,6 +179,10 @@ func (p *Provider) reconcile(ctx context.Context, opts *atmosgit.CloneOptions) e
 
 	if err := p.syncRemoteURL(ctx, opts); err != nil {
 		return err
+	}
+
+	if opts.Ref != "" {
+		return p.checkoutRef(ctx, opts)
 	}
 
 	if err := p.fetch(ctx, opts); err != nil {

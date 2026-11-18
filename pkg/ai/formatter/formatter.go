@@ -60,7 +60,7 @@ type ToolCallResult struct {
 
 // TokenUsage contains token usage statistics.
 type TokenUsage struct {
-	// Prompt tokens used in the request.
+	// Prompt tokens used in the request, including tokens read from or written to the prompt cache.
 	Prompt int64 `json:"prompt"`
 
 	// Completion tokens used in the response.
@@ -69,10 +69,10 @@ type TokenUsage struct {
 	// Total tokens used (prompt + completion).
 	Total int64 `json:"total"`
 
-	// Cached tokens read from prompt cache (if supported).
+	// Cached tokens read from prompt cache (if supported). They are included in Prompt.
 	Cached int64 `json:"cached,omitempty"`
 
-	// CacheCreation tokens used to create cache (if supported).
+	// CacheCreation tokens written to the prompt cache (if supported). They are included in Prompt.
 	CacheCreation int64 `json:"cache_creation,omitempty"`
 }
 

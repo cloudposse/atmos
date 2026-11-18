@@ -77,16 +77,10 @@ For complete Terraform/OpenTofu documentation, see:
 		// 2. A CI platform is auto-detected (e.g., GITHUB_ACTIONS=true).
 		ciMode := ci.ModeEnabled(cmd)
 
-		// component/stack for the exec-metadata Data payload (research.md
-		// Decision 21) — the multi-component --affected/--all path never
-		// reaches captureExecMetadataSync's single-component parser closure
-		// (gated out by its existing info.NodeHooks == nil check), so an
-		// empty component here (no positional arg) is expected, not an error.
-		var execComponent string
-		if len(args) > 0 {
-			execComponent = args[0]
-		}
-		shellOpts, stdoutBuf, stderrBuf := terraformCaptureShellOpts(execComponent, v.GetString("stack"))
+		// The exec-metadata parser receives the resolved component name when it
+		// runs (a path-style argument is only resolved later), so only the stack is
+		// passed here.
+		shellOpts, stdoutBuf, stderrBuf := terraformCaptureShellOpts(v.GetString("stack"))
 
 		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 

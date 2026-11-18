@@ -85,6 +85,20 @@ func (m *Manager) AuthenticateIsolated(ctx context.Context, identityName string)
 	return delegate.AuthenticateIsolated(ctx, identityName)
 }
 
+// WithIsolatedIdentity delegates an explicitly operation-scoped store identity.
+func (m *Manager) WithIsolatedIdentity(ctx context.Context, identityName string, operation func(context.Context, *schema.AuthContext) error) error {
+	defer perf.Track(nil, "auth.deferred.Manager.WithIsolatedIdentity")()
+	delegate, err := m.base()
+	if err != nil {
+		return err
+	}
+	scoped, ok := delegate.(types.ScopedAuthManager)
+	if !ok {
+		return errUtils.ErrAuthenticationUnavailable
+	}
+	return scoped.WithIsolatedIdentity(ctx, identityName, operation)
+}
+
 // AuthenticateProvider delegates an explicitly requested auth operation.
 func (m *Manager) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
 	defer perf.Track(nil, "auth.deferred.Manager.AuthenticateProvider")()
