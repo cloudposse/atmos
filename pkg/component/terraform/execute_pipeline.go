@@ -13,7 +13,6 @@ import (
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
-	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/policy/planfile"
@@ -64,25 +63,17 @@ func (e *Executor) prepareComponentExecution(
 		return nil, err
 	}
 
-	if prepared != nil && !info.DryRun {
-		if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
-			return nil, err
-		}
-		if err := configuration.WriteFiles(componentPath, prepared.Files); err != nil {
-			return nil, err
-		}
+	if err := writePreparedConfigurationFiles(info, prepared, componentPath); err != nil {
+		return nil, err
 	}
 
 	if err = checkComponentRestrictions(info); err != nil {
 		return nil, err
 	}
 
-	if shouldProcess && tenv == nil {
-		tenv, err = resolveAndInstallToolchainDeps(atmosConfig, info)
-		if err != nil {
-			return nil, err
-		}
-		info.Command = tenv.Resolve(info.Command)
+	tenv, err = resolveExecutionToolchain(atmosConfig, info, shouldProcess, tenv)
+	if err != nil {
+		return nil, err
 	}
 
 	varFile := ConstructTerraformComponentVarfileName(info)
@@ -105,6 +96,20 @@ func (e *Executor) prepareComponentExecution(
 		workingDir:    workingDir,
 		tenv:          tenv,
 	}, nil
+}
+
+// resolveExecutionToolchain installs dependencies only if preparation has not already
+// selected a toolchain, preserving the selected executable for configuration evaluation.
+func resolveExecutionToolchain(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, shouldProcess bool, tenv *dependencies.ToolchainEnvironment) (*dependencies.ToolchainEnvironment, error) {
+	if shouldProcess && tenv == nil {
+		var err error
+		tenv, err = resolveAndInstallToolchainDeps(atmosConfig, info)
+		if err != nil {
+			return nil, err
+		}
+		info.Command = tenv.Resolve(info.Command)
+	}
+	return tenv, nil
 }
 
 // runPreExecutionSteps performs validation, auth pre-hook, config file generation,
@@ -158,6 +163,12 @@ func (e *Executor) runPreExecutionSteps(
 
 	warnOnConflictingEnvVars()
 
+	return assemblePreExecutionEnvVars(atmosConfig, info, tenv)
+}
+
+// assemblePreExecutionEnvVars keeps the prepared environment for configuration-owned
+// execution; ordinary components and dry runs still assemble their full environment.
+func assemblePreExecutionEnvVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, tenv *dependencies.ToolchainEnvironment) error {
 	if schema.ConfigurationOwned(info.ComponentSettingsSection) && !info.DryRun {
 		if err := checkConfigurationWorkspace(info); err != nil {
 			return err

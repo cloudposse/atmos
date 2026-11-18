@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -174,4 +175,17 @@ func isRuntimeArtifact(path string) bool {
 		}
 	}
 	return false
+}
+
+// writePreparedConfigurationFiles rejects runtime artifacts before writing any prepared files.
+func writePreparedConfigurationFiles(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, componentPath string) error {
+	if prepared != nil && !info.DryRun {
+		if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
+			return err
+		}
+		if err := configuration.WriteFiles(componentPath, prepared.Files); err != nil {
+			return err
+		}
+	}
+	return nil
 }
