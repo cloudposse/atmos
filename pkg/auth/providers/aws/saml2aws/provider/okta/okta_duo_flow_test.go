@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -380,27 +381,94 @@ func TestVerifyEndpointHealth_StatusCheckUnreachable(t *testing.T) {
 	// Regression: a transport error in the background status check used to panic on a nil response.
 	withFastPolling(t)
 
-	var log requestLog
-	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.add(r.URL.Path)
-		if r.URL.Path == "/submit" {
-			_, _ = fmt.Fprint(w, `<form><input name="sid" value="after-health"></form>`)
+	// The status request fails with a transport error. Every request is recorded in the order it is
+	// sent, so the test can prove the failing status request ran before the resubmission.
+	var mu sync.Mutex
+	var sent []string
+	failStatus := faultAt(faultTransport, endpointStatusPath, 0)
+	fault := func(r *http.Request) faultKind {
+		kind := failStatus(r)
+		entry := r.URL.Path
+		if kind == faultTransport {
+			entry += " (failed)"
 		}
-	}))
-	defer ts.Close()
-
-	endpointHost := ts.URL[len("https://"):]
-	duoHost := closedServerURL(t)[len("https://"):]
-	oc, _ := offlineTestClient(t)
+		mu.Lock()
+		sent = append(sent, entry)
+		mu.Unlock()
+		return kind
+	}
+	handler := newRoutes(map[string]func(int, *http.Request) string{
+		"/alive":  static(""),
+		"/report": static(""),
+		"/submit": static(`<form><input name="sid" value="after-health"></form>`),
+	})
+	oc := newFaultClient(t, handler, fault)
 
 	require.NotPanics(t, func() {
-		doc, err := verifyEndpointHealth(oc, mustDoc(t, fakeEndpointForm), "https://"+duoHost, endpointHost, duoHost, ts.URL+"/submit", url.Values{})
+		doc, err := verifyEndpointHealth(oc, mustDoc(t, fakeEndpointForm), "https://duo.example.com", "endpoint.example.com",
+			"duo.example.com", "https://duo.example.com/submit", url.Values{})
 		require.NoError(t, err)
 		sid, _ := doc.Find(`input[name="sid"]`).Attr("value")
 		assert.Equal(t, "after-health", sid)
 	})
-	assert.Equal(t, 1, log.count("/alive"))
-	assert.Equal(t, 1, log.count("/report"))
+	assert.Equal(t, 1, handler.calls("/alive"))
+	assert.Equal(t, 1, handler.calls("/report"))
+
+	mu.Lock()
+	order := append([]string(nil), sent...)
+	mu.Unlock()
+	statusAt := slices.Index(order, endpointStatusPath+" (failed)")
+	submitAt := slices.Index(order, "/submit")
+	require.GreaterOrEqual(t, statusAt, 0, "the status request was never sent: %v", order)
+	require.GreaterOrEqual(t, submitAt, 0, "the resubmission was never sent: %v", order)
+	assert.Less(t, statusAt, submitAt, "the status request must fail before the resubmission: %v", order)
+}
+
+// endpointStatusPath is the Duo request that blocks until the endpoint health report is sent.
+const endpointStatusPath = "/frame/check_endpoint_app_status"
+
+// A failed status check does not stop the flow, but it is reported when the resubmission also fails.
+func TestVerifyEndpointHealth_StatusFailureExplainsFailedResubmit(t *testing.T) {
+	withFastPolling(t)
+
+	tests := []struct {
+		name       string
+		statusOK   bool
+		failStatus bool
+		wantStatus string
+	}{
+		{name: "status transport error", failStatus: true, wantStatus: "endpoint status check failed"},
+		// An unknown route answers 404, which the client rejects as an unsuccessful status.
+		{name: "status rejected", wantStatus: "endpoint status check failed"},
+		{name: "status succeeded", statusOK: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := map[string]func(int, *http.Request) string{"/alive": static(""), "/report": static("")}
+			if tc.statusOK {
+				h[endpointStatusPath] = static("{}")
+			}
+			failSubmit := faultAt(faultTransport, "/submit", 0)
+			failStatus := faultAt(faultTransport, endpointStatusPath, 0)
+			fault := func(r *http.Request) faultKind {
+				if tc.failStatus && failStatus(r) == faultTransport {
+					return faultTransport
+				}
+				return failSubmit(r)
+			}
+			oc := newFaultClient(t, newRoutes(h), fault)
+
+			_, err := verifyEndpointHealth(oc, mustDoc(t, fakeEndpointForm), "https://duo.example.com", "endpoint.example.com",
+				"duo.example.com", "https://duo.example.com/submit", url.Values{})
+			require.ErrorIs(t, err, errInjected)
+			assert.ErrorContains(t, err, "error retrieving verify response")
+			if tc.wantStatus == "" {
+				assert.NotContains(t, err.Error(), "endpoint status check")
+				return
+			}
+			assert.ErrorContains(t, err, tc.wantStatus)
+		})
+	}
 }
 
 // withShortPollTimeout shortens the MFA polling budget for the duration of a test.
@@ -434,6 +502,12 @@ func TestVerifyEndpointHealth_ReportFailureCancelsStatusRequest(t *testing.T) {
 	// It is separate from statusCancelled, so teardown cannot satisfy the cancellation assertion.
 	teardown := make(chan struct{})
 	duoServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only the status request may satisfy the synchronization below.
+		if r.URL.Path != endpointStatusPath {
+			t.Errorf("unexpected request to the Duo server: %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
 		// Tell the report handler the status request is in flight before it fails the report.
 		close(statusStarted)
 		// check_endpoint_app_status blocks until the client gives up.

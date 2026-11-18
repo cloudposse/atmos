@@ -150,6 +150,11 @@ the module graph or the binary. The copy also fixes the browser driver's timeout
   playwright-core package was written, that package is removed again, so Playwright does not mistake the
   half-seeded driver for a complete one and its own downloader can still run. A failed integrity check stays
   fatal. With `PLAYWRIGHT_CLI_PATH` set, the unused bundled CLI is not fetched, but Node.js is still prepared.
+  Seeding, and the rollback of a failed attempt, run under an exclusive cross-process lock
+  (`saml_driver_lock.go`, a lock file in the driver directory outside `package/`), and the driver is checked again
+  after the lock is taken. Two concurrent logins therefore never write the same files, and a failed seeder cannot
+  remove a driver another process just completed. A driver that is already complete takes no lock, so a read-only
+  driver directory keeps working.
 - `SAML2AWS_AUTO_BROWSER_DOWNLOAD` was dead: nothing read it, but `setupBrowserAutomation` set or unset it
   process-wide (clobbering a value the user exported) and `Environment()` exported it to subprocesses. Both are
   removed, along with the unused `IDPAccount.DownloadBrowser` field, and the two auth PRDs that claimed exporting
@@ -167,9 +172,12 @@ the module graph or the binary. The copy also fixes the browser driver's timeout
   same way `pkg/auth/credentials/` already is.
 - `.golangci.yml`: Atmos style and convention linters are relaxed for the vendored path. Correctness linters
   still apply.
-- `errors/errors.go`: added `ErrPlaywrightBrowserManifest`.
+- `errors/errors.go`: added `ErrPlaywrightBrowserManifest`, `ErrPlaywrightDriverBundle` (unexpected bundle content)
+  and `ErrPlaywrightDriverPatch` (I/O failures while patching the bundle).
 - Docs: `website/docs/cli/configuration/auth/providers.mdx` (an unsupported `driver` fails at login, and names
-  are case-sensitive) and `website/docs/cli/commands/auth/usage.mdx` (removed the reference to saml2aws).
+  are case-sensitive, and the `Browser` driver works when the identity provider submits the SAML response to the AWS
+  sign-in page from the login tab; a sign-in opened in a new tab is not captured) and
+  `website/docs/cli/commands/auth/usage.mdx` (removed the reference to saml2aws).
 
 **Behavior change:** an `aws/saml` provider that sets `driver` to one of the 15 undocumented values now fails
 with a clear error when that provider logs in, instead of working. Other providers and identities are not

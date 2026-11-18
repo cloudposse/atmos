@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -154,8 +155,41 @@ func TestPatchPlaywrightDriver_MissingBundleFails(t *testing.T) {
 	bundlePath := seedFakePlaywrightDriver(t)
 	require.NoError(t, os.Remove(bundlePath))
 
-	require.ErrorIs(t, patchPlaywrightDriver(), errUtils.ErrPlaywrightDriverSeed)
+	err := patchPlaywrightDriver()
+	require.ErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+	require.ErrorIs(t, err, errUtils.ErrPlaywrightDriverPatch)
+	require.ErrorIs(t, err, fs.ErrNotExist)
 	assert.NoFileExists(t, bundlePath)
+}
+
+// The bundle helpers classify their own I/O errors, so a direct caller does not depend on
+// patchPlaywrightDriver to add the sentinel, and the underlying cause stays reachable.
+func TestPatchDriverBundle_IOErrorsWrapSentinel(t *testing.T) {
+	t.Run("missing bundle", func(t *testing.T) {
+		err := patchDriverBundle(filepath.Join(t.TempDir(), "coreBundle.js"))
+		require.ErrorIs(t, err, errUtils.ErrPlaywrightDriverPatch)
+		require.ErrorIs(t, err, fs.ErrNotExist)
+		assert.NotErrorIs(t, err, errUtils.ErrPlaywrightDriverSeed)
+	})
+
+	t.Run("closed staged file", func(t *testing.T) {
+		staged, err := os.CreateTemp(t.TempDir(), ".coreBundle-*.tmp")
+		require.NoError(t, err)
+		require.NoError(t, staged.Close())
+
+		err = writeStagedBundle(staged, []byte(unpatchedCoreBundle), 0o644)
+		require.ErrorIs(t, err, errUtils.ErrPlaywrightDriverPatch)
+		require.ErrorIs(t, err, os.ErrClosed)
+	})
+
+	t.Run("unexpected content is not an I/O error", func(t *testing.T) {
+		bundlePath := filepath.Join(t.TempDir(), "coreBundle.js")
+		require.NoError(t, os.WriteFile(bundlePath, []byte("console.log('other');"), 0o644))
+
+		err := patchDriverBundle(bundlePath)
+		require.ErrorIs(t, err, errUtils.ErrPlaywrightDriverBundle)
+		assert.NotErrorIs(t, err, errUtils.ErrPlaywrightDriverPatch)
+	})
 }
 
 // assertNoStagedBundles fails if a staged patch file was left behind.

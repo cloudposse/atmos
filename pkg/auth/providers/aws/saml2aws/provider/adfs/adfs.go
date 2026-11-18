@@ -350,19 +350,33 @@ func challengeSubmitURL(doc *goquery.Document, fallback string) string {
 	return doc.Url.ResolveReference(parsed).String()
 }
 
-// challengeForm returns the first form that contains MFA challenge controls (a one-time code, security
-// code, challenge answer or AuthMethod input), or nil when no form does.
+// challengeForm returns the form that owns the MFA challenge, or nil when no form contains challenge controls.
+//
+// Atmos fork: the form holding the control that classified the page (a one-time code input for an MFA prompt,
+// the matching Azure AuthMethod value for an Azure wait) is preferred, so an earlier unrelated form, such as an
+// options form with its own AuthMethod input, is not submitted instead. Otherwise the first form that contains
+// any challenge control (a one-time code, security code, challenge answer or AuthMethod input) is used.
 func challengeForm(doc *goquery.Document) *goquery.Selection {
+	responseType, _, _ := checkResponse(doc)
+	if owner := firstFormWithInput(doc, func(name, value string) bool {
+		return classifiesChallenge(responseType, name, value)
+	}); owner != nil {
+		return owner
+	}
+	return firstFormWithInput(doc, func(name, _ string) bool {
+		return strings.EqualFold(name, "AuthMethod") || isCodeControl(name)
+	})
+}
+
+// firstFormWithInput returns the first form that has an input matching the predicate, or nil.
+func firstFormWithInput(doc *goquery.Document, matches func(name, value string) bool) *goquery.Selection {
 	var owner *goquery.Selection
 	doc.Find("form").EachWithBreak(func(_ int, f *goquery.Selection) bool {
 		found := false
 		f.Find("input").EachWithBreak(func(_ int, in *goquery.Selection) bool {
 			name, _ := in.Attr("name")
-			lname := strings.ToLower(name)
-			if lname == "authmethod" || strings.Contains(lname, "security_code") || strings.Contains(lname, "verificationcode") ||
-				strings.Contains(lname, "challengequestionanswer") || strings.Contains(lname, "oathcode") {
-				found = true
-			}
+			value, _ := in.Attr("value")
+			found = matches(name, value)
 			return !found
 		})
 		if found {
@@ -371,6 +385,31 @@ func challengeForm(doc *goquery.Document) *goquery.Selection {
 		return !found
 	})
 	return owner
+}
+
+// isCodeControl reports whether an input name is a one-time code, security code or challenge answer control.
+func isCodeControl(name string) bool {
+	lname := strings.ToLower(name)
+	return strings.Contains(lname, "security_code") || strings.Contains(lname, "verificationcode") ||
+		strings.Contains(lname, "challengequestionanswer") || strings.Contains(lname, "oathcode")
+}
+
+// classifiesChallenge reports whether an input is the control that gives a page its MFA response type.
+func classifiesChallenge(responseType AuthResponseType, name, value string) bool {
+	switch responseType {
+	case MFA_PROMPT:
+		if name == "AuthMethod" {
+			return value == "VIPAuthenticationProviderWindowsAccountName" || value == "VIPAuthenticationProviderUPN" ||
+				value == "Defender AD FS Adapter"
+		}
+		return isCodeControl(name)
+	case AZURE_MFA_WAIT:
+		return name == "AuthMethod" && value == "AzureMfaAuthentication"
+	case AZURE_MFA_SERVER_WAIT:
+		return name == "AuthMethod" && value == "AzureMfaServerAuthentication"
+	default:
+		return false
+	}
 }
 
 // challengeScope returns the selection whose inputs make up an MFA submission: the form that owns the

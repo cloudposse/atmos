@@ -126,6 +126,8 @@ var newSAMLClient = saml2aws.NewSAMLClient
 
 // Authenticate performs SAML authentication using saml2aws.
 func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, error) {
+	defer perf.Track(nil, "aws.samlProvider.Authenticate")()
+
 	if err := p.validateDriver(); err != nil {
 		return nil, err
 	}

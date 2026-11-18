@@ -301,6 +301,23 @@ func TestNewFormFromDocumentUsesBaseHref(t *testing.T) {
 		})
 	}
 
+	// Regression: an empty action resolved against base[href] and posted the form to the base path.
+	t.Run("empty action uses the document URL, not the base", func(t *testing.T) {
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<base href="/assets/"><form action=""><input name="x" value="1"/></form>`))
+		require.NoError(t, err)
+		doc.Url = &url.URL{Scheme: "https", Host: "idp.example.com", Path: "/login", RawQuery: "state=1"}
+		form, err := NewFormFromDocument(doc, "")
+		require.NoError(t, err)
+		assert.Equal(t, "https://idp.example.com/login?state=1", form.URL)
+	})
+
+	t.Run("empty action without document URL is an error", func(t *testing.T) {
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<base href="https://sso.example.com/sso/"><form action=""></form>`))
+		require.NoError(t, err)
+		_, err = NewFormFromDocument(doc, "")
+		require.Error(t, err)
+	})
+
 	t.Run("relative base without document URL is an error", func(t *testing.T) {
 		doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<base href="/sso/"><form action="resume"></form>`))
 		require.NoError(t, err)

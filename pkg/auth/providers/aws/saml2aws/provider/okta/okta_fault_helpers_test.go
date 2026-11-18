@@ -87,11 +87,14 @@ func faultAt(kind faultKind, path string, nth int) func(*http.Request) faultKind
 }
 
 // newFaultClient returns an Okta client whose HTTP traffic is served by handler, with fault applied on top.
+// Like the production client from New, it rejects responses that are neither a success nor a redirect,
+// so a request routed to an unknown path (404) fails instead of being treated as an empty page.
 func newFaultClient(t *testing.T, handler http.Handler, fault func(*http.Request) faultKind) *Client {
 	t.Helper()
 
 	hc, err := provider.NewHTTPClient(&faultRoundTripper{handler: handler, fault: fault}, &provider.HTTPClientOptions{})
 	require.NoError(t, err)
+	hc.CheckResponseStatus = provider.SuccessOrRedirectResponseValidator
 	return &Client{client: hc, mfa: "Auto", rememberDevice: true}
 }
 

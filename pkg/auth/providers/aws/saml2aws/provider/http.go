@@ -2,6 +2,7 @@ package provider
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	"github.com/avast/retry-go"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/publicsuffix"
 
@@ -37,6 +37,7 @@ const (
 	// Atmos fork: upstream left http.Client.Timeout at zero, so an IdP that accepted a request
 	// and never answered blocked authentication forever. Two minutes is generous for interactive
 	// IdP pages; the MFA push/poll flows repeat short requests, so each one stays well inside it.
+	// A request whose context carries a deadline is bounded by that deadline instead (see send).
 	DefaultRequestTimeout = 2 * time.Minute
 )
 
@@ -137,7 +138,7 @@ func (hc *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 		resp, err = hc.doWithRetry(req)
 	} else {
 		hc.logHTTPRequest(req)
-		resp, err = hc.Client.Do(req)
+		resp, err = hc.send(req)
 		// Atmos fork: the transport error embeds the full request URL, which can carry session tokens.
 		err = RedactError(err)
 	}
@@ -166,6 +167,11 @@ func (hc *HTTPClient) doWithRetry(req *http.Request) (*http.Response, error) {
 	attempted := false
 	err := retry.Do(
 		func() error {
+			// Atmos fork: http.Client adds the jar's cookies to the request headers it is given, so
+			// resending the same request carried the previous attempt's cookies alongside the jar's
+			// current ones (for example an expired session ID next to its replacement). Each attempt
+			// sends a copy of the caller's request, which keeps caller-set headers.
+			attempt := req.Clone(req.Context())
 			// Atmos fork: a failed attempt may have consumed the request body, so later attempts
 			// send a fresh copy. Upstream resent the consumed body.
 			if attempted && req.GetBody != nil {
@@ -173,11 +179,11 @@ func (hc *HTTPClient) doWithRetry(req *http.Request) (*http.Response, error) {
 				if bodyErr != nil {
 					return retry.Unrecoverable(bodyErr)
 				}
-				req.Body = body
+				attempt.Body = body
 			}
 			attempted = true
-			hc.logHTTPRequest(req)
-			clientResp, err := hc.Client.Do(req) //nolint:bodyclose // The response is returned to the caller, which closes the body.
+			hc.logHTTPRequest(attempt)
+			clientResp, err := hc.send(attempt) //nolint:bodyclose // The response is returned to the caller, which closes the body.
 			if err != nil {
 				// Atmos fork: the transport error embeds the full request URL, which can carry session tokens.
 				// The redacted error is logged and aggregated into the error returned to the caller.
@@ -205,6 +211,20 @@ func (hc *HTTPClient) doWithRetry(req *http.Request) (*http.Response, error) {
 	return resp, err
 }
 
+// send sends req with the client's settings.
+// Atmos fork: a request whose context carries a deadline is bounded by that deadline instead of the
+// client-wide timeout. Callers set a deadline when a request may legitimately outlast
+// DefaultRequestTimeout, such as the ADFS Azure MFA wait, where the server can hold the request open
+// until the user approves. Requests without a deadline keep DefaultRequestTimeout.
+func (hc *HTTPClient) send(req *http.Request) (*http.Response, error) {
+	if _, hasDeadline := req.Context().Deadline(); hasDeadline && hc.Timeout > 0 {
+		client := hc.Client
+		client.Timeout = 0
+		return client.Do(req)
+	}
+	return hc.Client.Do(req)
+}
+
 // DisableFollowRedirect disable redirects
 func (hc *HTTPClient) DisableFollowRedirect() {
 	hc.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -224,8 +244,25 @@ func SuccessOrRedirectResponseValidator(req *http.Request, resp *http.Response) 
 	}
 
 	// Atmos fork: the request URL can carry session tokens in its query string, so it is redacted.
-	return errors.Errorf("request for url: %s failed status: %s", RedactURL(req.URL), resp.Status)
+	// The error matches ErrUnexpectedStatus with errors.Is and keeps upstream's message text.
+	return &statusError{url: RedactURL(req.URL), status: resp.Status}
 }
+
+// ErrUnexpectedStatus identifies a response rejected by SuccessOrRedirectResponseValidator.
+// Atmos fork: upstream returned a string-only error, so callers could not match it with errors.Is.
+var ErrUnexpectedStatus = errors.New("unexpected HTTP response status")
+
+// statusError reports a rejected response status with upstream's message text and matches ErrUnexpectedStatus.
+type statusError struct {
+	url    string
+	status string
+}
+
+func (e *statusError) Error() string {
+	return fmt.Sprintf("request for url: %s failed status: %s", e.url, e.status)
+}
+
+func (e *statusError) Unwrap() error { return ErrUnexpectedStatus }
 
 // SuccessOrRedirectOrUnauthorizedResponseValidator also allows 401
 func SuccessOrRedirectOrUnauthorizedResponseValidator(req *http.Request, resp *http.Response) error {

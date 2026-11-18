@@ -443,24 +443,53 @@ func TestNewHTTPClientHasFiniteTimeout(t *testing.T) {
 }
 
 // The client timeout covers a server that accepts the request but never answers.
+// The request carries no deadline (a deadline replaces the client timeout), so an independent watchdog
+// ends the test if the client timeout is not applied, and the handler is then released.
 func TestNewHTTPClientTimeoutBoundsUnresponsiveServer(t *testing.T) {
+	const watchdog = 30 * time.Second
+	received := make(chan struct{}, 1)
 	release := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
-		<-release
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		select {
+		case received <- struct{}{}:
+		default:
+		}
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
 	}))
 	defer server.Close()
 	defer close(release)
 
 	client, err := NewHTTPClient(http.DefaultTransport, &HTTPClientOptions{})
 	require.NoError(t, err)
-	client.Timeout = 50 * time.Millisecond
+	client.Timeout = 200 * time.Millisecond
 	req, err := http.NewRequest(http.MethodGet, server.URL, nil)
 	require.NoError(t, err)
-	resp, err := client.Do(req)
-	if err == nil {
-		resp.Body.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		resp, doErr := client.Do(req)
+		if doErr == nil {
+			_ = resp.Body.Close()
+		}
+		done <- doErr
+	}()
+
+	select {
+	case err = <-done:
+	case <-time.After(watchdog):
+		t.Fatalf("client.Do did not return within %s: the client timeout was not applied", watchdog)
 	}
-	require.Error(t, err)
+	select {
+	case <-received:
+	default:
+		t.Fatal("the handler never received the request, so the failure was not the timeout")
+	}
+	var urlErr *url.Error
+	require.ErrorAs(t, err, &urlErr)
+	assert.True(t, urlErr.Timeout(), "the client timeout caused the failure: %v", err)
 }
 
 // Regression: the computed backoff, not only the base delay, is capped.

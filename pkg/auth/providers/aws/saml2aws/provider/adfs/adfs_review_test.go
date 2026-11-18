@@ -4,10 +4,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -92,6 +94,88 @@ func TestAuthenticateMFAUsesTheChallengeForm(t *testing.T) {
 	// Inputs of the unrelated form are not part of the submission.
 	_, hasOther := posts[1]["Other"]
 	assert.False(t, hasOther)
+}
+
+// Regression: an options form with its own AuthMethod input before the OTP form was submitted instead of
+// the OTP form, so the code was never sent.
+func TestAuthenticateMFAIgnoresEarlierOptionsForm(t *testing.T) {
+	page := `<html><body>
+<form method="post" action="/adfs/ls/options"><input name="AuthMethod" type="hidden" value="FormsAuthentication" /></form>
+<form method="post" action="/adfs/ls/mfa"><input name="VerificationCode" type="text" value="" />
+<input name="Context" type="hidden" value="ctx-123" /></form>
+</body></html>`
+	fake := &fakeADFS{
+		loginHTML: loginPage("/adfs/ls/"),
+		responses: []string{page, samlResponsePage},
+	}
+	ts := newTestServer(t, fake)
+
+	assertion, err := newTestClient(t).Authenticate(loginDetails(ts.URL, "654321"))
+	require.NoError(t, err)
+	assert.Equal(t, testSAMLAssertion, assertion)
+
+	_, paths := fake.requests()
+	assert.Equal(t, []string{"/adfs/ls/", "/adfs/ls/mfa"}, paths)
+	posts := fake.postedForms()
+	require.Len(t, posts, 2)
+	assert.Equal(t, []string{"654321"}, posts[1]["VerificationCode"])
+	assert.Equal(t, []string{"ctx-123"}, posts[1]["Context"])
+	// The options form's AuthMethod is not part of the submission.
+	_, hasAuthMethod := posts[1]["AuthMethod"]
+	assert.False(t, hasAuthMethod)
+}
+
+// The challenge form is the one holding the control that classified the page; pages without such a form keep
+// using the first form with any challenge control.
+func TestChallengeFormSelection(t *testing.T) {
+	const options = `<form action="/adfs/ls/options"><input name="AuthMethod" type="hidden" value="FormsAuthentication" /></form>`
+	base, err := url.Parse("https://idp.example.com/adfs/ls/")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		html string
+		want string
+	}{
+		{
+			name: "code form after options form",
+			html: options + `<form action="/adfs/ls/mfa"><input name="OathCode" value="" /></form>`,
+			want: "https://idp.example.com/adfs/ls/mfa",
+		},
+		{
+			name: "Azure wait form after options form",
+			html: options + `<form action="/adfs/ls/azure"><input name="AuthMethod" type="hidden" value="AzureMfaAuthentication" /></form>`,
+			want: "https://idp.example.com/adfs/ls/azure",
+		},
+		{
+			name: "Azure server wait form after options form",
+			html: options + `<form action="/adfs/ls/azure-server"><input name="AuthMethod" type="hidden" value="AzureMfaServerAuthentication" /></form>`,
+			want: "https://idp.example.com/adfs/ls/azure-server",
+		},
+		{
+			name: "VIP prompt form after options form",
+			html: options + `<form action="/adfs/ls/vip"><input name="AuthMethod" type="hidden" value="VIPAuthenticationProviderUPN" /></form>`,
+			want: "https://idp.example.com/adfs/ls/vip",
+		},
+		{
+			name: "single challenge form",
+			html: `<form action="/adfs/ls/mfa"><input name="VerificationCode" value="" /></form>`,
+			want: "https://idp.example.com/adfs/ls/mfa",
+		},
+		{
+			name: "unclassified page keeps the first form with a challenge control",
+			html: `<form action="/adfs/ls/plain"><input name="Other" /></form>` + options,
+			want: "https://idp.example.com/adfs/ls/options",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, err := goquery.NewDocumentFromReader(strings.NewReader(tt.html))
+			require.NoError(t, err)
+			doc.Url = base
+			assert.Equal(t, tt.want, challengeSubmitURL(doc, "https://fallback.example.com/login"))
+		})
+	}
 }
 
 // Regression: a SAMLResponse input without a value followed by an MFA input submitted an OTP.

@@ -233,13 +233,7 @@ func TestHasPlaywrightDriversOrCanDownload(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			homeDir := tt.setup(t)
 
-			// Override home directory for cross-platform compatibility.
-			t.Setenv("HOME", homeDir)        // Linux/macOS.
-			t.Setenv("USERPROFILE", homeDir) // Windows.
-
-			// Clear homedir cache to ensure environment variables take effect.
-			t.Cleanup(homedir.Reset)
-			homedir.Reset()
+			isolateDriverDetection(t, homeDir)
 
 			provider := &samlProvider{
 				config: &schema.Provider{
@@ -329,13 +323,7 @@ func TestGetDriver_WithPlaywrightDrivers(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			homeDir := tt.setup(t)
 
-			// Override home directory for cross-platform compatibility.
-			t.Setenv("HOME", homeDir)        // Linux/macOS.
-			t.Setenv("USERPROFILE", homeDir) // Windows.
-
-			// Clear homedir cache to ensure environment variables take effect.
-			t.Cleanup(homedir.Reset)
-			homedir.Reset()
+			isolateDriverDetection(t, homeDir)
 
 			provider := &samlProvider{
 				url: tt.url,
@@ -348,4 +336,40 @@ func TestGetDriver_WithPlaywrightDrivers(t *testing.T) {
 			assert.Equal(t, tt.expected, result, "getDriver result mismatch")
 		})
 	}
+}
+
+// isolateDriverDetection points every input of Playwright browser detection at test-owned directories.
+// HOME/USERPROFILE is homeDir, so fixtures created under it stay reachable through the home-based
+// locations. The Playwright registry (PLAYWRIGHT_BROWSERS_PATH), the Atmos and XDG cache directories and,
+// on Windows, LOCALAPPDATA point at empty directories, so browsers installed on the host do not leak in.
+func isolateDriverDetection(t *testing.T, homeDir string) {
+	t.Helper()
+	t.Setenv("HOME", homeDir)        // Linux/macOS.
+	t.Setenv("USERPROFILE", homeDir) // Windows.
+	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", t.TempDir())
+	t.Setenv("npm_config_playwright_browsers_path", "")
+	t.Setenv("npm_package_config_playwright_browsers_path", "")
+	t.Setenv("INIT_CWD", "")
+	emptyCache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", emptyCache)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", emptyCache)
+	t.Setenv("LOCALAPPDATA", t.TempDir())
+
+	// Clear homedir cache to ensure environment variables take effect.
+	t.Cleanup(homedir.Reset)
+	homedir.Reset()
+}
+
+// Prerequisite: a browser in the Playwright registry is detected, so the isolation above is what keeps a
+// browser installed on the host out of the negative cases.
+func TestIsolateDriverDetection_RegistryBrowserIsDetected(t *testing.T) {
+	isolateDriverDetection(t, t.TempDir())
+	registryDir := t.TempDir()
+	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", registryDir)
+	browserDir := filepath.Join(registryDir, "chromium-1234")
+	require.NoError(t, os.MkdirAll(browserDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(browserDir, "chrome"), []byte("fake"), 0o755))
+
+	provider := &samlProvider{config: &schema.Provider{}}
+	assert.True(t, provider.hasPlaywrightDriversOrCanDownload())
 }
