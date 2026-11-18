@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/gruntwork-io/terragrunt/pkg/config"
@@ -21,6 +22,8 @@ import (
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
+
+var errUndecidableDestroyPolicy = errors.New("prevent_destroy cannot be determined without effects denied by the read-only guard")
 
 // Resolve evaluates HCL using the pinned Terragrunt parser.
 //
@@ -241,10 +244,15 @@ func (e *unitEvaluator) checkDestroyGuard(ctx context.Context) error {
 	if e.request.Phase == phaseBackend || (e.request.Command != "plan" && e.request.Command != "apply" && e.request.Command != "destroy") {
 		return nil
 	}
-	guard, err := config.PartialParseConfigFile(ctx, e.logger, atmosbridge.Discovery(e.environment, false),
+	var denied atomic.Bool
+	guardEnvironment := atmosbridge.DiscoveryObserved(e.environment, false, func() { denied.Store(true) })
+	guard, err := config.PartialParseConfigFile(ctx, e.logger, guardEnvironment,
 		e.pctx.WithDecodeList(config.TerragruntFlags, config.TerraformExtraArgs), e.path, nil)
 	if err != nil {
 		return failedDestroyGuard(e.request, e.environment.FS, e.path, err)
+	}
+	if denied.Load() {
+		return failedDestroyGuard(e.request, e.environment.FS, e.path, errUndecidableDestroyPolicy)
 	}
 	return checkPreventDestroy(e.request, guard)
 }

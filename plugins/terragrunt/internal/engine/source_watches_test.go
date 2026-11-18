@@ -61,7 +61,11 @@ func TestInputWatchesFailuresAndIncludedInputs(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	path := filepath.Join(root, "shared.hcl")
 	result := &model.Resolution{Files: []string{path}}
-	require.Error(t, trackInputSources(fs, root, result))
+	require.NoError(t, trackInputSources(fs, root, result))
+	require.Contains(t, result.Files, path, "missing mark_as_read remains watched")
+	require.NoError(t, os.MkdirAll(path, 0o700))
+	require.Error(t, trackInputSources(afero.NewOsFs(), root, result), "non-absence errors still fail")
+	require.NoError(t, os.Remove(path))
 	require.NoError(t, fs.MkdirAll(root, 0o700))
 	// A read data file named *.hcl need not be HCL; it remains a file watch instead of
 	// failing the whole inventory.
@@ -75,7 +79,7 @@ func TestInputWatchesFailuresAndIncludedInputs(t *testing.T) {
 	require.Empty(t, result.Folders)
 	require.NoError(t, afero.WriteFile(fs, path, []byte(`inputs = { value = read_terragrunt_config("shared-input.hcl") }`), 0o600))
 	require.NoError(t, trackInputSources(fs, root, result))
-	require.Contains(t, result.Files, filepath.Join(root, "shared-input.hcl"))
+	require.Contains(t, result.Folders, filepath.Join(root, "shared-input.hcl"), "creation as either a file or directory is watched")
 }
 
 func TestInputWatchesFollowNestedConfigurationReads(t *testing.T) {
@@ -99,11 +103,10 @@ func TestInputWatchesFollowNestedConfigurationReads(t *testing.T) {
 	for _, path := range []string{
 		filepath.Join(root, "shared", "common.hcl"),
 		filepath.Join(root, "shared", "data.json"),
-		filepath.Join(root, "shared", "absent.hcl"),
 	} {
 		require.Contains(t, result.Files, path, "a transitive read is watched, even before it exists")
 	}
-	require.Empty(t, result.Folders)
+	require.Equal(t, []string{filepath.Join(root, "shared", "absent.hcl")}, result.Folders, "missing config creation is watched as either a file or directory")
 }
 
 // A JSON configuration read by read_terragrunt_config cannot be inspected for nested reads, so the
@@ -116,13 +119,13 @@ func TestInputWatchesWidenForJSONConfigurationReads(t *testing.T) {
 	require.NoError(t, afero.WriteFile(fs, unit, []byte(`inputs = { common = read_terragrunt_config("shared.hcl.json") }`), 0o600))
 	result := &model.Resolution{Files: []string{unit}}
 	require.NoError(t, trackInputSources(fs, root, result))
-	require.Equal(t, []string{root}, result.Folders)
+	require.Equal(t, []string{root, filepath.Join(root, "shared.hcl.json")}, result.Folders)
 	require.NotContains(t, result.Files, filepath.Join(root, "data.json"))
 
 	require.NoError(t, afero.WriteFile(fs, unit, []byte(`inputs = { common = read_terragrunt_config("shared.hcl") }`), 0o600))
 	result = &model.Resolution{Files: []string{unit}}
 	require.NoError(t, trackInputSources(fs, root, result))
-	require.Empty(t, result.Folders, "an HCL configuration is still inspected rather than widened")
+	require.Equal(t, []string{filepath.Join(root, "shared.hcl")}, result.Folders, "missing HCL config creation is watched without widening to the project")
 }
 
 // A path outside the project that is a symlink into it is watched at its canonical target.
@@ -160,6 +163,7 @@ func TestInputWatchesResolveDirectoryConfigurationReads(t *testing.T) {
 	unit := filepath.Join(root, "terragrunt.hcl")
 	require.NoError(t, afero.WriteFile(fs, unit, []byte(`inputs = { common = read_terragrunt_config("shared") }`), 0o600))
 	require.NoError(t, afero.WriteFile(fs, filepath.Join(root, "shared", "terragrunt.hcl"), []byte(`inputs = { nested = read_terragrunt_config("../other.hcl") }`), 0o600))
+	require.NoError(t, afero.WriteFile(fs, filepath.Join(root, "other.hcl"), []byte(`inputs = {}`), 0o600))
 	result := &model.Resolution{Files: []string{unit}}
 	require.NoError(t, trackInputSources(fs, root, result))
 	require.Equal(t, []string{filepath.Join(root, "shared")}, result.Folders)
@@ -302,4 +306,32 @@ func TestIncludedConfigReadUsesUnitWhileFileUsesAuthorDirectory(t *testing.T) {
 	require.Contains(t, result.Files, filepath.Join(filepath.Dir(parent), "authored.json"))
 	require.NotContains(t, result.Files, filepath.Join(filepath.Dir(parent), "extra.conf"))
 	require.Empty(t, result.Folders)
+}
+
+func TestDiscoveryKeepsMissingMarkAsRead(t *testing.T) {
+	request := nativeUnit(t, `locals { optional = mark_as_read("optional.hcl") }`)
+	request.Phase = "discover"
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	root, err := filepath.EvalSymlinks(filepath.Dir(request.Path))
+	require.NoError(t, err)
+	require.Contains(t, result.Files, filepath.Join(root, "optional.hcl"))
+}
+
+func TestInputWatchesResolveDirectoryConfiguration(t *testing.T) {
+	root := t.TempDir()
+	fs := afero.NewMemMapFs()
+	require.NoError(t, fs.MkdirAll(filepath.Join(root, "shared"), 0o700))
+	unit := filepath.Join(root, "terragrunt.hcl")
+	shared := filepath.Join(root, "shared", "terragrunt.hcl")
+	require.NoError(t, afero.WriteFile(fs, unit, []byte(`inputs = { value = read_terragrunt_config("shared") }`), 0o600))
+	result := &model.Resolution{Files: []string{unit}}
+	require.NoError(t, trackInputSources(fs, root, result))
+	require.NotContains(t, result.Files, shared, "directory watch covers its default config")
+	require.Contains(t, result.Folders, filepath.Dir(shared), "config creation is watched")
+	require.NoError(t, afero.WriteFile(fs, shared, []byte(`inputs = { value = file("../data.json") }`), 0o600))
+	require.NoError(t, trackInputSources(fs, root, result))
+	require.Contains(t, result.Files, filepath.Join(root, "data.json"), "selected config is scanned transitively")
+	result = &model.Resolution{Files: []string{unit}}
+	require.ErrorIs(t, trackInputSources(statFailureFs{Fs: fs, err: os.ErrPermission}, root, result), os.ErrPermission, "optional config stat failures are not hidden")
 }

@@ -108,7 +108,7 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 				phaseInfo,
 				info.SubCommand,
 				func(o ...component.ExecutionOption) error {
-					err := e.executeStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
+					err := e.executeReviewedStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
 						componentPath:  componentPath,
 						args:           phaseArgs,
 						gatePhase:      info.SubCommand,
@@ -144,6 +144,14 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 		}
 		return err
 	})
+}
+
+// executeReviewedStreamingOrShell verifies the reviewed files immediately before each attempt.
+func (e *Executor) executeReviewedStreamingOrShell(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, request *streamingExecRequest) error {
+	if err := recheckReviewedApply(component.ContextFromOptions(request.shellOpts...), config, info); err != nil {
+		return err
+	}
+	return e.executeStreamingOrShell(config, info, request)
 }
 
 // preflightRequiredVarFiles checks the requested command's required variable files in the

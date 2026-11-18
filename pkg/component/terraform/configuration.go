@@ -460,12 +460,13 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() er
 		case *after != *before:
 			s.err = fmt.Errorf("%w: configuration changed while Terraform ran", errUtils.ErrPlanVerificationFailed)
 		default:
-			// Terraform writes the plan itself unless a policy gate publishes it later, so the plan is
-			// fingerprinted now and an after hook cannot move the binding onto rewritten bytes.
-			if s.execCtx.planPolicy == nil {
-				if digest, digestErr := fileDigest(path); digestErr == nil {
-					after.planDigest = digest
-				}
+			// Fingerprint the actual engine output before after hooks, including private policy plans.
+			writtenPath := path
+			if s.execCtx.planPolicy != nil {
+				writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
+			}
+			if digest, digestErr := fileDigest(writtenPath); digestErr == nil {
+				after.planDigest = digest
 			}
 			s.result = after
 		}
@@ -502,4 +503,13 @@ func (c *componentExecContext) observePlanSnapshots(ctx context.Context, config 
 		return plannedOutputPath(c.componentPath, phaseArgs)
 	}}
 	return context.WithValue(ctx, planSnapshotKey{}, c.planSnapshots)
+}
+
+// recheckReviewedApply runs inside each subprocess attempt, after before hooks and recovery init.
+func recheckReviewedApply(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if info.DryRun || !schema.ConfigurationOwned(info.ComponentSettingsSection) || !usesConfigurationPlan(info) || !restoresConfigurationPlan(info) {
+		return nil
+	}
+	_, err := restoreConfigurationPlan(ctx, config, info)
+	return err
 }

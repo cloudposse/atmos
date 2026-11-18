@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -113,7 +114,7 @@ func observesCommand(filesystem afero.Fs, paths []string) bool {
 			return true
 		}
 		for _, name := range commandFunctions {
-			if bytes.Contains(contents, name) {
+			if callsFunction(contents, path, string(name)) {
 				return true
 			}
 		}
@@ -425,7 +426,7 @@ func literalStringList(content *hcl.BodyContent, name string) ([]string, bool) {
 func rejectArgumentDependentExecution(filesystem afero.Fs, paths []string) error {
 	for _, path := range paths {
 		content, err := afero.ReadFile(filesystem, path)
-		if err != nil || bytes.Contains(content, []byte("get_terraform_cli_args")) {
+		if err != nil || callsFunction(content, path, "get_terraform_cli_args") {
 			return fmt.Errorf("%w: argument-dependent saved-plan execution cannot be bound before apply", ErrUnsupportedExecution)
 		}
 	}
@@ -462,4 +463,60 @@ func executionDeclarations(filesystem afero.Fs, path string) ([]*hcl.Block, erro
 		blocks = append(blocks, declarations.Blocks...)
 	}
 	return blocks, nil
+}
+
+// callsFunction distinguishes evaluated function calls from comments and literal strings.
+// Invalid syntax remains conservative; the ordinary parser reports its diagnostics.
+func callsFunction(contents []byte, path, name string) bool {
+	if strings.HasSuffix(path, ".json") {
+		var value any
+		if json.Unmarshal(contents, &value) != nil {
+			return true
+		}
+		return jsonCallsFunction(value, path, name)
+	}
+	if !bytes.Contains(contents, []byte(name)) {
+		return false
+	}
+	file, diagnostics := hclsyntax.ParseConfig(contents, path, hcl.InitialPos)
+	if diagnostics.HasErrors() {
+		return true
+	}
+	return expressionCallsFunction(file.Body.(*hclsyntax.Body), name)
+}
+
+// JSON HCL interprets string values as templates, while object keys remain literal.
+func jsonCallsFunction(value any, path, name string) bool {
+	switch item := value.(type) {
+	case map[string]any:
+		for _, nested := range item {
+			if jsonCallsFunction(nested, path, name) {
+				return true
+			}
+		}
+	case []any:
+		for _, nested := range item {
+			if jsonCallsFunction(nested, path, name) {
+				return true
+			}
+		}
+	case string:
+		expression, diagnostics := hclsyntax.ParseTemplate([]byte(item), path, hcl.InitialPos)
+		if diagnostics.HasErrors() {
+			return strings.Contains(item, name)
+		}
+		return expressionCallsFunction(expression, name)
+	}
+	return false
+}
+
+func expressionCallsFunction(expression hclsyntax.Node, name string) bool {
+	found := false
+	diagnostics := hclsyntax.VisitAll(expression, func(node hclsyntax.Node) hcl.Diagnostics {
+		if call, ok := node.(*hclsyntax.FunctionCallExpr); ok && call.Name == name {
+			found = true
+		}
+		return nil
+	})
+	return found || diagnostics.HasErrors()
 }
