@@ -2,6 +2,8 @@ package googleapps
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -197,4 +199,35 @@ func TestExtractKeyHandlesMalformedChallengeUI(t *testing.T) {
 		assert.Empty(t, appID, value)
 		assert.Empty(t, handles, value)
 	}
+}
+
+// Regression: a form without an action submits to the final response URL, not the URL first requested.
+func TestLoadFirstPageUsesFinalURLAfterRedirect(t *testing.T) {
+	const finalPath = "/final/login"
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathFirstPage {
+			http.Redirect(w, r, finalPath, http.StatusFound)
+			return
+		}
+		_, _ = fmt.Fprint(w, `<html><body><form id="gaia_loginform" method="POST"><input type="hidden" name="GALX" value="g"></form></body></html>`)
+	}))
+	t.Cleanup(ts.Close)
+	kc := &Client{client: mustHTTPClient(t)}
+
+	submitURL, form, err := kc.loadFirstPage(&creds.LoginDetails{URL: ts.URL + pathFirstPage})
+	require.NoError(t, err)
+	assert.Equal(t, ts.URL+finalPath, submitURL)
+	assert.Equal(t, "g", form.Get("GALX"))
+}
+
+func TestDocumentURLFallsBackToRequestedURL(t *testing.T) {
+	got, err := documentURL(&http.Response{}, "https://idp.example.com/login")
+	require.NoError(t, err)
+	assert.Equal(t, "https://idp.example.com/login", got.String())
+
+	finalURL, err := url.Parse("https://idp.example.com/final")
+	require.NoError(t, err)
+	got, err = documentURL(&http.Response{Request: &http.Request{URL: finalURL}}, "https://idp.example.com/login")
+	require.NoError(t, err)
+	assert.Equal(t, finalURL, got)
 }

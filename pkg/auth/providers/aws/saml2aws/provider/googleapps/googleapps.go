@@ -303,6 +303,16 @@ func withLocale(rawURL string) string {
 	return result
 }
 
+// documentURL returns the URL a response document must resolve relative and missing form actions against.
+// Atmos fork: upstream used the URL that was requested, which is wrong after a redirect. The final request
+// URL of the response is used, falling back to the requested URL when the response carries no request metadata.
+func documentURL(res *http.Response, requested string) (*url.URL, error) {
+	if res != nil && res.Request != nil && res.Request.URL != nil {
+		return res.Request.URL, nil
+	}
+	return url.Parse(requested)
+}
+
 func (kc *Client) loadFirstPage(loginDetails *creds.LoginDetails) (string, url.Values, error) {
 	firstPageURL := withLocale(loginDetails.URL)
 
@@ -322,7 +332,7 @@ func (kc *Client) loadFirstPage(loginDetails *creds.LoginDetails) (string, url.V
 		return "", nil, errors.Wrap(err, "error parsing first page html document")
 	}
 
-	doc.Url, err = url.Parse(firstPageURL)
+	doc.Url, err = documentURL(res, firstPageURL)
 	if err != nil {
 		return "", url.Values{}, errors.Wrap(err, "failed to define URL for html doc")
 	}
@@ -357,7 +367,7 @@ func (kc *Client) loadLoginPage(submitURL string, referer string, authForm url.V
 		return "", nil, errors.Wrap(err, "error parsing login page html document")
 	}
 
-	doc.Url, err = url.Parse(submitURL)
+	doc.Url, err = documentURL(res, submitURL)
 	if err != nil {
 		return "", url.Values{}, errors.Wrap(err, "failed to define URL for html doc")
 	}
@@ -394,7 +404,7 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 		return nil, errors.Wrap(err, "error parsing login page html document")
 	}
 
-	doc.Url, err = url.Parse(submitURL)
+	doc.Url, err = documentURL(res, submitURL)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to define URL for html doc")
 	}
@@ -446,11 +456,6 @@ func (kc *Client) loadChallengePage(submitURL string, referer string, authForm u
 				if err != nil {
 					return nil, errors.Wrap(err, "failed to post sms request form")
 				}
-				doc.Url, err = url.Parse(submitURL)
-				if err != nil {
-					return nil, errors.Wrap(err, "failed to define URL for html doc")
-				}
-
 				submitURL = secondActionURL
 				responseForm, secondActionURL, err = extractInputsByFormID(doc, "challenge")
 				if err != nil {
@@ -597,7 +602,7 @@ func (kc *Client) loadAlternateChallengePage(submitURL string, referer string, a
 		return nil, errors.Wrap(err, "error parsing login page html document")
 	}
 
-	doc.Url, err = url.Parse(submitURL)
+	doc.Url, err = documentURL(res, submitURL)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to define URL for html doc")
 	}
@@ -691,9 +696,7 @@ func (kc *Client) loadResponsePage(submitURL string, referer string, responseFor
 
 	// Atmos fork: NewDocumentFromReader leaves doc.Url nil, and later steps (for example a captcha
 	// in the MFA response) dereference it. Use the final request URL, falling back to the submit URL.
-	if res.Request != nil && res.Request.URL != nil {
-		doc.Url = res.Request.URL
-	} else if doc.Url, err = url.Parse(submitURL); err != nil {
+	if doc.Url, err = documentURL(res, submitURL); err != nil {
 		return nil, errors.Wrap(err, "failed to define URL for html doc")
 	}
 

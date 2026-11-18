@@ -311,15 +311,35 @@ func TestPlaywrightRegistryDirRelativeBrowsersPathUsesInitCwd(t *testing.T) {
 func TestPlaywrightRegistryDirNpmEnvFallbacks(t *testing.T) {
 	configDir := t.TempDir()
 	packageDir := t.TempDir()
+	cacheHome := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	t.Setenv("LOCALAPPDATA", cacheHome)
+	t.Setenv("HOME", cacheHome)
+	t.Setenv("USERPROFILE", cacheHome)
 	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", "")
 	t.Setenv("npm_config_playwright_browsers_path", configDir)
 	t.Setenv("npm_package_config_playwright_browsers_path", packageDir)
 
+	// An empty but defined PLAYWRIGHT_BROWSERS_PATH wins over the npm variables and selects the default registry.
+	defaultDir, err := playwrightRegistryDir()
+	require.NoError(t, err)
+	assert.NotEqual(t, configDir, defaultDir)
+	assert.NotEqual(t, packageDir, defaultDir)
+	assert.Equal(t, playwrightCacheDir, filepath.Base(defaultDir))
+
+	// With PLAYWRIGHT_BROWSERS_PATH undefined, the npm variables apply in order.
+	require.NoError(t, os.Unsetenv("PLAYWRIGHT_BROWSERS_PATH"))
 	got, err := playwrightRegistryDir()
 	require.NoError(t, err)
 	assert.Equal(t, configDir, got)
 
+	// An empty but defined npm_config_ variable stops the lookup as well.
 	t.Setenv("npm_config_playwright_browsers_path", "")
+	got, err = playwrightRegistryDir()
+	require.NoError(t, err)
+	assert.Equal(t, defaultDir, got)
+
+	require.NoError(t, os.Unsetenv("npm_config_playwright_browsers_path"))
 	got, err = playwrightRegistryDir()
 	require.NoError(t, err)
 	assert.Equal(t, packageDir, got)

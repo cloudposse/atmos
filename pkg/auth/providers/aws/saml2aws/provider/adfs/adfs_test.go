@@ -616,3 +616,34 @@ func TestChallengeSubmitURL(t *testing.T) {
 		})
 	}
 }
+
+// Regression: a relative form action resolves against the final login page URL (after redirects),
+// not the URL the login flow first requested.
+func TestAuthenticateRelativeActionAfterRedirect(t *testing.T) {
+	const redirectedPath = "/adfs/login/index.html"
+
+	var mu sync.Mutex
+	var posted []string
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == redirectedPath:
+			_, _ = w.Write([]byte(loginPage("step=password")))
+		case r.Method == http.MethodGet:
+			http.Redirect(w, r, redirectedPath, http.StatusFound)
+		default:
+			mu.Lock()
+			posted = append(posted, r.URL.Path)
+			mu.Unlock()
+			_, _ = w.Write([]byte(samlResponsePage))
+		}
+	}))
+	t.Cleanup(ts.Close)
+
+	assertion, err := newTestClient(t).Authenticate(loginDetails(ts.URL, ""))
+	require.NoError(t, err)
+	assert.Equal(t, testSAMLAssertion, assertion)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"/adfs/login/step=password"}, posted)
+}

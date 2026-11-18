@@ -132,7 +132,8 @@ func playwrightBrowsersPathEnv() string {
 		"npm_config_playwright_browsers_path",
 		"npm_package_config_playwright_browsers_path",
 	} {
-		if value := os.Getenv(name); value != "" { //nolint:forbidigo // Third-party (Playwright) env vars, read the same way the driver reads them.
+		// An empty but defined variable still wins: Playwright falls back to the next variable only when undefined.
+		if value, ok := os.LookupEnv(name); ok { //nolint:forbidigo // Third-party (Playwright) env vars, read the same way the driver reads them.
 			return value
 		}
 	}

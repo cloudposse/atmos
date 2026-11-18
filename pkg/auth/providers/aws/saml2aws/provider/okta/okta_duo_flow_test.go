@@ -416,8 +416,11 @@ func TestVerifyMfa_DuoPushPollIsBounded(t *testing.T) {
 func TestVerifyEndpointHealth_ReportFailureCancelsStatusRequest(t *testing.T) {
 	withFastPolling(t)
 
+	statusStarted := make(chan struct{})
 	statusCancelled := make(chan struct{})
 	duoServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Tell the report handler the status request is in flight before it fails the report.
+		close(statusStarted)
 		// check_endpoint_app_status blocks until the client gives up.
 		<-r.Context().Done()
 		close(statusCancelled)
@@ -426,6 +429,12 @@ func TestVerifyEndpointHealth_ReportFailureCancelsStatusRequest(t *testing.T) {
 
 	endpoint := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/report" {
+			// Fail the report only after the status handler was entered, so the cancellation is observable.
+			select {
+			case <-statusStarted:
+			case <-time.After(10 * time.Second):
+				t.Error("the status request never reached the Duo server")
+			}
 			// Drop the connection so the report request fails with a transport error.
 			conn, _, err := w.(http.Hijacker).Hijack()
 			if err == nil {

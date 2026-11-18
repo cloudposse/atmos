@@ -77,7 +77,8 @@ identity provider and read the AWS roles from the SAML assertion.
   returned an empty error), invalid attempt and delay values are logged at debug level, and a client created with
   nil options sends the request once instead of panicking.
 - **Later review fixes:**
-  - `aws_role.go` keeps commas inside role names (a comma separates ARNs only before another `arn:`).
+  - `aws_role.go` keeps commas inside role names (a comma separates ARNs only before a complete role or SAML provider ARN, so paths such as
+    `/team,arn:blue/` stay intact).
   - `saml.go` matches the Attribute elements by namespace URI instead of the Assertion's prefix.
   - `cookiejar` no longer decodes the default cookie path twice.
   - `page.Form` puts GET form fields in the URL query, and no longer panics when the document has no URL.
@@ -101,6 +102,11 @@ identity provider and read the AWS roles from the SAML assertion.
     malformed `data-challenge-ui` values no longer panic.
   - Okta: both MFA polling loops stop after `mfaPollTimeout`, a failed Duo health report cancels the status request,
     the Duo callback response is closed, and the next FIDO device is searched for with the `Auto` setting.
+  - ADFS resolves the login form action against the final login page URL (after redirects), and Google Apps documents
+    use the final response URL, so forms without an action submit to the page that served them.
+  - `provider/http.go` caps each computed retry wait at `MaxRetryDelay` (the exponential backoff included), and
+    redacts the URL in transport errors (`RedactError`) before they are logged or returned, so query-string session
+    tokens do not leak.
 - **Tests:** browser tests use `go.uber.org/mock` mocks of a narrow `samlPage` interface instead of a real browser.
   Real-browser tests are in `browser_integration_test.go` and only run with `RUN_PLAYWRIGHT_INTEGRATION=1`.
 
