@@ -251,16 +251,43 @@ type storageStateSaver interface {
 }
 
 // saveStorageState writes the browser storage state (IdP session cookies) to statePath.
-// Atmos fork: Playwright creates the file with 0644 permissions, so the directory is created
-// with 0700 and the file is tightened to 0600 after saving.
+// Atmos fork: Playwright creates (os.Create, 0644) and writes the state file directly, so the cookies
+// were world-readable until a later chmod, and a failed save could clobber the previous state. The state
+// is saved to a private (0600) temporary file in a private (0700) directory and only moved over statePath
+// after a successful save, so a failure leaves the previous state untouched.
 func saveStorageState(saver storageStateSaver, statePath string) error {
-	if err := os.MkdirAll(filepath.Dir(statePath), storageStateDirPerm); err != nil {
+	dir := filepath.Dir(statePath)
+	if err := os.MkdirAll(dir, storageStateDirPerm); err != nil {
 		return err
 	}
-	if _, err := saver.StorageState(playwright.BrowserContextStorageStateOptions{Path: playwright.String(statePath)}); err != nil {
+	// MkdirAll does not tighten an existing directory.
+	if err := os.Chmod(dir, storageStateDirPerm); err != nil {
 		return err
 	}
-	return os.Chmod(statePath, storageStateFilePerm)
+
+	tmp, err := os.CreateTemp(dir, filepath.Base(statePath)+".*.tmp") // Created with 0600.
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+
+	if _, err := saver.StorageState(playwright.BrowserContextStorageStateOptions{Path: playwright.String(tmpPath)}); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Chmod(tmpPath, storageStateFilePerm); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, statePath); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 // getSAMLResponse navigates to the IdP and captures the SAMLResponse posted to the AWS sign-in endpoint.
@@ -286,12 +313,22 @@ var getSAMLResponse = func(page samlPage, loginDetails *creds.LoginDetails, clie
 		return "", err
 	}
 
+	// record stores the request body. Atmos fork: a captured SAMLResponse is never replaced by a later
+	// request that carries none (for example a GET to the same URL, whose body is empty), which upstream
+	// overwrote and then waited for another request until the timeout.
+	record := func(postData string, postErr error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if dataErr == nil && hasSAMLResponse(data) && (postErr != nil || !hasSAMLResponse(postData)) {
+			return
+		}
+		data, dataErr = postData, postErr
+	}
+
 	page.OnRequest(func(request playwright.Request) {
 		if signinRe.MatchString(request.URL()) {
 			postData, postErr := request.PostData()
-			mu.Lock()
-			data, dataErr = postData, postErr
-			mu.Unlock()
+			record(postData, postErr)
 		}
 	})
 	if _, err := page.Goto(loginDetails.URL); err != nil {
@@ -333,9 +370,7 @@ var getSAMLResponse = func(page samlPage, loginDetails *creds.LoginDetails, clie
 			return "", ErrNoSAMLResponse
 		default:
 			postData, postErr := r.PostData()
-			mu.Lock()
-			data, dataErr = postData, postErr
-			mu.Unlock()
+			record(postData, postErr)
 		}
 	}
 
@@ -357,6 +392,12 @@ var getSAMLResponse = func(page samlPage, loginDetails *creds.LoginDetails, clie
 	}
 
 	return samlResponse, nil
+}
+
+// hasSAMLResponse reports whether the request body carries a non-empty SAMLResponse form field.
+func hasSAMLResponse(body string) bool {
+	values, err := url.ParseQuery(body)
+	return err == nil && values.Get("SAMLResponse") != ""
 }
 
 var autoFill = func(page playwright.Page, loginDetails *creds.LoginDetails) error {

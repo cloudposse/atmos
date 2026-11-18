@@ -49,6 +49,9 @@ const (
 
 var logger = logrus.WithField("provider", "okta")
 
+// errMFAPollTimeout is returned when an MFA push is still pending after mfaPollTimeout.
+var errMFAPollTimeout = errors.New("timed out waiting for the MFA push to be approved")
+
 // Atmos fork: the polling/settle delays and the U2F device finder factory are package
 // variables (instead of inline literals) so tests can shorten the delays and inject a
 // mock device without real sleeps or attached hardware. Production values are unchanged.
@@ -57,6 +60,11 @@ var (
 	pushPollInterval = 3 * time.Second
 	// duoPollInterval is the delay between Duo push status checks.
 	duoPollInterval = 3 * time.Second
+	// mfaPollTimeout bounds how long the Okta Verify push and Duo push polling loops wait for a terminal answer.
+	// Atmos fork: upstream polled without a limit when the IdP kept answering with a non-terminal result.
+	mfaPollTimeout = 5 * time.Minute
+	// endpointHealthTimeout bounds the Duo endpoint health requests.
+	endpointHealthTimeout = 60 * time.Second
 	// endpointHealthSettleDelay is the delay before re-submitting the Duo auth form after an endpoint health report.
 	endpointHealthSettleDelay = 2 * time.Second
 	// newU2FDeviceFinder returns the DeviceFinder used for Duo U2F and Okta FIDO challenges.
@@ -163,7 +171,9 @@ type ctxKey string
 func (oc *Client) createSession(loginDetails *creds.LoginDetails, sessionToken string) (string, string, error) {
 	logger.Debug("create session func called")
 	if loginDetails == nil || sessionToken == "" {
-		logger.Debugf("unable to create an Okta session, nil input | loginDetails: %v | sessionToken: %s", loginDetails, sessionToken)
+		// Atmos fork: upstream logged loginDetails with %v, which includes the password, and the
+		// session token. Log only whether each input is present.
+		logger.Debugf("unable to create an Okta session, nil input | loginDetails set: %t | sessionToken set: %t", loginDetails != nil, sessionToken != "")
 		return "", "", fmt.Errorf("unable to create an okta session, nil input")
 	}
 
@@ -386,7 +396,7 @@ func (oc *Client) setDeviceTokenCookie(loginDetails *creds.LoginDetails) error {
 	// uncommented (avoid linting issues)
 	if false {
 		dt, _ := oc.getDeviceTokenFromOkta(loginDetails)
-		logger.Debugf("getDeviceTokenFromOkta is not yet implemented: dt: %s", dt)
+		logger.Debugf("getDeviceTokenFromOkta is not yet implemented: device token set: %t", dt != "")
 	}
 
 	oktaURL, err := url.Parse(loginDetails.URL)
@@ -562,7 +572,9 @@ func (oc *Client) follow(ctx context.Context, req *http.Request, loginDetails *c
 			if err != nil {
 				return "", errors.Wrap(err, "failed to decode saml-response")
 			}
-			logger.WithField("type", "saml-response").WithField("saml-response", string(decodedSamlResponse)).Debug("doc detect")
+			// Atmos fork: upstream logged the full decoded SAML response. The assertion is a bearer
+			// credential (it can be exchanged for AWS credentials until it expires), so only its size is logged.
+			logger.WithField("type", "saml-response").WithField("saml-response-bytes", len(decodedSamlResponse)).Debug("doc detect")
 			return samlResponse, nil
 		}
 	} else if docIsFormSamlRequest(doc) {
@@ -737,7 +749,10 @@ func getMfaChallengeContext(oc *Client, mfaOption int, resp string) (*mfaChallen
 	// yay
 	switch mfa := mfaIdentifer; mfa {
 	case IdentifierYubiMfa:
-		verifyCode := prompter.Password("Press the button on your yubikey")
+		verifyCode, promptErr := prompter.Password("Press the button on your yubikey")
+		if promptErr != nil {
+			return nil, errors.Wrap(promptErr, "error reading the yubikey code")
+		}
 		verifyReq.PassCode = verifyCode
 	}
 
@@ -804,7 +819,10 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 		}
 		// If multiple MFA of the same type are found, we prompt the user to pick which one to use
 		if len(mfaOptionsMatches) > 1 {
-			matchOptionIndex := prompter.Choose(fmt.Sprintf("Multiple %s MFA options found. Select which MFA option to use", oc.mfa), mfaOptionsMatches)
+			matchOptionIndex, promptErr := prompter.Choose(fmt.Sprintf("Multiple %s MFA options found. Select which MFA option to use", oc.mfa), mfaOptionsMatches)
+			if promptErr != nil {
+				return "", errors.Wrap(promptErr, "error selecting the MFA option")
+			}
 			for i := range mfaOptions {
 				if mfaOptions[i] == mfaOptionsMatches[matchOptionIndex] {
 					mfaOption = i
@@ -814,7 +832,10 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 			mfaOption = findMfaOption(oc.mfa, mfaOptions, 0)
 		}
 	} else if len(mfaOptions) > 1 {
-		mfaOption = prompter.Choose("Select which MFA option to use", mfaOptions)
+		var promptErr error
+		if mfaOption, promptErr = prompter.Choose("Select which MFA option to use", mfaOptions); promptErr != nil {
+			return "", errors.Wrap(promptErr, "error selecting the MFA option")
+		}
 	}
 
 	challengeContext, err := getMfaChallengeContext(oc, mfaOption, resp)
@@ -828,7 +849,10 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 	case IdentifierSmsMfa, IdentifierEmailMfa, IdentifierTotpMfa, IdentifierOktaTotpMfa, IdentifierSymantecTotpMfa:
 		verifyCode := loginDetails.MFAToken
 		if verifyCode == "" {
-			verifyCode = prompter.RequestSecurityCode("000000")
+			var promptErr error
+			if verifyCode, promptErr = prompter.RequestSecurityCode("000000"); promptErr != nil {
+				return "", errors.Wrap(promptErr, "error reading the MFA code")
+			}
 		}
 		tokenReq := VerifyRequest{StateToken: stateToken, PassCode: verifyCode, RememberDevice: strconv.FormatBool(oc.rememberDevice)}
 		tokenBody := new(bytes.Buffer)
@@ -858,6 +882,7 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 
 		// loop until success, error, or timeout
 		body := challengeContext.challengeResponseBody
+		pushDeadline := time.Now().Add(mfaPollTimeout)
 		for {
 			// on 'success' status
 			if gjson.Get(body, "status").String() == "SUCCESS" {
@@ -870,6 +895,9 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 			switch gjson.Get(body, "factorResult").String() {
 
 			case "WAITING":
+				if time.Now().After(pushDeadline) {
+					return "", errMFAPollTimeout
+				}
 				time.Sleep(pushPollInterval)
 				logger.Debug("Waiting for user to authorize login")
 				updatedContext, err := getMfaChallengeContext(oc, mfaOption, resp)
@@ -1005,7 +1033,10 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 				}
 			}
 		} else {
-			duoMfaOption = prompter.Choose("Select a DUO MFA Option", duoMfaOptions)
+			var promptErr error
+			if duoMfaOption, promptErr = prompter.Choose("Select a DUO MFA Option", duoMfaOptions); promptErr != nil {
+				return "", errors.Wrap(promptErr, "error selecting the DUO MFA option")
+			}
 		}
 
 		if duoMfaOption == -1 {
@@ -1014,7 +1045,10 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 
 		if duoMfaOptions[duoMfaOption] == "Passcode" {
 			// get users DUO MFA Token
-			token = prompter.StringRequired("Enter passcode")
+			var promptErr error
+			if token, promptErr = prompter.StringRequired("Enter passcode"); promptErr != nil {
+				return "", errors.Wrap(promptErr, "error reading the DUO passcode")
+			}
 		}
 
 		// send mfa auth request
@@ -1196,7 +1230,11 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 
 		if duoTxResult != "SUCCESS" {
 			// poll as this is likely a push request
+			duoDeadline := time.Now().Add(mfaPollTimeout)
 			for {
+				if time.Now().After(duoDeadline) {
+					return "", errMFAPollTimeout
+				}
 				time.Sleep(duoPollInterval)
 
 				req, err = http.NewRequest("POST", duoSubmitURL, strings.NewReader(duoForm.Encode()))
@@ -1286,10 +1324,13 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 
 		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-		_, err = oc.client.Do(req) // TODO: check result
+		// Atmos fork: the callback response was never closed, which prevents connection reuse.
+		callbackRes, err := oc.client.Do(req) // TODO: check result
 		if err != nil {
 			return "", errors.Wrap(err, "error retrieving verify response")
 		}
+		_, _ = io.Copy(io.Discard, callbackRes.Body)
+		_ = callbackRes.Body.Close()
 
 		// extract okta session token
 
@@ -1386,7 +1427,13 @@ func fidoWebAuthn(oc *Client, oktaOrgHost string, challengeContext *mfaChallenge
 			// Atmos fork: search from the option after the one that just failed. Upstream passed
 			// lastMfaOption, and findMfaOption is inclusive of its start index, so it always returned
 			// the failed option again and the "try the next FIDO device" fallback never ran.
-			nextMfaOption := findMfaOption(oc.mfa, mfaOptions, lastMfaOption+1)
+			// Atmos fork: with the "Auto" setting no option label starts with "AUTO", so the search
+			// never found a later FIDO option. Search for the FIDO label itself in that case.
+			fidoPrefix := oc.mfa
+			if strings.EqualFold(oc.mfa, "AUTO") {
+				fidoPrefix = strings.ToUpper(supportedMfaOptions[IdentifierFIDOWebAuthn])
+			}
+			nextMfaOption := findMfaOption(fidoPrefix, mfaOptions, lastMfaOption+1)
 			if nextMfaOption <= lastMfaOption {
 				return "", errors.Wrap(err, "tried all MFA options")
 			}
@@ -1572,10 +1619,11 @@ func verifyEndpointHealth(oc *Client, doc *goquery.Document, origURL string, duo
 	req.Header.Add("Referer", "https://"+duoHost+"/")
 	req.Header.Add("Origin", "https://"+duoHost)
 
-	_, err := oc.client.Do(req)
+	aliveRes, err := oc.client.Do(req)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to query alive URL %s", duoAliveUrl)
 	}
+	_ = aliveRes.Body.Close()
 
 	duoCheckEndpointAppURL := fmt.Sprintf("https://%s/frame/check_endpoint_app_status", duoHost)
 	req, _ = http.NewRequest("GET", duoCheckEndpointAppURL, nil)
@@ -1589,6 +1637,12 @@ func verifyEndpointHealth(oc *Client, doc *goquery.Document, origURL string, duo
 
 	req.Header.Add("Referer", origURL)
 	req.Header.Add("X-Requested-With", "XMLHttpRequest")
+
+	// Atmos fork: the status request blocks until the report is queried, so it gets a cancellable, bounded
+	// context. If the report fails, the status request is cancelled instead of blocking forever.
+	ctx, cancel := context.WithTimeout(context.Background(), endpointHealthTimeout)
+	defer cancel()
+	req = req.WithContext(ctx)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -1618,10 +1672,15 @@ func verifyEndpointHealth(oc *Client, doc *goquery.Document, origURL string, duo
 	req2.Header.Add("Referer", "https://"+duoHost+"/")
 	req2.Header.Add("Origin", "https://"+duoHost)
 
+	req2 = req2.WithContext(ctx)
+
 	res, err := oc.client.Do(req2)
-	if err == nil {
-		defer res.Body.Close()
+	if err != nil {
+		cancel()
+		wg.Wait()
+		return nil, errors.Wrapf(err, "failed to query report URL %s", duoHealthURL)
 	}
+	defer res.Body.Close()
 
 	// Wait for check_endpoint_app_status to block
 	wg.Wait()

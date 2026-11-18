@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,7 +21,7 @@ import (
 
 // serveECRAuthorization points the ECR client at a fake endpoint that returns body
 // for GetAuthorizationToken and records the signing region of the request.
-func serveECRAuthorization(t *testing.T, body string) *string {
+func serveECRAuthorization(t *testing.T, body string) func() string {
 	t.Helper()
 
 	// Keep the developer's shared AWS files and profile out of the SDK config load.
@@ -30,21 +31,32 @@ func serveECRAuthorization(t *testing.T, body string) *string {
 	t.Setenv("AWS_PROFILE", "")
 	t.Setenv("AWS_IGNORE_CONFIGURED_ENDPOINT_URLS", "")
 	t.Setenv("AWS_MAX_ATTEMPTS", "1")
+	// Inherited FIPS or dual-stack endpoint policies make the SDK reject the custom fake endpoint.
+	t.Setenv("AWS_USE_FIPS_ENDPOINT", "false")
+	t.Setenv("AWS_USE_DUALSTACK_ENDPOINT", "false")
 
-	signedRegion := new(string)
+	// The handler runs on the server goroutine, so the observed region is guarded by a mutex.
+	var mu sync.Mutex
+	signedRegion := ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 		assert.Equal(t, "AmazonEC2ContainerRegistry_V20150921.GetAuthorizationToken", r.Header.Get("X-Amz-Target"))
 		// Authorization: AWS4-HMAC-SHA256 Credential=AK/<date>/<region>/ecr/aws4_request, ...
 		if parts := strings.Split(r.Header.Get("Authorization"), "/"); len(parts) > 2 {
-			*signedRegion = parts[2]
+			mu.Lock()
+			signedRegion = parts[2]
+			mu.Unlock()
 		}
 		w.Header().Set("Content-Type", "application/x-amz-json-1.1")
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
 	t.Setenv("AWS_ENDPOINT_URL_ECR", srv.URL)
-	return signedRegion
+	return func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		return signedRegion
+	}
 }
 
 func TestGetAuthorizationToken(t *testing.T) {
@@ -115,7 +127,7 @@ func TestGetAuthorizationToken(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantRegion, *signedRegion)
+			assert.Equal(t, tt.wantRegion, signedRegion())
 			assert.Equal(t, tt.wantResult.Username, result.Username)
 			assert.Equal(t, tt.wantResult.Password, result.Password)
 			assert.Equal(t, tt.wantResult.Registry, result.Registry)

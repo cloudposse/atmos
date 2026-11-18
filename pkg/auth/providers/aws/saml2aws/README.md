@@ -76,6 +76,24 @@ identity provider and read the AWS roles from the SAML assertion.
 - **`provider/http.go`:** an `http_attempts_count` of `0` is clamped to one attempt (retry-go v3 ran nothing and
   returned an empty error), invalid attempt and delay values are logged at debug level, and a client created with
   nil options sends the request once instead of panicking.
+- **Later review fixes:**
+  - `aws_role.go` keeps commas inside role names (a comma separates ARNs only before another `arn:`).
+  - `saml.go` matches the Attribute elements by namespace URI instead of the Assertion's prefix.
+  - `cookiejar` no longer decodes the default cookie path twice.
+  - `page.Form` puts GET form fields in the URL query, and no longer panics when the document has no URL.
+  - The `prompter` methods return errors (Ctrl+C or a missing terminal stops authentication instead of choosing
+    the first option or sending an empty code), pinentry returns scanner errors, and selecting a default alias
+    resets an earlier pinentry choice.
+  - `provider/http.go` resends the request body on retries, binds retry waits to the request context, and closes
+    the body of a response rejected by the status validator.
+  - ADFS resolves every relative form action against the login page URL.
+  - Browser: the storage state is saved through a private temporary file, and a captured SAMLResponse is not
+    replaced by a later request without one.
+  - Google Apps: locale parameters are set in the query, challenge selection pages are followed at most 10 times
+    per attempt, the MFA response document has a URL, headings are matched with whitespace normalized, and
+    malformed `data-challenge-ui` values no longer panic.
+  - Okta: both MFA polling loops stop after `mfaPollTimeout`, a failed Duo health report cancels the status request,
+    the Duo callback response is closed, and the next FIDO device is searched for with the `Auto` setting.
 - **Tests:** browser tests use `go.uber.org/mock` mocks of a narrow `samlPage` interface instead of a real browser.
   Real-browser tests are in `browser_integration_test.go` and only run with `RUN_PLAYWRIGHT_INTEGRATION=1`.
 

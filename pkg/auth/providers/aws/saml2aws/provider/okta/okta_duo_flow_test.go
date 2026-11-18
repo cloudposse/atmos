@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
@@ -388,4 +389,72 @@ func TestVerifyEndpointHealth_StatusCheckUnreachable(t *testing.T) {
 	})
 	assert.Equal(t, 1, log.count("/alive"))
 	assert.Equal(t, 1, log.count("/report"))
+}
+
+// withShortPollTimeout shortens the MFA polling budget for the duration of a test.
+func withShortPollTimeout(t *testing.T) {
+	t.Helper()
+
+	orig := mfaPollTimeout
+	mfaPollTimeout = 20 * time.Millisecond
+	t.Cleanup(func() { mfaPollTimeout = orig })
+}
+
+// Regression: a Duo push that never reaches a terminal result stops with a timeout error.
+func TestVerifyMfa_DuoPushPollIsBounded(t *testing.T) {
+	withShortPollTimeout(t)
+	s := &duoScenario{authPages: []string{duoAuthPage}, prompts: []string{duoPromptOK}, statuses: []string{duoPushed}}
+
+	got, err := runDuo(t, s, "Duo Push")
+	require.ErrorIs(t, err, errMFAPollTimeout)
+	assert.Empty(t, got)
+	assert.Positive(t, s.log.count("/frame/status"))
+}
+
+// Regression: when the health report fails, the blocked status request is cancelled and the report
+// error is returned, instead of waiting for a status response that never arrives.
+func TestVerifyEndpointHealth_ReportFailureCancelsStatusRequest(t *testing.T) {
+	withFastPolling(t)
+
+	statusCancelled := make(chan struct{})
+	duoServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// check_endpoint_app_status blocks until the client gives up.
+		<-r.Context().Done()
+		close(statusCancelled)
+	}))
+	defer duoServer.Close()
+
+	endpoint := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/report" {
+			// Drop the connection so the report request fails with a transport error.
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err == nil {
+				_ = conn.Close()
+			}
+		}
+	}))
+	defer endpoint.Close()
+
+	oc, _ := offlineTestClient(t)
+	duoHost := duoServer.URL[len("https://"):]
+	endpointHost := endpoint.URL[len("https://"):]
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := verifyEndpointHealth(oc, mustDoc(t, fakeEndpointForm), "https://"+duoHost, endpointHost, duoHost, endpoint.URL+"/submit", url.Values{})
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to query report URL")
+	case <-time.After(10 * time.Second):
+		t.Fatal("verifyEndpointHealth did not return after the report failed")
+	}
+	select {
+	case <-statusCancelled:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the status request was not cancelled")
+	}
 }

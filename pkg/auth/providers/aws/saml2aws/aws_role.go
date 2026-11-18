@@ -29,9 +29,38 @@ func ParseAWSRoles(roles []string) ([]*AWSRole, error) {
 	return awsRoles, nil
 }
 
+// arnPattern matches a complete ARN: arn:<partition>:<service>:<region>:<account>:<resource>.
+var arnPattern = regexp.MustCompile(`^arn:[^:\n]*:[^:\n]*:[^:\n]*:[^:\n]*:[^\n]+$`)
+
+// arnSeparator is the comma that separates two ARNs in a role attribute value.
+var arnSeparator = regexp.MustCompile(`,\s*arn:`)
+
+// splitRoleARNs splits a "<arn>,<arn>" role attribute value into its ARNs.
+//
+// Atmos fork: upstream treated every comma as an ARN boundary, so a role name containing a comma
+// (which IAM permits) was silently truncated. A comma only separates ARNs when the next ARN starts after it.
+func splitRoleARNs(role string) []string {
+	role = strings.TrimSpace(role)
+	var parts []string
+	start := 0
+	for _, loc := range arnSeparator.FindAllStringIndex(role, -1) {
+		parts = append(parts, role[start:loc[0]])
+		// Skip the comma and any whitespace; the next ARN begins at "arn:".
+		start = loc[0] + strings.Index(role[loc[0]:], "arn:")
+	}
+	parts = append(parts, role[start:])
+
+	tokens := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part = strings.TrimSpace(part); arnPattern.MatchString(part) {
+			tokens = append(tokens, part)
+		}
+	}
+	return tokens
+}
+
 func parseRole(role string) (*AWSRole, error) {
-	r, _ := regexp.Compile("arn:([^:\n]*):([^:\n]*):([^:\n]*):([^:\n]*):(([^:/\n]*)[:/])?([^:,\n]*)")
-	tokens := r.FindAllString(role, -1)
+	tokens := splitRoleARNs(role)
 
 	if len(tokens) != 2 {
 		return nil, fmt.Errorf("Invalid role string only %d tokens", len(tokens))

@@ -836,13 +836,11 @@ providers:
 - `GoogleApps` - Google Workspace SAML
 - `Okta` - Okta SAML
 - `ADFS` - Active Directory Federation Services
-- `ADFS2` - ADFS 2.0
-- `AzureAD` - Azure Active Directory
-- `PingFed` - PingFederate
-- `KeyCloak` - Keycloak
-- `Auth0` - Auth0
-- `OneLogin` - OneLogin
-- `Browser` - Generic browser-based SAML (auto-detected)
+- `Browser` - Generic browser-based SAML (auto-detected); use it for any other IdP
+  (for example Azure AD, PingFederate, Keycloak, Auth0, OneLogin)
+
+The vendored SAML client supports only these four drivers. Other driver names are rejected
+with an "unsupported SAML driver" error.
 
 **Environment Variables:**
 

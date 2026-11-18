@@ -366,9 +366,8 @@ func defaultPath(path string) string {
 	if i == 0 {
 		return "/" // Path has the form "/abc".
 	}
-	if s, err := url.PathUnescape(path[:i]); err == nil {
-		return s
-	}
+	// Atmos fork: url.URL.Path is already decoded, so decoding it again corrupted paths that contain an
+	// escaped percent sign (for example "/a%2520b" is "/a%20b" in URL.Path, not "/a b").
 	return path[:i] // Path is either of form "/abc/xyz" or "/abc/xyz/".
 }
 

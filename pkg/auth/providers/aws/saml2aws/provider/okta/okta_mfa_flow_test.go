@@ -1,6 +1,7 @@
 package okta
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -346,6 +347,44 @@ func TestVerifyMfa_FidoWebAuthn(t *testing.T) {
 		device.AssertExpectations(t)
 	})
 
+	// Regression: with the default "Auto" setting the next FIDO device was never searched for.
+	t.Run("bad key handle falls through to the next FIDO device with Auto", func(t *testing.T) {
+		device := &mocks.U2FDevice{}
+		withMockDevice(t, device)
+		device.On("Close").Return()
+		device.On("Authenticate", mock.MatchedBy(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == "cred-a" })).
+			Return(nil, &u2fhost.BadKeyHandleError{}).Once()
+		device.On("Authenticate", mock.MatchedBy(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == "cred-b" })).
+			Return(&u2fhost.AuthenticateResponse{ClientData: "cd-b"}, nil).Once()
+
+		pr := withMockPrompter(t)
+		pr.On("Choose", "Select which MFA option to use", mock.Anything).Return(0).Once()
+
+		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.URL.Path {
+			case "/verify/a":
+				_, _ = fmt.Fprint(w, webauthnChallenge("https://"+r.Host+"/finish-a", "cred-a"))
+			case "/verify/b":
+				_, _ = fmt.Fprint(w, webauthnChallenge("https://"+r.Host+"/finish-b", "cred-b"))
+			case "/finish-b":
+				_, _ = fmt.Fprint(w, `{"sessionToken":"fido-b"}`)
+			default:
+				t.Errorf("unexpected request %s", r.URL.Path)
+			}
+		}))
+		defer ts.Close()
+
+		oc, _ := offlineTestClient(t)
+		oc.mfa = "Auto"
+		resp := mfaRequiredResponse(t, "state-1",
+			testFactor{id: "a", provider: "FIDO", factorType: "webauthn", href: ts.URL + "/verify/a", authName: "Key A"},
+			testFactor{id: "b", provider: "FIDO", factorType: "webauthn", href: ts.URL + "/verify/b", authName: "Key B"},
+		)
+		got, err := verifyMfa(oc, "okta.example.com", &creds.LoginDetails{}, resp)
+		require.NoError(t, err)
+		assert.Equal(t, "fido-b", got)
+	})
+
 	t.Run("bad key handle on the only device fails", func(t *testing.T) {
 		device := &mocks.U2FDevice{}
 		withMockDevice(t, device)
@@ -381,5 +420,58 @@ func TestVerifyMfa_FidoWebAuthn(t *testing.T) {
 		_, err := verifyMfa(oc, "okta.example.com", &creds.LoginDetails{}, resp)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to perform U2F challenge")
+	})
+}
+
+// Regression: a push that stays in WAITING stops with a timeout error instead of polling forever.
+func TestVerifyMfa_PushPollIsBounded(t *testing.T) {
+	withFastPolling(t)
+	withShortPollTimeout(t)
+	vs := newVerifyServer(t, func(string, int, map[string]any) string {
+		return `{"status":"MFA_CHALLENGE","factorResult":"WAITING"}`
+	})
+
+	oc, _ := offlineTestClient(t)
+	resp := mfaRequiredResponse(t, "state-1", testFactor{id: "push", provider: "OKTA", factorType: "push", href: vs.href("push")})
+	got, err := verifyMfa(oc, "okta.invalid", &creds.LoginDetails{}, resp)
+	require.ErrorIs(t, err, errMFAPollTimeout)
+	assert.Empty(t, got)
+}
+
+// Regression: a failed prompt (for example Ctrl+C) stops authentication instead of selecting the first
+// MFA option or submitting an empty token.
+func TestVerifyMfa_PromptFailureStopsAuthentication(t *testing.T) {
+	errPrompt := errors.New("interrupt")
+
+	t.Run("option selection", func(t *testing.T) {
+		pr := withMockPrompter(t)
+		pr.On("Choose", "Select which MFA option to use", mock.Anything).Return(0, errPrompt).Once()
+
+		vs := newVerifyServer(t, func(string, int, map[string]any) string {
+			t.Error("no verify request is expected after a failed prompt")
+			return `{}`
+		})
+		oc, _ := offlineTestClient(t)
+		resp := mfaRequiredResponse(t, "state-1",
+			testFactor{id: "a", provider: "OKTA", factorType: "push", href: vs.href("a")},
+			testFactor{id: "b", provider: "OKTA", factorType: "push", href: vs.href("b")},
+		)
+		_, err := verifyMfa(oc, "okta.invalid", &creds.LoginDetails{}, resp)
+		require.ErrorIs(t, err, errPrompt)
+	})
+
+	t.Run("security code", func(t *testing.T) {
+		pr := withMockPrompter(t)
+		pr.On("RequestSecurityCode", "000000").Return("", errPrompt).Once()
+
+		// Only the challenge request is made; the code is never submitted.
+		vs := newVerifyServer(t, func(string, int, map[string]any) string {
+			return `{"status":"MFA_CHALLENGE"}`
+		})
+		oc, _ := offlineTestClient(t)
+		resp := mfaRequiredResponse(t, "state-1", testFactor{id: "totp", provider: "GOOGLE", factorType: "token:software:totp", href: vs.href("totp")})
+		_, err := verifyMfa(oc, "okta.invalid", &creds.LoginDetails{}, resp)
+		require.ErrorIs(t, err, errPrompt)
+		assert.Equal(t, 1, vs.log.count("/verify/totp"))
 	})
 }

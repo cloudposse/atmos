@@ -78,6 +78,18 @@ func TestHasValidPlaywrightDrivers(t *testing.T) {
 			wantLog:  "Found browser binaries",
 		},
 		{
+			name: "registry metadata only returns false",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				linksDir := filepath.Join(dir, ".links")
+				require.NoError(t, os.Mkdir(linksDir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(linksDir, "client"), []byte("meta"), 0o644))
+				return dir
+			},
+			expected: false,
+			wantLog:  "no browser binaries",
+		},
+		{
 			name: "non-existent directory returns false",
 			setup: func(t *testing.T) string {
 				return filepath.Join(t.TempDir(), "does-not-exist")

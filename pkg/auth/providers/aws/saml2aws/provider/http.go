@@ -3,7 +3,6 @@ package provider
 import (
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"runtime"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/cfg"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/cookiejar"
-	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/dump"
 )
 
 // HTTPClient saml2aws http client which extends the existing client
@@ -30,6 +28,8 @@ type HTTPClient struct {
 const (
 	DefaultAttemptsCount = 1
 	DefaultRetryDelay    = time.Duration(1) * time.Second
+	// MaxRetryDelay caps the configured delay between HTTP retries.
+	MaxRetryDelay = 5 * time.Minute
 )
 
 type HTTPClientOptions struct {
@@ -76,7 +76,10 @@ func BuildHttpClientOpts(account *cfg.IDPAccount) *HTTPClientOptions {
 		opts.AttemptsCount = DefaultAttemptsCount
 	}
 
-	delay, delayErr := strconv.ParseUint(account.HttpRetryDelay, 10, 0)
+	// Atmos fork: upstream parsed an unbounded integer and multiplied it into a time.Duration,
+	// which overflows for large values. Parse at most 32 bits (no overflow when multiplied by
+	// time.Second) and cap the delay at MaxRetryDelay.
+	delay, delayErr := strconv.ParseUint(account.HttpRetryDelay, 10, 32)
 	if delayErr != nil {
 		if account.HttpRetryDelay != "" {
 			logrus.WithField("http_retry_delay", account.HttpRetryDelay).
@@ -84,7 +87,7 @@ func BuildHttpClientOpts(account *cfg.IDPAccount) *HTTPClientOptions {
 		}
 		opts.RetryDelay = DefaultRetryDelay
 	} else {
-		opts.RetryDelay = time.Duration(delay) * time.Second
+		opts.RetryDelay = min(time.Duration(delay)*time.Second, MaxRetryDelay)
 	}
 
 	return opts
@@ -133,6 +136,9 @@ func (hc *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 	if hc.CheckResponseStatus != nil {
 		err = hc.CheckResponseStatus(req, resp)
 		if err != nil {
+			// Atmos fork: callers discard the response when the status check fails, so its body
+			// was never closed. The status line stays available on the returned response.
+			_ = resp.Body.Close()
 			return resp, err
 		}
 	}
@@ -144,8 +150,19 @@ func (hc *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 func (hc *HTTPClient) doWithRetry(req *http.Request) (*http.Response, error) {
 	var resp *http.Response
+	attempted := false
 	err := retry.Do(
 		func() error {
+			// Atmos fork: a failed attempt may have consumed the request body, so later attempts
+			// send a fresh copy. Upstream resent the consumed body.
+			if attempted && req.GetBody != nil {
+				body, bodyErr := req.GetBody()
+				if bodyErr != nil {
+					return retry.Unrecoverable(bodyErr)
+				}
+				req.Body = body
+			}
+			attempted = true
 			hc.logHTTPRequest(req)
 			clientResp, err := hc.Client.Do(req)
 			if err != nil {
@@ -157,6 +174,8 @@ func (hc *HTTPClient) doWithRetry(req *http.Request) (*http.Response, error) {
 		// Atmos fork: options built without BuildHttpClientOpts are clamped too.
 		retry.Attempts(atLeastOneAttempt(hc.Options.AttemptsCount)),
 		retry.Delay(hc.Options.RetryDelay),
+		// Atmos fork: cancelling the request also stops the retry waits.
+		retry.Context(req.Context()),
 		retry.OnRetry(
 			func(n uint, err error) {
 				logrus.
@@ -200,24 +219,17 @@ func SuccessOrRedirectOrUnauthorizedResponseValidator(req *http.Request, resp *h
 	return validatorResponse
 }
 
+// Atmos fork: upstream's DUMP_CONTENT switch dumped full requests and responses, including
+// password form bodies, session cookies and SAML assertions, to the terminal. It was removed,
+// and request URLs are logged without their query string, which can carry session tokens.
 func (hc *HTTPClient) logHTTPRequest(req *http.Request) {
-	if dump.ContentEnable() {
-		log.Println(dump.RequestString(req))
-		return
-	}
-
 	logrus.WithField("http", "client").WithFields(logrus.Fields{
-		"URL":    req.URL.String(),
+		"URL":    RedactURL(req.URL),
 		"method": req.Method,
 	}).Debug("HTTP Req")
 }
 
 func (hc *HTTPClient) logHTTPResponse(resp *http.Response) {
-	if dump.ContentEnable() {
-		log.Println(dump.ResponseString(resp))
-		return
-	}
-
 	logrus.WithField("http", "client").WithFields(logrus.Fields{
 		"Status": resp.Status,
 	}).Debug("HTTP Res")

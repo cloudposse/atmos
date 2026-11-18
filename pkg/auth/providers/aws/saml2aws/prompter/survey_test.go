@@ -38,11 +38,26 @@ func TestCliPrompterWithoutTerminal(t *testing.T) {
 	useNonInteractiveStdio(t)
 	cli := NewCli()
 
-	assert.Empty(t, cli.RequestSecurityCode("000000"))
-	assert.Empty(t, cli.String("Region", "us-east-1"))
-	assert.Empty(t, cli.StringRequired("Username"))
-	assert.Empty(t, cli.Password("Password"))
-	assert.Equal(t, 0, cli.Choose("Pick", []string{"a", "b"}))
+	// Atmos fork: prompt failures are propagated, never turned into a default selection or an empty value.
+	code, err := cli.RequestSecurityCode("000000")
+	require.Error(t, err)
+	assert.Empty(t, code)
+
+	value, err := cli.String("Region", "us-east-1")
+	require.Error(t, err)
+	assert.Empty(t, value)
+
+	required, err := cli.StringRequired("Username")
+	require.Error(t, err)
+	assert.Empty(t, required)
+
+	secret, err := cli.Password("Password")
+	require.Error(t, err)
+	assert.Empty(t, secret)
+
+	index, err := cli.Choose("Pick", []string{"a", "b"})
+	require.Error(t, err)
+	assert.Equal(t, 0, index)
 
 	selected, err := cli.ChooseWithDefault("Pick", "b", []string{"a", "b"})
 	require.Error(t, err)

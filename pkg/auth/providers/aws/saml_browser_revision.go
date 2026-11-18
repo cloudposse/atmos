@@ -97,7 +97,7 @@ func readBrowserDir(manifestPath, browserName, hostPlatform string) (string, err
 // otherwise <cache>/ms-playwright, where <cache> is $XDG_CACHE_HOME or ~/.cache on Linux,
 // ~/Library/Caches on macOS, and %LOCALAPPDATA% or ~/AppData/Local on Windows.
 func playwrightRegistryDir() (string, error) {
-	switch browsersPath := os.Getenv("PLAYWRIGHT_BROWSERS_PATH"); browsersPath { //nolint:forbidigo // Third-party (Playwright) env var, read the same way the driver reads it.
+	switch browsersPath := playwrightBrowsersPathEnv(); browsersPath {
 	case "":
 	case "0":
 		opts := &playwright.RunOptions{}
@@ -107,7 +107,13 @@ func playwrightRegistryDir() (string, error) {
 		// The playwright-core package root is the directory holding cli.js and browsers.json.
 		return filepath.Join(filepath.Dir(playwrightManifestPath(opts.DriverDirectory)), playwrightLocalBrowsers), nil
 	default:
-		// Playwright resolves a relative path against the working directory.
+		// Playwright resolves a relative path against INIT_CWD (set by npm) before the working directory.
+		if filepath.IsAbs(browsersPath) {
+			return filepath.Clean(browsersPath), nil
+		}
+		if initCwd := os.Getenv("INIT_CWD"); initCwd != "" { //nolint:forbidigo // Third-party (npm/Playwright) env var, read the same way the driver reads it.
+			return filepath.Abs(filepath.Join(initCwd, browsersPath))
+		}
 		return filepath.Abs(browsersPath)
 	}
 
@@ -116,6 +122,21 @@ func playwrightRegistryDir() (string, error) {
 		return "", err
 	}
 	return filepath.Join(cacheDir, playwrightCacheDir), nil
+}
+
+// playwrightBrowsersPathEnv returns the configured PLAYWRIGHT_BROWSERS_PATH using Playwright's
+// precedence: the variable itself, then its npm_config_ and npm_package_config_ lowercase forms.
+func playwrightBrowsersPathEnv() string {
+	for _, name := range []string{
+		"PLAYWRIGHT_BROWSERS_PATH",
+		"npm_config_playwright_browsers_path",
+		"npm_package_config_playwright_browsers_path",
+	} {
+		if value := os.Getenv(name); value != "" { //nolint:forbidigo // Third-party (Playwright) env vars, read the same way the driver reads them.
+			return value
+		}
+	}
+	return ""
 }
 
 // playwrightDefaultCacheDir returns the cache base directory Playwright uses on goos.

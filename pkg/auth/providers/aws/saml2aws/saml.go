@@ -52,18 +52,18 @@ func ExtractSessionDuration(data []byte) (int64, error) {
 	// log.Printf("tag: %s", assertionElement.Tag)
 
 	// Get the actual assertion attributes
-	attributeStatement := assertionElement.FindElement(childPath(assertionElement.Space, attributeStatementTag))
+	attributeStatement := firstChild(assertionElement, assertionElement, attributeStatementTag)
 	if attributeStatement == nil {
 		return 0, ErrMissingElement{Tag: attributeStatementTag}
 	}
 
-	attributes := attributeStatement.FindElements(childPath(assertionElement.Space, attributeTag))
+	attributes := childElements(assertionElement, attributeStatement, attributeTag)
 
 	for _, attribute := range attributes {
 		if attribute.SelectAttrValue("Name", "") != "https://aws.amazon.com/SAML/Attributes/SessionDuration" {
 			continue
 		}
-		atributeValues := attribute.FindElements(childPath(assertionElement.Space, attributeValueTag))
+		atributeValues := childElements(assertionElement, attribute, attributeValueTag)
 		for _, attrValue := range atributeValues {
 			return strconv.ParseInt(attrValue.Text(), 10, 64)
 		}
@@ -150,19 +150,19 @@ func ExtractAwsRoles(data []byte) ([]string, error) {
 	// log.Printf("tag: %s", assertionElement.Tag)
 
 	// Get the actual assertion attributes
-	attributeStatement := assertionElement.FindElement(childPath(assertionElement.Space, attributeStatementTag))
+	attributeStatement := firstChild(assertionElement, assertionElement, attributeStatementTag)
 	if attributeStatement == nil {
 		return nil, ErrMissingElement{Tag: attributeStatementTag}
 	}
 
 	// log.Printf("tag: %s", attributeStatement.Tag)
 
-	attributes := attributeStatement.FindElements(childPath(assertionElement.Space, attributeTag))
+	attributes := childElements(assertionElement, attributeStatement, attributeTag)
 	for _, attribute := range attributes {
 		if attribute.SelectAttrValue("Name", "") != "https://aws.amazon.com/SAML/Attributes/Role" {
 			continue
 		}
-		atributeValues := attribute.FindElements(childPath(assertionElement.Space, attributeValueTag))
+		atributeValues := childElements(assertionElement, attribute, attributeValueTag)
 		for _, attrValue := range atributeValues {
 			awsroles = append(awsroles, attrValue.Text())
 		}
@@ -171,10 +171,28 @@ func ExtractAwsRoles(data []byte) ([]string, error) {
 	return awsroles, nil
 }
 
-func childPath(space, tag string) string {
-	if space == "" {
-		return "./" + tag
+// childElements returns the direct children of parent with the given local tag that belong to the same
+// namespace URI as the assertion element.
+//
+// Atmos fork: upstream built a "./<assertion-prefix>:<tag>" path, and etree compares that prefix literally, so
+// an assertion using one prefix for Assertion and another prefix for the same namespace on its children was
+// rejected. Matching by namespace URI accepts any prefix (and default namespaces) bound to that URI.
+func childElements(assertion, parent *etree.Element, tag string) []*etree.Element {
+	namespace := assertion.NamespaceURI()
+	var matches []*etree.Element
+	for _, child := range parent.ChildElements() {
+		// An element whose prefix is not bound to any namespace is tolerated, as upstream matched by tag alone.
+		if child.Tag == tag && (child.NamespaceURI() == namespace || child.NamespaceURI() == "") {
+			matches = append(matches, child)
+		}
 	}
-	// log.Printf("query = %s", "./"+space+":"+tag)
-	return "./" + space + ":" + tag
+	return matches
+}
+
+// firstChild returns the first direct child matched by childElements, or nil.
+func firstChild(assertion, parent *etree.Element, tag string) *etree.Element {
+	if matches := childElements(assertion, parent, tag); len(matches) > 0 {
+		return matches[0]
+	}
+	return nil
 }

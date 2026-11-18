@@ -93,6 +93,20 @@ the module graph or the binary. The copy also fixes the browser driver's timeout
   - Okta Duo trusted-endpoint check: upstream skipped certificate verification for whatever `certifier_url` the
     Duo page named. Verification is now skipped only for a loopback host, where the local certifier runs with a
     self-signed certificate.
+  - Secrets in debug logs (code-scanning `clear-text logging`): with debug logging on, upstream logged the Okta
+    password (`loginDetails` printed with `%v`), the decoded SAML assertion (a bearer credential for AWS until it
+    expires), the Okta device token, and full request URLs whose query strings carry session tokens. The hidden
+    `DUMP_CONTENT` switch also dumped whole requests and responses (password form bodies, cookies, assertions). The
+    dump path and its package are removed, URLs are logged as scheme, host and path only (`provider.RedactURL`),
+    and secret values are replaced by their presence or length.
+  - Retry delay (code-scanning `incorrect integer conversion`): an unbounded `http_retry_delay` overflowed
+    `time.Duration`. It is parsed as 32 bits and capped at 5 minutes.
+  - CodeRabbit review round (details in the package `README.md`, "Later review fixes"): prompt failures (Ctrl+C,
+    no terminal) now abort login instead of sending an empty token or picking the first option; Okta push and Duo
+    polling stop after 5 minutes; SAML assertions are parsed by namespace URI rather than prefix; retried requests
+    resend their body; relative ADFS form actions and GoogleApps locale parameters are resolved correctly; the
+    browser session file is saved through a private temporary file; and several panics and leaked response
+    bodies are fixed.
 - **Testability:** `getSAMLResponse` takes a narrow `samlPage` interface, mocked with `go.uber.org/mock`.
   The poll and settle delays in Okta and ADFS are package variables, so tests do not sleep.
   Tests that need a real browser moved to `browser_integration_test.go` and only run with

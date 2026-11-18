@@ -627,6 +627,12 @@ func (p *samlProvider) hasValidPlaywrightDrivers(path string) bool {
 			continue
 		}
 
+		// Playwright keeps registry metadata (for example ".links") next to the browsers and creates it
+		// before any browser is downloaded, so an interrupted install must not count as an installed browser.
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+
 		versionPath := filepath.Join(path, entry.Name())
 		versionEntries, err := os.ReadDir(versionPath)
 		if err != nil {
