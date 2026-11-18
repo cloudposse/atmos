@@ -322,8 +322,8 @@ func TestSAMLProvider_setupBrowserAutomation_HandlesStorageSetupFailureGracefull
 	err = sp.setupBrowserAutomation()
 	assert.NoError(t, err, "storage dir failure is non-fatal — should return nil")
 
-	// Verify the environment variable was still set (proves function continued).
-	assert.Equal(t, "true", os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"))
+	// Verify the function continued past the storage failure: auto-download is still enabled.
+	assert.True(t, sp.createLoginDetails().DownloadBrowser)
 }
 
 func TestSAMLProvider_setupBrowserAutomation_FailsOnInvalidExecutable(t *testing.T) {
@@ -343,13 +343,13 @@ func TestSAMLProvider_setupBrowserAutomation_FailsOnInvalidExecutable(t *testing
 	assert.Error(t, err, "should fail fast when browser executable does not exist")
 }
 
-func TestSAMLProvider_setupBrowserAutomation_UnsetsEnvWhenDownloadDisabled(t *testing.T) {
+func TestSAMLProvider_setupBrowserAutomation_KeepsEnvWhenDownloadDisabled(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
 	homedir.Reset()
 
-	// Pre-set the env var to simulate a previous auth flow.
+	// Pre-set the env var to simulate a value the user exported.
 	t.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
 
 	p := &samlProvider{
@@ -363,8 +363,10 @@ func TestSAMLProvider_setupBrowserAutomation_UnsetsEnvWhenDownloadDisabled(t *te
 	err := p.setupBrowserAutomation()
 	assert.NoError(t, err)
 
-	assert.Empty(t, os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"),
-		"SAML2AWS_AUTO_BROWSER_DOWNLOAD should be unset for non-Browser drivers")
+	// Atmos no longer sets or unsets SAML2AWS_AUTO_BROWSER_DOWNLOAD: nothing reads it.
+	assert.Equal(t, "true", os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"),
+		"a value the user exported must be left alone")
+	assert.False(t, p.createLoginDetails().DownloadBrowser, "non-Browser drivers never download")
 }
 
 func TestSAMLProvider_setupBrowserAutomation_LogsBrowserType(t *testing.T) {

@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/playwright-community/playwright-go"
+	"github.com/mxschmitt/playwright-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
@@ -35,7 +35,11 @@ import (
 // driver directory from the official npm registry and nodejs.org instead
 // (mirroring what newer playwright-go releases do). With the directory seeded,
 // playwright-go's isUpToDateDriver() check passes and its dead download path
-// never runs — for Atmos's own install call and for saml2aws's internal one.
+// never runs — for Atmos's own install call and for the vendored saml2aws browser provider.
+//
+// playwright-go v0.6401+ downloads from the same npm and nodejs.org sources itself,
+// but does not verify what it downloads. The pre-seed is kept because it checks the
+// npm tarball's sha512 integrity before extracting it.
 const (
 	// Node.js runtime version downloaded alongside the playwright-core package
 	// when no PLAYWRIGHT_NODEJS_PATH is provided.
@@ -79,6 +83,35 @@ func ensurePlaywrightDriver() error {
 	}
 
 	return seedNodeBinary(driverDir)
+}
+
+// patchPlaywrightDriver applies playwright-go's compatibility patches to the driver
+// bundle (package/lib/coreBundle.js). playwright-go only patches inside
+// DownloadDriver, which Install calls but Run does not. A pre-seeded driver is
+// therefore unpatched until a browser download runs, and that never happens when
+// the required browser is already installed or a custom browser is configured.
+// It is a no-op without a driver in the driver directory, so DownloadDriver can
+// never fall back to downloading an unverified driver from here.
+func patchPlaywrightDriver() error {
+	defer perf.Track(nil, "aws.patchPlaywrightDriver")()
+
+	if os.Getenv("PLAYWRIGHT_CLI_PATH") != "" { //nolint:forbidigo // Third-party (playwright-go) env var, read the same way the library reads it.
+		// playwright-go never patches an external driver.
+		return nil
+	}
+
+	opts := &playwright.RunOptions{}
+	driver, err := playwright.NewDriver(opts)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPlaywrightDriverSeed, err)
+	}
+	if _, err := os.Stat(filepath.Join(opts.DriverDirectory, "package", "cli.js")); err != nil {
+		return nil
+	}
+	if err := driver.DownloadDriver(); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPlaywrightDriverSeed, err)
+	}
+	return nil
 }
 
 // seedPlaywrightCore downloads playwright-core from the npm registry, verifies

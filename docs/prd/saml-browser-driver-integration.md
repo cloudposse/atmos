@@ -36,9 +36,9 @@ Initial implementation had several issues:
 - Only recommended for specialized environments with driver pre-provisioning
 
 **LoginDetails as Source of Truth**
-- saml2aws checks `LoginDetails.DownloadBrowser`, not `IDPAccount.DownloadBrowser`
-- Atmos must set both fields to ensure configuration works
-- Provider's `shouldDownloadBrowser()` determines value from config
+- The browser driver checks `LoginDetails.DownloadBrowser` only
+- Atmos's vendored saml2aws fork removed the unused `IDPAccount.DownloadBrowser` field
+- Provider's `shouldDownloadBrowser()` determines the value from config and the installed browsers
 
 ### Implementation Details
 
@@ -65,10 +65,18 @@ func (p *samlProvider) shouldDownloadBrowser() bool {
 }
 ```
 
-**Why both IDPAccount and LoginDetails?**
-- `IDPAccount.DownloadBrowser`: Used for environment variable (`SAML2AWS_AUTO_BROWSER_DOWNLOAD`)
-- `LoginDetails.DownloadBrowser`: Used by saml2aws authentication logic
-- Both must be set to ensure downloads work
+**Why only LoginDetails?**
+- `LoginDetails.DownloadBrowser` is the only field the browser driver reads before running `playwright install`
+- Upstream's `IDPAccount.DownloadBrowser` was never read by the library and was removed from the vendored fork
+- `SAML2AWS_AUTO_BROWSER_DOWNLOAD` was only read by the saml2aws CLI flag parser, which Atmos does not use,
+  so Atmos neither sets it in its own process nor exports it to subprocesses
+
+**Which browser is checked?**
+- Auto-detection checks the exact revision of the browser that will be launched, read from the driver's
+  `browsers.json` (`chromium-<rev>`, `firefox-<rev>` or `webkit-<rev>`, or
+  `<name>_<platform>_special-<rev>` when `revisionOverrides` has an entry for the host platform)
+- `browser_type: chromium`, `firefox` and `webkit` are installed by Playwright, so auto-download still applies to them
+- System channels (`chrome*`, `msedge*`) and `browser_executable_path` use the user's own browser and are never downloaded
 
 #### Cache Directory Management
 
@@ -151,11 +159,9 @@ auth:
       download_browser_driver: false  # Assumes drivers pre-installed
 ```
 
-**Environment Variable Override**:
-```bash
-export SAML2AWS_AUTO_BROWSER_DOWNLOAD=true
-atmos auth login --identity my-identity
-```
+**No Environment Variable Override**:
+
+`SAML2AWS_AUTO_BROWSER_DOWNLOAD` has no effect on Atmos. Use `download_browser_driver: true` to force a download.
 
 ### Testing Strategy
 
