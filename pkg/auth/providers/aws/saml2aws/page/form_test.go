@@ -31,17 +31,18 @@ func TestNewFormFromDocument(t *testing.T) {
 
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(data))
 	require.Nil(t, err)
+	doc.Url = &url.URL{Scheme: "https", Host: "idp.example.com", Path: "/start"}
 
 	// assert the default behavior is to extract the first form with an action
 	form, err := NewFormFromDocument(doc, "")
 	require.Nil(t, err)
-	require.Equal(t, "/form_b", form.URL)
+	require.Equal(t, "https://idp.example.com/form_b", form.URL)
 	require.Equal(t, url.Values{"b1": []string{"rock"}, "b2": []string{"paper"}}, *form.Values)
 
 	// assert we can provide a specific form filter
 	form, err = NewFormFromDocument(doc, "#c")
 	require.Nil(t, err)
-	require.Equal(t, "/form_c", form.URL)
+	require.Equal(t, "https://idp.example.com/form_c", form.URL)
 	require.Equal(t, url.Values{"c1": []string{"now"}}, *form.Values)
 }
 
@@ -76,7 +77,7 @@ func TestNewFormFromDocumentDefaultsAndMethod(t *testing.T) {
 		{
 			name:       "method attribute is upper-cased",
 			html:       `<form id="f" action="/next" method="get"><input name="a" value="1"/></form>`,
-			wantURL:    "/next",
+			wantURL:    "https://idp.example.com/next",
 			wantMethod: http.MethodGet,
 		},
 	}
@@ -104,6 +105,7 @@ func TestNewFormFromDocumentSkipsInputsWithoutNameOrValue(t *testing.T) {
 <input name="empty" value=""/>
 </form>`))
 	require.NoError(t, err)
+	doc.Url = &url.URL{Scheme: "https", Host: "idp.example.com"}
 
 	form, err := NewFormFromDocument(doc, "")
 	require.NoError(t, err)
@@ -111,10 +113,12 @@ func TestNewFormFromDocumentSkipsInputsWithoutNameOrValue(t *testing.T) {
 }
 
 func TestNewFormFromResponse(t *testing.T) {
-	res := &http.Response{Body: io.NopCloser(strings.NewReader(`<form action="/go"><input name="k" value="v"/></form>`))}
+	req, err := http.NewRequest(http.MethodGet, "https://idp.example.com/login", nil)
+	require.NoError(t, err)
+	res := &http.Response{Body: io.NopCloser(strings.NewReader(`<form action="/go"><input name="k" value="v"/></form>`)), Request: req}
 	form, err := NewFormFromResponse(res, "")
 	require.NoError(t, err)
-	assert.Equal(t, "/go", form.URL)
+	assert.Equal(t, "https://idp.example.com/go", form.URL)
 	assert.Equal(t, url.Values{"k": {"v"}}, *form.Values)
 
 	res = &http.Response{Body: io.NopCloser(failingReader{})}
@@ -210,4 +214,52 @@ func TestNewFormFromResponseMissingDocumentURL(t *testing.T) {
 	form, err := NewFormFromResponse(res, "#f")
 	require.NoError(t, err)
 	assert.Equal(t, "https://idp.example.com/login", form.URL)
+}
+
+// Regression: a relative form action was stored verbatim, so the request had no scheme or host.
+func TestNewFormFromDocumentResolvesRelativeAction(t *testing.T) {
+	const html = `<form action="/next"><input name="x" value="1"/></form>`
+	newDoc := func(t *testing.T, base string) *goquery.Document {
+		t.Helper()
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+		require.NoError(t, err)
+		if base != "" {
+			u, err := url.Parse(base)
+			require.NoError(t, err)
+			doc.Url = u
+		}
+		return doc
+	}
+
+	t.Run("relative action resolves against the document URL", func(t *testing.T) {
+		form, err := NewFormFromDocument(newDoc(t, "https://idp.example.com/a/b?q=1"), "")
+		require.NoError(t, err)
+		assert.Equal(t, "https://idp.example.com/next", form.URL)
+		req, err := form.BuildRequest()
+		require.NoError(t, err)
+		assert.Equal(t, "idp.example.com", req.URL.Host)
+	})
+
+	t.Run("absolute action is unchanged", func(t *testing.T) {
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<form action="https://other.example.com/saml"></form>`))
+		require.NoError(t, err)
+		doc.Url = &url.URL{Scheme: "https", Host: "idp.example.com", Path: "/a"}
+		form, err := NewFormFromDocument(doc, "")
+		require.NoError(t, err)
+		assert.Equal(t, "https://other.example.com/saml", form.URL)
+	})
+
+	t.Run("relative action without a document URL is an error", func(t *testing.T) {
+		_, err := NewFormFromDocument(newDoc(t, ""), "")
+		require.Error(t, err)
+	})
+
+	t.Run("response URL is used to resolve the action", func(t *testing.T) {
+		req, err := http.NewRequest(http.MethodGet, "https://idp.example.com/login", nil)
+		require.NoError(t, err)
+		res := &http.Response{Body: io.NopCloser(strings.NewReader(html)), Request: req}
+		form, err := NewFormFromResponse(res, "")
+		require.NoError(t, err)
+		assert.Equal(t, "https://idp.example.com/next", form.URL)
+	})
 }

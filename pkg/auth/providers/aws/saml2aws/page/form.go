@@ -74,7 +74,11 @@ func NewFormFromDocument(doc *goquery.Document, formFilter string) (*Form, error
 
 	attrValue, ok := formSelection.Attr("action")
 	if ok {
-		form.URL = attrValue
+		action, err := resolveFormAction(attrValue, doc.Url)
+		if err != nil {
+			return nil, err
+		}
+		form.URL = action
 	} else if doc.Url != nil {
 		form.URL = doc.Url.String()
 	} else {
@@ -103,6 +107,23 @@ func NewFormFromDocument(doc *goquery.Document, formFilter string) (*Form, error
 	})
 
 	return &form, nil
+}
+
+// resolveFormAction resolves a form action against the document URL.
+// Atmos fork: upstream stored a relative action verbatim, which cannot be requested because it has no scheme or host.
+// Absolute actions are returned unchanged; a relative action needs a document URL to resolve against.
+func resolveFormAction(action string, base *url.URL) (string, error) {
+	parsed, err := url.Parse(action)
+	if err != nil {
+		return "", errors.Wrap(err, "invalid form action")
+	}
+	if parsed.IsAbs() {
+		return action, nil
+	}
+	if base == nil {
+		return "", fmt.Errorf("form action %q is relative and the document has no URL to resolve it against", action)
+	}
+	return base.ResolveReference(parsed).String(), nil
 }
 
 func NewFormFromResponse(res *http.Response, formFilter string) (*Form, error) {

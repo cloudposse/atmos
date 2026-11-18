@@ -726,15 +726,23 @@ func mustFindErrorMsg(doc *goquery.Document) string {
 }
 
 func extractInputsByFormID(doc *goquery.Document, formID ...string) (url.Values, string, error) {
-	// First try to find form by specific id
+	// First try to find form by specific id.
+	// Atmos fork: a form selected by id is used on its own; when it has no action,
+	// extractInputsByFormQuery defaults to the document URL. Upstream fell through to
+	// every form and merged their fields, posting them to another form's action.
 	for _, id := range formID {
-		formData, actionURL, err := extractInputsByFormQuery(doc, fmt.Sprintf("#%s", id))
-		if err == nil && actionURL != "" {
-			return formData, actionURL, nil
+		query := fmt.Sprintf("#%s", id)
+		if doc.Find(fmt.Sprintf("form%s", query)).Length() == 0 {
+			continue
 		}
+		formData, actionURL, err := extractInputsByFormQuery(doc, query)
+		if err != nil {
+			return nil, "", err
+		}
+		return formData, actionURL, nil
 	}
 
-	// If no form found by id or actionURL in the previous forms, search for any form
+	// No form with the given ids exists, so search for any form.
 	formData, actionURL, err := extractInputsByFormQuery(doc, "")
 	if err != nil && actionURL != "" {
 		return formData, actionURL, errors.New("could not find any forms with actions")
@@ -754,6 +762,10 @@ func extractInputsByFormQuery(doc *goquery.Document, formQuery string) (url.Valu
 
 	query := fmt.Sprintf("form%s", formQuery)
 
+	// Atmos fork: goquery leaves doc.Url nil for reader-based documents; upstream dereferenced it.
+	if doc.Url == nil {
+		return formData, "", errors.New("document has no URL")
+	}
 	currentURL := doc.Url.String()
 
 	// get action url
@@ -769,6 +781,10 @@ func extractInputsByFormQuery(doc *goquery.Document, formQuery string) (url.Valu
 		}
 		actionAttr = action
 	})
+	// Atmos fork: a form without an action submits to the document URL.
+	if actionAttr == "" {
+		actionAttr = currentURL
+	}
 
 	actionURL, err := generateFullURLIfRelative(actionAttr, currentURL)
 	if err != nil {
