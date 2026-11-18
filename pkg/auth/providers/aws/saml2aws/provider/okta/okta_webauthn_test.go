@@ -164,6 +164,32 @@ func TestFidoClientChallengeU2F_Behavior(t *testing.T) {
 	})
 }
 
+// A device that keeps asking for a touch times out between polls with the same sentinel as a hung read.
+func TestFidoClientChallengeU2F_PresenceTimeoutBetweenPolls(t *testing.T) {
+	savedTimeout, savedPoll := u2fAuthTimeout, u2fPollInterval // gitleaks:allow -- Test timing variables, not secrets.
+	u2fAuthTimeout, u2fPollInterval = 50*time.Millisecond, 5*time.Millisecond // gitleaks:allow -- Test timing variables, not secrets.
+	t.Cleanup(func() { u2fAuthTimeout, u2fPollInterval = savedTimeout, savedPoll }) // gitleaks:allow -- Test timing variables, not secrets.
+
+	closed := make(chan struct{})
+	device := &mocks.U2FDevice{}
+	device.On("Authenticate", mock.Anything).Return(nil, &u2fhost.TestOfUserPresenceRequiredError{})
+	device.On("Close").Run(func(mock.Arguments) { close(closed) }).Return().Once()
+
+	client := &FidoClient{Device: device}
+	got, err := client.ChallengeU2F()
+	require.ErrorIs(t, err, ErrU2FAuthTimeout)
+	assert.Nil(t, got)
+	device.AssertCalled(t, "Authenticate", mock.Anything)
+
+	// The timeout can fire between polls (closed on return) or during a read (closed once the read
+	// returns), so wait for the single close either way.
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("device was never closed")
+	}
+}
+
 // Regression: a device whose Authenticate read never returns must not block ChallengeU2F past its timeout,
 // and the device must not be closed while that read is still in flight.
 func TestFidoClientChallengeU2F_HungDeviceTimesOut(t *testing.T) {
@@ -180,7 +206,7 @@ func TestFidoClientChallengeU2F_HungDeviceTimesOut(t *testing.T) {
 	client := &FidoClient{Device: device}
 	start := time.Now()
 	got, err := client.ChallengeU2F()
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrU2FAuthTimeout)
 	assert.Contains(t, err.Error(), "failed to get authentication response")
 	assert.Nil(t, got)
 	assert.Less(t, time.Since(start), 5*time.Second)

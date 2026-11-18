@@ -22,6 +22,10 @@ const (
 	systemWebAuthnTimeoutMillis = 60000
 )
 
+// ErrU2FAuthTimeout is returned when a U2F device does not complete authentication within u2fAuthTimeout.
+// Atmos fork: both timeout paths wrap this sentinel so callers can match it with errors.Is.
+var ErrU2FAuthTimeout = errors.New("timed out waiting for the U2F device")
+
 // Variables so tests can shorten them.
 var (
 	// u2fAuthTimeout bounds how long ChallengeU2F waits for a touch.
@@ -138,49 +142,52 @@ func (d *FidoClient) ChallengeU2F() (*SignedAssertion, error) {
 		}
 	}()
 	defer interval.Stop()
+	// Atmos fork: each attempt is dispatched before waiting, so the first device read always starts
+	// before the timeout can win (upstream waited one poll interval first, racing the timeout).
 	for {
+		pending := d.authenticateAsync(request)
+		var result u2fAuthResult
+		select {
+		case result = <-pending:
+		case <-timeout:
+			closeDevice = false
+			go func() {
+				<-pending
+				d.Device.Close()
+			}()
+			return nil, fmt.Errorf("%w: failed to get authentication response after %d seconds", ErrU2FAuthTimeout, int(u2fAuthTimeout/time.Second))
+		}
+		response, err := result.response, result.err
+		if err == nil {
+			responsePayload = &SignedAssertion{
+				StateToken:        d.StateToken,
+				ClientData:        response.ClientData,
+				SignatureData:     response.SignatureData,
+				AuthenticatorData: response.AuthenticatorData,
+			}
+			log.Println("  ==> Touch accepted. Proceeding with authentication")
+			return responsePayload, nil
+		}
+
+		var presenceErr *u2fhost.TestOfUserPresenceRequiredError
+		switch {
+		case errors.As(err, &presenceErr):
+			if !prompted {
+				log.Println("Touch the flashing U2F device to authenticate...")
+				prompted = true
+			}
+		default:
+			errString := fmt.Sprintf("%s", err)
+			if !strings.Contains(errString, "U2FHIDError") &&
+				!strings.Contains(errString, "hidapi: hid_error is not implemented yet") {
+				return responsePayload, err
+			}
+		}
+
 		select {
 		case <-timeout:
-			return nil, fmt.Errorf("failed to get authentication response after %d seconds", int(u2fAuthTimeout/time.Second))
+			return nil, fmt.Errorf("%w: failed to get authentication response after %d seconds", ErrU2FAuthTimeout, int(u2fAuthTimeout/time.Second))
 		case <-interval.C:
-			pending := d.authenticateAsync(request)
-			var result u2fAuthResult
-			select {
-			case result = <-pending:
-			case <-timeout:
-				closeDevice = false
-				go func() {
-					<-pending
-					d.Device.Close()
-				}()
-				return nil, fmt.Errorf("failed to get authentication response after %d seconds", int(u2fAuthTimeout/time.Second))
-			}
-			response, err := result.response, result.err
-			if err == nil {
-				responsePayload = &SignedAssertion{
-					StateToken:        d.StateToken,
-					ClientData:        response.ClientData,
-					SignatureData:     response.SignatureData,
-					AuthenticatorData: response.AuthenticatorData,
-				}
-				log.Println("  ==> Touch accepted. Proceeding with authentication")
-				return responsePayload, nil
-			}
-
-			var presenceErr *u2fhost.TestOfUserPresenceRequiredError
-			switch {
-			case errors.As(err, &presenceErr):
-				if !prompted {
-					log.Println("Touch the flashing U2F device to authenticate...")
-					prompted = true
-				}
-			default:
-				errString := fmt.Sprintf("%s", err)
-				if !strings.Contains(errString, "U2FHIDError") &&
-					!strings.Contains(errString, "hidapi: hid_error is not implemented yet") {
-					return responsePayload, err
-				}
-			}
 		}
 	}
 }
