@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
@@ -17,12 +18,16 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws"
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/cfg"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -545,6 +550,7 @@ func TestWritePreseedFileCopyError(t *testing.T) {
 	err = writePreseedFile(root, "node", errorReader{}, preseedFileMode)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not write file")
+	assert.NoFileExists(t, filepath.Join(root.Name(), "node"), "a half-written file must not look finished")
 }
 
 func TestWritePreseedFileOpenError(t *testing.T) {
@@ -719,4 +725,169 @@ func TestNodePlatformSuffixFor_UnsupportedPlatformsRequireNodePath(t *testing.T)
 			assert.Contains(t, err.Error(), tt.wantText)
 		})
 	}
+}
+
+// Regression: an npm integrity failure must propagate out of prepareBrowserDriver instead of being
+// downgraded to a warning, which would let playwright-go's unverified downloader fetch the rejected tarball.
+func TestPrepareBrowserDriver_IntegrityMismatchIsFatal(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	driverDir := t.TempDir()
+	t.Setenv("PLAYWRIGHT_DRIVER_PATH", driverDir)
+	t.Setenv("PLAYWRIGHT_NODEJS_PATH", "preinstalled-node")
+
+	tgz := makeTgz(t, map[string]string{"package/cli.js": "cli"})
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	mux.HandleFunc("/playwright-core/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `{"dist":{"tarball":%q,"integrity":"sha512-tampered"}}`, server.URL+"/tarball.tgz")
+	})
+	mux.HandleFunc("/tarball.tgz", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(tgz)
+	})
+	overridePreseedHosts(t, server.URL, server.URL)
+
+	p := &samlProvider{config: &schema.Provider{}}
+	err := p.prepareBrowserDriver("Browser")
+	require.ErrorIs(t, err, errUtils.ErrPlaywrightDriverIntegrity)
+	assert.NoFileExists(t, filepath.Join(driverDir, "package", "cli.js"))
+}
+
+// Negative path: a non-integrity seed failure (registry unreachable) stays best-effort, so an
+// already-installed driver keeps working offline.
+func TestPrepareBrowserDriver_NonIntegritySeedFailureIsNotFatal(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("PLAYWRIGHT_DRIVER_PATH", t.TempDir())
+	t.Setenv("PLAYWRIGHT_NODEJS_PATH", "preinstalled-node")
+
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	overridePreseedHosts(t, server.URL, server.URL)
+
+	p := &samlProvider{config: &schema.Provider{}}
+	require.NoError(t, p.prepareBrowserDriver("Browser"))
+}
+
+func TestVerifyNpmIntegrity_WrapsIntegritySentinel(t *testing.T) {
+	assert.ErrorIs(t, verifyNpmIntegrity([]byte("x"), "sha512-bad"), errUtils.ErrPlaywrightDriverIntegrity)
+	assert.ErrorIs(t, verifyNpmIntegrity([]byte("x"), ""), errUtils.ErrPlaywrightDriverIntegrity)
+}
+
+// stubNewSAMLClient replaces the SAML client constructor for the test and counts its calls.
+func stubNewSAMLClient(t *testing.T, client saml2aws.SAMLClient) *int {
+	t.Helper()
+	calls := 0
+	orig := newSAMLClient
+	newSAMLClient = func(*cfg.IDPAccount) (saml2aws.SAMLClient, error) {
+		calls++
+		return client, nil
+	}
+	t.Cleanup(func() { newSAMLClient = orig })
+	return &calls
+}
+
+func newBrowserSAMLProvider(t *testing.T) *samlProvider {
+	t.Helper()
+	pAny, err := NewSAMLProvider("p", &schema.Provider{Kind: "aws/saml", URL: "https://idp.example.com/saml", Region: "us-east-1", Driver: "Browser"})
+	require.NoError(t, err)
+	sp := pAny.(*samlProvider)
+	sp.RoleToAssumeFromAssertion = "admin"
+	return sp
+}
+
+// Regression: an integrity failure during Authenticate stops authentication before the SAML client
+// (and therefore the browser install and run) is ever created.
+func TestAuthenticate_BrowserIntegrityFailureStopsBeforeBrowserInstall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	driverDir := t.TempDir()
+	t.Setenv("PLAYWRIGHT_DRIVER_PATH", driverDir)
+	t.Setenv("PLAYWRIGHT_NODEJS_PATH", "preinstalled-node")
+
+	tgz := makeTgz(t, map[string]string{"package/cli.js": "cli"})
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	mux.HandleFunc("/playwright-core/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `{"dist":{"tarball":%q,"integrity":"sha512-tampered"}}`, server.URL+"/tarball.tgz")
+	})
+	mux.HandleFunc("/tarball.tgz", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(tgz)
+	})
+	overridePreseedHosts(t, server.URL, server.URL)
+	clientCalls := stubNewSAMLClient(t, stubSAMLClient{err: errors.New("must not be reached")})
+
+	_, err := newBrowserSAMLProvider(t).Authenticate(context.Background())
+	require.ErrorIs(t, err, errUtils.ErrPlaywrightDriverIntegrity)
+	assert.Zero(t, *clientCalls, "no SAML client, and so no browser install, may be created")
+	assert.NoFileExists(t, filepath.Join(driverDir, "package", "cli.js"))
+}
+
+// Negative path: a non-integrity seed failure (registry unreachable) with an already-installed driver
+// is non-fatal; Authenticate continues and the installed driver file is preserved untouched.
+// The stub client returns before Playwright starts, so this does not prove the driver is usable;
+// TestAuthenticate_BrowserOfflineReusesUsableDriver covers offline reuse of a working driver.
+func TestAuthenticate_BrowserSeedFailureContinuesAndPreservesInstalledDriver(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	driverDir := t.TempDir()
+	t.Setenv("PLAYWRIGHT_DRIVER_PATH", driverDir)
+	t.Setenv("PLAYWRIGHT_NODEJS_PATH", "")
+
+	cliPath := filepath.Join(driverDir, "package", "cli.js")
+	require.NoError(t, os.MkdirAll(filepath.Dir(cliPath), 0o755))
+	require.NoError(t, os.WriteFile(cliPath, []byte("installed-cli"), 0o644))
+
+	// The Node.js download fails: the registry is unreachable.
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+	overridePreseedHosts(t, server.URL, server.URL)
+	errClient := errors.New("stub client reached")
+	clientCalls := stubNewSAMLClient(t, stubSAMLClient{err: errClient})
+
+	_, err := newBrowserSAMLProvider(t).Authenticate(context.Background())
+	require.ErrorIs(t, err, errClient)
+	require.NotErrorIs(t, err, errUtils.ErrPlaywrightDriverIntegrity)
+	assert.Equal(t, 1, *clientCalls, "authentication continues with the installed driver")
+	content, readErr := os.ReadFile(cliPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, "installed-cli", string(content))
+}
+
+// Offline reuse: with a usable driver (a fake CLI that the Node.js stand-in can run) already installed,
+// login prepares it without any download, patches its bundle, and the driver still answers its own
+// version check afterwards.
+func TestAuthenticate_BrowserOfflineReusesUsableDriver(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	bundlePath := seedFakePlaywrightDriver(t)
+
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	overridePreseedHosts(t, server.URL, server.URL)
+	errClient := errors.New("stub client reached")
+	clientCalls := stubNewSAMLClient(t, stubSAMLClient{err: errClient})
+
+	_, err := newBrowserSAMLProvider(t).Authenticate(context.Background())
+	require.ErrorIs(t, err, errClient)
+	assert.Equal(t, 1, *clientCalls)
+	assert.Zero(t, requests.Load(), "a usable installed driver is reused without any download")
+
+	data, readErr := os.ReadFile(bundlePath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(data), `pageError.location?.url || ""`, "the reused driver is patched")
+	cli, readErr := os.ReadFile(filepath.Join(filepath.Dir(filepath.Dir(bundlePath)), "cli.js"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "cli", string(cli))
 }

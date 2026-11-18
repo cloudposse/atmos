@@ -447,6 +447,29 @@ linters:
           - lintroller
         path: ^magefiles/
         text: "perf\\.Track"
+      # Vendored fork of the unmaintained saml2aws library (MIT, see its ATTRIBUTIONS.md).
+      # Atmos style and convention linters are relaxed for the upstream code; correctness
+      # linters (govet, staticcheck, unused, errorlint, bodyclose, nilerr, gosec) still apply.
+      - linters:
+          - cyclop
+          - depguard
+          - dogsled
+          - dupl
+          - err113
+          - forbidigo
+          - funlen
+          - gocognit
+          - gocritic
+          - godot
+          - importas
+          - lintroller
+          - nestif
+          - paralleltest
+          - revive
+          - tparallel
+          - unparam
+          - whitespace
+        path: ^pkg/auth/providers/aws/saml2aws/
     paths:
       - experiments/.*
       - third_party$

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -16,9 +15,10 @@ import (
 	stsTypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/versent/saml2aws/v2"
-	"github.com/versent/saml2aws/v2/pkg/creds"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws"
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
@@ -143,7 +143,57 @@ func TestSAMLProvider_ValidateAndEnvironment(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "eu-central-1", env["AWS_DEFAULT_REGION"])
 	assert.Equal(t, "eu-central-1", env["AWS_REGION"])
-	assert.Equal(t, "true", env["SAML2AWS_AUTO_BROWSER_DOWNLOAD"]) // set when download flag is true
+	// SAML2AWS_AUTO_BROWSER_DOWNLOAD is not exported: nothing reads it.
+	assert.NotContains(t, env, "SAML2AWS_AUTO_BROWSER_DOWNLOAD")
+}
+
+// Only the drivers kept in the vendored saml2aws copy are accepted. An unsupported driver fails
+// when that provider authenticates, but not in Validate: the auth manager validates every
+// provider up front, and one stale SAML provider must not break every other identity.
+func TestSAMLProvider_Driver(t *testing.T) {
+	tests := []struct {
+		driver  string
+		wantErr bool
+	}{
+		{driver: ""},
+		{driver: "Browser"},
+		{driver: "GoogleApps"},
+		{driver: "Okta"},
+		{driver: "ADFS"},
+		{driver: "AzureAD", wantErr: true},
+		{driver: "KeyCloak", wantErr: true},
+		{driver: "browser", wantErr: true}, // Driver names are case-sensitive, matching upstream saml2aws.
+	}
+
+	for _, tt := range tests {
+		t.Run("driver="+tt.driver, func(t *testing.T) {
+			p, err := NewSAMLProvider("p", &schema.Provider{
+				Kind:   "aws/saml",
+				URL:    "https://idp.example.com/saml",
+				Region: "us-east-1",
+				Driver: tt.driver,
+			})
+			require.NoError(t, err)
+			sp := p.(*samlProvider)
+
+			// Validate never rejects the driver.
+			require.NoError(t, p.Validate())
+
+			err = sp.validateDriver()
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, errUtils.ErrInvalidProviderConfig)
+			assert.ErrorContains(t, err, fmt.Sprintf("unsupported SAML driver %q", tt.driver))
+			assert.ErrorContains(t, err, "ADFS, Browser, GoogleApps, Okta")
+
+			// Authenticate fails fast with the same error, before any browser or network work.
+			_, authErr := p.Authenticate(t.Context())
+			require.ErrorIs(t, authErr, errUtils.ErrInvalidProviderConfig)
+			assert.ErrorContains(t, authErr, fmt.Sprintf("unsupported SAML driver %q", tt.driver))
+		})
+	}
 }
 
 // stub manager for PreAuthenticate.
@@ -273,14 +323,15 @@ func TestSAMLProvider_selectRole(t *testing.T) {
 	assert.Equal(t, "arn:aws:iam::123:role/Prod", sel.RoleARN)
 }
 
-func TestSAMLProvider_setupBrowserAutomation_SetsEnv(t *testing.T) {
+func TestSAMLProvider_setupBrowserAutomation_DoesNotSetEnv(t *testing.T) {
 	t.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "")
 	pAny, err := NewSAMLProvider("p", &schema.Provider{Kind: "aws/saml", URL: "https://idp.example.com/saml", Region: "us-east-1", DownloadBrowserDriver: true})
 	require.NoError(t, err)
 	sp := pAny.(*samlProvider)
-	sp.setupBrowserAutomation()
-	// The function should set this env var when DownloadBrowserDriver is true.
-	assert.Equal(t, "true", os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"))
+	require.NoError(t, sp.setupBrowserAutomation())
+	// Auto-download reaches the library through LoginDetails.DownloadBrowser, not the environment.
+	assert.Empty(t, os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"))
+	assert.True(t, sp.createLoginDetails(sp.getDriver()).DownloadBrowser)
 }
 
 func TestSAMLProvider_Authenticate_RequiresRoleHint(t *testing.T) {
@@ -324,13 +375,12 @@ func TestSAMLProvider_createSAMLConfig_LoginDetails(t *testing.T) {
 	require.NoError(t, err)
 	sp := p.(*samlProvider)
 
-	cfg := sp.createSAMLConfig()
+	cfg := sp.createSAMLConfig(sp.getDriver())
 	assert.Equal(t, "https://idp.example.com", cfg.URL)
 	assert.Equal(t, "p", cfg.Profile)
 	assert.Equal(t, "eu-west-1", cfg.Region)
-	assert.True(t, cfg.DownloadBrowser)
 
-	ld := sp.createLoginDetails()
+	ld := sp.createLoginDetails(sp.getDriver())
 	assert.Equal(t, "https://idp.example.com", ld.URL)
 	assert.Equal(t, "user", ld.Username)
 	assert.Equal(t, "pass", ld.Password)
@@ -343,6 +393,7 @@ func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
 		downloadBrowserDriver bool
 		explicitDriver        string
 		expectedDownload      bool
+		expectedDriver        string                    // Optional: the driver the case must select.
 		setup                 func(t *testing.T) string // Returns home directory.
 	}{
 		{
@@ -374,22 +425,14 @@ func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
 			name:                  "disabled when drivers already installed",
 			downloadBrowserDriver: false,
 			expectedDownload:      false, // Pre-installed drivers → no download needed.
+			expectedDriver:        "Browser",
 			setup: func(t *testing.T) string {
-				homeDir := t.TempDir()
-				// Create fake Playwright drivers in the platform-appropriate cache path.
-				var playwrightDir string
-				switch runtime.GOOS {
-				case "darwin":
-					playwrightDir = filepath.Join(homeDir, "Library", "Caches", "ms-playwright", "1.47.2")
-				case "windows":
-					playwrightDir = filepath.Join(homeDir, "AppData", "Local", "ms-playwright", "1.47.2")
-				default: // Linux.
-					playwrightDir = filepath.Join(homeDir, ".cache", "ms-playwright", "1.47.2")
-				}
-				require.NoError(t, os.MkdirAll(playwrightDir, 0o755))
-				browserDir := filepath.Join(playwrightDir, "chromium-1234")
-				require.NoError(t, os.MkdirAll(browserDir, 0o755))
-				require.NoError(t, os.WriteFile(filepath.Join(browserDir, "chrome"), []byte("fake"), 0o755))
+				// Create a fake Playwright browser where the driver looks for it, using
+				// Playwright's <cache>/chromium-<revision> layout and the revision the
+				// bundled driver requires.
+				homeDir, playwrightDir := isolatedBrowserCacheDir(t)
+				stubRequiredChromiumRevision(t, "1234")
+				installFakeBrowser(t, playwrightDir, "chromium-1234")
 				return homeDir
 			},
 		},
@@ -414,7 +457,13 @@ func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
 			require.NoError(t, err)
 			sp := p.(*samlProvider)
 
-			ld := sp.createLoginDetails()
+			// GoogleApps also never downloads, so a missed cache detection would pass the download
+			// assertion below; check the selected driver to keep the case meaningful.
+			if tt.expectedDriver != "" {
+				require.Equal(t, tt.expectedDriver, sp.getDriver())
+			}
+
+			ld := sp.createLoginDetails(sp.getDriver())
 
 			// Assert against the explicit expected value, not the implementation.
 			assert.Equal(t, tt.expectedDownload, ld.DownloadBrowser,
@@ -615,7 +664,7 @@ func TestSAMLProvider_createSAMLConfig_AllFields(t *testing.T) {
 	require.NoError(t, err)
 	sp := p.(*samlProvider)
 
-	cfg := sp.createSAMLConfig()
+	cfg := sp.createSAMLConfig(sp.getDriver())
 	assert.Equal(t, "https://idp.example.com/saml", cfg.URL)
 	assert.Equal(t, "test-provider", cfg.Profile)
 	assert.Equal(t, "eu-central-1", cfg.Region)
@@ -625,7 +674,6 @@ func TestSAMLProvider_createSAMLConfig_AllFields(t *testing.T) {
 	assert.False(t, cfg.SkipVerify)
 	assert.Equal(t, 30, cfg.Timeout)
 	assert.Equal(t, "urn:amazon:webservices", cfg.AmazonWebservicesURN)
-	assert.True(t, cfg.DownloadBrowser)
 	assert.False(t, cfg.Headless)
 }
 
@@ -642,7 +690,7 @@ func TestSAMLProvider_createSAMLConfig_BrowserConfiguration(t *testing.T) {
 	require.NoError(t, err)
 	sp := p.(*samlProvider)
 
-	cfg := sp.createSAMLConfig()
+	cfg := sp.createSAMLConfig(sp.getDriver())
 	assert.Equal(t, "msedge", cfg.BrowserType)
 	assert.Equal(t, filepath.Join("opt", "browsers", "msedge"), cfg.BrowserExecutablePath)
 	assert.Equal(t, "Browser", cfg.Provider)
@@ -659,7 +707,7 @@ func TestSAMLProvider_createLoginDetails_WithPassword(t *testing.T) {
 	require.NoError(t, err)
 	sp := p.(*samlProvider)
 
-	ld := sp.createLoginDetails()
+	ld := sp.createLoginDetails(sp.getDriver())
 	assert.Equal(t, "https://idp.example.com/saml", ld.URL)
 	assert.Equal(t, "testuser", ld.Username)
 	assert.Equal(t, "secretpass", ld.Password)
@@ -676,7 +724,7 @@ func TestSAMLProvider_createLoginDetails_NoPassword(t *testing.T) {
 	require.NoError(t, err)
 	sp := p.(*samlProvider)
 
-	ld := sp.createLoginDetails()
+	ld := sp.createLoginDetails(sp.getDriver())
 	assert.Equal(t, "https://idp.example.com/saml", ld.URL)
 	assert.Equal(t, "testuser", ld.Username)
 	assert.Empty(t, ld.Password) // Should be empty when not provided
@@ -844,32 +892,11 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 
 			// Mock playwrightDriversInstalled based on test case.
 			if tc.playwrightInstalled {
-				// Create temporary directory with playwright drivers.
-				tmpDir := t.TempDir()
-				homeDir := tmpDir
-				t.Setenv("HOME", homeDir)
-				t.Setenv("USERPROFILE", homeDir)
-				t.Setenv("LOCALAPPDATA", homeDir) // Windows: playwright checks LOCALAPPDATA.
-
-				// Clear homedir cache to ensure environment variables take effect.
-				t.Cleanup(homedir.Reset)
-				homedir.Reset()
-
-				// Create mock playwright drivers in the platform-appropriate cache path.
-				var playwrightPath string
-				switch runtime.GOOS {
-				case "darwin":
-					playwrightPath = filepath.Join(homeDir, "Library", "Caches", "ms-playwright", "chromium-1084")
-				case "windows":
-					playwrightPath = filepath.Join(homeDir, "ms-playwright", "chromium-1084")
-				default: // Linux.
-					playwrightPath = filepath.Join(homeDir, ".cache", "ms-playwright", "chromium-1084")
-				}
-				require.NoError(t, os.MkdirAll(playwrightPath, 0o755))
-
-				// hasValidPlaywrightDrivers checks for files inside version directory.
-				dummyBinary := filepath.Join(playwrightPath, "chrome")
-				require.NoError(t, os.WriteFile(dummyBinary, []byte("dummy"), 0o755))
+				// Create a fake installed browser where the Playwright driver looks for it.
+				// The installed directory must match the revision the bundled driver requires.
+				_, playwrightDir := isolatedBrowserCacheDir(t)
+				stubRequiredChromiumRevision(t, "1084")
+				installFakeBrowser(t, playwrightDir, "chromium-1084")
 			} else {
 				// Use empty temp directory (no drivers).
 				tmpDir := t.TempDir()
@@ -885,7 +912,7 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 				homedir.Reset()
 			}
 
-			result := sp.shouldDownloadBrowser()
+			result := sp.shouldDownloadBrowser(sp.getDriver())
 			assert.Equal(t, tc.expectedResult, result)
 		})
 	}
@@ -1063,48 +1090,6 @@ func TestSAMLProvider_Logout_ErrorPaths(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestSAMLProvider_Environment_AutoDownload(t *testing.T) {
-	tests := []struct {
-		name                    string
-		downloadBrowserDriver   bool
-		expectedAutoDownloadVar string
-	}{
-		{
-			name:                    "download browser driver enabled",
-			downloadBrowserDriver:   true,
-			expectedAutoDownloadVar: "true",
-		},
-		{
-			name:                    "download browser driver disabled",
-			downloadBrowserDriver:   false,
-			expectedAutoDownloadVar: "",
-		},
-	}
-
-	for _, tt := range tests {
-		tc := tt
-		t.Run(tc.name, func(t *testing.T) {
-			p, err := NewSAMLProvider("test", &schema.Provider{
-				Kind:                  "aws/saml",
-				URL:                   "https://idp.example.com/saml",
-				Region:                "us-west-2",
-				DownloadBrowserDriver: tc.downloadBrowserDriver,
-			})
-			require.NoError(t, err)
-
-			env, err := p.Environment()
-			require.NoError(t, err)
-
-			if tc.expectedAutoDownloadVar != "" {
-				assert.Equal(t, tc.expectedAutoDownloadVar, env["SAML2AWS_AUTO_BROWSER_DOWNLOAD"])
-			} else {
-				_, exists := env["SAML2AWS_AUTO_BROWSER_DOWNLOAD"]
-				assert.False(t, exists)
 			}
 		})
 	}
