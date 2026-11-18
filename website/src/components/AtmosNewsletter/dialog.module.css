@@ -1,0 +1,59 @@
+.trigger {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ifm-link-color);
+  font: inherit;
+  cursor: pointer;
+}
+.trigger:hover {
+  text-decoration: underline;
+}
+.dialog {
+  width: min(36rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+  border-radius: 0.875rem;
+  color: var(--ifm-font-color-base);
+  background: var(--ifm-background-color);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
+}
+.dialog::backdrop {
+  background: rgba(3, 7, 17, 0.7);
+  backdrop-filter: blur(5px);
+}
+.dialog section {
+  margin: 0;
+  padding: 2rem;
+  border: 0;
+}
+.dialog h2 {
+  padding-right: 1.5rem;
+}
+.close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ifm-color-emphasis-600);
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+.close:hover {
+  background: rgba(128, 128, 128, 0.15);
+}
+:global(body:has(dialog[open])) {
+  overflow: hidden;
+}
+@media (max-width: 600px) {
+  .dialog section {
+    padding: 1.5rem;
+  }
+}

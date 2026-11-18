@@ -29,3 +29,12 @@
   .header { padding-top: 1.5rem; }
   .title { font-size: 2rem; }
 }
+
+.subscriptions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+}
