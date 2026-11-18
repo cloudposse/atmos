@@ -154,7 +154,7 @@ func TestClientDoWithRetry_StopsOnCancelledContext(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		resp, doErr := hc.Do(req)
+		resp, doErr := hc.Do(req) //nolint:bodyclose // The receiver below closes the body.
 		done <- result{resp, doErr}
 	}()
 

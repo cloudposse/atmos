@@ -115,25 +115,25 @@ func (kc *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 	authForm.Set("Email", loginDetails.Username)
 
 	// Post email address w/o password, then Get the password-input page
-	passwordURL, passwordForm, err := kc.loadLoginPage(withLocale(authURL), withLocale(loginDetails.URL), authForm)
+	loginPageURL, passwordForm, err := kc.loadLoginPage(withLocale(authURL), withLocale(loginDetails.URL), authForm)
 	if err != nil {
 		// if failed, try with "identifier"
 		authForm.Set("Email", "") // Clear previous key
 		authForm.Set("identifier", loginDetails.Username)
-		passwordURL, passwordForm, err = kc.loadLoginPage(withLocale(authURL), withLocale(loginDetails.URL), authForm)
+		loginPageURL, passwordForm, err = kc.loadLoginPage(withLocale(authURL), withLocale(loginDetails.URL), authForm)
 		if err != nil {
 			return "", errors.Wrap(err, "error loading login page")
 		}
 	}
 
-	logger.Debugf("loginURL: %s", provider.RedactRawURL(passwordURL))
+	logger.Debugf("loginURL: %s", provider.RedactRawURL(loginPageURL))
 
 	passwordForm.Set("Passwd", loginDetails.Password)
 	passwordForm.Set("TrustDevice", "on")
 
-	referingURL := passwordURL
+	referingURL := loginPageURL
 
-	responseDoc, err := kc.loadChallengePage(withLocale(passwordURL), referingURL, passwordForm, loginDetails)
+	responseDoc, err := kc.loadChallengePage(withLocale(loginPageURL), referingURL, passwordForm, loginDetails)
 	if err != nil {
 		return "", errors.Wrap(err, "error loading challenge page")
 	}
@@ -991,8 +991,12 @@ func generateFullURLIfRelative(destination, currentPageURL string) (string, erro
 
 	// Atmos fork: upstream resolved only root-relative destinations, so a directory-relative action such as
 	// "next" stayed without a scheme and host. Every relative reference is now resolved against the page URL.
-	reference, err := url.Parse(destination)
-	if err != nil || reference.IsAbs() {
+	reference, parseErr := url.Parse(destination)
+	if parseErr != nil {
+		// Upstream returned a destination it could not resolve unchanged; the request that uses it reports the error.
+		return destination, nil //nolint:nilerr // Intentional: an unparseable destination is passed through as is.
+	}
+	if reference.IsAbs() {
 		return destination, nil
 	}
 
