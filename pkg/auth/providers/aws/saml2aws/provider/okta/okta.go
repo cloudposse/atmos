@@ -97,7 +97,7 @@ type Client struct {
 // AuthRequest represents an mfa okta request
 type AuthRequest struct {
 	Username   string `json:"username"`
-	Password   string `json:"password"` //nolint:gosec // Okta primary-auth request body requires the password field.
+	Password   string `json:"password"`
 	StateToken string `json:"stateToken,omitempty"`
 }
 
@@ -114,7 +114,7 @@ type VerifyRequest struct {
 
 // SessionRequst holds the SessionToken used to create an Okta Session
 type SessionRequst struct {
-	SessionToken string `json:"sessionToken"` //nolint:gosec // Okta session request body requires the sessionToken field.
+	SessionToken string `json:"sessionToken"`
 }
 
 // mfaChallengeContext is used to hold MFA challenge context in a simple struct.
@@ -206,7 +206,6 @@ func (oc *Client) createSession(loginDetails *creds.LoginDetails, sessionToken s
 	if err != nil {
 		return "", "", errors.Wrap(err, "error retrieving session response")
 	}
-	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -229,7 +228,7 @@ func (oc *Client) createSession(loginDetails *creds.LoginDetails, sessionToken s
 
 	err = credentials.SaveCredentials(loginDetails.URL+"/sessionCookie", loginDetails.Username, oktaSessionCookie)
 	if err != nil {
-		return "", "", fmt.Errorf("error storing okta session token | err: %w", err)
+		return "", "", fmt.Errorf("error storing okta session token | err: %v", err)
 	}
 
 	oktaSessionToken := gjson.Get(resp, "sessionToken").String()
@@ -284,7 +283,6 @@ func (oc *Client) validateSession(loginDetails *creds.LoginDetails) error {
 	if err != nil {
 		return errors.Wrap(err, "error retrieving session response")
 	}
-	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -346,7 +344,6 @@ func (oc *Client) authWithSession(loginDetails *creds.LoginDetails) (string, err
 			return "", errors.Wrap(err, "error authing with session")
 		}
 	}
-	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -380,7 +377,6 @@ func (oc *Client) getDeviceTokenFromOkta(loginDetails *creds.LoginDetails) (stri
 	if err != nil {
 		return "", errors.Wrap(err, "error retrieving device token")
 	}
-	defer resp.Body.Close()
 
 	for _, c := range resp.Cookies() {
 		if c.Name == "DT" { // Device token
@@ -412,7 +408,7 @@ func (oc *Client) setDeviceTokenCookie(loginDetails *creds.LoginDetails) error {
 	baseURL := &url.URL{Scheme: oktaURLScheme, Host: oktaURLHost, Path: "/"}
 
 	var cookies []*http.Cookie
-	cookie := http.Cookie{ //nolint:gosec // HttpOnly and SameSite apply to Set-Cookie responses; this cookie only seeds the client jar and is Secure.
+	cookie := http.Cookie{
 		Name:    "DT",
 		Secure:  true,
 		Expires: time.Now().Add(time.Hour * 24 * 30),                    // 30 Days -> this time might not matter as this cookie is set on every saml2aws login request
@@ -458,7 +454,6 @@ func (oc *Client) primaryAuth(loginDetails *creds.LoginDetails) (string, string,
 	if err != nil {
 		return "", "", "", errors.Wrap(err, "error retrieving auth response")
 	}
-	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -562,7 +557,6 @@ func (oc *Client) follow(ctx context.Context, req *http.Request, loginDetails *c
 		logger.Debug("ERROR FOLLOWING")
 		return "", errors.Wrap(err, "error following")
 	}
-	defer res.Body.Close()
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
 		logger.Debug("FAILED TO BUILD DOC FROM RESP")
@@ -606,9 +600,9 @@ func (oc *Client) follow(ctx context.Context, req *http.Request, loginDetails *c
 	}
 
 	if handler == nil {
-		html, _ := doc.Html()
+		html, _ := doc.Selection.Html()
 		logger.WithField("doc", html).Debug("Unknown document type")
-		return "", errors.New("unknown document type")
+		return "", fmt.Errorf("Unknown document type")
 	}
 
 	ctx, req, err = handler(ctx, doc)
@@ -632,7 +626,6 @@ func (oc *Client) getStateToken(req *http.Request, loginDetails *creds.LoginDeta
 	if err != nil {
 		return "", errors.Wrap(err, "error retrieving app response")
 	}
-	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return "", errors.Wrap(err, "error retrieving body from response")
@@ -655,7 +648,7 @@ func getStateTokenFromOktaPageBody(responseBody string) (string, error) {
 	for _, re := range regexes {
 		match := re.FindStringSubmatch(responseBody)
 		if len(match) >= 2 {
-			return strings.ReplaceAll(match[1], `\x2D`, "-"), nil
+			return strings.Replace(match[1], `\x2D`, "-", -1), nil
 		}
 	}
 
@@ -784,7 +777,6 @@ func getMfaChallengeContext(oc *Client, mfaOption int, resp string) (*mfaChallen
 	if err != nil {
 		return nil, errors.Wrap(err, "error retrieving verify response")
 	}
-	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -885,7 +877,6 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 		if err != nil {
 			return "", errors.Wrap(err, "error retrieving token post response")
 		}
-		defer res.Body.Close()
 
 		return extractSessionToken(res.Body)
 
@@ -965,7 +956,7 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 		duoForm.Add("color_depth", "24")
 		duoForm.Add("is_cef_browser", "false")
 		duoForm.Add("is_ipad_os", "false")
-		duoForm.Add("is_ie_compatability_mode", "") //nolint:misspell // Duo's actual (misspelled) form field name.
+		duoForm.Add("is_ie_compatability_mode", "")
 		duoForm.Add("acting_ie_version", "")
 		duoForm.Add("react_support", "true")
 		duoForm.Add("react_support_error_message", "")
@@ -988,7 +979,6 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 		if err != nil {
 			return "", errors.Wrap(err, "error retrieving verify response")
 		}
-		defer res.Body.Close()
 
 		// At this point, if device trust is enabled we need to go on that tangent
 		doc, err := goquery.NewDocumentFromReader(res.Body)
@@ -1096,7 +1086,6 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 		if err != nil {
 			return "", errors.Wrap(err, "error retrieving verify response")
 		}
-		defer res.Body.Close()
 
 		body, err := io.ReadAll(res.Body)
 		if err != nil {
@@ -1129,7 +1118,6 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 		if err != nil {
 			return "", errors.Wrap(err, "error retrieving verify response")
 		}
-		defer res.Body.Close()
 
 		body, err = io.ReadAll(res.Body)
 		if err != nil {
@@ -1193,7 +1181,6 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 			if err != nil {
 				return "", errors.Wrap(err, "error retrieving verify response")
 			}
-			defer res.Body.Close()
 
 			body, err = io.ReadAll(res.Body)
 			if err != nil {
@@ -1267,8 +1254,6 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 				}
 
 				body, err = io.ReadAll(res.Body)
-				// Close inside the polling loop so bodies are not held until the function returns.
-				_ = res.Body.Close()
 				if err != nil {
 					return "", errors.Wrap(err, "error retrieving body from response")
 				}
@@ -1311,7 +1296,6 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 		if err != nil {
 			return "", errors.Wrap(err, "error retrieving duo result response")
 		}
-		defer res.Body.Close()
 
 		body, err = io.ReadAll(res.Body)
 		if err != nil {
@@ -1374,7 +1358,6 @@ func verifyMfa(oc *Client, oktaOrgHost string, loginDetails *creds.LoginDetails,
 		if err != nil {
 			return "", errors.Wrap(err, "error retrieving verify response")
 		}
-		defer res.Body.Close()
 
 		body, err = io.ReadAll(res.Body)
 		if err != nil {
@@ -1440,8 +1423,7 @@ func fidoWebAuthn(oc *Client, oktaOrgHost string, challengeContext *mfaChallenge
 		signedAssertion, err = fidoClient.ChallengeU2F()
 		if err != nil {
 			// if this error is not a bad key error we are done
-			var badKeyErr *u2fhost.BadKeyHandleError
-			if !errors.As(err, &badKeyErr) {
+			if _, ok := err.(*u2fhost.BadKeyHandleError); !ok {
 				return "", errors.Wrap(err, "failed to perform U2F challenge")
 			}
 
@@ -1489,7 +1471,6 @@ func fidoWebAuthn(oc *Client, oktaOrgHost string, challengeContext *mfaChallenge
 	if err != nil {
 		return "", errors.Wrap(err, "error retrieving verify response")
 	}
-	defer res.Body.Close()
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
