@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -440,4 +442,86 @@ func TestNewHTTPClientTimeoutBoundsUnresponsiveServer(t *testing.T) {
 		resp.Body.Close()
 	}
 	require.Error(t, err)
+}
+
+// Regression: the computed backoff, not only the base delay, is capped.
+func TestClientDoWithRetriesCapsBackoff(t *testing.T) {
+	const (
+		baseDelay = 40 * time.Millisecond
+		attempts  = 5
+		// Uncapped exponential waits total 40+80+160+320 = 600ms; capped waits total 4*40 = 160ms.
+		maxElapsed = 400 * time.Millisecond
+	)
+	orig := retryMaxDelay
+	retryMaxDelay = baseDelay
+	t.Cleanup(func() { retryMaxDelay = orig })
+
+	hc, err := NewHTTPClient(&flakyTransport{failures: attempts}, &HTTPClientOptions{
+		IsWithRetries: true,
+		AttemptsCount: attempts,
+		RetryDelay:    baseDelay,
+	})
+	require.NoError(t, err)
+	req, err := http.NewRequest(http.MethodGet, "http://idp.invalid/login", nil)
+	require.NoError(t, err)
+
+	start := time.Now()
+	res, err := hc.Do(req)
+	if res != nil {
+		defer res.Body.Close()
+	}
+	require.Error(t, err)
+	assert.Less(t, time.Since(start), maxElapsed)
+}
+
+// Regression: transport errors embed the request URL, so the query string must not reach the logs
+// or the error returned to the caller, with or without retries.
+func TestClientDoRedactsURLInTransportErrors(t *testing.T) {
+	const secret = "secret-session-token" // gitleaks:allow -- Fake token proving redaction, not a credential.
+	for _, withRetries := range []bool{false, true} {
+		t.Run(fmt.Sprintf("retries=%t", withRetries), func(t *testing.T) {
+			stdLog := captureLog(t)
+			logrusLog := captureLogrus(t)
+
+			hc, err := NewHTTPClient(&flakyTransport{failures: 10}, &HTTPClientOptions{
+				IsWithRetries: withRetries,
+				AttemptsCount: 2,
+				RetryDelay:    time.Millisecond,
+			})
+			require.NoError(t, err)
+			req, err := http.NewRequest(http.MethodGet, "http://idp.invalid/login?sessionToken="+secret, nil)
+			require.NoError(t, err)
+
+			res, err := hc.Do(req)
+			if res != nil {
+				defer res.Body.Close()
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "idp.invalid/login")
+			assert.Contains(t, err.Error(), errTransport.Error())
+			assert.NotContains(t, err.Error(), secret)
+			assert.NotContains(t, stdLog.String()+logrusLog.String(), secret)
+		})
+	}
+}
+
+func TestRedactError(t *testing.T) {
+	assert.NoError(t, RedactError(nil))
+
+	plain := errors.New("plain")
+	assert.Equal(t, plain, RedactError(plain))
+
+	direct := &url.Error{Op: "Get", URL: "https://idp.example.com/login?token=secret", Err: errTransport}
+	got := RedactError(direct)
+	assert.NotContains(t, got.Error(), "secret")
+	require.ErrorIs(t, got, errTransport)
+	var ue *url.Error
+	require.ErrorAs(t, got, &ue)
+	assert.Equal(t, "Get", ue.Op)
+
+	wrapped := fmt.Errorf("context: %w", direct)
+	got = RedactError(wrapped)
+	assert.NotContains(t, got.Error(), "secret")
+	assert.Contains(t, got.Error(), "context: ")
+	require.ErrorIs(t, got, errTransport)
 }

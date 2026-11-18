@@ -119,6 +119,11 @@ func (p *samlProvider) PreAuthenticate(manager types.AuthManager) error {
 	return nil
 }
 
+// newSAMLClient builds the SAML client. It is a package variable only so tests can observe that
+// authentication stops before any client (and so any browser install) is created. Production
+// behavior is unchanged.
+var newSAMLClient = saml2aws.NewSAMLClient
+
 // Authenticate performs SAML authentication using saml2aws.
 func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, error) {
 	if err := p.validateDriver(); err != nil {
@@ -146,7 +151,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 	loginDetails := p.createLoginDetails()
 
 	// Create the SAML client.
-	samlClient, err := saml2aws.NewSAMLClient(samlConfig)
+	samlClient, err := newSAMLClient(samlConfig)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create SAML client: %w", errUtils.ErrInvalidProviderConfig, err)
 	}

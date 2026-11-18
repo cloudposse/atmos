@@ -37,6 +37,9 @@ const (
 	DefaultRequestTimeout = 2 * time.Minute
 )
 
+// retryMaxDelay caps each computed retry wait. It is a variable so tests can shrink it.
+var retryMaxDelay = MaxRetryDelay
+
 type HTTPClientOptions struct {
 	IsWithRetries bool // http retry feature switch
 	AttemptsCount uint
@@ -131,6 +134,8 @@ func (hc *HTTPClient) Do(req *http.Request) (*http.Response, error) {
 	} else {
 		hc.logHTTPRequest(req)
 		resp, err = hc.Client.Do(req)
+		// Atmos fork: the transport error embeds the full request URL, which can carry session tokens.
+		err = RedactError(err)
 	}
 	if err != nil {
 		return resp, err
@@ -170,7 +175,9 @@ func (hc *HTTPClient) doWithRetry(req *http.Request) (*http.Response, error) {
 			hc.logHTTPRequest(req)
 			clientResp, err := hc.Client.Do(req) //nolint:bodyclose // The response is returned to the caller, which closes the body.
 			if err != nil {
-				return err
+				// Atmos fork: the transport error embeds the full request URL, which can carry session tokens.
+				// The redacted error is logged and aggregated into the error returned to the caller.
+				return RedactError(err)
 			}
 			resp = clientResp
 			return nil
@@ -178,6 +185,9 @@ func (hc *HTTPClient) doWithRetry(req *http.Request) (*http.Response, error) {
 		// Atmos fork: options built without BuildHttpClientOpts are clamped too.
 		retry.Attempts(atLeastOneAttempt(hc.Options.AttemptsCount)),
 		retry.Delay(hc.Options.RetryDelay),
+		// Atmos fork: the default delay type backs off exponentially, so capping the base delay alone
+		// still allowed each wait to grow past MaxRetryDelay.
+		retry.MaxDelay(retryMaxDelay),
 		// Atmos fork: cancelling the request also stops the retry waits.
 		retry.Context(req.Context()),
 		retry.OnRetry(

@@ -42,7 +42,7 @@ func TestParseAWSRolesErrors(t *testing.T) {
 		},
 		{
 			name:    "three tokens",
-			role:    "arn:aws:iam::1:role/a,arn:aws:iam::1:saml-provider/b,arn:aws:iam::1:role/c",
+			role:    "arn:aws:iam::123456789012:role/a,arn:aws:iam::123456789012:saml-provider/b,arn:aws:iam::123456789012:role/c",
 			wantErr: "invalid role string only 3 tokens",
 		},
 		{
@@ -88,6 +88,24 @@ func TestParseAWSRolesCommaInRoleName(t *testing.T) {
 		if assert.NoError(t, err) && assert.Len(t, roles, 1) {
 			assert.Equal(t, "arn:aws:iam::123456789012:role/admin,ops", roles[0].RoleARN)
 			assert.Equal(t, "arn:aws:iam::123456789012:saml-provider/idp", roles[0].PrincipalARN)
+		}
+	}
+}
+
+// Regression: IAM role paths may contain ",arn:" so a comma only separates ARNs when a complete ARN follows it.
+func TestParseAWSRolesCommaARNInRolePath(t *testing.T) {
+	const (
+		roleARN      = "arn:aws:iam::123456789012:role/team,arn:blue/admin"
+		principalARN = "arn:aws:iam::123456789012:saml-provider/idp"
+	)
+	for _, role := range []string{
+		roleARN + "," + principalARN,
+		principalARN + "," + roleARN,
+	} {
+		roles, err := ParseAWSRoles([]string{role})
+		if assert.NoError(t, err) && assert.Len(t, roles, 1) {
+			assert.Equal(t, roleARN, roles[0].RoleARN)
+			assert.Equal(t, principalARN, roles[0].PrincipalARN)
 		}
 	}
 }

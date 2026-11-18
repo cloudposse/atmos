@@ -125,9 +125,13 @@ func (ac *Client) Authenticate(loginDetails *creds.LoginDetails) (string, error)
 		// with "/", so "?step=password" or "step=password" reached the HTTP client without a scheme.
 		// ResolveReference leaves absolute URLs unchanged.
 		//
-		parsedUrl, err := url.Parse(adfsURL)
-		if err != nil {
-			return "", errors.Wrap(err, "failed to parse ADFS URL")
+		// The base is the final login page URL (after redirects), not the initial request URL.
+		parsedUrl := doc.Url
+		if parsedUrl == nil {
+			var err error
+			if parsedUrl, err = url.Parse(adfsURL); err != nil {
+				return "", errors.Wrap(err, "failed to parse ADFS URL")
+			}
 		}
 		parsedPath, err := url.Parse(authSubmitURL)
 		if err != nil {
