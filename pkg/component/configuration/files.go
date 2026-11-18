@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
@@ -40,6 +41,9 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 		if err := validateFile(file); err != nil {
 			return err
 		}
+		if err := validateDestination(root, file.Path); err != nil {
+			return generatedFileError(file.Path, err)
+		}
 	}
 	for _, file := range files {
 		if err := writeFile(root, file); err != nil {
@@ -56,35 +60,169 @@ func validateFile(file schema.ComponentConfigurationFile) error {
 	if file.IfExists != "error" && file.IfExists != "skip" && file.IfExists != "overwrite" {
 		return errUtils.ErrPluginUnsupportedExtension
 	}
+	if IsRuntimeArtifact(file.Path) {
+		return generatedFileError(file.Path, errUtils.ErrPluginInvalidConfig)
+	}
 	return nil
 }
 
 func writeFile(root *os.Root, file schema.ComponentConfigurationFile) error {
+	if err := validateFile(file); err != nil {
+		return err
+	}
+	directory, err := destinationDirectory(root, filepath.Dir(file.Path), true)
+	if err != nil {
+		return generatedFileError(file.Path, err)
+	}
+	defer directory.Close()
 	mode := writtenMode(file)
+	output, err := openGeneratedFile(directory, filepath.Base(file.Path), file.IfExists, mode)
+	if err != nil {
+		return generatedFileError(file.Path, err)
+	}
+	if output == nil {
+		return nil
+	}
 	if file.Sensitive {
 		atmosio.RegisterSecretValue(string(file.Content))
 	}
-	if err := root.MkdirAll(filepath.Dir(file.Path), directoryMode); err != nil {
-		return err
+	// Restrict permissions before truncating or writing any sensitive content.
+	if err := applyMode(output, file, mode); err != nil {
+		return generatedFileError(file.Path, errors.Join(err, output.Close()))
 	}
-	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
-	if file.IfExists == "overwrite" {
-		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	if err := output.Truncate(0); err != nil {
+		return generatedFileError(file.Path, errors.Join(err, output.Close()))
 	}
-	output, err := root.OpenFile(file.Path, flags, mode)
-	if errors.Is(err, os.ErrExist) && file.IfExists == "skip" {
+	_, writeErr := output.Write(file.Content)
+	return generatedFileError(file.Path, errors.Join(writeErr, output.Close()))
+}
+
+func generatedFileError(path string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%w: generated file %s: %w", errUtils.ErrPluginInvalidConfig, path, err)
+}
+
+// validateDestination checks existing ancestors and the leaf before the first
+// write. Missing directories are created only during the subsequent write phase.
+func validateDestination(root *os.Root, path string) error {
+	directory, err := destinationDirectory(root, filepath.Dir(path), false)
+	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("%w: generated file %s: %w", errUtils.ErrPluginInvalidConfig, file.Path, err)
+		return err
 	}
-	// Open applies the process umask and ignores the mode of an existing file, so set it explicitly.
-	chmodErr := applyMode(output, file, mode)
-	if chmodErr != nil {
-		return errors.Join(chmodErr, output.Close())
+	defer directory.Close()
+	info, err := directory.Lstat(filepath.Base(path))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
 	}
-	_, writeErr := output.Write(file.Content)
-	return errors.Join(writeErr, output.Close())
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return errUtils.ErrPluginInvalidConfig
+	}
+	return nil
+}
+
+// destinationDirectory pins each ordinary directory by handle. Lstat/Stat identity
+// checks reject symlinks introduced between inspection and opening an ancestor.
+func destinationDirectory(root *os.Root, path string, create bool) (*os.Root, error) {
+	current, err := root.OpenRoot(".")
+	if err != nil {
+		return nil, err
+	}
+	for _, part := range strings.Split(filepath.Clean(path), string(filepath.Separator)) {
+		if part == "." {
+			continue
+		}
+		next, err := openDestinationChild(current, part, create)
+		_ = current.Close()
+		if err != nil {
+			return nil, err
+		}
+		current = next
+	}
+	return current, nil
+}
+
+func openDestinationChild(root *os.Root, name string, create bool) (*os.Root, error) {
+	if create {
+		if err := root.Mkdir(name, directoryMode); err != nil && !errors.Is(err, os.ErrExist) {
+			return nil, err
+		}
+	}
+	before, err := root.Lstat(name)
+	if err != nil {
+		return nil, err
+	}
+	if !before.IsDir() {
+		return nil, errUtils.ErrPluginInvalidConfig
+	}
+	child, err := root.OpenRoot(name)
+	if err != nil {
+		return nil, err
+	}
+	after, err := child.Stat(".")
+	if err != nil || !os.SameFile(before, after) {
+		_ = child.Close()
+		return nil, errors.Join(errUtils.ErrPluginInvalidConfig, err)
+	}
+	return child, nil
+}
+
+// openGeneratedFile never truncates while opening. The final handle must match
+// the inspected ordinary file, so replacing the leaf with a symlink cannot
+// redirect an overwrite. Exclusive creation provides the same guarantee for new files.
+func openGeneratedFile(root *os.Root, name, policy string, mode os.FileMode) (*os.File, error) {
+	before, err := root.Lstat(name)
+	if errors.Is(err, os.ErrNotExist) {
+		return root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !before.Mode().IsRegular() {
+		return nil, errUtils.ErrPluginInvalidConfig
+	}
+	if policy == "skip" {
+		return nil, nil
+	}
+	if policy == "error" {
+		return nil, os.ErrExist
+	}
+	output, err := root.OpenFile(name, os.O_WRONLY, mode)
+	if err != nil {
+		return nil, err
+	}
+	after, err := output.Stat()
+	if err != nil || !os.SameFile(before, after) {
+		return nil, errors.Join(errUtils.ErrPluginInvalidConfig, err, output.Close())
+	}
+	return output, nil
+}
+
+// IsRuntimeArtifact reserves Terraform state, lock files and workdir metadata.
+// These names mirror the provisioner/workdir contract; importing that package
+// here would create a configuration-loading cycle.
+// Case folding keeps the same protection when a configuration moves between
+// case-sensitive and case-insensitive filesystems.
+//
+//nolint:lintroller // Pure path validation with no I/O; exempt from performance tracking.
+func IsRuntimeArtifact(path string) bool {
+	path = strings.ToLower(filepath.ToSlash(filepath.Clean(filepath.FromSlash(path))))
+	if path == "terraform.tfstate" || path == "terraform.tfstate.backup" || path == ".terraform.tfstate.lock.info" || strings.HasSuffix(path, ".terraform.lock.hcl") {
+		return true
+	}
+	for _, segment := range strings.Split(path, "/") {
+		if segment == ".terraform" || segment == "terraform.tfstate.d" || segment == ".atmos" {
+			return true
+		}
+	}
+	return false
 }
 
 // applyMode sets the permission bits explicitly because open applies the umask

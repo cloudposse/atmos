@@ -1,12 +1,16 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -14,6 +18,10 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if os.Getenv("ATMOS_TERRAGRUNT_VERSION_TREE") != "" {
+		versionTreeHelper()
+		os.Exit(0)
+	}
 	if os.Getenv("ATMOS_TERRAGRUNT_VERSION_CHILD") != "" {
 		_, _ = os.Stdout.WriteString(os.Getenv("ATMOS_TERRAGRUNT_VERSION_CHILD"))
 		os.Exit(0)
@@ -94,4 +102,60 @@ inputs = {
 		require.Equal(t, "ambient", os.Getenv("CUSTOM_VALUE"))
 		require.Equal(t, "ambient-token-must-not-return", os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE"))
 	}
+}
+
+// versionTreeHelper keeps stdout open in a descendant of the version wrapper.
+func versionTreeHelper() {
+	if os.Getenv("ATMOS_TERRAGRUNT_VERSION_TREE") == "wrapper" {
+		executable, _ := os.Executable()
+		child := exec.CommandContext(context.Background(), executable)
+		child.Env = append(os.Environ(), "ATMOS_TERRAGRUNT_VERSION_TREE=child")
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		_ = child.Run()
+		return
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		os.Exit(2)
+	}
+	defer listener.Close()
+	_ = os.WriteFile(os.Getenv("ATMOS_TERRAGRUNT_VERSION_READY"), []byte(listener.Addr().String()), 0o600)
+	// Bound the fixture itself so a broken cancellation implementation cannot leak forever.
+	time.Sleep(10 * time.Second)
+}
+
+func TestVersionProbeCancellationClosesDescendant(t *testing.T) {
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	ready := filepath.Join(t.TempDir(), "ready")
+	request := model.Request{Tofu: executable, Environment: map[string]string{
+		"ATMOS_TERRAGRUNT_VERSION_TREE": "wrapper", "ATMOS_TERRAGRUNT_VERSION_READY": ready,
+	}}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { result <- checkVersions(ctx, &request, ">= 1.0.0", "") }()
+	var address string
+	require.Eventually(t, func() bool {
+		data, err := os.ReadFile(ready)
+		address = string(data)
+		return err == nil && address != ""
+	}, 5*time.Second, 10*time.Millisecond)
+	connection, err := net.DialTimeout("tcp", address, time.Second)
+	require.NoError(t, err, "the descendant must be live before cancellation")
+	require.NoError(t, connection.Close())
+	cancel()
+	select {
+	case err := <-result:
+		require.Error(t, err)
+	case <-time.After(4 * time.Second):
+		t.Fatal("version probe did not return promptly after cancellation")
+	}
+	require.Eventually(t, func() bool {
+		connection, err := net.DialTimeout("tcp", address, 50*time.Millisecond)
+		if err == nil {
+			_ = connection.Close()
+		}
+		return err != nil
+	}, time.Second, 10*time.Millisecond, "version child survived cancellation")
 }

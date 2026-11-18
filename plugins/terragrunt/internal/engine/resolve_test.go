@@ -354,7 +354,8 @@ func TestOverlayRejectsLockFilesAndCarriesModes(t *testing.T) {
 
 func TestBackendDownloadDirectoryFromReadConfigInputs(t *testing.T) {
 	for name, expression := range map[string]string{
-		"direct": `download_dir = try(read_terragrunt_config("settings.hcl").inputs.cache, "fallback-cache")`,
+		"directory": `download_dir = try(read_terragrunt_config("settings").inputs.cache, "fallback-cache")`,
+		"direct":    `download_dir = try(read_terragrunt_config("settings.hcl").inputs.cache, "fallback-cache")`,
 		"local": `locals { settings = read_terragrunt_config("settings.hcl") }
 download_dir = try(local.settings.inputs.cache, "fallback-cache")`,
 	} {
@@ -366,6 +367,10 @@ remote_state {
 }
 `)
 			settings := filepath.Join(filepath.Dir(request.Path), "settings.hcl")
+			if name == "directory" {
+				settings = filepath.Join(filepath.Dir(request.Path), "settings", "terragrunt.hcl")
+				require.NoError(t, os.MkdirAll(filepath.Dir(settings), 0o755))
+			}
 			require.NoError(t, os.WriteFile(settings, []byte(`inputs = { cache = "configured-cache" }`), 0o644))
 			full, err := Resolve(t.Context(), request)
 			require.NoError(t, err)
@@ -400,14 +405,16 @@ func TestInputProjection(t *testing.T) {
 		{"unrelated", `download_dir = "cache"`, `inputs = { unrelated = run_cmd("must-not-run") }`, nil, []string{"inputs", "run_cmd"}},
 		{"attribute", `download_dir = read_terragrunt_config("settings.hcl").inputs.cache`, `inputs = { cache = "configured", unrelated = run_cmd("must-not-run") }`, []string{"configured"}, []string{"run_cmd"}},
 		{"index", `download_dir = read_terragrunt_config("settings.hcl")["inputs"]["cache"]`, `inputs = { cache = "configured", unrelated = run_cmd("must-not-run") }`, []string{"configured"}, []string{"run_cmd"}},
-		{"transitive", `download_dir = read_terragrunt_config("settings.hcl").inputs.cache`, `inputs = { base = "configured", cache = read_terragrunt_config("other.hcl").inputs.base, unrelated = run_cmd("must-not-run") }`, []string{"configured", "other.hcl"}, []string{"run_cmd"}},
+		{"transitive", `download_dir = read_terragrunt_config("settings.hcl").inputs.cache`, `inputs = { base = "configured", cache = read_terragrunt_config("other.hcl").inputs.base, unrelated = run_cmd("must-not-run") }`, []string{"other.hcl"}, []string{"configured", "run_cmd"}},
 		{"whole map", `download_dir = lookup(read_terragrunt_config("settings.hcl").inputs, "cache", "fallback")`, `inputs = { cache = "configured" }`, []string{"configured"}, nil},
 		{"computed map", `download_dir = read_terragrunt_config("settings.hcl").inputs.cache`, `inputs = merge({cache = "configured"}, {})`, []string{"configured", "merge"}, nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			references := newInputReferences("terragrunt.hcl")
-			references.project("terragrunt.hcl", []byte(test.reference))
-			projected := references.project("settings.hcl", []byte(test.inputs))
+			references := newInputReferences("terragrunt.hcl", afero.NewMemMapFs())
+			_, err := references.project("terragrunt.hcl", []byte(test.reference))
+			require.NoError(t, err)
+			projected, err := references.project("settings.hcl", []byte(test.inputs))
+			require.NoError(t, err)
 			_, diagnostics := hclsyntax.ParseConfig(projected, "settings.hcl", hcl.InitialPos)
 			require.False(t, diagnostics.HasErrors(), diagnostics.Error())
 			for _, want := range test.present {
@@ -420,7 +427,9 @@ func TestInputProjection(t *testing.T) {
 	}
 	t.Run("invalid syntax", func(t *testing.T) {
 		data := []byte("inputs = {")
-		require.Equal(t, data, newInputReferences("terragrunt.hcl").project("invalid.hcl", data))
+		projected, err := newInputReferences("terragrunt.hcl", afero.NewMemMapFs()).project("invalid.hcl", data)
+		require.NoError(t, err)
+		require.Equal(t, data, projected)
 	})
 }
 
@@ -432,7 +441,7 @@ func TestBackendProbePropagatesStatFailure(t *testing.T) {
 	_, statErr := file.Stat()
 	var expected *os.PathError
 	require.ErrorAs(t, statErr, &expected)
-	probe := withoutInputsFS{Fs: afero.NewOsFs(), inputs: newInputReferences(file.Name())}
+	probe := withoutInputsFS{Fs: afero.NewOsFs(), inputs: newInputReferences(file.Name(), afero.NewOsFs())}
 	result, err := probe.projectFile(file, file.Name())
 	require.ErrorIs(t, err, expected.Err)
 	var actual *os.PathError
@@ -445,7 +454,7 @@ func TestBackendProbePropagatesStatFailure(t *testing.T) {
 func TestBackendProbePreservesDirectoryHandle(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "directory.hcl")
 	require.NoError(t, os.Mkdir(dir, 0o755))
-	probe := withoutInputsFS{Fs: afero.NewOsFs(), inputs: newInputReferences("terragrunt.hcl")}
+	probe := withoutInputsFS{Fs: afero.NewOsFs(), inputs: newInputReferences("terragrunt.hcl", afero.NewMemMapFs())}
 	file, err := probe.Open(dir)
 	require.NoError(t, err)
 	defer file.Close()
@@ -462,4 +471,29 @@ func TestBackendGenerationOverlayPreservesCallerRequest(t *testing.T) {
 	_, err := backendGenerationOverlay(t.Context(), &request, nil)
 	require.Error(t, err)
 	require.Equal(t, original, request)
+}
+
+func TestBackendInputProjectionUsesTargetFile(t *testing.T) {
+	request := nativeUnit(t, `download_dir = read_terragrunt_config("settings.hcl").inputs.cache`)
+	request.Phase = "backend"
+	root := filepath.Dir(request.Path)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "settings.hcl"), []byte(`inputs = {
+ cache = read_terragrunt_config("other.hcl").inputs.base
+}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "other.hcl"), []byte(`inputs = {
+ base = "configured-cache"
+ cache = run_cmd("must-not-run")
+}`), 0o644))
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Contains(t, result.WorkingDir, "configured-cache")
+}
+
+func TestBackendInputProjectionRejectsUnknownTarget(t *testing.T) {
+	request := nativeUnit(t, `download_dir = try(read_terragrunt_config(get_env("SETTINGS_FILE")).inputs.cache, "fallback-cache")`)
+	request.Phase = "backend"
+	request.Environment["SETTINGS_FILE"] = "settings.hcl"
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), "settings.hcl"), []byte(`inputs = { cache = "configured-cache" }`), 0o644))
+	_, err := Resolve(t.Context(), request)
+	require.ErrorContains(t, err, errInputReferenceTarget.Error(), "an unknown target must not silently select a fallback or evaluate unrelated inputs")
 }
