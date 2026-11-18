@@ -1196,7 +1196,7 @@ BSD LICENSED DEPENDENCIES
 
   - go4.org/netipx
     License: BSD-3-Clause
-    URL: https://github.com/go4org/netipx/blob/fdeea329fbba/LICENSE
+    URL: https://github.com/go4org/netipx/blob/3075585bcbeb/LICENSE
 
   - golang.org/x/crypto
     License: BSD-3-Clause
