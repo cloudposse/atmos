@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ssh/self provider",
+  "description": "A provider with no authority: the key is self-asserted. It takes no configuration.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {}
+}

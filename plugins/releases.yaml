@@ -12,3 +12,12 @@ packages:
       - pkg/plugin/oci/**
       - sdk/**
       - proto/**
+  ssh:
+    path: plugins/ssh
+    repository: oci://ghcr.io/cloudposse/atmos/plugins/ssh
+    inputs:
+      - .github/workflows/plugin-packages.yaml
+      - pkg/plugin/build/**
+      - pkg/plugin/oci/**
+      - sdk/**
+      - proto/**

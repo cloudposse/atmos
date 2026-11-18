@@ -1,0 +1,33 @@
+version: 1
+commands:
+  - name: ssh
+    arguments: [help]
+    exit_code: 0
+    stdout: |
+      Manage SSH keys and the agent that serves them.
+
+      Usage:
+        key list                          Keys on this machine, across key stores.
+        key show <name> [--format F]      Print a key. F is authorized-key (default),
+                                          allowed-signers, github, or json.
+        key status [<name>]               Each key's store, requirements, authority,
+                                          expiry, and the last login result and error.
+        key delete <name> --yes           Delete the local key and its agent entry. The
+                                          authority is updated at the next login or logout.
+        agent start | stop | status       Run, stop, or inspect the agent service.
+        agent log [--lines N]             Print the tail of the audit log.
+        test <identity> [--soak D] [--interval D]
+                                          Sign a Git payload through the identity's socket
+                                          and verify it. --soak repeats it every interval
+                                          for D, one line per attempt.
+        help                              Print this text.
+
+      Flags:
+        --root <dir>    Use this data directory instead of the default. The "root" entry
+                        of the command's config does the same.
+        --store <kind>  Pick the key store when a name exists in more than one.
+
+      Keys are created by "atmos auth login". Commands never contact an authority.
+steps:
+  - type: shell
+    command: go test ./...

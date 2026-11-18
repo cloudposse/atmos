@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ssh command settings",
+  "description": "Settings under plugins.packages.<alias>.config for the ssh command.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "root": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The plugin's data directory, when it is not the default. Use the same value as the identities' spec.root."
+    }
+  }
+}
