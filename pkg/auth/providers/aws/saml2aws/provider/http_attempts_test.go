@@ -67,8 +67,8 @@ func TestClientDo_NilOptions(t *testing.T) {
 	require.NoError(t, err)
 	req, err := http.NewRequest(http.MethodGet, ts.URL, http.NoBody)
 	require.NoError(t, err)
-	var resp *http.Response
-	require.NotPanics(t, func() { resp, err = hc.Do(req) })
+	// A nil-options panic would fail the test on its own.
+	resp, err := hc.Do(req)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
 }
