@@ -22,6 +22,9 @@ func TestResolveWithholdsTransformedSensitiveInputCommandOutput(t *testing.T) {
 		{"transform inside", "sensitive(upper(%s))", true},
 		{"transform outside", "upper(sensitive(%s))", true},
 		{"nested input", "{ key = sensitive(upper(%s)) }", true},
+		{"merge overwrite", `merge({ token = sensitive(%s) }, { token = "replacement" })`, true},
+		{"merge disjoint", `merge({ token = sensitive(%s) }, { public = "visible" })`, false},
+		{"merge unknown keys", `merge({ token = sensitive(%s) }, jsondecode("{\"token\":\"replacement\"}"))`, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			call := effectCommand(t, "raw-secret-73ea")
@@ -60,8 +63,8 @@ func TestApplyTimeReparseWithholdsTransformedSensitiveInput(t *testing.T) {
 	environment, err := evaluationEnvironment(ctx, &request, nil, request.Path)
 	require.NoError(t, err)
 	pctx := requestParsingContext(&request, request.Path)
-	unit := unitEvaluator{logger: l, environment: environment, pctx: pctx, request: &request, path: request.Path}
-	cfg, err := unit.parseUnit(ctx)
+	evaluator := unitEvaluator{logger: l, environment: environment, pctx: pctx, request: &request, path: request.Path}
+	cfg, err := evaluator.parseUnit(ctx)
 	require.NoError(t, err)
 	body, err := os.ReadFile(request.Path)
 	require.NoError(t, err)
@@ -69,7 +72,7 @@ func TestApplyTimeReparseWithholdsTransformedSensitiveInput(t *testing.T) {
 	require.NoError(t, os.WriteFile(request.Path, body, 0o600))
 	l.Debug("before apply-raw-secret")
 	require.NotContains(t, sink.Entries()[0].Message, "withheld")
-	_, _, err = unit.unitExecution(ctx, cfg)
+	_, _, err = evaluator.unitExecution(ctx, cfg, &sensitivityScan{})
 	require.NoError(t, err)
 	entries := sink.Entries()
 	require.Len(t, entries, 1)
@@ -107,4 +110,24 @@ func TestSensitiveInputsSelectExposedInclude(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestApplyValidationFailureRetainsSensitiveFileReads(t *testing.T) {
+	request := nativeUnit(t, "include \"extra\" {\n path = get_terraform_command() == \"apply\" ? \"${get_terragrunt_dir()}/apply.hcl\" : \"${get_terragrunt_dir()}/plan.hcl\"\n}\n")
+	request.Environment[effectChildEnv] = "1"
+	dir := filepath.Dir(request.Path)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "plan.hcl"), []byte("inputs = {}\n"), 0o600))
+	body := fmt.Sprintf("locals {\n token = sensitive(%s)\n args = get_terraform_cli_args()\n}\n", effectCommand(t, "apply-validation-secret"))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "apply.hcl"), []byte(body), 0o600))
+	sink := NewLogSink("debug", request.BasePath)
+	logger(t, sink).Debug("before apply-validation-secret")
+	_, err := Resolve(WithLogSink(t.Context(), sink), request)
+	require.ErrorIs(t, err, ErrUnsupportedExecution)
+	effects, err := os.ReadFile(filepath.Join(request.BasePath, "effects"))
+	require.NoError(t, err)
+	require.Contains(t, string(effects), "apply-validation-secret")
+	entries := sink.Entries()
+	require.Len(t, entries, 1)
+	require.Contains(t, entries[0].Message, "withheld")
+	require.NotContains(t, entries[0].Message, "apply-validation-secret")
 }

@@ -66,6 +66,8 @@ type Session struct {
 	settingsErrs map[string]error
 	// options holds the provider-owned keys of each enabled section, by section name.
 	options map[string]map[string]any
+	// providerOptionValues retains environment declarations for preparation overrides.
+	providerOptionValues map[string]map[string]schema.ComponentProviderOption
 	// prepared records the state identity each instance was prepared with, so a
 	// dependent's output reads can be checked against it within this invocation.
 	prepared sync.Map
@@ -82,7 +84,7 @@ func New(ctx context.Context, config *schema.AtmosConfiguration, command string,
 	if !filepath.IsAbs(root) || loader == nil {
 		return nil, errUtils.ErrPluginInvalidConfig
 	}
-	s := &Session{ctx: ctx, root: root, command: command, loader: loader, done: make(chan struct{}), importProviders: make(map[string]*pluginv1.DiscoverComponentsRequest), importResults: make(map[string][]*pluginv1.DiscoveredComponent), imported: make(map[string]*pluginv1.DiscoveredComponent), options: make(map[string]map[string]any)}
+	s := &Session{ctx: ctx, root: root, command: command, loader: loader, done: make(chan struct{}), importProviders: make(map[string]*pluginv1.DiscoverComponentsRequest), importResults: make(map[string][]*pluginv1.DiscoveredComponent), imported: make(map[string]*pluginv1.DiscoveredComponent), options: make(map[string]map[string]any), providerOptionValues: make(map[string]map[string]schema.ComponentProviderOption)}
 	seen := make(map[string]bool)
 	for _, name := range slices.Sorted(maps.Keys(config.Components.Terraform.ConfigurationProviders)) {
 		settings := config.Components.Terraform.ConfigurationProviders[name]
@@ -118,11 +120,17 @@ func (s *Session) addProvider(config *schema.AtmosConfiguration, scheme string, 
 		s.rejectSection(scheme, invalidSetting(settingsKey(scheme), "The settings cannot be read", "Remove keys under the section that repeat a built-in setting such as `enabled`, `provider`, `mode`, or `discovery`."))
 		return
 	}
-	options, err := operationOptions(config.ComponentProviderOptions[scheme])
+	optionValues, err := snapshotProviderOptions(config.ComponentProviderOptions[scheme])
+	if err != nil {
+		s.configErr = errors.Join(s.configErr, err)
+		return
+	}
+	options, err := operationOptions(optionValues, request.Invocation.Environment)
 	if err != nil {
 		s.configErr = errors.Join(s.configErr, invalidSetting(settingsKey(scheme), "The provider options of the command line cannot be encoded", "Check the values of the provider flags."))
 		return
 	}
+	s.providerOptionValues[name] = optionValues
 	request.Operation.Mode, request.Operation.Options = operationMode(settings), options
 	s.options[scheme] = settings.Options
 	s.importProviders[scheme] = proto.Clone(request).(*pluginv1.DiscoverComponentsRequest)

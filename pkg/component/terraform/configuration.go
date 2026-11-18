@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2"
@@ -22,7 +23,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/backend"
@@ -203,6 +203,10 @@ func prepareForRebuild(ctx context.Context, config *schema.AtmosConfiguration, i
 	prepared, err := config.ComponentConfigurations.Prepare(ctx, &fresh)
 	if err != nil || prepared == nil {
 		return nil, err
+	}
+	// A reviewed absence of IAM is a binding too, not permission to assume a new role.
+	if !reflect.DeepEqual(prepared.IAM, rebuild.plan.Prepared.IAM) {
+		return nil, fmt.Errorf("%w: reviewed IAM settings changed between role and unit evaluation", errUtils.ErrPlanVerificationFailed)
 	}
 	digest, err := backendIdentityDigest(prepared.Backend)
 	if err != nil {
@@ -471,14 +475,6 @@ func checkConfigurationWorkspace(info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
-// Workdir runtime paths generated artifacts must never write. They mirror the paths the
-// workdir sync preserves: Terraform data and workspace-state directories, Atmos metadata,
-// provider lock files at any depth, and the default local-backend state files at the root.
-var (
-	runtimeArtifactDirs  = map[string]bool{".terraform": true, "terraform.tfstate.d": true, provWorkdir.AtmosDir: true}
-	runtimeArtifactFiles = map[string]bool{"terraform.tfstate": true, "terraform.tfstate.backup": true, ".terraform.tfstate.lock.info": true}
-)
-
 // rejectRuntimeArtifacts checks the whole artifact set before any file is written, so a
 // generated file can never replace Terraform state, provider locks, or workdir metadata,
 // even with an overwrite policy.
@@ -492,14 +488,14 @@ func rejectRuntimeArtifacts(files []schema.ComponentConfigurationFile) error {
 }
 
 func isRuntimeArtifact(path string) bool {
-	path = filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
-	if runtimeArtifactFiles[path] || strings.HasSuffix(path, provisioner.CanonicalLockFilename) {
-		return true
+	return configuration.IsRuntimeArtifact(path)
+}
+
+// recheckReviewedApply runs inside each subprocess attempt, after before hooks and recovery init.
+func recheckReviewedApply(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if info.DryRun || !schema.ConfigurationOwned(info.ComponentSettingsSection) || !usesConfigurationPlan(info) || !restoresConfigurationPlan(info) {
+		return nil
 	}
-	for _, segment := range strings.Split(path, "/") {
-		if runtimeArtifactDirs[segment] {
-			return true
-		}
-	}
-	return false
+	_, err := restoreConfigurationPlan(ctx, config, info)
+	return err
 }

@@ -164,7 +164,7 @@ func processIncludeTagInternal(
 			data, err := os.ReadFile(localFile)
 			if err != nil {
 				return false, fmt.Errorf("%w: %s, stack manifest: %s, error: %w",
-					ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
+					ErrIncludeYamlFunctionFailedStackManifest, RedactIncludeArgument(val), RedactIncludeArgument(file), err)
 			}
 			if err := spliceYAMLText(atmosConfig, node, string(data), includeSplice{query: includeQuery, eval: evalFunctions, val: val, file: file}); err != nil {
 				return false, err
@@ -198,7 +198,7 @@ func processIncludeTagInternal(
 				text = string(v)
 			default:
 				return false, fmt.Errorf("%w: %s, stack manifest: %s, error: unexpected remote content type %T",
-					ErrIncludeYamlFunctionFailedStackManifest, val, file, raw)
+					ErrIncludeYamlFunctionFailedStackManifest, RedactIncludeArgument(val), RedactIncludeArgument(file), raw)
 			}
 			// Nested paths inside remote content keep the outer manifest as
 			// their context; there is no local directory to resolve against.
@@ -296,7 +296,7 @@ func spliceYAMLText(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, yam
 		evaluated, err := evaluateIncludeQuery(atmosConfig, yamlText, query)
 		if err != nil {
 			return fmt.Errorf("%w: %s, stack manifest: %s, error: %w",
-				ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
+				ErrIncludeYamlFunctionFailedStackManifest, RedactIncludeArgument(val), RedactIncludeArgument(file), err)
 		}
 		yamlText = evaluated
 	}
@@ -518,10 +518,17 @@ func processLocalFile(localFile string, forceRaw bool) (any, error) {
 	return filetype.ParseFileByExtension(os.ReadFile, localFile)
 }
 
-// processRemoteFile downloads and parses a remote file.
+// processRemoteFile downloads and parses a remote file. A credential in the include target is
+// removed from the text of any error, because the download layers quote the reference they fail on.
 func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile string, forceRaw bool) (any, error) {
 	defer perf.Track(atmosConfig, "utils.processRemoteFile")()
 
+	res, err := fetchRemoteFile(atmosConfig, includeFile, forceRaw)
+	return res, redactIncludeError(err, includeFile)
+}
+
+// fetchRemoteFile downloads and parses a remote file.
+func fetchRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile string, forceRaw bool) (any, error) {
 	// oci:// sources need one file picked out of the pulled image, which go-getter's own
 	// "//subdir" handling cannot do (it only copies directories), so the pick happens here
 	// after the shared OCI getter has pulled the image.
@@ -571,7 +578,7 @@ func processOCIIncludeFile(atmosConfig *schema.AtmosConfiguration, includeFile s
 
 	imageRef, subdir := getter.SourceDirSubdir(includeFile)
 	if subdir == "" {
-		return nil, fmt.Errorf("%w: '%s'", ErrIncludeYamlFunctionOCIMissingPath, includeFile)
+		return nil, fmt.Errorf("%w: '%s'", ErrIncludeYamlFunctionOCIMissingPath, RedactIncludeArgument(includeFile))
 	}
 
 	tempDir, err := os.MkdirTemp("", "atmos-include-oci-*")
@@ -587,16 +594,18 @@ func processOCIIncludeFile(atmosConfig *schema.AtmosConfiguration, includeFile s
 	// survive. It applies ociIncludeTimeout itself, so no extra deadline is set here.
 	dl := downloader.NewGoGetterDownloader(atmosConfig).(downloader.ContextFileDownloader)
 	if _, err := dl.FetchWithMetadataContext(context.Background(), imageRef, tempDir, downloader.ClientModeDir, ociIncludeTimeout); err != nil {
-		return nil, fmt.Errorf("%w: '%s': %w", ErrIncludeYamlFunctionFailedStackManifest, includeFile, err)
+		return nil, redactIncludeError(fmt.Errorf("%w: '%s': %w", ErrIncludeYamlFunctionFailedStackManifest, RedactIncludeArgument(includeFile), err), includeFile)
 	}
 
 	localFile, err := filesystem.SafeJoin(tempDir, subdir)
 	if err != nil {
-		return nil, fmt.Errorf("%w: '%s': %w", ErrIncludeYamlFunctionInvalidFile, includeFile, err)
+		return nil, redactIncludeError(fmt.Errorf("%w: '%s': %w", ErrIncludeYamlFunctionInvalidFile, RedactIncludeArgument(includeFile), err), includeFile)
 	}
 
 	if !FileExists(localFile) {
-		return nil, fmt.Errorf("%w: oci artifact '%s' does not contain '%s'", ErrIncludeYamlFunctionInvalidFile, imageRef, subdir)
+		// The subdirectory is cut from the include target at its first "//", so a password that
+		// holds one leaves a fragment of itself in it: the whole message is scrubbed against the target.
+		return nil, redactIncludeError(fmt.Errorf("%w: oci artifact '%s' does not contain '%s'", ErrIncludeYamlFunctionInvalidFile, RedactIncludeArgument(imageRef), subdir), includeFile)
 	}
 
 	return processLocalFile(localFile, forceRaw)
@@ -641,15 +650,15 @@ func unmarshalYamlContent(y string, val string, file string) (*yaml.Node, error)
 	var includedNode yaml.Node
 	err := yaml.Unmarshal([]byte(y), &includedNode)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s, stack manifest: %s, error: %v",
-			ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
+		return nil, fmt.Errorf("%w: %s, stack manifest: %s, error: %w",
+			ErrIncludeYamlFunctionFailedStackManifest, RedactIncludeArgument(val), RedactIncludeArgument(file), err)
 	}
 
 	// yaml.Unmarshal creates a DocumentNode, we need to use its content
 	if includedNode.Kind == yaml.DocumentNode {
 		if len(includedNode.Content) == 0 {
 			return nil, fmt.Errorf("%w: %s, stack manifest: %s, error: empty document",
-				ErrIncludeYamlFunctionFailedStackManifest, val, file)
+				ErrIncludeYamlFunctionFailedStackManifest, RedactIncludeArgument(val), RedactIncludeArgument(file))
 		}
 		return includedNode.Content[0], nil
 	}

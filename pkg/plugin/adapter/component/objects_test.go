@@ -205,3 +205,38 @@ func TestDecodeInputsRejectsUnknownSetElementWithoutExposingKey(t *testing.T) {
 	})}}
 	require.Empty(t, formatPath(path))
 }
+
+func TestUnknownInputErrorsRespectSensitivePaths(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		paths     []*pluginv1.ComponentValuePath
+		protected bool
+	}{
+		{"unmarked", nil, false},
+		{"whole inputs", []*pluginv1.ComponentValuePath{{}}, true},
+		{"map", []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: "zone"}}}}}, true},
+		{"other input", []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: "public"}}}}}, false},
+		{"invalid path", []*pluginv1.ComponentValuePath{nil}, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			value := objectWireValue(t, cty.ObjectVal(map[string]cty.Value{
+				"zone": cty.MapVal(map[string]cty.Value{"private-map-key-4ed1": cty.UnknownVal(cty.String)}), "public": cty.StringVal("visible"),
+			}))
+			value.SensitivePaths = test.paths
+			_, err := DecodeInputs(value)
+			require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+			text := err.Error() + strings.Join(errUtils.AllDetails(err), "\n")
+			if test.protected {
+				require.NotContains(t, text, "private-map-key-4ed1")
+			} else {
+				require.Contains(t, text, "private-map-key-4ed1")
+			}
+		})
+	}
+	root := objectWireValue(t, cty.MapVal(map[string]cty.Value{"private-input-name": cty.UnknownVal(cty.String)}))
+	root.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	_, err := DecodeInputs(root)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	require.NotContains(t, err.Error()+strings.Join(errUtils.AllDetails(err), "\n"), "private-input-name")
+	require.True(t, errUtils.HasContext(err, "input", "sensitive"))
+}

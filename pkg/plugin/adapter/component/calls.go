@@ -166,9 +166,6 @@ func checkPreparationResponse(result *pluginv1.PrepareComponentResponse, mode st
 	if result == nil {
 		return errUtils.ErrPluginProtocol
 	}
-	if err := firstDiagnosticError(result.Diagnostics); err != nil {
-		return err
-	}
 	// IAM is resolved before module evaluation. This response may carry only the
 	// role settings and diagnostics/logs, never a prepared module or artifacts.
 	remaining := proto.Clone(result).(*pluginv1.PrepareComponentResponse)
@@ -178,5 +175,9 @@ func checkPreparationResponse(result *pluginv1.PrepareComponentResponse, mode st
 	if proto.Size(remaining) != 0 {
 		return errUtils.ErrPluginProtocol
 	}
-	return nil
+	// Validate and register the token before diagnostic details can reach the logger.
+	if _, err := DecodeString(result.GetIam().GetWebIdentityToken()); err != nil {
+		return err
+	}
+	return firstDiagnosticError(result.Diagnostics)
 }

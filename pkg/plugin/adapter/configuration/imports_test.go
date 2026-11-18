@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -45,10 +46,17 @@ func TestImportedUnitsBecomeComponentsOfTheImportingStack(t *testing.T) {
 	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
 	network, app := unit(t, "network"), unit(t, "app")
 	app.Dependencies = []*pluginv1.ComponentDependency{{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT}}
+	discoveryCalls := 0
 	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
-		require.Empty(t, req.IncludePaths, "imports are not limited by included_paths")
+		if discoveryCalls == 0 {
+			require.Empty(t, req.IncludePaths, "imports are not limited by included_paths")
+			require.Equal(t, []string{"terragrunt://live"}, req.Imports)
+		} else {
+			require.Equal(t, []string{"live/app/terragrunt.hcl", "live/network/terragrunt.hcl", "root.hcl"}, req.IncludePaths)
+			require.Empty(t, req.Imports, "the recheck must not rescan the entire import")
+		}
+		discoveryCalls++
 		require.Empty(t, req.ExcludePaths, "imports are not filtered by excluded_paths")
-		require.Equal(t, []string{"terragrunt://live"}, req.Imports)
 		require.Nil(t, req.Effects)
 		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil
 	}).Times(2) // The import, then the dependency recheck that preparation runs under its own environment.
@@ -665,6 +673,15 @@ func TestDependencyPreparedStateIsComparedAcrossSeparateImports(t *testing.T) {
 			network, app := unit(t, "network"), unit(t, "app")
 			app.Dependencies = []*pluginv1.ComponentDependency{{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT}}
 			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+				if len(request.Imports) == 0 {
+					require.Len(t, request.IncludePaths, 2)
+					require.Contains(t, request.IncludePaths, "root.hcl")
+					if slices.Contains(request.IncludePaths, network.Source) {
+						return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network}}, nil
+					}
+					require.Contains(t, request.IncludePaths, app.Source)
+					return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{app}}, nil
+				}
 				require.Len(t, request.Imports, 1)
 				if request.Imports[0] == "terragrunt://live/network" {
 					return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network}}, nil

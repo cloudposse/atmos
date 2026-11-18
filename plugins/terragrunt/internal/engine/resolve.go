@@ -4,25 +4,26 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
+	"sync/atomic"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/gruntwork-io/terragrunt/pkg/log/format"
 	"github.com/gruntwork-io/terragrunt/pkg/options"
-	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
+
+var errUndecidableDestroyPolicy = errors.New("prevent_destroy cannot be determined without effects denied by the read-only guard")
 
 // Resolve evaluates HCL using the pinned Terragrunt parser.
 //
@@ -227,10 +228,15 @@ func (e *unitEvaluator) checkDestroyGuard(ctx context.Context) error {
 	if e.request.Phase == phaseBackend || (e.request.Command != "plan" && e.request.Command != "apply" && e.request.Command != "destroy") {
 		return nil
 	}
-	guard, err := config.PartialParseConfigFile(ctx, e.logger, atmosbridge.Discovery(e.environment, false),
+	var denied atomic.Bool
+	guardEnvironment := atmosbridge.DiscoveryObserved(e.environment, false, func() { denied.Store(true) })
+	guard, err := config.PartialParseConfigFile(ctx, e.logger, guardEnvironment,
 		e.pctx.WithDecodeList(config.TerragruntFlags, config.TerraformExtraArgs), e.path, nil)
 	if err != nil {
 		return failedDestroyGuard(e.request, e.environment.FS, e.path, err)
+	}
+	if denied.Load() {
+		return failedDestroyGuard(e.request, e.environment.FS, e.path, errUndecidableDestroyPolicy)
 	}
 	return checkPreventDestroy(e.request, guard)
 }
@@ -287,7 +293,7 @@ func literalPreventDestroy(body *hclsyntax.Body, parseErr error) error {
 // unitExecution returns hooks and extra arguments as data for the host to run;
 // evaluation never executes them. Backend identity is read from a partial parse
 // that does not decode them.
-func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.TerragruntConfig) (*model.Execution, []string, error) {
+func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.TerragruntConfig, scan *sensitivityScan) (*model.Execution, []string, error) {
 	if e.request.Phase == phaseBackend {
 		return nil, nil, nil
 	}
@@ -298,6 +304,8 @@ func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.Terragrun
 	finalizeExecution(execution, e.path)
 	reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
 		parsed, err := config.ParseConfigFile(ctx, e.logger, e.environment, apply, e.path, nil)
+		// Retain reads even when later execution validation rejects the reparse.
+		scan.applyFiles = append(scan.applyFiles, apply.FilesRead.Paths()...)
 		if err != nil {
 			// The apply-time values are unknown, and the unit's own inputs and locals no longer count as
 			// registered: whatever Terragrunt logged before failing may carry them.
@@ -309,7 +317,7 @@ func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.Terragrun
 		}
 		// Apply-time values can differ from the ones planned, so register them before any event is returned.
 		sink := logSinkFrom(ctx)
-		redactUnitInputs(sink, e.environment.FS, append(apply.FilesRead.Paths(), e.path), e.path, parsed.Inputs)
+		redactUnitInputs(sink, e.environment.FS, append(apply.FilesRead.Paths(), e.path), e.path, parsed)
 		redactLocals(sink, e.environment.FS, e.path, parsed.Locals)
 		return parsed, nil
 	}
@@ -319,7 +327,7 @@ func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.Terragrun
 func (e *unitEvaluator) parseUnit(ctx context.Context) (*config.TerragruntConfig, error) {
 	environment := e.environment
 	if e.request.Phase == phaseBackend {
-		environment = environment.WithFS(withoutInputsFS{Fs: environment.FS, inputs: newInputReferences(e.path)})
+		environment = environment.WithFS(withoutInputsFS{Fs: environment.FS, inputs: newInputReferences(e.path, environment.FS)})
 		cfg, err := config.PartialParseConfigFile(ctx, e.logger, environment, e.pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), e.path, nil)
 		if err != nil {
 			return nil, err
@@ -396,166 +404,18 @@ func (f withoutInputsFS) projectFile(file afero.File, name string) (afero.File, 
 	if err != nil {
 		return nil, err
 	}
+	projected, err := f.inputs.project(name, data)
+	if err != nil {
+		return nil, err
+	}
 	memory := afero.NewMemMapFs()
-	if err := afero.WriteFile(memory, name, f.inputs.project(name, data), probeFileMode); err != nil {
+	if err := afero.WriteFile(memory, name, projected, probeFileMode); err != nil {
 		return nil, err
 	}
 	return memory.Open(name)
 }
 
-const inputsAttribute = "inputs"
-
-// inputReferences tracks input keys used by the probe, including references in
-// retained input values. A whole-map or dynamic reference requires all inputs.
-// The parser may read included files concurrently.
-type inputReferences struct {
-	mu   sync.Mutex
-	root string
-	keys map[string]bool
-	all  bool
-}
-
-func newInputReferences(root string) *inputReferences {
-	return &inputReferences{root: root, keys: map[string]bool{}}
-}
-
-// project preserves syntax errors for the upstream parser to diagnose.
-func (r *inputReferences) project(name string, data []byte) []byte {
-	parsed, diags := hclsyntax.ParseConfig(data, name, hcl.InitialPos)
-	if diags.HasErrors() {
-		return data
-	}
-	body := parsed.Body.(*hclsyntax.Body)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.collectBody(body)
-	inputs := body.Attributes[inputsAttribute]
-	if inputs == nil {
-		return data
-	}
-	file, _ := hclwrite.ParseConfig(data, name, hcl.InitialPos)
-	if name == r.root || (!r.all && len(r.keys) == 0) {
-		file.Body().RemoveAttribute(inputsAttribute)
-		return file.Bytes()
-	}
-	if r.all {
-		return data
-	}
-	object, ok := inputs.Expr.(*hclsyntax.ObjectConsExpr)
-	if !ok {
-		// Computed maps cannot be safely pruned without evaluating their expression.
-		r.collect(inputs.Expr)
-		return data
-	}
-	r.expand(object)
-	if r.all {
-		return data
-	}
-	file.Body().SetAttributeRaw(inputsAttribute, r.objectTokens(object, data, name))
-	return file.Bytes()
-}
-
-func (r *inputReferences) collectBody(body *hclsyntax.Body) {
-	for name, attr := range body.Attributes {
-		if name != inputsAttribute {
-			r.collect(attr.Expr)
-		}
-	}
-	for _, block := range body.Blocks {
-		r.collect(block.Body)
-	}
-}
-
-func (r *inputReferences) expand(object *hclsyntax.ObjectConsExpr) {
-	// A selected value may reference another input key. Reach a fixed point before
-	// pruning so source order does not determine which values survive.
-	for {
-		count := len(r.keys)
-		for _, item := range object.Items {
-			key, diags := item.KeyExpr.Value(nil)
-			if diags.HasErrors() || !key.IsKnown() || key.IsNull() || key.Type() != cty.String {
-				// Preserve computed keys rather than silently selecting a fallback path.
-				r.all = true
-				return
-			}
-			if r.keys[key.AsString()] {
-				r.collect(item.ValueExpr)
-			}
-		}
-		if r.all {
-			return
-		}
-		if count == len(r.keys) {
-			return
-		}
-	}
-}
-
-func (r *inputReferences) objectTokens(object *hclsyntax.ObjectConsExpr, data []byte, name string) hclwrite.Tokens {
-	var attributes []hclwrite.ObjectAttrTokens
-	for _, item := range object.Items {
-		key, _ := item.KeyExpr.Value(nil)
-		if !r.keys[key.AsString()] {
-			continue
-		}
-		// Reparse the value as an attribute to preserve arbitrary HCL expressions.
-		value := item.ValueExpr.Range().SliceBytes(data)
-		expression, _ := hclwrite.ParseConfig(append(append([]byte("value = "), value...), '\n'), name, hcl.InitialPos)
-		attributes = append(attributes, hclwrite.ObjectAttrTokens{
-			Name:  hclwrite.TokensForValue(key),
-			Value: expression.Body().GetAttribute("value").Expr().BuildTokens(nil),
-		})
-	}
-	return hclwrite.TokensForObject(attributes)
-}
-
-func (r *inputReferences) collect(node hclsyntax.Node) {
-	_ = hclsyntax.VisitAll(node, func(node hclsyntax.Node) hcl.Diagnostics {
-		switch expression := node.(type) {
-		case *hclsyntax.ScopeTraversalExpr:
-			r.traversal(expression.Traversal)
-		case *hclsyntax.RelativeTraversalExpr:
-			r.traversal(expression.Traversal)
-		}
-		return nil
-	})
-}
-
-func (r *inputReferences) traversal(traversal hcl.Traversal) {
-	for i, step := range traversal {
-		name, _ := traversalName(step)
-		if name != inputsAttribute {
-			continue
-		}
-		if i+1 == len(traversal) {
-			r.all = true
-			return
-		}
-		key, known := traversalName(traversal[i+1])
-		if known {
-			r.keys[key] = true
-		} else {
-			r.all = true
-		}
-	}
-}
-
-func traversalName(step hcl.Traverser) (string, bool) {
-	switch step := step.(type) {
-	case hcl.TraverseRoot:
-		return step.Name, true
-	case hcl.TraverseAttr:
-		return step.Name, true
-	case hcl.TraverseIndex:
-		if step.Key.IsKnown() && !step.Key.IsNull() && step.Key.Type() == cty.String {
-			return step.Key.AsString(), true
-		}
-	}
-	return "", false
-}
-
-// unitResolution converts the parsed unit into its module identity. Local sources
-// must be existing directories; remote sources keep the identity they were written with.
+// unitResolution preserves local directory identities and remote getter URIs.
 func (e *unitEvaluator) unitResolution(ctx context.Context, cfg *config.TerragruntConfig) (*model.Resolution, error) {
 	result := &model.Resolution{Path: e.path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(e.pctx.FilesRead.Paths(), e.path)}
 	if err := unitSettings(ctx, cfg, e.request, e.path, result); err != nil {
@@ -590,4 +450,23 @@ func (e *unitEvaluator) unitResolution(ctx context.Context, cfg *config.Terragru
 	result.Files = append(result.Files, e.request.OriginFiles...)
 	result.Folders = append(result.Folders, e.request.OriginFolders...)
 	return result, nil
+}
+
+// checkInlineModule identifies inline Terraform modules and reports shared configurations to skip.
+func (d *projectDiscovery) checkInlineModule(path string) (bool, error) {
+	entries, err := afero.ReadDir(d.overlay, filepath.Dir(path))
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".tf") || strings.HasSuffix(entry.Name(), ".tf.json")) {
+			return true, nil
+		}
+	}
+	rel, _ := filepath.Rel(d.root, path)
+	d.result.Warnings = append(d.result.Warnings, model.Warning{
+		Code: model.WarningUnitWithoutSource, Path: filepath.ToSlash(rel),
+		Message: fmt.Sprintf("%s has no terraform { source } block and no Terraform files next to it, so it is treated as a shared configuration and is not listed as a component", filepath.ToSlash(rel)),
+	})
+	return false, nil
 }

@@ -254,7 +254,10 @@ func (s *Session) componentRequest(ctx context.Context, info *schema.ConfigAndSt
 	env := preparationEnvironment(info)
 	env["ATMOS_TERRAFORM_BINARY"] = info.Command
 	env["TF_WORKSPACE"] = info.TerraformWorkspace
-	mode, options := s.providerOperation(instance.Provider)
+	mode, options, err := s.providerOperation(instance.Provider, env)
+	if err != nil {
+		return nil, err
+	}
 	request := &pluginv1.ComponentRequest{
 		Provider: instance.Provider, Address: instance.Address, Source: instance.Source, RootDirectory: s.root,
 		Configuration: instance.Configuration, ProviderConfiguration: s.providerSettings(instance.Provider),

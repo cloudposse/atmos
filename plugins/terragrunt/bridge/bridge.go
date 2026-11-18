@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"path/filepath"
 
 	"github.com/gruntwork-io/terragrunt/internal/configbridge"
@@ -36,20 +37,32 @@ func Environment(env map[string]string, stdout, stderr io.Writer) *venv.Venv {
 	return venv.OSVenv().WithExec(scopedExec{Exec: vexec.NewOSExec(), environment: env}).WithEnv(env).WithReplaceEnviron(func(map[string]string) error { return nil }).WithWriter(stdout).WithErrWriter(stderr)
 }
 
-var (
-	errDiscoveryExecution  = errors.New("read-only discovery cannot execute")
-	errDiscoveryDecryption = errors.New("read-only discovery cannot decrypt")
-)
-
 // Discovery denies process execution, network access, and decryption. Only an
 // explicit stack generation phase may write its generated files.
 //
 //nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func Discovery(v *venv.Venv, generate bool) *venv.Venv {
+	return DiscoveryObserved(v, generate, func() {})
+}
+
+var (
+	errDiscoveryExecute = errors.New("read-only discovery cannot execute")
+	errDiscoveryDecrypt = errors.New("read-only discovery cannot decrypt")
+	// Preserve the classification identities used by the live-log bridge.
+	errDiscoveryExecution  = errDiscoveryExecute
+	errDiscoveryDecryption = errDiscoveryDecrypt
+)
+
+// DiscoveryObserved reports denied effects even if an HCL try expression swallows the error.
+//
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
+func DiscoveryObserved(v *venv.Venv, generate bool, denied func()) *venv.Venv {
 	v = v.WithHandler(func(_ context.Context, inv vexec.Invocation) vexec.Result {
-		return vexec.Result{Err: fmt.Errorf("%w %s", errDiscoveryExecution, inv.Name)}
-	}).WithHTTP(vhttp.NewNoNetworkClient()).WithSops(vsops.NewMemDecrypter(func(_ map[string]string, path, _ string) ([]byte, error) {
-		return nil, fmt.Errorf("%w %s", errDiscoveryDecryption, path)
+		denied()
+		return vexec.Result{Err: fmt.Errorf("%w %s", errDiscoveryExecute, inv.Name)}
+	}).WithHTTP(&http.Client{Transport: deniedTransport{base: vhttp.NewNoNetworkClient().Transport, denied: denied}}).WithSops(vsops.NewMemDecrypter(func(_ map[string]string, path, _ string) ([]byte, error) {
+		denied()
+		return nil, fmt.Errorf("%w %s", errDiscoveryDecrypt, path)
 	}))
 	if !generate {
 		v = v.WithFS(afero.NewReadOnlyFs(v.FS))
@@ -98,4 +111,16 @@ func GenerateStack(ctx context.Context, logger log.Logger, env *venv.Venv, path,
 //nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
 func IsDestroyOperation(command string, arguments []string) bool {
 	return command == "destroy" || iacargs.HasDestroyFlag(arguments)
+}
+
+// deniedTransport retains the upstream no-network error shape while recording its use.
+type deniedTransport struct {
+	base   http.RoundTripper
+	denied func()
+}
+
+//nolint:lintroller // Pure HTTP interface delegation in the standalone compatibility module.
+func (t deniedTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	t.denied()
+	return t.base.RoundTrip(request)
 }

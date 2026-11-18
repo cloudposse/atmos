@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +24,7 @@ import (
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	configadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/configuration"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 )
@@ -676,4 +680,248 @@ func TestProviderSectionFollowsTheProviderName(t *testing.T) {
 	}
 	require.Equal(t, "tg", providerSection(config, "terragrunt"))
 	require.Equal(t, "unknown", providerSection(config, "unknown"))
+}
+
+// Compile-time sentinel for the record field these tests depend on.
+var _ = configurationPlan{Modules: true}
+
+var (
+	errModuleDownload    = errors.New("module source unreachable")
+	errUnexpectedCommand = errors.New("unexpected command")
+)
+
+// reviewWithModules is reviewInDefaultWorkdir for a unit whose `init` downloaded a child module.
+func (p *reviewedPlanProject) reviewWithModules(t *testing.T, module string) string {
+	t.Helper()
+	p.explicitWorkdir = false
+	info := p.info(t, "plan")
+	p.provider.EXPECT().Prepare(gomock.Any(), info).Return(p.prepared(), nil)
+	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, p.config, info, false)
+	require.NoError(t, err)
+	p.workdir = execution.workingDir
+	writeModule(t, p.workdir, module)
+	planPath := filepath.Join(p.workdir, "reviewed.planfile")
+	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	require.NoError(t, recordConfigurationPlan(t.Context(), p.config, info, execution, []string{"-out=" + planPath}))
+	return planPath
+}
+
+func writeModule(t *testing.T, workdir, content string) {
+	t.Helper()
+	module := filepath.Join(workdir, downloadedModulesDir, "vpc", "main.tf")
+	require.NoError(t, os.MkdirAll(filepath.Dir(module), 0o755))
+	require.NoError(t, os.WriteFile(module, []byte(content), 0o600))
+}
+
+func readPlanRecord(t *testing.T, planPath string) configurationPlan {
+	t.Helper()
+	data, err := os.ReadFile(planPath + configurationPlanSuffix)
+	require.NoError(t, err)
+	var record configurationPlan
+	require.NoError(t, json.Unmarshal(data, &record))
+	return record
+}
+
+// moduleGetter uses the generated shell mock for `terraform get`: it installs the given module content into
+// the directory it runs in, or fails.
+func moduleGetter(t *testing.T, content string, failure error) *shellFixture {
+	t.Helper()
+	return newShellFixture(t, func(call *shellCall) error {
+		if !slices.Equal(call.args, []string{"get"}) {
+			return errUnexpectedCommand
+		}
+		if failure != nil {
+			return failure
+		}
+		module := filepath.Join(call.dir, downloadedModulesDir, "vpc", "main.tf")
+		if err := os.MkdirAll(filepath.Dir(module), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(module, []byte(content), 0o600)
+	})
+}
+
+// callDirs lists the directory of every call.
+func callDirs(shell *shellFixture) []string {
+	dirs := make([]string, 0, len(shell.calls))
+	for i := range shell.calls {
+		dirs = append(dirs, shell.calls[i].dir)
+	}
+	return dirs
+}
+
+// A pinned module downloads the same bytes on a fresh runner, so the rebuilt workdir verifies.
+func TestApplyOfRestoredPlanDownloadsPinnedModulesBeforeVerification(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	planPath := project.reviewWithModules(t, "# vpc v1.2.3")
+	require.True(t, readPlanRecord(t, planPath).Modules, "the record notes the downloaded modules")
+	project.freshRunner(t, planPath)
+	getter := moduleGetter(t, "# vpc v1.2.3", nil)
+	testExecutor(t).services.ExecuteShellCommand = getter.mock.Execute
+
+	_, execution, err := project.freshApply(t, planPath, project.prepared())
+
+	require.NoError(t, err)
+	require.Equal(t, []string{project.workdir}, callDirs(getter), "modules download once, into the rebuilt workdir")
+	require.Equal(t, project.workdir, execution.componentPath)
+}
+
+// A floating source that now resolves to different code rejects the plan: the modules stay in the digest.
+func TestApplyOfRestoredPlanRejectsChangedModules(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	planPath := project.reviewWithModules(t, "# vpc reviewed")
+	project.freshRunner(t, planPath)
+	testExecutor(t).services.ExecuteShellCommand = moduleGetter(t, "# vpc moved branch", nil).mock.Execute
+
+	_, _, err := project.freshApply(t, planPath, project.prepared())
+
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+}
+
+// A download failure rejects the plan rather than skipping the module check.
+func TestApplyOfRestoredPlanRejectsUnreachableModules(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	planPath := project.reviewWithModules(t, "# vpc reviewed")
+	project.freshRunner(t, planPath)
+	testExecutor(t).services.ExecuteShellCommand = moduleGetter(t, "", errModuleDownload).mock.Execute
+
+	_, _, err := project.freshApply(t, planPath, project.prepared())
+
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorIs(t, err, errModuleDownload)
+}
+
+// A plan made without downloaded modules never downloads anything on a fresh runner.
+func TestApplyOfRestoredPlanWithoutModulesDoesNotDownload(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	planPath := project.reviewInDefaultWorkdir(t)
+	require.False(t, readPlanRecord(t, planPath).Modules)
+	project.freshRunner(t, planPath)
+	getter := moduleGetter(t, "", nil)
+	testExecutor(t).services.ExecuteShellCommand = getter.mock.Execute
+
+	_, _, err := project.freshApply(t, planPath, project.prepared())
+
+	require.NoError(t, err)
+	require.Empty(t, getter.calls)
+}
+
+// The module download runs with the sanitized environment, and keeps the default one when none is set.
+func TestInstallReviewedModulesUsesSanitizedEnvironment(t *testing.T) {
+	rebuild := &reviewedRebuild{plan: &configurationPlan{Modules: true}}
+	for name, env := range map[string][]string{"sanitized": {"PATH=/sanitized", "TF_VAR_x=1"}, "unset": nil} {
+		t.Run(name, func(t *testing.T) {
+			getter := moduleGetter(t, "# vpc", nil)
+			executor := testExecutor(t)
+			executor.services.ExecuteShellCommand = getter.mock.Execute
+			info := &schema.ConfigAndStacksInfo{Command: "terraform", SanitizedEnv: env}
+
+			require.NoError(t, executor.installReviewedModules(&schema.AtmosConfiguration{}, info, rebuild, t.TempDir()))
+
+			require.Len(t, getter.calls, 1)
+			require.Equal(t, env, getter.calls[0].options.ProcessEnv)
+		})
+	}
+}
+
+func TestRestoredPlanRejectsModulesChangedByInit(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	planPath := project.reviewWithModules(t, "# reviewed module")
+	project.freshRunner(t, planPath)
+	executor := testExecutor(t)
+	executor.services.ExecuteShellCommand = moduleGetter(t, "# reviewed module", nil).mock.Execute
+	info, execution, err := project.freshApply(t, planPath, project.prepared())
+	require.NoError(t, err)
+	project.config.Components.Terraform.Init.Upgrade = schema.TerraformInitUpgradeAlways
+	info.ComponentBackendType = "http"
+	var initialized, applied bool
+	shell := newShellFixture(t, func(call *shellCall) error {
+		if call.args[0] == "init" {
+			require.Contains(t, call.args, "-upgrade")
+			initialized = true
+			writeModule(t, call.dir, "# upgraded module")
+		}
+		if call.args[0] == "apply" {
+			applied = true
+		}
+		return nil
+	})
+	executor.services.ExecuteShellCommand = shell.mock.Execute
+	err = executor.executeCommandPipeline(project.config, info, execution)
+	require.True(t, initialized)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.False(t, applied, "apply must not run against modules changed by init")
+}
+
+func TestRestoredPlanRejectsModulesChangedByInitRecovery(t *testing.T) {
+	for _, hooks := range []bool{false, true} {
+		t.Run(fmt.Sprint(hooks), func(t *testing.T) {
+			project := newReviewedPlanProject(t)
+			planPath := project.reviewWithModules(t, "# reviewed module")
+			project.freshRunner(t, planPath)
+			executor := testExecutor(t)
+			executor.services.ExecuteShellCommand = moduleGetter(t, "# reviewed module", nil).mock.Execute
+			info, execution, err := project.freshApply(t, planPath, project.prepared())
+			require.NoError(t, err)
+			if hooks {
+				info.ComponentExecution = &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{execHook("before", "apply")}}
+			}
+			attempts, initialized := 0, false
+			executor.services.ExecuteShellCommand = newShellFixture(t, func(call *shellCall) error {
+				if len(call.args) > 0 && call.args[0] == "apply" {
+					attempts++
+					_, _ = io.WriteString(call.options.ExecMetadataStderrCapture, "Error: Inconsistent dependency lock file")
+					return errUtils.ExitCodeError{Code: 1}
+				}
+				return nil
+			}).mock.Execute
+			project.config.Components.Terraform.Init.Upgrade = schema.TerraformInitUpgradeAlways
+			executor.executeTerraformInitForcedFn = func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, dir, _ string, _, upgrade bool, _ ...ShellCommandOption) error {
+				require.True(t, upgrade)
+				initialized = true
+				writeModule(t, dir, "# upgraded module")
+				return nil
+			}
+			err = executor.runMainCommandPhase(project.config, info, execution, []string{"apply"}, execution.componentPath, false)
+			require.True(t, initialized)
+			require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+			require.Equal(t, 1, attempts, "recovery must not retry against changed modules")
+		})
+	}
+}
+
+func TestRestoredPlanRetriesAfterModuleDownloadFailure(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	planPath := project.reviewWithModules(t, "# reviewed module")
+	project.freshRunner(t, planPath)
+	plan, err := os.ReadFile(planPath)
+	require.NoError(t, err)
+	record, err := os.ReadFile(planPath + configurationPlanSuffix)
+	require.NoError(t, err)
+	executor := testExecutor(t)
+	executor.services.ExecuteShellCommand = newShellFixture(t, func(call *shellCall) error {
+		require.Equal(t, []string{"get"}, call.args)
+		writeModule(t, call.dir, "# incomplete download")
+		return errModuleDownload
+	}).mock.Execute
+	_, _, err = project.freshApply(t, planPath, project.prepared())
+	require.ErrorIs(t, err, errModuleDownload)
+	failed, err := filepath.Glob(filepath.Join(filepath.Dir(project.workdir), ".atmos-failed-rebuild-*", "workdir", downloadedModulesDir, "vpc", "main.tf"))
+	require.NoError(t, err)
+	require.Len(t, failed, 1, "unverified output is preserved separately from restored artifacts")
+	partial, err := os.ReadFile(failed[0])
+	require.NoError(t, err)
+	require.Equal(t, "# incomplete download", string(partial))
+	restored, err := os.ReadFile(planPath)
+	require.NoError(t, err)
+	require.Equal(t, plan, restored)
+	restored, err = os.ReadFile(planPath + configurationPlanSuffix)
+	require.NoError(t, err)
+	require.Equal(t, record, restored)
+	getter := moduleGetter(t, "# reviewed module", nil)
+	executor.services.ExecuteShellCommand = getter.mock.Execute
+	_, execution, err := project.freshApply(t, planPath, project.prepared())
+	require.NoError(t, err)
+	require.Equal(t, project.workdir, execution.workingDir)
+	require.Len(t, getter.calls, 1, "retry reaches the module download")
 }

@@ -222,6 +222,7 @@ var (
 	ErrYamlFuncTemplateEmbedding = errors.New("a YAML function value cannot be used in this template expression")
 	//nolint:staticcheck // Error starts with a proper product name.
 	ErrYamlFuncMaxResolutionDepth       = errors.New("Atmos YAML function resolution exceeded the maximum dependency depth (likely an undetected circular dependency)")
+	ErrYamlAliasExpansionLimit          = errors.New("YAML aliases expand to more values than the configuration loader allows")
 	ErrComponentFuncDuringManifestLoad  = errors.New("atmos.Component cannot be evaluated while stack manifests are being loaded")
 	ErrDeferredTemplateContextMissing   = errors.New("cannot resolve deferred !template value: template context is unavailable because template processing was disabled for this invocation")
 	ErrAwsGetCallerIdentity             = errors.New("failed to get AWS caller identity")

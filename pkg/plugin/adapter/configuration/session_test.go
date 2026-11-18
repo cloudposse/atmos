@@ -39,8 +39,14 @@ func TestSessionDiscoveryAndPreparation(t *testing.T) {
 	provider.EXPECT().ComponentType().Return("terraform")
 	network, app := unit(t, "network"), unit(t, "app")
 	app.Dependencies = []*pluginv1.ComponentDependency{{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT}}
+	discoveryCalls := 0
 	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
-		require.Equal(t, []string{"live/**"}, request.IncludePaths)
+		if discoveryCalls == 0 {
+			require.Equal(t, []string{"live/**"}, request.IncludePaths)
+		} else {
+			require.Equal(t, []string{"live/app/terragrunt.hcl", "live/network/terragrunt.hcl", "root.hcl"}, request.IncludePaths)
+		}
+		discoveryCalls++
 		require.Nil(t, request.Effects)
 		require.Equal(t, "tofu", request.Invocation.Environment["ATMOS_TERRAFORM_BINARY"])
 		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil
@@ -348,7 +354,7 @@ func TestPreparationRevalidatesDependencyPaths(t *testing.T) {
 				require.Equal(t, map[string]string{"DEPENDENCY": "component", "IDENTITY": "selected", "TF_WORKSPACE": "stage", "ATMOS_TERRAFORM_BINARY": "tofu"}, request.Invocation.Environment)
 				require.Equal(t, "apply", request.Operation.Command)
 				require.Nil(t, request.Effects)
-				require.Equal(t, []string{"live/**"}, request.IncludePaths)
+				require.Equal(t, []string{"live/app/terragrunt.hcl", "live/network/terragrunt.hcl", "live/other/terragrunt.hcl", "root.hcl"}, request.IncludePaths)
 				if change == "discovery error" {
 					return nil, context.Canceled
 				}

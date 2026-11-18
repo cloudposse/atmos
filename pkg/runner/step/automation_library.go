@@ -36,6 +36,7 @@ func NewAutomationLibrary(vars *Variables, workflow *schema.WorkflowDefinition) 
 		vars = NewVariables()
 	}
 	snapshot := vars.Clone()
+	snapshot.artifactSession()
 	snapshot.automationDepth++
 	return &AutomationLibrary{vars: snapshot, workflow: workflow, processChanges: map[string]string{}}
 }
@@ -58,6 +59,46 @@ func (l *AutomationLibrary) Names() []string {
 func (l *AutomationLibrary) Fork() api.StepLibrary {
 	defer perf.Track(nil, "step.AutomationLibrary.Fork")()
 	return &AutomationLibrary{vars: l.vars.Clone(), workflow: l.workflow, processChanges: maps.Clone(l.processChanges)}
+}
+
+// ForkTask isolates artifact operation identities while retaining the report collector and schedule.
+func (l *AutomationLibrary) ForkTask() api.StepLibrary {
+	defer perf.Track(nil, "step.AutomationLibrary.ForkTask")()
+	fork := l.Fork().(*AutomationLibrary)
+	parent := l.vars.artifactSession()
+	parent.mu.Lock()
+	collector := parent.collector
+	parent.mu.Unlock()
+	fork.vars.artifacts = newArtifactSession()
+	fork.vars.artifacts.collector = collector
+	return fork
+}
+
+var (
+	_ api.GroupScheduler  = (*AutomationLibrary)(nil)
+	_ api.ScheduledForker = (*automationGroup)(nil)
+)
+
+// ScheduleGroup reserves the scheduled position of a parallel group and returns the library its
+// branches fork from, so artifact reports order the branches by where they were scheduled. It
+// implements api.GroupScheduler.
+func (l *AutomationLibrary) ScheduleGroup() api.ScheduledForker {
+	defer perf.Track(nil, "step.AutomationLibrary.ScheduleGroup")()
+	return &automationGroup{AutomationLibrary: l, group: l.vars.ScheduleGroup()}
+}
+
+// automationGroup is the library of one parallel group: it forks every branch at the group's
+// reserved position.
+type automationGroup struct {
+	*AutomationLibrary
+	group *ScheduledGroup
+}
+
+// ForkAt isolates a parallel branch like Fork and records the branch's scheduled index. It
+// implements api.ScheduledForker.
+func (g *automationGroup) ForkAt(index int) api.StepLibrary {
+	defer perf.Track(nil, "step.automationGroup.ForkAt")()
+	return &AutomationLibrary{vars: g.group.ForkAt(index), workflow: g.workflow, processChanges: maps.Clone(g.processChanges)}
 }
 
 // Run validates configuration and dispatches through the shared step executor.
@@ -93,6 +134,13 @@ func (l *AutomationLibrary) runStep(ctx context.Context, step *schema.WorkflowSt
 	before := maps.Clone(l.vars.Env)
 	result, err := l.execute(ctx, step)
 	l.rememberEnvironment(before)
+	if err == nil {
+		// A handler may report success after its background work was canceled by its own deadline.
+		// Parent cancellation must not turn a successful handler into an error.
+		if timeoutErr := deadline.Expired(); errors.Is(timeoutErr, errUtils.ErrStepTimeout) {
+			err = timeoutErr
+		}
+	}
 
 	if err != nil {
 		// Some handlers return only the process exit code after cancellation (notably

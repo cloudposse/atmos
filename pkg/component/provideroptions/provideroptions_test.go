@@ -358,3 +358,18 @@ func TestNamesAreDerivedFromProvidersWithSlashes(t *testing.T) {
 	assert.Equal(t, "vendor-tool-iam-role", option.FlagName("vendor/tool"))
 	assert.Equal(t, []string{"ATMOS_VENDOR_TOOL_IAM_ROLE"}, option.EnvNames("vendor/tool"))
 }
+
+func TestResolvedOptionsRetainEnvironmentDeclarations(t *testing.T) {
+	options, err := resolveWith(t, sample, nil, map[string]string{"ATMOS_TOOL_RETRIES": "7"})
+	require.NoError(t, err)
+	option := options["tool"]["retries"]
+	require.False(t, option.FromCLI)
+	require.Equal(t, TypeInt, option.Type)
+	require.Contains(t, option.EnvNames, "ATMOS_TOOL_RETRIES")
+	value, present, err := InvocationValue("retries", option, map[string]string{"ATMOS_TOOL_RETRIES": "9"})
+	require.NoError(t, err)
+	require.True(t, present)
+	require.Equal(t, 9, value)
+	_, _, err = InvocationValue("retries", option, map[string]string{"ATMOS_TOOL_RETRIES": "invalid"})
+	require.ErrorIs(t, err, errUtils.ErrProviderOption)
+}

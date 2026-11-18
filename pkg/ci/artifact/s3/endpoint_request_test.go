@@ -12,13 +12,17 @@ import (
 	sdk "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/artifact/blob/s3/s3test"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 )
 
 func TestIdentityEndpointUsesBucketPath(t *testing.T) {
 	requests := make(chan *http.Request, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests <- r.Clone(r.Context())
+		select {
+		case requests <- r.Clone(r.Context()):
+		default: // A retried request must not block the handler behind an unread channel.
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -38,5 +42,35 @@ func TestIdentityEndpointUsesBucketPath(t *testing.T) {
 		require.Equal(t, "/artifacts/templates/stack.yaml", request.URL.Path)
 	default:
 		t.Fatal("SDK request did not reach the emulator endpoint")
+	}
+}
+
+func TestAdapterIdentityResolverRoutesToEndpoint(t *testing.T) {
+	s3test.IsolateAWSConfig(t)
+	requests := make(chan *http.Request, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case requests <- r.Clone(r.Context()):
+		default: // A retried request must not block the handler behind an unread channel.
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	t.Setenv("AWS_ACCESS_KEY_ID", "test")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
+	resolver := &fakeAuthContextResolver{awsResult: &artifact.AWSAuthConfig{Region: "us-east-1", EndpointURL: server.URL}}
+	backend, err := NewStore(artifact.StoreOptions{Identity: "deploy", Options: map[string]any{"bucket": "artifacts"}})
+	require.NoError(t, err)
+	store := backend.(*Store)
+	store.SetAuthContext(resolver, "")
+	exists, err := store.Exists(t.Context(), "path/object")
+	require.NoError(t, err)
+	require.True(t, exists)
+	require.Equal(t, "deploy", resolver.requestedIDName)
+	select {
+	case request := <-requests:
+		require.Equal(t, "/artifacts/path/object", request.URL.Path)
+	default:
+		t.Fatal("identity endpoint received no request")
 	}
 }

@@ -92,7 +92,7 @@ func DecodeInputs(input *pluginv1.ComponentValue) (map[string]any, error) {
 		return nil, err
 	}
 	if !value.IsWhollyKnown() && !value.IsNull() && (value.Type().IsObjectType() || value.Type().IsMapType()) {
-		return nil, unknownInputError(value)
+		return nil, unknownInputError(value, input.SensitivePaths)
 	}
 	return exactInputObject(input, value)
 }
@@ -116,7 +116,11 @@ func exactInputObject(input *pluginv1.ComponentValue, value cty.Value) (map[stri
 }
 
 // unknownInputError names the first input, in key order, that holds an unknown value.
-func unknownInputError(object cty.Value) error {
+func unknownInputError(object cty.Value, encoded []*pluginv1.ComponentValuePath) error {
+	protected, err := validatedSensitivePaths(object, encoded)
+	if err != nil {
+		return err
+	}
 	if !object.IsKnown() {
 		return errUtils.Build(errUtils.ErrPluginProtocol).
 			WithExplanation("The plugin returned the inputs of the component as an unknown value.").
@@ -128,16 +132,21 @@ func unknownInputError(object cty.Value) error {
 		if attributes[name].IsWhollyKnown() {
 			continue
 		}
-		path := name
+		path := cty.GetAttrPath(name)
+		if object.Type().IsMapType() {
+			path = cty.IndexStringPath(name)
+		}
+		root := path
 		_ = cty.Walk(attributes[name], func(at cty.Path, current cty.Value) (bool, error) {
 			if current.IsKnown() {
 				return true, nil
 			}
-			path = name + formatPath(at)
+			path = append(root.Copy(), at...)
 			return false, nil
 		})
+		name, location := safeUnknownLocation(name, path, protected)
 		return errUtils.Build(errUtils.ErrPluginProtocol).
-			WithExplanationf("The input `%s` is not known when the component is prepared, so Atmos cannot write it to the variable file.", path).
+			WithExplanationf("The input `%s` is not known when the component is prepared, so Atmos cannot write it to the variable file.", location).
 			WithContext("input", name).
 			WithHint("Terraform computes unknown values during apply; an input must be known before Terraform starts. Replace it with a value that does not depend on resources that do not exist yet.").
 			WithHint("If the input comes from a dependency output, give the dependency `mock_outputs` or apply the dependency first.").
@@ -292,8 +301,20 @@ func decodePlain(input *pluginv1.ComponentValue) (cty.Value, error) {
 }
 
 func sensitiveValue(value cty.Value, encoded *pluginv1.ComponentValuePath) (cty.Value, error) {
-	if encoded == nil {
+	path, err := sensitivePath(encoded)
+	if err != nil {
+		return cty.NilVal, err
+	}
+	result, err := path.Apply(value)
+	if err != nil {
 		return cty.NilVal, errUtils.ErrPluginProtocol
+	}
+	return result, nil
+}
+
+func sensitivePath(encoded *pluginv1.ComponentValuePath) (cty.Path, error) {
+	if encoded == nil {
+		return nil, errUtils.ErrPluginProtocol
 	}
 	path := cty.Path{}
 	for _, step := range encoded.Steps {
@@ -303,18 +324,14 @@ func sensitiveValue(value cty.Value, encoded *pluginv1.ComponentValuePath) (cty.
 		case *pluginv1.ComponentValueStep_Index:
 			index, err := sensitiveIndex(selector.Index)
 			if err != nil {
-				return cty.NilVal, err
+				return nil, err
 			}
 			path = path.Index(index)
 		default:
-			return cty.NilVal, errUtils.ErrPluginProtocol
+			return nil, errUtils.ErrPluginProtocol
 		}
 	}
-	result, err := path.Apply(value)
-	if err != nil {
-		return cty.NilVal, errUtils.ErrPluginProtocol
-	}
-	return result, nil
+	return path, nil
 }
 
 func objectJSON(value cty.Value) (any, error) {
@@ -371,4 +388,39 @@ func sensitiveIndex(encoded *pluginv1.ComponentValue) (cty.Value, error) {
 		return cty.NilVal, errUtils.ErrPluginProtocol
 	}
 	return index, nil
+}
+
+// validatedSensitivePaths checks selectors without requiring unknown values to encode as JSON.
+func validatedSensitivePaths(value cty.Value, encoded []*pluginv1.ComponentValuePath) ([]cty.Path, error) {
+	paths := make([]cty.Path, 0, len(encoded))
+	for _, item := range encoded {
+		path, err := sensitivePath(item)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := path.Apply(value); err != nil {
+			return nil, errUtils.ErrPluginProtocol
+		}
+		paths = append(paths, path)
+	}
+	return paths, nil
+}
+
+// safeUnknownLocation never formats descendants of a sensitive value, including map keys.
+func safeUnknownLocation(name string, path cty.Path, protected []cty.Path) (string, string) {
+	hidden := false
+	for _, prefix := range protected {
+		if path.HasPrefix(prefix) {
+			path = path[:len(prefix)]
+			hidden = true
+		}
+	}
+	if len(path) == 0 {
+		return "sensitive", "[sensitive input]"
+	}
+	location := strings.TrimPrefix(formatPath(path), ".")
+	if hidden {
+		location += " [sensitive value]"
+	}
+	return name, location
 }

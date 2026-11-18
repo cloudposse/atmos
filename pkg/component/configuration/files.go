@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
@@ -70,6 +71,9 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 		if err := validateFile(file); err != nil {
 			return err
 		}
+		if err := validateDestination(root, file.Path); err != nil {
+			return generatedFileError(file.Path, err)
+		}
 	}
 	previous := readManifest(root)
 	undo := make(restorePoint)
@@ -129,6 +133,26 @@ func validateFile(file schema.ComponentConfigurationFile) error {
 // writeFile applies one file's policy and returns the digest to record, or empty when the host
 // does not own the file afterwards (removed, or an existing file that "skip" left alone).
 func writeFile(root *os.Root, file schema.ComponentConfigurationFile, recorded string) (string, error) {
+	if err := validateFile(file); err != nil {
+		return "", err
+	}
+	remove := file.IfExists == "remove" || file.IfExists == "remove_terragrunt"
+	directory, err := destinationDirectory(root, filepath.Dir(file.Path), !remove)
+	if remove && errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", generatedFileError(file.Path, err)
+	}
+	defer directory.Close()
+	leaf := file
+	leaf.Path = filepath.Base(file.Path)
+	digest, err := writeOwnedFile(directory, leaf, recorded)
+	return digest, generatedFileError(file.Path, err)
+}
+
+// writeOwnedFile applies policies within a pinned, non-symlink destination directory.
+func writeOwnedFile(root *os.Root, file schema.ComponentConfigurationFile, recorded string) (string, error) {
 	remove, err := checkFileOwnership(root, file, recorded)
 	if err != nil {
 		return "", generatedFileError(file.Path, err)
@@ -216,10 +240,7 @@ func ensureMode(root *os.Root, file schema.ComponentConfigurationFile) error {
 	if !file.Sensitive && file.Mode == 0 {
 		return nil
 	}
-	if err := restrictExistingGeneratedFile(root, file); err != nil {
-		return generatedFileError(file.Path, err)
-	}
-	return nil
+	return generatedFileError(file.Path, restrictExistingGeneratedFile(root, file))
 }
 
 // replaceFile writes the bytes with the file's clamped permission bits; sensitive files, which can
@@ -314,7 +335,121 @@ func createFile(root *os.Root, path string, file schema.ComponentConfigurationFi
 
 // generatedFileError classifies a filesystem failure on a generated file as invalid configuration.
 func generatedFileError(path string, err error) error {
+	if err == nil {
+		return nil
+	}
 	return fmt.Errorf("%w: generated file %s: %w", errUtils.ErrPluginInvalidConfig, path, err)
+}
+
+// validateDestination checks existing ancestors and the leaf before the first
+// write. Missing directories are created only during the subsequent write phase.
+func validateDestination(root *os.Root, path string) error {
+	directory, err := destinationDirectory(root, filepath.Dir(path), false)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	info, err := directory.Lstat(filepath.Base(path))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return errUtils.ErrPluginInvalidConfig
+	}
+	return nil
+}
+
+// destinationDirectory pins each ordinary directory by handle. Lstat/Stat identity
+// checks reject symlinks introduced between inspection and opening an ancestor.
+func destinationDirectory(root *os.Root, path string, create bool) (*os.Root, error) {
+	current, err := root.OpenRoot(".")
+	if err != nil {
+		return nil, err
+	}
+	for _, part := range strings.Split(filepath.Clean(path), string(filepath.Separator)) {
+		if part == "." {
+			continue
+		}
+		next, err := openDestinationChild(current, part, create)
+		_ = current.Close()
+		if err != nil {
+			return nil, err
+		}
+		current = next
+	}
+	return current, nil
+}
+
+func openDestinationChild(root *os.Root, name string, create bool) (*os.Root, error) {
+	if create {
+		if err := root.Mkdir(name, directoryMode); err != nil && !errors.Is(err, os.ErrExist) {
+			return nil, err
+		}
+	}
+	before, err := root.Lstat(name)
+	if err != nil {
+		return nil, err
+	}
+	if !before.IsDir() {
+		return nil, &os.PathError{Op: "open destination directory", Path: name, Err: errUtils.ErrPluginInvalidConfig}
+	}
+	child, err := root.OpenRoot(name)
+	if err != nil {
+		return nil, err
+	}
+	after, err := child.Stat(".")
+	if err != nil || !os.SameFile(before, after) {
+		_ = child.Close()
+		return nil, errors.Join(errUtils.ErrPluginInvalidConfig, err)
+	}
+	return child, nil
+}
+
+// openExistingGeneratedFile pins an ordinary file for permission updates without
+// creating or truncating it. Replacement writes use exclusive temporary files.
+func openExistingGeneratedFile(root *os.Root, name string) (*os.File, error) {
+	before, err := root.Lstat(name)
+	if err != nil {
+		return nil, err
+	}
+	if !before.Mode().IsRegular() {
+		return nil, errUtils.ErrPluginInvalidConfig
+	}
+	output, err := root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	after, err := output.Stat()
+	if err != nil || !os.SameFile(before, after) {
+		return nil, errors.Join(errUtils.ErrPluginInvalidConfig, err, output.Close())
+	}
+	return output, nil
+}
+
+// IsRuntimeArtifact reserves Terraform state, lock files and workdir metadata.
+// These names mirror the provisioner/workdir contract; importing that package
+// here would create a configuration-loading cycle.
+// Case folding keeps the same protection when a configuration moves between
+// case-sensitive and case-insensitive filesystems.
+//
+//nolint:lintroller // Pure path validation with no I/O; exempt from performance tracking.
+func IsRuntimeArtifact(path string) bool {
+	path = strings.ToLower(filepath.ToSlash(filepath.Clean(filepath.FromSlash(path))))
+	if path == "terraform.tfstate" || path == "terraform.tfstate.backup" || path == ".terraform.tfstate.lock.info" || strings.HasSuffix(path, ".terraform.lock.hcl") {
+		return true
+	}
+	for _, segment := range strings.Split(path, "/") {
+		if segment == ".terraform" || segment == "terraform.tfstate.d" || segment == ".atmos" {
+			return true
+		}
+	}
+	return false
 }
 
 // applyMode sets the permission bits explicitly because open applies the umask

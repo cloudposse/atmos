@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -584,4 +586,116 @@ func TestDiscoveryAndStateRenderEngineLogs(t *testing.T) {
 	require.Contains(t, output.String(), "scanning live")
 	require.Contains(t, output.String(), "resolving backend")
 	require.Contains(t, output.String(), "component=network")
+}
+
+func TestEnvironmentOptionsUseProjectAndPreparationEnvironment(t *testing.T) {
+	for _, fromCLI := range []bool{false, true} {
+		t.Run(fmt.Sprint(fromCLI), func(t *testing.T) {
+			t.Setenv("TG_DOWNLOAD_DIR", "/job-cache")
+			config := enabledConfig(t)
+			config.Env = map[string]string{"TG_DOWNLOAD_DIR": "/project-cache"}
+			config.ComponentProviderOptions = map[string]map[string]schema.ComponentProviderOption{"terragrunt": {
+				"download_dir": {Value: "/job-cache", FromCLI: fromCLI, Type: "string", EnvNames: []string{"TG_DOWNLOAD_DIR"}},
+			}}
+			session, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) { return nil, nil })
+			require.NoError(t, err)
+			require.NoError(t, session.configErr)
+			value, err := adapter.DecodeValue(session.requests[0].Operation.Options["download_dir"])
+			require.NoError(t, err)
+			want := "/project-cache"
+			if fromCLI {
+				want = "/job-cache"
+			}
+			require.Equal(t, want, value)
+			// Later caller mutations must not change the invocation's declarations.
+			config.ComponentProviderOptions["terragrunt"]["download_dir"].EnvNames[0] = "POISONED"
+			_, absent, err := session.providerOperation("terragrunt", map[string]string{})
+			require.NoError(t, err)
+			if fromCLI {
+				require.Contains(t, absent, "download_dir")
+			} else {
+				require.NotContains(t, absent, "download_dir", "sanitized identity must not restore an ambient option")
+			}
+			for _, current := range []string{"/component-cache", ""} {
+				_, options, err := session.providerOperation("terragrunt", map[string]string{"TG_DOWNLOAD_DIR": current})
+				require.NoError(t, err)
+				value, err := adapter.DecodeValue(options["download_dir"])
+				require.NoError(t, err)
+				if fromCLI {
+					require.Equal(t, "/job-cache", value)
+				} else {
+					require.Equal(t, current, value)
+				}
+			}
+			session.providerOptionValues["terragrunt"]["download_dir"].EnvNames[0] = "SESSION_ONLY"
+			require.Equal(t, "POISONED", config.ComponentProviderOptions["terragrunt"]["download_dir"].EnvNames[0])
+		})
+	}
+}
+
+func TestCommandOverrideKeepsDiscoveryEngineAndValidatesPreparation(t *testing.T) {
+	for _, returnedEngine := range []string{"opentofu", "terraform"} {
+		t.Run(returnedEngine, func(t *testing.T) {
+			config := enabledConfig(t)
+			config.Components.Terraform.Command = "terraform"
+			provider := NewMockProvider(gomock.NewController(t))
+			provider.EXPECT().ComponentType().Return("terraform")
+			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+				component := unit(t, "app")
+				component.Engine = "terraform"
+				if request.Invocation.Environment["ATMOS_TERRAFORM_BINARY"] == "tofu" {
+					component.Engine = "opentofu"
+				}
+				return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{component}}, nil
+			}).Times(2)
+			provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+				require.Equal(t, "tofu", request.Invocation.Environment["ATMOS_TERRAFORM_BINARY"])
+				return &pluginv1.PrepareComponentResponse{Engine: returnedEngine, State: &pluginv1.ComponentStateIdentity{}}, nil
+			})
+			session, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) {
+				return map[string]Provider{"terragrunt": provider}, nil
+			})
+			require.NoError(t, err)
+			info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "plan", Command: "tofu", ComponentCommand: "tofu", ComponentSettingsSection: map[string]any{"configuration": true}}
+			prepared, err := session.Prepare(t.Context(), info)
+			if returnedEngine == "terraform" {
+				require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+				require.Nil(t, prepared)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, prepared)
+			}
+		})
+	}
+}
+
+func TestPreparationDoesNotRediscoverEveryIndependentUnit(t *testing.T) {
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform")
+	var units []*pluginv1.DiscoveredComponent
+	for i := range 200 {
+		units = append(units, unit(t, fmt.Sprintf("unit-%d", i)))
+	}
+	evaluated := 0
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+		var selected []*pluginv1.DiscoveredComponent
+		for _, candidate := range units {
+			if slices.Contains(request.IncludePaths, "live/**") || slices.Contains(request.IncludePaths, candidate.Source) {
+				selected = append(selected, candidate)
+			}
+		}
+		evaluated += len(selected)
+		return &pluginv1.DiscoverComponentsResponse{Components: selected}, nil
+	}).Times(201)
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", State: &pluginv1.ComponentStateIdentity{}}, nil).Times(200)
+	session, err := New(t.Context(), enabledConfig(t), "plan", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
+	require.NoError(t, err)
+	for _, candidate := range units {
+		prepared, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: candidate.Address.Component, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}})
+		require.NoError(t, err)
+		require.NotNil(t, prepared)
+	}
+	require.Equal(t, 400, evaluated, "one initial inventory plus one unit per preparation")
 }

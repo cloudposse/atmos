@@ -1,0 +1,79 @@
+---
+title: atmos artifacts catalog remove
+sidebar_label: catalog remove
+sidebar_class_name: command
+id: catalog-remove
+description: Unlist a release from the repository's published catalog.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Unlist a release from the latest published catalog. The artifact, its signatures, and every consumer lock file are untouched.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts catalog remove --help" src="/casts/screengrabs/atmos-artifacts-catalog-remove--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts catalog remove <ref> --repository=<alias> [flags]
+```
+
+## Examples
+
+```shell
+# Unlist one release
+atmos artifacts catalog remove components/terraform/vpc:1.2.0 --repository=shared
+```
+
+## Behavior
+
+Remove only unlists. It deletes no artifact content, no signature, and does not rewrite any lock file, so consumers that pinned the release keep working. When the removed version was the last one of its name, the name is dropped from the catalog. Removal publishes a new catalog revision under the repository's lock when one is available.
+
+## Arguments
+
+<dl>
+    <dt>`ref` <em>(required)</em></dt>
+    <dd>
+        `name:version` of a listed release. A digest reference cannot be unlisted.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(required)</em></dt>
+    <dd>
+        Configured repository alias. Its `catalog` setting selects the catalog.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Errors
+
+<dl>
+    <dt>Catalog not configured</dt>
+    <dd>The repository has no `catalog`. Nothing is written.</dd>
+
+    <dt>Not listed</dt>
+    <dd>The catalog does not exist or does not list that version.</dd>
+</dl>
+
+Every failure exits with a nonzero status.
+
+## Related
+
+- [`atmos artifacts catalog add`](/cli/commands/artifacts/catalog-add)
+- [`atmos artifacts delete`](/cli/commands/artifacts/delete)
+- [Artifacts Configuration](/cli/configuration/artifacts)

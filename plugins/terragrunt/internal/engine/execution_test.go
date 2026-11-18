@@ -1296,3 +1296,32 @@ func TestDiscoveryHonorsAutomaticHookOverride(t *testing.T) {
 		})
 	}
 }
+
+func TestPlanAllowsLiteralArgumentFunctionName(t *testing.T) {
+	request := executionUnit(t, "")
+	file, err := os.OpenFile(request.Path, os.O_APPEND|os.O_WRONLY, 0o600)
+	require.NoError(t, err)
+	_, err = file.WriteString(`
+# get_terraform_cli_args() is not evaluated here.
+inputs = { label = "get_terraform_cli_args" }
+`)
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "get_terraform_cli_args", result.Inputs["label"])
+	require.Nil(t, result.Execution)
+}
+
+func TestArgumentCallsDistinguishJSONTemplatesFromLiterals(t *testing.T) {
+	for _, test := range []struct {
+		input  string
+		called bool
+	}{
+		{`{"inputs":{"get_terraform_cli_args":"get_terraform_cli_args()"}}`, false},
+		{`{"inputs":{"value":"${join(\",\", get_terraform_cli_args())}"}}`, true},
+		{`{"inputs":{"value":"${join(\",\", get\u005fterraform_cli_args())}"}}`, true},
+	} {
+		require.Equal(t, test.called, callsFunction([]byte(test.input), "terragrunt.hcl.json", "get_terraform_cli_args"))
+	}
+}

@@ -111,7 +111,7 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 				phaseInfo,
 				info.SubCommand,
 				func(o ...component.ExecutionOption) error {
-					err := e.executeStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
+					err := e.executeReviewedStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
 						componentPath:  componentPath,
 						args:           phaseArgs,
 						gatePhase:      info.SubCommand,
@@ -147,6 +147,14 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 		}
 		return err
 	})
+}
+
+// executeReviewedStreamingOrShell verifies the reviewed files immediately before each attempt.
+func (e *Executor) executeReviewedStreamingOrShell(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, request *streamingExecRequest) error {
+	if err := recheckReviewedApply(component.ContextFromOptions(request.shellOpts...), config, info); err != nil {
+		return err
+	}
+	return e.executeStreamingOrShell(config, info, request)
 }
 
 // preflightRequiredVarFiles checks the requested command's required variable files in the
@@ -565,42 +573,6 @@ func (e *Executor) recoverFromInitRequired( //nolint:revive // argument-limit: e
 		return err
 	}
 	return e.retryMainCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, opts...)
-}
-
-// runInitRecovery classifies a failed main command and, when smart init's recovery policy
-// allows it, runs the forced init the diagnostic asked for. It reports whether the main command
-// should now be retried; otherwise it returns the error to propagate.
-func (e *Executor) runInitRecovery( //nolint:revive // argument-limit: every parameter is load-bearing context from the recovering caller.
-	atmosConfig *schema.AtmosConfiguration,
-	info *schema.ConfigAndStacksInfo,
-	execCtx *componentExecContext,
-	componentPath string,
-	mainErr error,
-	stdoutBuf, stderrBuf *bytes.Buffer,
-	opts ...component.ExecutionOption,
-) (bool, error) {
-	if info.SubCommand == subcommandInit {
-		return false, mainErr
-	}
-
-	combined := stdoutBuf.String() + "\n" + stderrBuf.String() + "\n" + mainErr.Error()
-	rec, policyErr := classifyInitRecovery(atmosConfig, info, combined)
-	if policyErr != nil {
-		return false, errors.Join(mainErr, policyErr)
-	}
-	if !rec.Run {
-		return false, mainErr
-	}
-
-	ui.Warning(fmt.Sprintf("Terraform requires initialization; running init and retrying '%s'", info.SubCommand))
-
-	initErr := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandInit), func() error {
-		return e.executeTerraformInitForcedFn(atmosConfig, info, componentPath, execCtx.varFile, rec.WithReconfigure, rec.WithUpgrade, opts...)
-	})
-	if initErr != nil {
-		return false, errors.Join(mainErr, initErr)
-	}
-	return true, nil
 }
 
 // recoverWithinLifecycle is recoverFromInitRequired for a main command wrapped by provider
