@@ -1,14 +1,19 @@
 package configuration
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filelock"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -23,6 +28,8 @@ const (
 	// Granted modes keep owner rwx and group/other read-execute bits only.
 	grantedModeMask = 0o755
 	ownerReadWrite  = 0o600
+	// The lock timeout bounds how long a run waits for another process writing the same workdir.
+	lockTimeout = 2 * time.Minute
 )
 
 // WriteFiles materializes evaluated bytes under the provisioned module, without templating.
@@ -37,6 +44,31 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 	if len(files) == 0 && !manifestExists(directory) {
 		return nil
 	}
+	// One writer per canonical workdir at a time, across processes, from the manifest read through
+	// rollback: two overlapping runs would otherwise record each other's digests as stale.
+	ctx, cancel := context.WithTimeout(context.Background(), lockTimeout)
+	defer cancel()
+	return filelock.New(workdirLockPath(directory)).WithExclusive(ctx, func() error {
+		return writeFilesLocked(directory, files)
+	})
+}
+
+// workdirLockPath names the advisory lock for a working directory. The lock lives outside the
+// directory, keyed by its canonical path, so every spelling of the directory shares one lock and
+// the lock file never becomes part of the provisioned module.
+func workdirLockPath(directory string) string {
+	canonical, err := filepath.Abs(directory)
+	if err != nil {
+		canonical = directory
+	}
+	if resolved, err := filepath.EvalSymlinks(canonical); err == nil {
+		canonical = resolved
+	}
+	sum := sha256.Sum256([]byte(canonical))
+	return filepath.Join(os.TempDir(), "atmos-generated-files-"+hex.EncodeToString(sum[:16])+".lock")
+}
+
+func writeFilesLocked(directory string, files []schema.ComponentConfigurationFile) error {
 	root, err := os.OpenRoot(directory)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
@@ -48,18 +80,20 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 	previous := readManifest(root)
 	undo := make(restorePoint)
 	current := make(map[string]string, len(files))
+	completed := make(map[string]bool, len(files))
 	names := make([]string, 0, len(files))
 	for _, file := range files {
 		// Clean the key, so ./provider.tf and provider.tf name the same recorded file.
 		key := filepath.ToSlash(filepath.Clean(file.Path))
 		names = append(names, key)
 		if err := undo.capture(root, key); err != nil {
-			return errors.Join(generatedFileError(file.Path, err), keepRecordsAfterFailure(root, previous, current, undo))
+			return errors.Join(generatedFileError(file.Path, err), keepRecordsAfterFailure(root, previous, current, completed, undo))
 		}
 		digest, err := writeFile(root, file, previous[key])
 		if err != nil {
-			return errors.Join(err, keepRecordsAfterFailure(root, previous, current, undo))
+			return errors.Join(err, keepRecordsAfterFailure(root, previous, current, completed, undo))
 		}
+		completed[key] = true
 		if digest != "" {
 			current[key] = digest
 		}
@@ -82,10 +116,11 @@ func recordManifest(root *os.Root, current map[string]string, undo restorePoint)
 
 // keepRecordsAfterFailure writes the manifest when a batch stops early: the files this run already
 // wrote keep their new digests, and every other file keeps its earlier record, so a retry after the
-// conflict is fixed still recognizes them as this host's.
-func keepRecordsAfterFailure(root *os.Root, previous, current map[string]string, undo restorePoint) error {
+// conflict is fixed still recognizes them as this host's. A path whose policy already completed in
+// this batch, such as one removed, is not restored: its earlier record would claim a file that is gone.
+func keepRecordsAfterFailure(root *os.Root, previous, current map[string]string, completed map[string]bool, undo restorePoint) error {
 	for key, digest := range previous {
-		if _, written := current[key]; !written {
+		if _, written := current[key]; !written && !completed[key] {
 			current[key] = digest
 		}
 	}

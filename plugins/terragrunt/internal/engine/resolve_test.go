@@ -67,7 +67,7 @@ func TestNativeRejectsUnsupportedSemantics(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := Resolve(t.Context(), nativeUnit(t, test.extra))
-			require.ErrorContains(t, err, test.message)
+			requireCauseContains(t, err, test.message)
 		})
 	}
 }
@@ -85,7 +85,7 @@ remote_state {
 	require.Equal(t, "local", result.BackendType)
 	request.Phase = ""
 	_, err = Resolve(t.Context(), request)
-	require.ErrorContains(t, err, "cannot inspect selected executable")
+	requireCauseContains(t, err, "cannot inspect selected executable")
 }
 
 func TestBackendGenerateDoesNotWriteStack(t *testing.T) {
@@ -346,7 +346,7 @@ func TestOverlayRejectsLockFilesAndCarriesModes(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(nested, ".terraform.lock.hcl"), []byte("# lock"), 0o644))
 		_, err := Resolve(t.Context(), request)
 		require.ErrorIs(t, err, atmosbridge.ErrUnsupportedOverlay)
-		require.ErrorContains(t, err, ".terraform.lock.hcl")
+		requireCauseContains(t, err, ".terraform.lock.hcl")
 		request.Phase = "backend"
 		_, err = Resolve(t.Context(), request)
 		require.NoError(t, err, "backend reads never export the overlay")
@@ -583,7 +583,7 @@ func TestBackendInputProjectionRejectsUnknownTarget(t *testing.T) {
 	request.Environment["SETTINGS_FILE"] = "settings.hcl"
 	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), "settings.hcl"), []byte(`inputs = { cache = "configured-cache" }`), 0o644))
 	_, err := Resolve(t.Context(), request)
-	require.ErrorContains(t, err, errInputReferenceTarget.Error(), "an unknown target must not silently select a fallback or evaluate unrelated inputs")
+	requireCauseContains(t, err, errInputReferenceTarget.Error(), "an unknown target must not silently select a fallback or evaluate unrelated inputs")
 }
 
 func TestBackendInputProjectionOrdinaryLocalsAndExposedInclude(t *testing.T) {

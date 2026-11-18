@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -348,13 +349,9 @@ func environmentValue(env []string, key string, opts ...component.ExecutionOptio
 	if base == nil {
 		base = os.Environ()
 	}
-	merged := slices.Concat(base, env)
-	for i := len(merged) - 1; i >= 0; i-- {
-		if name, value, found := strings.Cut(merged[i], "="); found && name == key {
-			return value
-		}
-	}
-	return ""
+	// Windows folds environment names to one case; other platforms match exactly.
+	value, _ := lastEnvListValue(slices.Concat(base, env), key, runtime.GOOS)
+	return value
 }
 
 // hookOptions carries over only what a hook shares with the command: cancellation, the process
