@@ -16,6 +16,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/cfg"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
@@ -436,8 +437,8 @@ func TestAuthenticateMFAPrompt(t *testing.T) {
 }
 
 func TestAuthenticateMFAPromptsWhenTokenMissingOrConsumed(t *testing.T) {
-	pr := &mocks.Prompter{}
-	pr.On("RequestSecurityCode", "000000").Return("999999").Once()
+	pr := mocks.NewMockPrompter(gomock.NewController(t))
+	pr.EXPECT().RequestSecurityCode("000000").Return("999999", nil).Times(1)
 	usePrompter(t, pr)
 
 	verification := mfaPage(`<input name="VerificationCode" type="text" value="" />`)
@@ -459,7 +460,6 @@ func TestAuthenticateMFAPromptsWhenTokenMissingOrConsumed(t *testing.T) {
 	require.Len(t, posts, 3)
 	assert.Equal(t, []string{"111111"}, posts[1]["VerificationCode"])
 	assert.Equal(t, []string{"999999"}, posts[2]["VerificationCode"])
-	pr.AssertExpectations(t)
 }
 
 func TestAuthenticateAzureMFAWait(t *testing.T) {

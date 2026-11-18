@@ -1,5 +1,10 @@
 package credentials
 
+// Atmos fork: the Helper mock is generated with mockgen. The package's own tests use a package-local copy
+// because importing the shared mocks package from them would be an import cycle.
+//go:generate go run go.uber.org/mock/mockgen -source=$GOFILE -destination=mock_credentials_test.go -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen -source=$GOFILE -destination=../../mocks/mock_credentials.go -package=mocks
+
 import (
 	"errors"
 )

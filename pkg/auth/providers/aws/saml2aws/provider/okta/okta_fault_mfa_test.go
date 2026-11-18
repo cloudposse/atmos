@@ -9,8 +9,8 @@ import (
 
 	"github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
@@ -28,14 +28,14 @@ func TestVerifyMfa_RequestFailures(t *testing.T) {
 		href     string
 		mfaToken string
 		fault    func(*http.Request) faultKind
-		prompt   func(pr *mocks.Prompter)
+		prompt   func(pr *mocks.MockPrompter)
 		wantErr  string
 	}{
 		{
 			name:   "yubikey prompt failure stops authentication",
 			factor: testFactor{id: "y", provider: "YUBICO", factorType: "token:hardware"},
-			prompt: func(pr *mocks.Prompter) {
-				pr.On("Password", "Press the button on your yubikey").Return("", errPrompt).Once()
+			prompt: func(pr *mocks.MockPrompter) {
+				pr.EXPECT().Password("Press the button on your yubikey").Return("", errPrompt).Times(1)
 			},
 			wantErr: "error reading the yubikey code",
 		},
@@ -92,7 +92,7 @@ func TestVerifyMfa_RequestFailures(t *testing.T) {
 func TestVerifyMfa_MultipleMatchesPromptFailure(t *testing.T) {
 	errPrompt := errors.New("interrupt")
 	pr := withMockPrompter(t)
-	pr.On("Choose", "Multiple FIDO MFA options found. Select which MFA option to use", mock.Anything).Return(0, errPrompt).Once()
+	pr.EXPECT().Choose("Multiple FIDO MFA options found. Select which MFA option to use", gomock.Any()).Return(0, errPrompt).Times(1)
 
 	handler := newRoutes(nil)
 	oc := newFaultClient(t, handler, nil)
@@ -133,7 +133,7 @@ func TestVerifyMfa_FidoFailureModes(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skipf("the system WebAuthn API is available on %s and would prompt for a real authenticator", runtime.GOOS)
 		}
-		withDeviceFinder(t, &scriptedDeviceFinder{errs: []error{errNoDeviceFound}})
+		withDeviceFinder(t, failingFinder(gomock.NewController(t), errNoDeviceFound))
 		oc := newFaultClient(t, newRoutes(map[string]func(int, *http.Request) string{
 			"/verify/f": static(webauthnChallenge(faultOrgURL+"/finish", "cred-1")),
 		}), nil)
@@ -145,7 +145,7 @@ func TestVerifyMfa_FidoFailureModes(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		device  func(d *mocks.U2FDevice)
+		device  func(d *mocks.MockU2FDevice)
 		next    string
 		fault   func(*http.Request) faultKind
 		extra   bool
@@ -153,28 +153,28 @@ func TestVerifyMfa_FidoFailureModes(t *testing.T) {
 	}{
 		{
 			name:    "callback URL that cannot be built",
-			device:  func(d *mocks.U2FDevice) { d.On("Authenticate", mock.Anything).Return(signed, nil).Once() },
+			device:  func(d *mocks.MockU2FDevice) { d.EXPECT().Authenticate(gomock.Any()).Return(signed, nil).Times(1) },
 			next:    badURL,
 			wantErr: "error building authentication request",
 		},
 		{
 			name:    "callback transport failure",
-			device:  func(d *mocks.U2FDevice) { d.On("Authenticate", mock.Anything).Return(signed, nil).Once() },
+			device:  func(d *mocks.MockU2FDevice) { d.EXPECT().Authenticate(gomock.Any()).Return(signed, nil).Times(1) },
 			next:    faultOrgURL + "/finish",
 			fault:   faultAt(faultTransport, "/finish", 0),
 			wantErr: "error retrieving verify response",
 		},
 		{
 			name:    "callback unreadable body",
-			device:  func(d *mocks.U2FDevice) { d.On("Authenticate", mock.Anything).Return(signed, nil).Once() },
+			device:  func(d *mocks.MockU2FDevice) { d.EXPECT().Authenticate(gomock.Any()).Return(signed, nil).Times(1) },
 			next:    faultOrgURL + "/finish",
 			fault:   faultAt(faultBody, "/finish", 0),
 			wantErr: "error retrieving body from response",
 		},
 		{
 			name: "next FIDO option cannot be challenged",
-			device: func(d *mocks.U2FDevice) {
-				d.On("Authenticate", mock.Anything).Return(nil, &u2fhost.BadKeyHandleError{}).Once()
+			device: func(d *mocks.MockU2FDevice) {
+				d.EXPECT().Authenticate(gomock.Any()).Return(nil, &u2fhost.BadKeyHandleError{}).Times(1)
 			},
 			next:    faultOrgURL + "/finish",
 			fault:   faultAt(faultTransport, "/verify/second", 0),
@@ -184,10 +184,10 @@ func TestVerifyMfa_FidoFailureModes(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			device := &mocks.U2FDevice{}
-			device.On("Close").Return()
+			device := mocks.NewMockU2FDevice(gomock.NewController(t))
+			device.EXPECT().Close().MinTimes(1) // Unlimited, but at least one call (the former testify AssertExpectations contract).
 			tc.device(device)
-			withDeviceFinder(t, &MockDeviceFinder{device})
+			withMockDevice(t, device)
 
 			oc := newFaultClient(t, newRoutes(map[string]func(int, *http.Request) string{
 				"/verify/first":  static(webauthnChallenge(tc.next, "cred-1")),
@@ -201,12 +201,11 @@ func TestVerifyMfa_FidoFailureModes(t *testing.T) {
 				// Both options match, so the user is asked to pick; pick the first.
 				oc.mfa = "FIDO"
 				pr := withMockPrompter(t)
-				pr.On("Choose", mock.Anything, mock.Anything).Return(0, nil).Once()
+				pr.EXPECT().Choose(gomock.Any(), gomock.Any()).Return(0, nil).Times(1)
 			}
 			_, err := verifyMfa(oc, "okta.example.com", &creds.LoginDetails{}, mfaRequiredResponse(t, "state-1", factors...))
 			require.Error(t, err)
 			assert.ErrorContains(t, err, tc.wantErr)
-			device.AssertExpectations(t)
 		})
 	}
 }

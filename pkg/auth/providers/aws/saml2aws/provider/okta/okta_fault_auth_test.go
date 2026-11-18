@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 )
@@ -34,7 +35,8 @@ func sessionAPI(extra map[string]func(int, *http.Request) string) *routes {
 }
 
 func TestSessionAPIs_FailureModes(t *testing.T) {
-	withCredentialsHelper(t, &recordingHelper{})
+	// Some cases store a session cookie; how many is not part of this test's contract.
+	withCredentialsHelperMock(t).EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
 
 	tests := []struct {
 		name    string

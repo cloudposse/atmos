@@ -12,6 +12,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/provider"
@@ -179,7 +180,7 @@ func TestAuthenticate_CaptchaFailures(t *testing.T) {
 	t.Run("prompt failure stops the flow", func(t *testing.T) {
 		errCancelled := errors.New("prompt cancelled")
 		pr := withMockPrompter(t)
-		pr.On("String", "Captcha", "").Return("", errCancelled).Once()
+		pr.EXPECT().String("Captcha", "").Return("", errCancelled).Times(1)
 		page := `<html><body><form id="challenge" action="/next">` + captchaInput +
 			`<div class="captcha-img"><img src="/Captcha"></div></form></body></html>`
 		f, kc, loginDetails := captchaFlow(t, page, nil)
@@ -191,7 +192,7 @@ func TestAuthenticate_CaptchaFailures(t *testing.T) {
 
 	t.Run("captcha page without a form", func(t *testing.T) {
 		pr := withMockPrompter(t)
-		pr.On("String", "Captcha", "").Return("answer").Once()
+		pr.EXPECT().String("Captcha", "").Return("answer", nil).Times(1)
 		page := `<html><body>` + captchaInput + `<div class="captcha-img"><img src="/Captcha"></div></body></html>`
 		_, kc, loginDetails := captchaFlow(t, page, nil)
 
@@ -202,7 +203,7 @@ func TestAuthenticate_CaptchaFailures(t *testing.T) {
 
 	t.Run("captcha submission fails", func(t *testing.T) {
 		pr := withMockPrompter(t)
-		pr.On("String", "Captcha", "").Return("answer").Once()
+		pr.EXPECT().String("Captcha", "").Return("answer", nil).Times(1)
 		page := `<html><body><form id="challenge" action="` + closedServerURL(t) + `/next">` + captchaInput +
 			`<div class="captcha-img"><img src="/Captcha"></div></form></body></html>`
 		_, kc, loginDetails := captchaFlow(t, page, nil)
@@ -257,7 +258,7 @@ func TestChallenge_PromptAndFormFailures(t *testing.T) {
 			name: "TOTP prompt failure",
 			page: func(*testing.T) string { return challengePage("/signin/challenge/totp/2", "") },
 			setup: func(t *testing.T) {
-				withMockPrompter(t).On("RequestSecurityCode", "000000").Return("", errCancelled).Once()
+				withMockPrompter(t).EXPECT().RequestSecurityCode("000000").Return("", errCancelled).Times(1)
 			},
 			wantErr: "failed to read the TOTP code",
 		},
@@ -280,7 +281,7 @@ func TestChallenge_PromptAndFormFailures(t *testing.T) {
 			name: "SMS token prompt failure",
 			page: func(*testing.T) string { return challengePage("/signin/challenge/ipp/3", "") },
 			setup: func(t *testing.T) {
-				withMockPrompter(t).On("StringRequired", "Enter SMS token: G-").Return("", errCancelled).Once()
+				withMockPrompter(t).EXPECT().StringRequired("Enter SMS token: G-").Return("", errCancelled).Times(1)
 			},
 			wantErr: "failed to read the SMS token",
 		},
@@ -288,7 +289,7 @@ func TestChallenge_PromptAndFormFailures(t *testing.T) {
 			name: "security key one-time code prompt failure",
 			page: func(*testing.T) string { return challengePage("/signin/challenge/skotp/4", "") },
 			setup: func(t *testing.T) {
-				withMockPrompter(t).On("RequestSecurityCode", "000 000").Return("", errCancelled).Once()
+				withMockPrompter(t).EXPECT().RequestSecurityCode("000 000").Return("", errCancelled).Times(1)
 			},
 			wantErr: "failed to read the one-time code",
 		},
@@ -324,7 +325,7 @@ func TestChallenge_PromptAndFormFailures(t *testing.T) {
 }
 
 func TestChallenge_SecurityKeyWithoutDeviceReportsFactorFailure(t *testing.T) {
-	withDeviceFinder(t, &scriptedDeviceFinder{err: errNoDeviceFound})
+	withDeviceFinder(t, failingFinder(gomock.NewController(t), errNoDeviceFound, 1))
 	_, _, err := runChallenge(t, withoutSkipForm(securityKeyPage(true)), map[string]pageHandler{}, &creds.LoginDetails{})
 	require.ErrorIs(t, err, errNoDeviceFound)
 }

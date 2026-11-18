@@ -15,6 +15,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/cfg"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
@@ -132,17 +133,15 @@ func fixture(t *testing.T, name string) string {
 }
 
 // withMockPrompter installs a mock prompter and restores the previous one when the test ends.
-// A mock without expectations panics on any call, which makes unexpected prompts fail the test.
-func withMockPrompter(t *testing.T) *mocks.Prompter {
+// A mock without expectations fails the test on any call, which makes unexpected prompts fail the test.
+// The controller verifies the expectations when the test ends.
+func withMockPrompter(t *testing.T) *mocks.MockPrompter {
 	t.Helper()
 
 	orig := prompter.ActivePrompter
-	pr := &mocks.Prompter{}
+	pr := mocks.NewMockPrompter(gomock.NewController(t))
 	prompter.SetPrompter(pr)
-	t.Cleanup(func() {
-		prompter.SetPrompter(orig)
-		pr.AssertExpectations(t)
-	})
+	t.Cleanup(func() { prompter.SetPrompter(orig) })
 	return pr
 }
 

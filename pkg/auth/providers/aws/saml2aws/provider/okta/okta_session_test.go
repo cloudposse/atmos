@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/cfg"
 )
@@ -42,7 +43,8 @@ func TestCreateSession(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			withCredentialsHelper(t, &recordingHelper{addErr: tc.addErr})
+			// Only an active session is stored; the error cases never reach the store.
+			withCredentialsHelperMock(t).EXPECT().Add(gomock.Any()).Return(tc.addErr).AnyTimes()
 			ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, pathSessions, r.URL.Path)
 				w.WriteHeader(tc.status)
@@ -65,7 +67,7 @@ func TestCreateSession(t *testing.T) {
 	}
 
 	t.Run("MFA required is verified", func(t *testing.T) {
-		withCredentialsHelper(t, &recordingHelper{})
+		withCredentialsHelperMock(t).EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
 		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
 			case pathSessions:
