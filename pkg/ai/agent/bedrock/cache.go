@@ -26,7 +26,7 @@ func extractCacheConfig(atmosConfig *schema.AtmosConfiguration) *cacheConfig {
 	}
 
 	settings := providerConfig.Cache
-	if !settings.Enabled {
+	if !settings.IsEnabled() {
 		return &cacheConfig{}
 	}
 
