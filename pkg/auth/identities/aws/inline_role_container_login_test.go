@@ -218,3 +218,45 @@ func TestExplicitStaticProfileDoesNotRequireInvocationHome(t *testing.T) {
 	require.Equal(t, "invocation-secret", value.SecretAccessKey)
 	assertProcessEnvironmentUnchanged(t, poisoned)
 }
+
+func TestContainerCredentialsUseValidatedTransportForHTTPScheme(t *testing.T) {
+	for _, scheme := range []string{"http", "HTTP", "HtTp"} {
+		t.Run(scheme, func(t *testing.T) {
+			closed := make(chan bool, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				closed <- r.Close
+				_, _ = w.Write([]byte(`{"AccessKeyId":"invocation","SecretAccessKey":"secret","Token":"token","Expiration":"2099-01-01T00:00:00Z"}`))
+			}))
+			defer server.Close()
+			endpoint := scheme + server.URL[len("http"):]
+			provider, found, err := containerCredentials(map[string]string{"AWS_CONTAINER_CREDENTIALS_FULL_URI": endpoint})
+			require.NoError(t, err)
+			require.True(t, found)
+			value, err := provider.Retrieve(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, "invocation", value.AccessKeyID)
+			require.True(t, <-closed, "plain HTTP must use the validated short-lived transport for every scheme spelling")
+		})
+	}
+}
+
+func TestContainerHTTPSPreservesSDKTransport(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("untrusted TLS endpoint must not receive a credentials request")
+	}))
+	defer server.Close()
+	for _, scheme := range []string{"https", "HTTPS"} {
+		provider, configured, err := containerCredentials(map[string]string{"AWS_CONTAINER_CREDENTIALS_FULL_URI": scheme + server.URL[len("https"):]})
+		require.NoError(t, err)
+		require.True(t, configured)
+		_, err = provider.Retrieve(t.Context())
+		require.ErrorContains(t, err, "x509", "SDK default transport must validate TLS certificates")
+	}
+	for _, endpoint := range []string{"https://credentials.example.test", "HTTPS://credentials.example.test"} {
+		client, err := checkContainerEndpoint(endpoint)
+		require.NoError(t, err)
+		require.Nil(t, client, "HTTPS retains the SDK transport and certificate validation")
+	}
+	_, err := checkContainerEndpoint("HTTP://203.0.113.1/credentials")
+	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig, "normalized HTTP still enforces the address allowlist")
+}

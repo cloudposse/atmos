@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -62,6 +63,8 @@ func TestDiscoveryRejectsUnrepresentableInventory(t *testing.T) {
 				unit.Config.Files = []string{filepath.Join(outside, "secret.hcl")}
 			case "dependency outside scope":
 				unit.Config.Dependencies = []string{filepath.Join(base.RootDirectory, "other", "terragrunt.hcl")}
+				require.NoError(t, os.MkdirAll(filepath.Dir(unit.Config.Dependencies[0]), 0o700))
+				require.NoError(t, os.WriteFile(unit.Config.Dependencies[0], []byte(""), 0o600))
 			}
 			p := New(func(context.Context, model.Request) (*model.Resolution, error) {
 				if name == "evaluator failure" {

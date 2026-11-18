@@ -2,7 +2,6 @@
 package engine
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -324,10 +323,10 @@ func (e *unitEvaluator) parseUnit(ctx context.Context) (*config.TerragruntConfig
 			return nil, err
 		}
 		// Reject unverifiable backend generation before the full download_dir probe.
-		if err := checkBackendGeneration(environment.FS, append(e.pctx.FilesRead.Paths(), e.path)); err != nil {
+		if err := checkBackendGeneration(environment.FS, backendConfigurationPaths(cfg, e.path)); err != nil {
 			return nil, err
 		}
-		if e.request.Environment[downloadDirEnv] == "" && mentionsDownloadDir(environment.FS, append(e.pctx.FilesRead.Paths(), e.path)) {
+		if e.request.Environment[downloadDirEnv] == "" && mentionsDownloadDir(environment.FS, backendConfigurationPaths(cfg, e.path)) {
 			cfg.DownloadDir, err = downloadDir(ctx, e.logger, environment, e.pctx)
 		}
 		return cfg, err
@@ -352,18 +351,6 @@ func downloadDir(ctx context.Context, logger log.Logger, environment *atmosbridg
 		return "", err
 	}
 	return full.DownloadDir, nil
-}
-
-// mentionsDownloadDir reports whether any parsed configuration file names download_dir. The probe
-// in downloadDir parses the whole unit, so a unit that never sets it skips the probe and its
-// inputs stay unevaluated during backend reads.
-func mentionsDownloadDir(filesystem afero.Fs, paths []string) bool {
-	for _, path := range paths {
-		if content, err := afero.ReadFile(filesystem, path); err == nil && bytes.Contains(content, []byte("download_dir")) {
-			return true
-		}
-	}
-	return false
 }
 
 // withoutInputsFS projects inputs to the keys referenced by the configuration.

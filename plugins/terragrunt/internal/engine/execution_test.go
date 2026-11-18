@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1234,6 +1235,64 @@ func TestUnitBinaryOverriddenByTheStackIsNotProbed(t *testing.T) {
 			require.Equal(t, WarningTerraformBinaryOverridden, warning.Code)
 			require.Contains(t, warning.Message, tt.effective)
 			require.Contains(t, warning.Message, filepath.ToSlash(tt.unitBinary))
+		})
+	}
+}
+
+func TestTflintLifecycleAliasesExpandOncePerStage(t *testing.T) {
+	commands := []string{"read-config", "plan", "init-from-module", "terragrunt-read-config", "apply", "init-from-module", "read-config"}
+	hook := model.Hook{Name: "lint", Commands: commands, Execute: []string{"tflint"}}
+	hooks := finalizeHooks([]model.Hook{hook}, &model.Execution{}, filepath.Join(t.TempDir(), "terragrunt.hcl"))
+	require.Len(t, hooks, 8, "aliases and duplicates must not repeat the init/lint pair")
+	for i, command := range []string{"terragrunt-read-config", "init-from-module", "plan", "apply"} {
+		require.Equal(t, []string{command}, hooks[2*i].Commands)
+		require.Equal(t, []string{command}, hooks[2*i+1].Commands)
+		require.Contains(t, hooks[2*i].Execute, "--init")
+		require.NotContains(t, hooks[2*i+1].Execute, "--init")
+	}
+	require.Equal(t, []string{"read-config", "plan", "init-from-module", "terragrunt-read-config", "apply", "init-from-module", "read-config"}, hook.Commands, "normalization does not mutate the input hook")
+}
+
+// Invalid error patterns remain unsupported in L7, which supports the TFLint built-in.
+func TestDiscoveryPreservesRepeatedHooksInOneFile(t *testing.T) {
+	request := executionUnit(t, `error_hook "lint" {
+ commands = ["plan"]
+ execute = ["./wrapper.sh"]
+ on_errors = ["("]
+ }
+ error_hook "lint" {
+ commands = ["plan"]
+ execute = ["./wrapper.sh"]
+ on_errors = [".*"]
+ }`)
+	for _, phase := range []string{"discover", ""} {
+		request.Phase = phase
+		_, err := Resolve(t.Context(), request)
+		require.ErrorContains(t, err, "Invalid `on_errors` pattern")
+	}
+}
+
+func TestDiscoveryHonorsAutomaticHookOverride(t *testing.T) {
+	for _, invalidAuto := range []bool{false, true} {
+		t.Run(fmt.Sprint(invalidAuto), func(t *testing.T) {
+			unit, auto := "(", ".*"
+			if invalidAuto {
+				unit, auto = auto, unit
+			}
+			hook := func(pattern string) string {
+				return fmt.Sprintf("error_hook \"lint\" {\n commands = [\"plan\"]\n execute = [\"./wrapper.sh\"]\n on_errors = [%q]\n}", pattern)
+			}
+			request := executionUnit(t, hook(unit))
+			require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), "terragrunt.autoinclude.hcl"), []byte("terraform {\n"+hook(auto)+"\n}"), 0o600))
+			for _, phase := range []string{"discover", ""} {
+				request.Phase = phase
+				_, err := Resolve(t.Context(), request)
+				if invalidAuto {
+					require.ErrorContains(t, err, "Invalid `on_errors` pattern")
+				} else {
+					require.NoError(t, err)
+				}
+			}
 		})
 	}
 }

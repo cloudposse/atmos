@@ -3,9 +3,12 @@ package engine
 import (
 	"errors"
 	"io/fs"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/spf13/afero"
@@ -23,9 +26,19 @@ func unresolvedGeneratedBackend(path string) error {
 	}
 }
 
-// checkBackendGeneration inspects files read by the partial backend parse, including
-// parents. Unknown generation expressions fail closed without evaluating inputs,
-// hooks or commands. Non-HCL auxiliary files are not configuration declarations.
+// backendConfigurationPaths names declarations participating in this unit's parse.
+// FilesRead also contains data reads and mark_as_read paths, which are watches,
+// not configuration declarations (and need not exist).
+func backendConfigurationPaths(cfg *config.TerragruntConfig, path string) []string {
+	paths := []string{path}
+	for _, name := range slices.Sorted(maps.Keys(cfg.ProcessedIncludes)) {
+		paths = append(paths, localPath(filepath.Dir(path), cfg.ProcessedIncludes[name].Path))
+	}
+	return paths
+}
+
+// checkBackendGeneration inspects the unit and its parsed includes. Unknown generation
+// expressions fail closed without evaluating inputs, hooks or commands.
 func checkBackendGeneration(filesystem afero.Fs, paths []string) error {
 	for _, path := range paths {
 		// Upstream partial parsing does not merge automatic includes. They can add
@@ -94,6 +107,7 @@ func staticallyNonBackendGeneration(body hcl.Body) bool {
 		return known && disabled
 	}
 	path, ok := literalGenerateString(content.Attributes["path"])
+	path = filepath.Clean(path)
 	if !ok || !filepath.IsLocal(path) || path == "." {
 		return false
 	}
@@ -129,5 +143,34 @@ func literalGenerateDisabled(attr *hcl.Attribute) (bool, bool) {
 // terraformConfigurationFile identifies generated files Terraform can load.
 func terraformConfigurationFile(path string) bool {
 	lower := strings.ToLower(path)
-	return strings.HasSuffix(lower, ".tf") || strings.HasSuffix(lower, ".tf.json")
+	return strings.HasSuffix(lower, ".tf") || strings.HasSuffix(lower, ".tf.json") ||
+		strings.HasSuffix(lower, ".tofu") || strings.HasSuffix(lower, ".tofu.json")
+}
+
+// mentionsDownloadDir reports whether any parsed configuration file names download_dir. The probe
+// in downloadDir parses the whole unit, so a unit that never sets it skips the probe and its
+// inputs stay unevaluated during backend reads.
+func mentionsDownloadDir(filesystem afero.Fs, paths []string) bool {
+	for _, path := range paths {
+		data, err := afero.ReadFile(filesystem, path)
+		if err != nil {
+			continue
+		}
+		parser := hclparse.NewParser()
+		var file *hcl.File
+		var diagnostics hcl.Diagnostics
+		if strings.HasSuffix(path, ".json") {
+			file, diagnostics = parser.ParseJSON(data, path)
+		} else {
+			file, diagnostics = parser.ParseHCL(data, path)
+		}
+		if diagnostics.HasErrors() {
+			continue
+		}
+		content, _, _ := file.Body.PartialContent(&hcl.BodySchema{Attributes: []hcl.AttributeSchema{{Name: "download_dir"}}})
+		if content.Attributes["download_dir"] != nil {
+			return true
+		}
+	}
+	return false
 }

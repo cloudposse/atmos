@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"path/filepath"
 	"reflect"
@@ -225,7 +226,8 @@ func checkExecutionSyntax(filesystem afero.Fs, cfg *config.TerragruntConfig, pat
 }
 
 // includedExecutionPaths lists the files whose execution blocks apply to a unit, in merge order.
-// Included files come first, in the order the unit declares its includes, and the unit comes last,
+// Included files come first, in the order the unit declares its includes, then the unit and its
+// highest-priority automatic override,
 // so a later same-named declaration replaces an earlier one, as Terragrunt merges hooks and
 // extra_arguments by name.
 func includedExecutionPaths(filesystem afero.Fs, cfg *config.TerragruntConfig, path string) ([]string, error) {
@@ -245,7 +247,14 @@ func includedExecutionPaths(filesystem afero.Fs, cfg *config.TerragruntConfig, p
 		}
 		paths = append(paths, included)
 	}
-	return append(paths, path), nil
+	paths = append(paths, path)
+	auto := filepath.Join(filepath.Dir(path), config.DefaultAutoIncludeFile)
+	if _, err := filesystem.Stat(auto); err == nil {
+		paths = append(paths, auto)
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	return paths, nil
 }
 
 // includeDeclarationOrder returns the names of the processed includes in the order the unit declares
@@ -312,26 +321,32 @@ type executionDeclaration struct {
 }
 
 // effectiveExecutionBlocks parses every file and keeps, for each block type and name, the last
-// declaration in file order. Unparseable files are still reported.
+// file in merge order, preserving repeated declarations within that file.
+// Unparseable files are still reported.
 func effectiveExecutionBlocks(filesystem afero.Fs, paths []string) ([]executionDeclaration, error) {
 	var order []string
-	effective := map[string]executionDeclaration{}
+	effective := map[string][]executionDeclaration{}
 	for _, path := range paths {
 		blocks, err := executionDeclarations(filesystem, path)
 		if err != nil {
 			return nil, err
 		}
+		seenInFile := map[string]bool{}
 		for _, block := range blocks {
 			key := block.Type + "\x00" + strings.Join(block.Labels, "\x00")
 			if _, seen := effective[key]; !seen {
 				order = append(order, key)
 			}
-			effective[key] = executionDeclaration{block: block, path: path}
+			if !seenInFile[key] {
+				effective[key] = nil
+				seenInFile[key] = true
+			}
+			effective[key] = append(effective[key], executionDeclaration{block: block, path: path})
 		}
 	}
 	result := make([]executionDeclaration, 0, len(order))
 	for _, key := range order {
-		result = append(result, effective[key])
+		result = append(result, effective[key]...)
 	}
 	return result, nil
 }

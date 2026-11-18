@@ -22,6 +22,8 @@ const lockFileName = ".terraform.lock.hcl"
 
 const hclExtension = ".hcl"
 
+const readConfigFunction = "read_terragrunt_config"
+
 // fileScan is the evaluation scope of one HCL file being inspected.
 type fileScan struct {
 	// base resolves relative paths named by file functions in this file.
@@ -204,7 +206,7 @@ func (t *watchTracker) visit(scan fileScan, node hclsyntax.Node) {
 func (t *watchTracker) trackCall(scan fileScan, call *hclsyntax.FunctionCallExpr) {
 	switch call.Name {
 	case "file", "fileexists", "filebase64", "filemd5", "filesha1", "filesha256", "filesha512",
-		"filebase64sha256", "filebase64sha512", "templatefile", "read_tfvars_file", "read_terragrunt_config",
+		"filebase64sha256", "filebase64sha512", "templatefile", "read_tfvars_file", readConfigFunction,
 		"sops_decrypt_file", "mark_as_read":
 		t.trackFile(scan, call)
 	case "fileset":
@@ -230,20 +232,18 @@ func (t *watchTracker) trackFile(scan fileScan, call *hclsyntax.FunctionCallExpr
 		t.fallback()
 		return
 	}
-	if call.Name == "read_terragrunt_config" && t.followConfigurationDirectory(path) {
+	if call.Name == readConfigFunction && t.followConfigurationDirectory(path) {
 		return
 	}
 	t.add(t.files, path)
-	if call.Name != "read_terragrunt_config" {
+	if call.Name != readConfigFunction {
 		return
 	}
-	switch {
-	case strings.HasSuffix(path, hclExtension):
-		t.queue = append(t.queue, queuedFile{path: path})
-	case strings.HasSuffix(path, ".json"):
-		// A JSON configuration holds its expressions in strings the HCL syntax walk cannot
-		// inspect, so any file it reads could be anywhere in the project.
+	if strings.HasSuffix(path, ".json") {
+		// JSON expressions need conservative watches; every other suffix is native HCL.
 		t.fallback()
+	} else {
+		t.queue = append(t.queue, queuedFile{path: path})
 	}
 }
 
@@ -287,15 +287,15 @@ func (t *watchTracker) followInclude(scan fileScan, block *hclsyntax.Block) {
 	}
 	path := localPath(scan.unit, value)
 	t.add(t.files, path)
-	switch {
-	case strings.HasSuffix(path, hclExtension):
-		t.queue = append(t.queue, queuedFile{path: path, unit: scan.unit})
-	case strings.HasSuffix(path, ".json"):
+	if strings.HasSuffix(path, ".json") {
 		t.fallback()
+	} else {
+		t.queue = append(t.queue, queuedFile{path: path, unit: scan.unit})
 	}
 }
 
-// firstPath evaluates the first argument against the file's directory.
+// firstPath uses the evaluation directory for configuration reads and the authored
+// file directory for ordinary file functions, matching their different upstream bases.
 func (t *watchTracker) firstPath(scan fileScan, call *hclsyntax.FunctionCallExpr) (string, bool) {
 	if len(call.Args) == 0 {
 		return "", false
@@ -303,6 +303,9 @@ func (t *watchTracker) firstPath(scan fileScan, call *hclsyntax.FunctionCallExpr
 	path, ok := stringOf(call.Args[0], scan.ctx)
 	if !ok {
 		return "", false
+	}
+	if call.Name == readConfigFunction {
+		return localPath(scan.unit, path), true
 	}
 	return localPath(scan.base, path), true
 }

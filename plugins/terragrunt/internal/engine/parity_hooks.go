@@ -96,7 +96,7 @@ func expandTflint(hook *model.Hook, execution *model.Execution, path string) []m
 	}
 	passthrough := withoutConfigFlag(arguments[1:])
 	var result []model.Hook
-	for _, command := range hook.Commands {
+	for _, command := range distinctHookCommands(hook.Commands) {
 		variables := append([]string{tflintInputVariablesMarker}, tflintExtraVariables(command, execution)...)
 		initHook := *hook
 		initHook.Commands = []string{command}
@@ -106,6 +106,20 @@ func expandTflint(hook *model.Hook, execution *model.Execution, path string) []m
 		// The module directory is where tflint runs; a working_dir would only change the lock key upstream.
 		initHook.WorkingDirectory, runHook.WorkingDirectory = "", ""
 		result = append(result, initHook, runHook)
+	}
+	return result
+}
+
+// distinctHookCommands preserves stage order while collapsing the read-config alias and duplicates.
+func distinctHookCommands(commands []string) []string {
+	var result []string
+	for _, command := range commands {
+		if command == model.LifecycleReadConfigAlias {
+			command = model.LifecycleReadConfig
+		}
+		if !slices.Contains(result, command) {
+			result = append(result, command)
+		}
 	}
 	return result
 }
