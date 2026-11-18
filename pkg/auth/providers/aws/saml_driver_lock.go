@@ -15,13 +15,13 @@ import (
 )
 
 const (
-	// driverSeedLockName is the lock file, inside the driver directory, that serializes driver seeding
-	// across Atmos processes. It lives outside package/, so a rollback of the package never removes it.
+	// The lock file, inside the driver directory, that serializes driver seeding across Atmos
+	// processes. It lives outside package/, so a rollback of the package never removes it.
 	driverSeedLockName = ".atmos-driver-seed.lock"
 
-	// driverSeedLockTimeout bounds the wait for another process's seeding. It covers the four downloads
-	// of a full seed (npm metadata, the playwright-core tarball, the Node.js archive and its checksums),
-	// each bounded by preseedDownloadTimeout.
+	// The bound on the wait for another process's seeding. It covers the four downloads of a full seed
+	// (npm metadata, the playwright-core tarball, the Node.js archive and its checksums), each bounded
+	// by preseedDownloadTimeout.
 	driverSeedLockTimeout = 4*preseedDownloadTimeout + time.Minute
 )
 
