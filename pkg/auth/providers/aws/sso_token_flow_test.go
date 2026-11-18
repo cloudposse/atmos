@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
+	"github.com/charmbracelet/x/ansi"
 	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -195,7 +197,10 @@ func TestPollForAccessToken(t *testing.T) {
 			if tt.wantErrSubstr != "" {
 				require.Error(t, err)
 				assert.ErrorIs(t, err, errUtils.ErrSSOTokenCreationFailed)
-				assert.Contains(t, errUtils.Format(err, errUtils.DefaultFormatterConfig()), tt.wantErrSubstr)
+				// The formatted error is styled (ANSI color under a forced-color CI terminal) and word-wrapped,
+				// so compare its plain text with whitespace collapsed.
+				formatted := strings.Join(strings.Fields(ansi.Strip(errUtils.Format(err, errUtils.DefaultFormatterConfig()))), " ")
+				assert.Contains(t, formatted, tt.wantErrSubstr)
 				assert.Empty(t, result.AccessToken)
 				return
 			}
