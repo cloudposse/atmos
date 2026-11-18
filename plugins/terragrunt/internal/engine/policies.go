@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/gruntwork-io/terragrunt/pkg/config"
@@ -74,7 +76,7 @@ func checkVersions(ctx context.Context, request *model.Request, terraform, terra
 	for key, value := range request.Environment {
 		cmd.Env = append(cmd.Env, key+"="+value)
 	}
-	data, err := cmd.Output()
+	data, err := versionProbeOutput(ctx, cmd)
 	if err != nil {
 		return fmt.Errorf("terraform_version_constraint: cannot inspect selected executable: %w", err)
 	}
@@ -183,9 +185,40 @@ func effectivePolicyArguments(request *model.Request, cfg *config.TerragruntConf
 // unsupportedDependencyWorkspace preserves the existing output-dependency workspace guard.
 func unsupportedDependencyWorkspace(request *model.Request, cfg *config.TerragruntConfig) bool {
 	workspace := request.Environment["TF_WORKSPACE"]
-	return workspace != "" && workspace != "default" && len(cfg.TerragruntDependencies) > 0 && cfg.Dependencies != nil && len(cfg.Dependencies.Paths) > 0
+	if workspace == "" || workspace == "default" {
+		return false
+	}
+	for _, dependency := range cfg.TerragruntDependencies {
+		if (dependency.Enabled == nil || *dependency.Enabled) && (dependency.SkipOutputs == nil || !*dependency.SkipOutputs) {
+			return true
+		}
+	}
+	return false
 }
 
 func missingTerraformSource(cfg *config.TerragruntConfig) bool {
 	return cfg.Terraform == nil || cfg.Terraform.Source == nil
+}
+
+// versionProbeOutput follows Atmos process-group/job cancellation semantics and
+// bounds pipe draining when a wrapper leaves stdout open in a descendant.
+func versionProbeOutput(ctx context.Context, cmd *exec.Cmd) ([]byte, error) {
+	const waitDelay = 2 * time.Second
+	cmd.WaitDelay = waitDelay
+	tree, err := prepareProcessTree(cmd)
+	if err != nil {
+		return nil, err
+	}
+	defer tree.close()
+	var output bytes.Buffer
+	cmd.Stdout = &output
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	if err := tree.started(); err != nil {
+		_ = cmd.Process.Kill()
+		return nil, errors.Join(err, cmd.Wait())
+	}
+	err = cmd.Wait()
+	return output.Bytes(), errors.Join(err, ctx.Err())
 }

@@ -354,6 +354,14 @@ func simpleTagHandler(resolve func(fullTagValue string) (any, error)) TagHandler
 	}
 }
 
+// LocalIncludeFile resolves an !include path to the local file it names, or "" for a remote
+// include. It is the thin adapter callers outside this package (such as the scaffold
+// publication-root confinement in pkg/manifest) use to locate an include without
+// duplicating the resolution rules.
+func LocalIncludeFile(includeFile, manifestFile string, atmosConfig *schema.AtmosConfiguration) string {
+	return findLocalFile(includeFile, manifestFile, atmosConfig)
+}
+
 // ScaffoldTagPolicy returns the TagWalkPolicy used to resolve scaffold.yaml
 // manifests. Unlike the stack-manifest policy, Defer is false: scaffold.yaml
 // has no later evaluation phase, so a tag needing real stack/component/

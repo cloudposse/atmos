@@ -21,7 +21,7 @@ checks:
   - id: go-fumpt
     handler: gofumpt
     files: '\.go$'
-    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)'
+    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|pkg/artifact/compat/testdata/)'
     fix: true
 
   - id: go-mod-tidy
@@ -37,7 +37,7 @@ checks:
   - id: golangci-lint
     handler: custom_lint
     files: '\.go$'
-    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)'
+    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|pkg/artifact/compat/testdata/)'
 
   - id: gomodcheck
     handler: module_compatibility
@@ -57,18 +57,18 @@ checks:
 
   - id: trailing-whitespace
     handler: trailing_whitespace
-    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)'
+    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|pkg/artifact/compat/testdata/|.*\.svg|website/src/components/Screengrabs/)'
     fix: true
 
   - id: end-of-file-fixer
     handler: end_of_file
-    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)'
+    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|pkg/artifact/compat/testdata/|.*\.svg|website/src/components/Screengrabs/)'
     fix: true
 
   - id: check-yaml
     handler: yaml_syntax
     files: '\.(yaml|yml)$'
-    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|tests/fixtures/)'
+    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|pkg/artifact/compat/testdata/|tests/fixtures/)'
 
   - id: check-added-large-files
     handler: large_files

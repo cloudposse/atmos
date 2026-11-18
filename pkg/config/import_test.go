@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/redacttest"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
@@ -217,12 +220,43 @@ func TestSanitizeImport(t *testing.T) {
 			input:    "gcs::https://storage.googleapis.com/bucket/file?access_token=secret",
 			expected: "gcs::https://storage.googleapis.com/bucket/file",
 		},
+		{
+			name:     "forced getter with a double colon password",
+			input:    "git::https://user:pa::ss@example.com/repo.git",
+			expected: "git::https://example.com/repo.git",
+		},
+		{
+			name:     "password with an at sign",
+			input:    "https://user:pa@ss@second@example.com/file.yaml",
+			expected: "https://example.com/file.yaml",
+		},
+		{
+			name:     "unparsable URL with credentials is replaced",
+			input:    "https://user:hunter2@exa mple.com/%zz",
+			expected: artifact.RedactedValue,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := SanitizeImport(tt.input)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSanitizeImport_SharedCredentialCases feeds the table shared by every credential redaction
+// helper to SanitizeImport and asserts no user or password of a URL-shaped import survives.
+func TestSanitizeImport_SharedCredentialCases(t *testing.T) {
+	for _, tc := range redacttest.Cases() {
+		if !strings.Contains(tc.Raw, "://") {
+			continue
+		}
+		t.Run(tc.Name, func(t *testing.T) {
+			got := SanitizeImport(tc.Raw)
+			for _, secret := range tc.Secrets {
+				assert.NotContains(t, got, secret, "sanitized form of %q", tc.Raw)
+			}
 		})
 	}
 }

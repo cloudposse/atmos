@@ -35,7 +35,17 @@ func (d *configYamlDecoder) decode(node *yaml.Node, sourceFile string) (any, err
 	if node == nil {
 		return nil, nil
 	}
+	if node.Kind == yaml.AliasNode {
+		return d.decodeAlias(node, sourceFile)
+	}
+	if node.Anchor != "" {
+		return d.decodeAnchored(node, sourceFile)
+	}
+	return d.decodeNode(node, sourceFile)
+}
 
+// decodeNode evaluates one node by kind, without consulting the anchor cache.
+func (d *configYamlDecoder) decodeNode(node *yaml.Node, sourceFile string) (any, error) {
 	switch node.Kind {
 	case yaml.DocumentNode:
 		if len(node.Content) == 0 {
@@ -59,17 +69,44 @@ func (d *configYamlDecoder) decodeMappingNodeWithYamlFunctions(node *yaml.Node, 
 	for i := 0; i < len(node.Content); i += 2 {
 		keyNode := node.Content[i]
 		valueNode := node.Content[i+1]
+		if isMergeKey(keyNode) {
+			continue
+		}
+		d.path = append(d.path, keyNode.Value)
+		d.nodeOrigin = nil
 		value, err := d.decode(valueNode, sourceFile)
+		if err == nil && d.origin != nil {
+			d.recordValueOrigin(valueNode, sourceFile)
+		}
+		d.nodeOrigin = nil
+		d.path = d.path[:len(d.path)-1]
 		if err != nil {
 			return nil, err
 		}
 		result[keyNode.Value] = value
+	}
+	if err := d.expandMergeKeys(node, result, sourceFile); err != nil {
+		return nil, err
 	}
 	recordScriptSource(node, result, sourceFile)
 	if err := recordCommandFields(node, result); err != nil {
 		return nil, err
 	}
 	return result, nil
+}
+
+// recordValueOrigin reports the file that declared the value just decoded at the current path. A
+// value produced by an include, or by an alias of an anchored include, belongs to the included file
+// (and is remote when that file is), not to the file that merely references it.
+func (d *configYamlDecoder) recordValueOrigin(valueNode *yaml.Node, sourceFile string) {
+	file, remote := sourceFile, false
+	if d.remoteSource != "" {
+		file, remote = d.remoteSource, true
+	}
+	if included := d.nodeOrigin; included != nil && (valueNode.Kind == yaml.AliasNode || isIncludeTag(valueNode.Tag)) {
+		file, remote = included.file, included.remote
+	}
+	d.origin(d.path, file, remote)
 }
 
 // decodeSequenceNodeWithYamlFunctions evaluates sequence elements in their original order.
@@ -115,6 +152,12 @@ func (d *configYamlDecoder) processScalarNodeValueForFile(node *yaml.Node, sourc
 	return d.processIncludeNodeValueForFile(node, sourceFile)
 }
 
+// redactIncludeValue removes credentials from an include argument before it is echoed in an error.
+// Only URL-shaped values are touched: a local path or an SCP-style git address keeps its text.
+func redactIncludeValue(value string) string {
+	return u.RedactIncludeArgument(value)
+}
+
 func isIncludeTag(tag string) bool {
 	return tag == u.AtmosYamlFuncInclude || tag == u.AtmosYamlFuncIncludeRaw
 }
@@ -128,7 +171,8 @@ func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sour
 	// Resolve the path against the config file and the project base path, never the working
 	// directory, so the result is the same wherever Atmos runs from.
 	scope := commandIncludeScope(sourceFile)
-	value := scope.Resolve(node.Value).Value
+	include := scope.Resolve(node.Value)
+	value := include.Value
 	resolved := legacyyaml.Node{
 		Kind:  legacyyaml.ScalarNode,
 		Tag:   node.Tag,
@@ -136,7 +180,7 @@ func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sour
 	}
 	key := sourceFile + "\x00" + node.Value
 	if d.includes[key] || len(d.includes) >= maxConfigIncludeDepth {
-		return nil, fmt.Errorf("%w: recursive include: %s", ErrExecuteYamlFunctions, node.Value)
+		return nil, fmt.Errorf("%w: recursive include: %s", ErrExecuteYamlFunctions, redactIncludeValue(node.Value))
 	}
 	d.includes[key] = true
 	defer delete(d.includes, key)
@@ -144,20 +188,36 @@ func (d *configYamlDecoder) processIncludeNodeValueForFile(node *yaml.Node, sour
 		BasePath:         scope.BasePath,
 		BasePathAbsolute: scope.BasePath,
 	}
-	var err error
-	if node.Tag == u.AtmosYamlFuncIncludeRaw {
-		err = u.ProcessIncludeRawTag(atmosConfig, &resolved, value, sourceFile)
-	} else {
-		_, err = u.ProcessIncludeTagWalked(atmosConfig, &resolved, value, sourceFile, d.evaluateInclude)
-	}
+	outerTaint := d.remoteTaint
+	d.remoteTaint = nil
+	walked, err := d.runInclude(atmosConfig, &resolved, node.Tag, value, sourceFile)
+	walkedRemote := d.remoteTaint
+	d.remoteTaint = outerTaint
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, node.Value, err)
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncInclude, redactIncludeValue(node.Value), err)
 	}
 	var decoded any
 	if err := resolved.Decode(&decoded); err != nil {
 		return nil, err
 	}
+	if d.origin != nil {
+		d.recordIncludeOrigin(includeResult{localPath: include.LocalPath, target: node.Value, decoded: decoded, walked: walked, walkedRemote: walkedRemote})
+	}
 	return decoded, nil
+}
+
+// recordIncludedOrigins records plain, non-evaluated mappings without running their tags.
+func (d *configYamlDecoder) recordIncludedOrigins(value any, file string, remote bool) {
+	mapping, ok := value.(map[string]any)
+	if !ok {
+		return
+	}
+	for key, child := range mapping {
+		d.path = append(d.path, key)
+		d.recordIncludedOrigins(child, file, remote)
+		d.origin(d.path, file, remote)
+		d.path = d.path[:len(d.path)-1]
+	}
 }
 
 // includeBasePathForSourceFile returns the directory a config file's bare include paths anchor

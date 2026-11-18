@@ -1,0 +1,295 @@
+package artifact
+
+import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// Compile-time sentinels: a rename of these schema fields must fail the build.
+var _ = schema.ArtifactRepositoryConfig{Kind: "", Options: nil, Packaging: "", Permissions: "", Catalog: ""}
+
+func TestDecodeOptions_IsStrict(t *testing.T) {
+	tests := []struct {
+		name     string
+		raw      map[string]any
+		wantErr  string
+		wantHint bool
+	}{
+		{name: "valid", raw: map[string]any{"bucket": "acme-artifacts", "region": "us-east-2"}},
+		{name: "unknown key is a typo", raw: map[string]any{"buckt": "acme-artifacts"}, wantErr: "buckt"},
+		{name: "wrong type", raw: map[string]any{"bucket": 42}, wantErr: "bucket"},
+		{name: "credential-looking key gets a hint", raw: map[string]any{"bucket": "acme-artifacts", "secret_key": "x"}, wantErr: "secret_key", wantHint: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var options S3Options
+			err := DecodeOptions(tt.raw, &options)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				assert.Equal(t, "acme-artifacts", options.Bucket)
+				return
+			}
+			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.Equal(t, tt.wantHint, strings.Contains(err.Error(), "auth identity"))
+		})
+	}
+}
+
+func TestOptionsValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		options Options
+		wantErr string
+	}{
+		{name: "local dir ok", options: &LocalDirOptions{Path: ".atmos/artifacts"}},
+		{name: "local dir missing path", options: &LocalDirOptions{}, wantErr: `"path" is required`},
+		{name: "local dir NUL", options: &LocalDirOptions{Path: "a\x00b"}, wantErr: "NUL"},
+		{name: "relative path with traversal is a legitimate destination", options: &LocalDirOptions{Path: "../shared/artifacts"}},
+		{name: "archive missing path", options: &LocalArchiveOptions{}, wantErr: `"path" is required`},
+		{name: "layout missing path", options: &OCILayoutOptions{}, wantErr: `"path" is required`},
+		{name: "s3 ok", options: &S3Options{Bucket: "acme-artifacts", Prefix: "atmos", Region: "us-east-2", Tags: map[string]string{"purpose": "backup"}}},
+		{name: "s3 missing bucket", options: &S3Options{}, wantErr: `"bucket" is required`},
+		{name: "s3 IP bucket", options: &S3Options{Bucket: "192.168.0.1"}, wantErr: "not a valid S3 bucket name"},
+		{name: "s3 bad bucket", options: &S3Options{Bucket: "Bad_Bucket"}, wantErr: "not a valid S3 bucket name"},
+		{name: "s3 bad region", options: &S3Options{Bucket: "acme-artifacts", Region: "US East"}, wantErr: "not a valid region"},
+		{name: "s3 prefix traversal", options: &S3Options{Bucket: "acme-artifacts", Prefix: "a/../b"}, wantErr: "prefix"},
+		{name: "s3 absolute prefix", options: &S3Options{Bucket: "acme-artifacts", Prefix: "/atmos"}, wantErr: "prefix"},
+		{name: "s3 trailing slash prefix", options: &S3Options{Bucket: "acme-artifacts", Prefix: "atmos/"}, wantErr: "prefix"},
+		{name: "s3 reserved prefix", options: &S3Options{Bucket: "acme-artifacts", Prefix: "atmos/.atmos-artifacts"}, wantErr: "reserved"},
+		{name: "s3 reserved tag prefix", options: &S3Options{Bucket: "acme-artifacts", Tags: map[string]string{"aws:foo": "x"}}, wantErr: "reserved"},
+		{name: "s3 oversized tag value", options: &S3Options{Bucket: "acme-artifacts", Tags: map[string]string{"k": strings.Repeat("x", 257)}}, wantErr: "value exceeds"},
+		{name: "s3 tag value at the character limit", options: &S3Options{Bucket: "acme-artifacts", Tags: map[string]string{"k": strings.Repeat("x", 256)}}},
+		{name: "s3 multibyte tag value at the character limit", options: &S3Options{Bucket: "acme-artifacts", Tags: map[string]string{"k": strings.Repeat("é", 256)}}},
+		{name: "s3 multibyte tag value over the character limit", options: &S3Options{Bucket: "acme-artifacts", Tags: map[string]string{"k": strings.Repeat("é", 257)}}, wantErr: "value exceeds"},
+		{name: "s3 tag key at the character limit", options: &S3Options{Bucket: "acme-artifacts", Tags: map[string]string{strings.Repeat("k", 128): "v"}}},
+		{name: "s3 multibyte tag key at the character limit", options: &S3Options{Bucket: "acme-artifacts", Tags: map[string]string{strings.Repeat("é", 128): "v"}}},
+		{name: "s3 multibyte tag key over the character limit", options: &S3Options{Bucket: "acme-artifacts", Tags: map[string]string{strings.Repeat("é", 129): "v"}}, wantErr: "must be 1-128 characters"},
+		{name: "s3 empty tag key", options: &S3Options{Bucket: "acme-artifacts", Tags: map[string]string{"": "v"}}, wantErr: "must be 1-128 characters"},
+		{name: "s3 too many tags", options: &S3Options{Bucket: "acme-artifacts", Tags: elevenTags()}, wantErr: "exceed the S3 limit"},
+		{name: "s3 bad key pattern", options: &S3Options{Bucket: "acme-artifacts", KeyPattern: "../x"}, wantErr: "segment"},
+		{name: "s3 emulator endpoint", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "http://localhost:4566"}},
+		{name: "s3 endpoint without scheme", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "localhost:4566"}, wantErr: "http or https"},
+		{name: "s3 endpoint with file scheme", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "file:///tmp/x"}, wantErr: "http or https"},
+		{name: "s3 endpoint without host", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "https://"}, wantErr: "no host"},
+		{name: "s3 endpoint with credentials", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "https://user:pass@example.com"}, wantErr: "credentials"},
+		{name: "registry ok", options: &OCIRegistryOptions{Registry: "ghcr.io", Prefix: "acme/atmos"}},
+		{name: "registry with port", options: &OCIRegistryOptions{Registry: "localhost:5000"}},
+		{name: "registry max port", options: &OCIRegistryOptions{Registry: "localhost:65535"}},
+		{name: "registry port overflow", options: &OCIRegistryOptions{Registry: "localhost:65536"}, wantErr: "without a scheme"},
+		{name: "registry missing", options: &OCIRegistryOptions{}, wantErr: `"registry" is required`},
+		{name: "registry with scheme", options: &OCIRegistryOptions{Registry: "https://ghcr.io"}, wantErr: "without a scheme"},
+		{name: "registry with credentials", options: &OCIRegistryOptions{Registry: "user:pw@ghcr.io"}, wantErr: "without a scheme"},
+		{name: "registry with credentials and a scheme", options: &OCIRegistryOptions{Registry: "https://user:hunter2@ghcr.io"}, wantErr: "without a scheme"},
+		{name: "registry uppercase prefix", options: &OCIRegistryOptions{Registry: "ghcr.io", Prefix: "Acme/Atmos"}, wantErr: "not a valid OCI repository path"},
+		{name: "registry prefix traversal", options: &OCIRegistryOptions{Registry: "ghcr.io", Prefix: "acme/../x"}, wantErr: "prefix"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.options.Validate()
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.NotContains(t, err.Error(), "hunter2", "rejected registry credentials are never echoed")
+			assert.NotContains(t, err.Error(), "user:pw", "rejected registry credentials are never echoed")
+		})
+	}
+}
+
+func elevenTags() map[string]string {
+	tags := make(map[string]string)
+	for _, key := range strings.Split("a b c d e f g h i j k", " ") {
+		tags[key] = "v"
+	}
+	return tags
+}
+
+func TestValidateKeyPattern(t *testing.T) {
+	prd := `{{ .CreatedAt | date "2006/01/02" }}/{{ .Name }}/{{ .Version }}.tgz`
+	tests := []struct {
+		name       string
+		pattern    string
+		packaging  Packaging
+		wantErr    string
+		wantUnsafe bool
+	}{
+		{name: "empty is fine", pattern: ""},
+		{name: "PRD example", pattern: prd, packaging: PackagingTgz},
+		{name: "tar.gz extension for tgz", pattern: "{{ .Name }}/{{ .Version }}.tar.gz", packaging: PackagingTgz},
+		{name: "extension conflicts with packaging", pattern: "{{ .Name }}/{{ .Version }}.zip", packaging: PackagingTgz, wantErr: "does not match packaging"},
+		{name: "archive extension with directory packaging", pattern: "{{ .Name }}/{{ .Version }}.tgz", packaging: PackagingNone, wantErr: "does not match packaging"},
+		{name: "extension not checked without packaging", pattern: "{{ .Name }}.zip"},
+		{name: "date layout slashes inside action are not segments", pattern: `{{ .CreatedAt | date "2006/01/02" }}/x`},
+		{name: "unknown field", pattern: "{{ .Owner }}/x", wantErr: "unknown field .Owner"},
+		{name: "unbalanced open", pattern: "{{ .Name /x", wantErr: "unbalanced"},
+		{name: "unbalanced close", pattern: ".Name }}/x", wantErr: "unbalanced"},
+		{name: "absolute", pattern: "/{{ .Name }}", wantErr: "relative", wantUnsafe: true},
+		{name: "traversal", pattern: "{{ .Name }}/../x", wantErr: "segment", wantUnsafe: true},
+		{name: "empty segment", pattern: "a//b", wantErr: "segment", wantUnsafe: true},
+		{name: "reserved namespace", pattern: ".atmos-artifacts/{{ .Name }}", wantErr: "reserved", wantUnsafe: true},
+		{name: "backslash", pattern: `a\b`, wantErr: "backslash", wantUnsafe: true},
+		{name: "field name inside string literal is not a field", pattern: `{{ printf ".Owner" }}/{{ .Name }}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateKeyPattern(tt.pattern, tt.packaging)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.Equal(t, tt.wantUnsafe, strings.Contains(err.Error(), errUtils.ErrArtifactUnsafePath.Error()))
+		})
+	}
+}
+
+func TestValidatePrefix(t *testing.T) {
+	require.NoError(t, ValidatePrefix(""))
+	require.NoError(t, ValidatePrefix("acme/atmos"))
+	for _, bad := range []string{"/abs", "a/./b", "a//b", "..", `a\b`, "a/.atmos-artifacts"} {
+		err := ValidatePrefix(bad)
+		require.ErrorIs(t, err, errUtils.ErrArtifactUnsafePath, bad)
+		require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid, bad)
+	}
+}
+
+func TestRegistryHostOf(t *testing.T) {
+	host, ok := RegistryHostOf("oci://GHCR.io/acme/atmos/catalog:stable")
+	require.True(t, ok)
+	assert.Equal(t, "ghcr.io", host)
+	for _, bad := range []string{"https://ghcr.io/x", "oci:///x", "oci://user:pw@ghcr.io/x", "::"} {
+		_, ok := RegistryHostOf(bad)
+		assert.False(t, ok, bad)
+	}
+}
+
+// TestBuiltinKindsMatchTypedOptions keeps each descriptor's path options and typed options struct in step.
+func TestBuiltinKindsMatchTypedOptions(t *testing.T) {
+	require.NotEmpty(t, BuiltinKinds())
+	for _, kind := range BuiltinKinds() {
+		desc, ok := BuiltinKind(kind)
+		require.True(t, ok, kind)
+		require.NotNil(t, desc.NewOptions, kind)
+		tags := mapstructureTags(desc.NewOptions())
+		for _, path := range desc.PathOptions {
+			assert.Contains(t, tags, path, "%s declares path option %q that its typed options do not decode", kind, path)
+		}
+		assert.True(t, desc.Capabilities.HasPackaging(desc.DefaultPackaging), "%s default packaging must be supported", kind)
+		assert.NotEmpty(t, desc.Capabilities.LockScopes, kind)
+	}
+}
+
+func mapstructureTags(options Options) []string {
+	rt := reflect.TypeOf(options).Elem()
+	tags := make([]string, 0, rt.NumField())
+	for i := range rt.NumField() {
+		tags = append(tags, rt.Field(i).Tag.Get("mapstructure"))
+	}
+	return tags
+}
+
+// TestValidationCreatesNothing proves validation is free of filesystem side effects.
+func TestValidationCreatesNothing(t *testing.T) {
+	root := t.TempDir()
+	cfg := &schema.ArtifactRepositoryConfig{
+		Kind:        RepositoryKindLocalArchive,
+		Permissions: "0600",
+		Options:     map[string]any{"path": filepath.Join(root, "not", "created", "yet"), "key_pattern": "{{ .Name }}/{{ .Version }}.tgz"},
+	}
+	desc, _ := BuiltinKind(RepositoryKindLocalArchive)
+	require.NoError(t, ValidateRepositoryConfig(desc, cfg))
+
+	entries, err := os.ReadDir(root)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "validation must not create destination directories")
+}
+
+func TestDecodeOptions_S3EndpointAndPathStyle(t *testing.T) {
+	var options S3Options
+	require.NoError(t, DecodeOptions(map[string]any{"bucket": "acme-artifacts", "endpoint": "http://localhost:4566", "path_style": true}, &options))
+	assert.Equal(t, "http://localhost:4566", options.Endpoint)
+	require.NotNil(t, options.PathStyle)
+	assert.True(t, *options.PathStyle)
+
+	var defaults S3Options
+	require.NoError(t, DecodeOptions(map[string]any{"bucket": "acme-artifacts"}, &defaults))
+	assert.Nil(t, defaults.PathStyle, "an omitted path_style keeps the endpoint-dependent default")
+
+	err := DecodeOptions(map[string]any{"bucket": "acme-artifacts", "path_style": "yes please"}, &S3Options{})
+	require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+}
+
+// TestValidateEndpoint_NeverEchoesCredentials guards that no endpoint diagnostic, including scheme
+// and parse failures, repeats credentials embedded in the configured endpoint.
+func TestValidateEndpoint_NeverEchoesCredentials(t *testing.T) {
+	const secret = "s3cr3t-password"
+	tests := []struct {
+		name     string
+		endpoint string
+		wantErr  string
+	}{
+		{name: "wrong scheme with credentials", endpoint: "ftp://user:" + secret + "@example.com", wantErr: "credentials"},
+		{name: "parse failure with credentials", endpoint: "http://user:" + secret + "@exa mple.com", wantErr: "not a valid URL"},
+		{name: "bad port with credentials", endpoint: "http://user:" + secret + "@example.com:port", wantErr: "not a valid URL"},
+		{name: "no host with credentials", endpoint: "https://user:" + secret + "@", wantErr: "credentials"},
+		{name: "valid scheme with credentials", endpoint: "https://user:" + secret + "@example.com", wantErr: "credentials"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEndpoint(tt.endpoint)
+			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			assert.NotContains(t, err.Error(), secret)
+		})
+	}
+}
+
+// TestOCIRegistryOptionsValidate_NeverEchoesCredentials guards that a registry diagnostic repeats
+// the configured value only with any embedded userinfo redacted.
+func TestOCIRegistryOptionsValidate_NeverEchoesCredentials(t *testing.T) {
+	const (
+		secret = "s3cr3t-password"
+		user   = "svc-deploy"
+	)
+	tests := []struct {
+		name     string
+		registry string
+		wantErr  string
+	}{
+		{name: "userinfo only", registry: user + ":" + secret + "@registry.example.com", wantErr: RedactedValue},
+		{name: "scheme and userinfo", registry: "https://" + user + ":" + secret + "@registry.example.com", wantErr: "https://registry.example.com"},
+		{name: "userinfo and path", registry: "https://" + user + ":" + secret + "@registry.example.com/acme/atmos", wantErr: "https://registry.example.com/acme/atmos"},
+		{name: "token without password", registry: secret + "@registry.example.com:5000", wantErr: RedactedValue},
+		{name: "scheme-relative userinfo", registry: "//" + user + ":" + secret + "@registry.example.com", wantErr: "//registry.example.com"},
+		{name: "scheme-relative userinfo and path", registry: "//" + user + ":" + secret + "@registry.example.com/acme/atmos", wantErr: "//registry.example.com/acme/atmos"},
+		{name: "scheme-relative token without password", registry: "//" + secret + "@registry.example.com:5000", wantErr: "//registry.example.com:5000"},
+		{name: "malformed escape with userinfo", registry: "https://" + user + ":" + secret + "@registry.example.com/%zz", wantErr: RedactedValue},
+		{name: "unparsable host with userinfo", registry: "https://" + user + ":" + secret + "@exa mple.com", wantErr: RedactedValue},
+		{name: "scheme-relative without credentials stays visible", registry: "//registry.example.com", wantErr: "//registry.example.com"},
+		{name: "scheme without credentials stays visible", registry: "https://registry.example.com", wantErr: "https://registry.example.com"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := (&OCIRegistryOptions{Registry: tt.registry}).Validate()
+			require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
+			assert.Contains(t, err.Error(), tt.wantErr)
+			// The security property holds whatever the redacted format is: neither the secret nor
+			// the user name appears anywhere in the error text.
+			assert.False(t, strings.Contains(err.Error(), secret), "the secret must never be echoed: %q", err.Error())
+			assert.False(t, strings.Contains(err.Error(), user), "the user name must never be echoed: %q", err.Error())
+		})
+	}
+}

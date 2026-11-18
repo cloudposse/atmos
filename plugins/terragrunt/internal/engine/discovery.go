@@ -91,8 +91,8 @@ type projectDiscovery struct {
 	overlay   afero.Fs
 	result    *model.Resolution
 	templates map[string]bool
-	// generated records units reached through stack traversal so the standalone
-	// pass does not discover the same generated unit again.
+	// generated records units and stacks reached through parent traversal so an
+	// independent pass cannot discover materialized children again.
 	generated map[string]bool
 }
 
@@ -164,7 +164,7 @@ func (d *projectDiscovery) parse(path string, generate bool) (*model.Resolution,
 func (d *projectDiscovery) discoverStacks(stacks []string) error {
 	failures := map[string]error{}
 	for _, path := range stacks {
-		if d.skipped(path) {
+		if !d.independentStack(path) {
 			continue
 		}
 		if _, err := d.parse(path, true); err != nil {
@@ -176,13 +176,21 @@ func (d *projectDiscovery) discoverStacks(stacks []string) error {
 		}
 	}
 	for _, path := range stacks {
-		if err := failures[path]; err != nil && !d.skipped(path) {
+		if err := failures[path]; err != nil && d.independentStack(path) {
 			return fmt.Errorf("discover %s: %w", path, err)
 		}
 	}
-	// A template that parsed independently is still a template, not another live stack.
-	d.result.Inventory = slices.DeleteFunc(d.result.Inventory, func(unit model.DiscoveredUnit) bool { return d.skipped(unit.GenerationRoot) })
+	// Templates and generated child stacks may have parsed before their parent.
+	// Filter the complete inventory so traversal order cannot create independent roots.
+	d.result.Inventory = slices.DeleteFunc(d.result.Inventory, func(unit model.DiscoveredUnit) bool {
+		return !d.independentStack(unit.GenerationRoot)
+	})
 	return nil
+}
+
+// independentStack excludes templates and materialized child stacks from root discovery.
+func (d *projectDiscovery) independentStack(path string) bool {
+	return !d.skipped(path) && !d.generated[path]
 }
 
 // discoverStandaloneUnits visits units that no stack owns. A unit already
@@ -237,6 +245,9 @@ func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement *uni
 	for _, child := range slices.Sorted(maps.Keys(resolved.StackConfigs)) {
 		source := resolved.StackSources[child]
 		d.templates[source] = true
+		if physical, err := canonicalPath(resolved.StackConfigs[child]); err == nil {
+			d.generated[physical] = true
+		}
 		if err := d.visit(resolved.StackConfigs[child], placement.child(resolved.Stacks[child], source, files), depth+1); err != nil {
 			return err
 		}

@@ -25,13 +25,13 @@ func includeNotFoundError(tag, args, includeFile, manifestFile string, atmosConf
 
 	switch {
 	case filepath.IsAbs(includeFile):
-		return fmt.Errorf("%w: could not find local file '%s'", ErrIncludeYamlFunctionInvalidFile, includeFile)
+		return fmt.Errorf("%w: could not find local file '%s'", ErrIncludeYamlFunctionInvalidFile, RedactIncludeArgument(includeFile))
 
 	case isManifestRelativePath(includeFile):
 		resolved := ResolveRelativePath(includeFile, manifestFile)
 		builder := errUtils.Build(fmt.Errorf(
 			"%w: could not find local file '%s' at '%s' (paths starting with './' or '../' are resolved relative to the including file '%s' only)",
-			ErrIncludeYamlFunctionInvalidFile, includeFile, resolved, manifestFile,
+			ErrIncludeYamlFunctionInvalidFile, RedactIncludeArgument(includeFile), resolved, manifestFile,
 		)).WithHint("Paths starting with `./` or `../` are relative to the file that contains the `" + tag +
 			"`. Paths without that prefix are relative to `base_path`.")
 		if suggestion := baseRelativeIncludeSuggestion(includeFile, basePath); suggestion != "" {
@@ -47,7 +47,7 @@ func includeNotFoundError(tag, args, includeFile, manifestFile string, atmosConf
 		}
 		return errUtils.Build(fmt.Errorf(
 			"%w: could not find local file '%s' (tried relative to base path '%s' and the working directory '%s')",
-			ErrIncludeYamlFunctionInvalidFile, includeFile, basePath, workingDir,
+			ErrIncludeYamlFunctionInvalidFile, RedactIncludeArgument(includeFile), basePath, workingDir,
 		)).WithHint("Paths without a `./` or `../` prefix are relative to `base_path`. Start the path with `./` or `../` " +
 			"to resolve it relative to the file that contains the `" + tag + "`.").Err()
 	}
