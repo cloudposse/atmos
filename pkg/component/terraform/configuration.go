@@ -521,6 +521,9 @@ type planSnapshotter struct {
 	pathFrom func(phaseArgs []string) string
 	result   *planSnapshot
 	err      error
+	// observed is the plan path of the last observed subprocess run. When it ran but kept no
+	// snapshot, the binding must not fall back to a later observation that after hooks could change.
+	observed string
 }
 
 // takePlanSnapshot fingerprints the configuration with the inputs the binding record uses.
@@ -551,13 +554,17 @@ func takePlanSnapshot(ctx context.Context, config *schema.AtmosConfiguration, in
 
 // around wraps one run of the Terraform subprocess. The configuration must be the same before and
 // after it; the unchanged snapshot is kept for the binding, and a changed one rejects the plan.
-func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() error {
+// The failed callback classifies the result with the phase's effective arguments and environment, the
+// same classification the hooks use, so the "changes present" status of -detailed-exitcode
+// (from the command line or TF_CLI_ARGS, including extra_arguments) still binds the plan.
+func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed func(error) bool) func() error {
 	return func() error {
-		s.result, s.err = nil, nil
+		s.result, s.err, s.observed = nil, nil, ""
 		path := s.pathFrom(phaseArgs)
 		if path == "" {
 			return run()
 		}
+		s.observed = path
 		before, beforeErr := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
 		runErr := run()
 		if beforeErr != nil {
@@ -577,7 +584,7 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() er
 			if s.execCtx.planPolicy != nil {
 				writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
 			}
-			if s.planCommandFailed(phaseArgs, runErr) {
+			if failed(runErr) {
 				return runErr
 			}
 			digest, digestErr := fileDigest(writtenPath)
@@ -592,16 +599,6 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() er
 	}
 }
 
-// planCommandFailed leaves Terraform's detailed plan status available for binding: only a real
-// failure skips the plan digest, never the "changes present" status of -detailed-exitcode.
-func (s *planSnapshotter) planCommandFailed(args []string, err error) bool {
-	if err == nil {
-		return false
-	}
-	env := slices.Concat(envpkg.ConvertMapToSlice(s.config.Env), s.info.ComponentEnvList)
-	return !isDetailedExitCodeChanges(subcommandPlan, args, env, err)
-}
-
 // reviewedSnapshot returns the configuration Terraform read, or takes a fresh snapshot when no
 // observed run recorded one for this plan.
 func (c *componentExecContext) reviewedSnapshot(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, path string) (*planSnapshot, error) {
@@ -611,6 +608,9 @@ func (c *componentExecContext) reviewedSnapshot(ctx context.Context, config *sch
 		}
 		if s.result != nil && s.result.path == path {
 			return s.result, nil
+		}
+		if s.observed == path {
+			return nil, fmt.Errorf("%w: Terraform ran without a reviewed snapshot of its configuration", errUtils.ErrPlanVerificationFailed)
 		}
 	}
 	return takePlanSnapshot(ctx, config, info, c, path)

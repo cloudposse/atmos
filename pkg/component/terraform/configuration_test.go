@@ -430,7 +430,7 @@ func TestPolicySnapshotRejectsPlanRewrittenBeforePublication(t *testing.T) {
 			execution.planPolicy = &planfile.Guard{}
 			ctx := execution.observePlanSnapshots(t.Context(), config, info, []string{"plan", "-out=" + published})
 			snapshot := ctx.Value(planSnapshotKey{}).(*planSnapshotter)
-			run := snapshot.around([]string{"plan", "-out=" + private}, func() error { return os.WriteFile(private, []byte("engine plan"), 0o600) })
+			run := snapshot.around([]string{"plan", "-out=" + private}, func() error { return os.WriteFile(private, []byte("engine plan"), 0o600) }, failedOnError)
 			require.NoError(t, run())
 			digest, err := fileDigest(private)
 			require.NoError(t, err)

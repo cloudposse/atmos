@@ -36,7 +36,7 @@ func TestMissingPlanDigestStopsBeforeAfterHooks(t *testing.T) {
 	phase := &executionPhase{command: "plan", args: []string{"plan", "-out=" + planPath}, insertAt: 1, componentPath: execution.workingDir}
 	shell := newShellFixture(t, nil)
 	err = hookExecutor(shell).runExecutionPhase(project.config, info, phase, nil, func(_ *schema.ConfigAndStacksInfo, args []string, _ []component.ExecutionOption) error {
-		return snapshotter.around(args, func() error { return nil })()
+		return snapshotter.around(args, func() error { return nil }, failedOnError)()
 	})
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.ErrorIs(t, snapshotter.err, errUtils.ErrPlanVerificationFailed)
@@ -44,14 +44,49 @@ func TestMissingPlanDigestStopsBeforeAfterHooks(t *testing.T) {
 	require.Empty(t, shell.calls, "after hooks must not run when the plan cannot be fingerprinted")
 
 	commandErr := errors.New("terraform failed")
-	err = snapshotter.around(phase.args, func() error { return commandErr })()
+	err = snapshotter.around(phase.args, func() error { return commandErr }, failedOnError)()
 	require.ErrorIs(t, err, commandErr, "an ordinary command failure must not be masked by a missing plan")
 
 	err = hookExecutor(shell).runExecutionPhase(project.config, info, phase, nil, func(_ *schema.ConfigAndStacksInfo, args []string, _ []component.ExecutionOption) error {
-		return snapshotter.around(args, func() error { return os.WriteFile(planPath, []byte("valid plan"), 0o600) })()
+		return snapshotter.around(args, func() error { return os.WriteFile(planPath, []byte("valid plan"), 0o600) }, failedOnError)()
 	})
 	require.NoError(t, err)
 	require.Len(t, shell.calls, 1, "a successful fingerprint permits the after hook")
+}
+
+// failedOnError classifies every error as a failed command.
+func failedOnError(err error) bool { return err != nil }
+
+// The snapshotter uses the phase's classification of the result: a "changes present" status the
+// phase accepts (for example -detailed-exitcode from extra_arguments' TF_CLI_ARGS_plan) still binds
+// the plan, and a run that kept no snapshot is never replaced by a later observation.
+func TestPlanSnapshotUsesThePhaseClassification(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	info := project.info(t, "plan")
+	project.provider.EXPECT().Prepare(gomock.Any(), info).Return(project.prepared(), nil)
+	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, info, false)
+	require.NoError(t, err)
+	planPath := filepath.Join(execution.workingDir, "reviewed.plan")
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: project.config, info: info, execCtx: execution, pathFrom: func([]string) string { return planPath }}
+	execution.planSnapshots = snapshotter
+	changes := errUtils.ExitCodeError{Code: 2}
+	acceptsChanges := func(err error) bool { return err != nil && !errors.Is(err, changes) }
+	write := func() error {
+		require.NoError(t, os.WriteFile(planPath, []byte("plan with changes"), 0o600))
+		return changes
+	}
+	err = snapshotter.around([]string{"plan"}, write, acceptsChanges)()
+	require.ErrorIs(t, err, changes, "the status still reaches the caller")
+	require.NoError(t, snapshotter.err)
+	require.NotNil(t, snapshotter.result, "a status the phase accepts binds the plan")
+	require.NotEmpty(t, snapshotter.result.planDigest)
+
+	// A genuine failure keeps no snapshot, and the binding does not fall back to a later observation.
+	err = snapshotter.around([]string{"plan"}, write, failedOnError)()
+	require.ErrorIs(t, err, changes)
+	require.Nil(t, snapshotter.result)
+	_, err = execution.reviewedSnapshot(t.Context(), project.config, info, planPath)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 }
 
 func newReviewedPlanProject(t *testing.T) *reviewedPlanProject {
@@ -328,7 +363,7 @@ func TestPlanSnapshotterFingerprintsThePlanBeforeAfterHooksRun(t *testing.T) {
 			execution.planSnapshots = snapshotter
 
 			// Terraform writes the plan.
-			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) })
+			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) }, failedOnError)
 			require.NoError(t, terraform())
 			written, err := fileDigest(planPath)
 			require.NoError(t, err)
@@ -378,7 +413,7 @@ func TestPlanSnapshotterBindsTheEngineThatRanTerraform(t *testing.T) {
 			snapshotter := &planSnapshotter{ctx: t.Context(), config: project.config, info: info, execCtx: execution, pathFrom: func([]string) string { return planPath }}
 			execution.planSnapshots = snapshotter
 
-			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) })
+			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) }, failedOnError)
 			require.NoError(t, terraform())
 			require.NotNil(t, snapshotter.result)
 			require.Equal(t, ran, snapshotter.result.engineDigest, "the engine digest is taken around the subprocess")

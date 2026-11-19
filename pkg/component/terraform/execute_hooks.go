@@ -121,7 +121,9 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 			return changesPresent
 		}
 		if snapshots, ok := ctx.Value(planSnapshotKey{}).(*planSnapshotter); ok {
-			run = snapshots.around(phaseArgs, run)
+			run = snapshots.around(phaseArgs, run, func(err error) bool {
+				return err != nil && !isDetailedExitCodeChanges(phase.command, phaseArgs, env, err, phaseOpts...)
+			})
 		}
 		err := run()
 		// A plan that reports changes completed; only a real failure is given to init recovery.
