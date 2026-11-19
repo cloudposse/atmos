@@ -145,6 +145,7 @@ func postPullRequestComment(ctx context.Context, p provider.Provider, plan comme
 		Marker:   plan.marker,
 		Body:     plan.body,
 		Behavior: plan.behavior,
+		RunURL:   ciCtx.RunURL,
 	})
 }
 

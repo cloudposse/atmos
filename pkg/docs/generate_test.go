@@ -265,7 +265,7 @@ func TestGenerateDocument_WithInjectedRenderer(t *testing.T) {
 
 	docsGenerate := atmosConfig.Docs.Generate["readme"]
 	// Call generateDocument with our injected stubRenderer.
-	err = generateDocument(&atmosConfig, targetDir, &docsGenerate, mockRenderer{})
+	_, err = generateDocument(&atmosConfig, targetDir, &docsGenerate, mockRenderer{})
 	if err != nil {
 		t.Fatalf("generateDocument failed: %v", err)
 	}
@@ -314,7 +314,7 @@ func TestGenerateDocument_DefaultTemplateFallback_RealRenderer(t *testing.T) {
 	}
 
 	docsGenerate := atmosConfig.Docs.Generate["readme"]
-	if err := generateDocument(&atmosConfig, targetDir, &docsGenerate, defaultTemplateRenderer{}); err != nil {
+	if _, err := generateDocument(&atmosConfig, targetDir, &docsGenerate, defaultTemplateRenderer{}); err != nil {
 		t.Fatalf("generateDocument failed: %v", err)
 	}
 
@@ -368,7 +368,7 @@ func TestGenerateDocument_TemplateFetchFailsReturnsError(t *testing.T) {
 	}
 
 	docsGenerate := atmosConfig.Docs.Generate["readme"]
-	err = generateDocument(&atmosConfig, targetDir, &docsGenerate, defaultTemplateRenderer{})
+	_, err = generateDocument(&atmosConfig, targetDir, &docsGenerate, defaultTemplateRenderer{})
 	if err == nil {
 		t.Fatal("expected generateDocument to return an error for a missing configured template")
 	}

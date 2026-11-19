@@ -87,4 +87,6 @@ const (
 	AfterHelmfileDestroy                    = events.AfterHelmfileDestroy
 	BeforeScaffoldGenerate                  = events.BeforeScaffoldGenerate
 	AfterScaffoldGenerate                   = events.AfterScaffoldGenerate
+	BeforeDocsGenerate                      = events.BeforeDocsGenerate
+	AfterDocsGenerate                       = events.AfterDocsGenerate
 )
