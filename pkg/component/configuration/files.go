@@ -3,10 +3,10 @@ package configuration
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -89,8 +89,10 @@ func workdirLockPath(directory string) string {
 	if resolved, err := filepath.EvalSymlinks(canonical); err == nil {
 		canonical = resolved
 	}
-	sum := sha256.Sum256([]byte(canonical))
-	return filepath.Join(os.TempDir(), "atmos-generated-files-"+hex.EncodeToString(sum[:16])+".lock")
+	// The digest only names the lock file, so a non-cryptographic 128-bit FNV-1a digest suffices.
+	hash := fnv.New128a()
+	_, _ = hash.Write([]byte(canonical))
+	return filepath.Join(os.TempDir(), "atmos-generated-files-"+hex.EncodeToString(hash.Sum(nil))+".lock")
 }
 
 func writeFilesLocked(directory string, files []schema.ComponentConfigurationFile) error {

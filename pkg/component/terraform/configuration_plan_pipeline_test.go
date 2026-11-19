@@ -13,6 +13,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -26,6 +27,36 @@ type reviewedPlanProject struct {
 	provider        *MockReviewedPlanRuntime
 	// iam is the Terragrunt role the unit prepares with, when set.
 	iam *schema.ComponentIAM
+}
+
+func TestMissingPlanDigestStopsBeforeAfterHooks(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	info := project.info(t, "plan")
+	project.provider.EXPECT().Prepare(gomock.Any(), info).Return(project.prepared(), nil)
+	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, info, false)
+	require.NoError(t, err)
+	info.ComponentExecution = &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{execHook("after", "plan")}}
+	planPath := filepath.Join(execution.workingDir, "missing.plan")
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: project.config, info: info, execCtx: execution, pathFrom: func([]string) string { return planPath }}
+	phase := &executionPhase{command: "plan", args: []string{"plan", "-out=" + planPath}, insertAt: 1, componentPath: execution.workingDir}
+	shell := newShellFixture(t, nil)
+	err = hookExecutor(shell).runExecutionPhase(project.config, info, phase, nil, func(_ *schema.ConfigAndStacksInfo, args []string, _ []component.ExecutionOption) error {
+		return snapshotter.around(args, func() error { return nil })()
+	})
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorIs(t, snapshotter.err, errUtils.ErrPlanVerificationFailed)
+	require.Nil(t, snapshotter.result)
+	require.Empty(t, shell.calls, "after hooks must not run when the plan cannot be fingerprinted")
+
+	commandErr := errors.New("terraform failed")
+	err = snapshotter.around(phase.args, func() error { return commandErr })()
+	require.ErrorIs(t, err, commandErr, "an ordinary command failure must not be masked by a missing plan")
+
+	err = hookExecutor(shell).runExecutionPhase(project.config, info, phase, nil, func(_ *schema.ConfigAndStacksInfo, args []string, _ []component.ExecutionOption) error {
+		return snapshotter.around(args, func() error { return os.WriteFile(planPath, []byte("valid plan"), 0o600) })()
+	})
+	require.NoError(t, err)
+	require.Len(t, shell.calls, 1, "a successful fingerprint permits the after hook")
 }
 
 func newReviewedPlanProject(t *testing.T) *reviewedPlanProject {
