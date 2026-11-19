@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -87,7 +88,11 @@ func AWS(ctx context.Context, v *venv.Venv) *venv.Venv {
 	transport := &awsTransport{next: v.HTTP.Transport, endpoints: awsEndpoints(env), credentials: aws.Credentials{
 		AccessKeyID: env[envAccessKeyID], SecretAccessKey: env[envSecretKey], SessionToken: env[envSessionToken],
 	}}
+	role := roleOptions(env)
 	switch {
+	case role.RoleARN != "" && role.WebIdentityToken != "":
+		// A command-level web identity role is assumed with an unsigned, invocation-scoped STS call, so no base
+		// credentials are needed or resolved.
 	case hasStaticAWSKeys(env):
 	case selectsAWSCredentials(env):
 		credentials, err := cachedCredentials(awsCacheKey(env), func() (aws.Credentials, error) { return resolveAWSCredentials(ctx, env, transport) })
@@ -97,7 +102,7 @@ func AWS(ctx context.Context, v *venv.Venv) *venv.Venv {
 		// SDK default chain, which reads the plugin process (its keys, container credentials, or instance role).
 		transport.apply(env, nil, errNoInvocationCredentials)
 	}
-	if role := roleOptions(env); role.RoleARN != "" && transport.failure == nil {
+	if role.RoleARN != "" && transport.failure == nil {
 		credentials, err := cachedCredentials(roleCacheKey(env, role), func() (aws.Credentials, error) { return assumeInvocationRole(ctx, v.WithEnv(env), transport, role) })
 		transport.apply(env, &credentials, err)
 	}
@@ -142,6 +147,9 @@ var errNoInvocationCredentials = errors.New("the invocation environment supplies
 func assumeInvocationRole(ctx context.Context, v *venv.Venv, transport *awsTransport, role iam.RoleOptions) (aws.Credentials, error) {
 	ctx, cancel := context.WithTimeout(ctx, awsResolveTimeout)
 	defer cancel()
+	if role.WebIdentityToken != "" {
+		return assumeWebIdentityRole(ctx, v, transport, role)
+	}
 	// AssumeIamRole reads the HTTP client of the venv, so it must see the endpoint overrides.
 	assumed, err := awshelper.AssumeIamRole(ctx, v.WithHTTP(vhttp.WithTransport(v.HTTP, transport)), role, "")
 	if err != nil {
@@ -228,9 +236,18 @@ func roleCacheKey(env map[string]string, role iam.RoleOptions) string {
 func resolveAWSCredentials(ctx context.Context, env map[string]string, transport *awsTransport) (aws.Credentials, error) {
 	ctx, cancel := context.WithTimeout(ctx, awsResolveTimeout)
 	defer cancel()
+	// The SDK reads the shared files again when it resolves, so validation and resolution share one private
+	// copy of them: a file that changes in between cannot select a source that was never validated. The SDK
+	// has no option that accepts an already loaded profile.
+	env, cleanup, err := snapshotSharedFiles(env)
+	if err != nil {
+		return aws.Credentials{}, err
+	}
+	defer cleanup()
 	if err := rejectAmbientCredentialSources(ctx, env); err != nil {
 		return aws.Credentials{}, err
 	}
+	afterProfileValidated()
 	cfg, err := invocationConfig(ctx, env, transport)
 	if err != nil {
 		return aws.Credentials{}, err
@@ -535,18 +552,92 @@ func rejectAmbientCredentialSources(ctx context.Context, env map[string]string) 
 		if profile.CredentialSource != "" {
 			return fmt.Errorf("%w: profile credential_source cannot be isolated from the plugin process; use invocation static credentials or a file-backed source_profile", ErrAWSCredentials)
 		}
+		// The SDK starts the helper with the plugin process environment and offers no option for another one.
+		if profile.CredentialProcess != "" {
+			return fmt.Errorf("%w: profile credential_process runs with the plugin process environment, not the invocation's; use invocation static credentials, SSO settings, or a web identity token file instead", ErrAWSCredentials)
+		}
 		terminal = profile
 	}
 	if !hasFileBackedCredentials(terminal) {
-		return fmt.Errorf("%w: profile %q has no credential source in the invocation's shared files, and the SDK would fall back to the plugin process; add static keys, a credential_process, SSO settings, or a web identity token file to the profile", ErrAWSCredentials, profileName(env))
+		return fmt.Errorf("%w: profile %q has no credential source in the invocation's shared files, and the SDK would fall back to the plugin process; add static keys, SSO settings, or a web identity token file to the profile", ErrAWSCredentials, profileName(env))
 	}
 	return nil
 }
 
 // hasFileBackedCredentials reports whether the last profile of a chain names a source the SDK resolves from
-// the shared files: static keys, a credential process, SSO settings, or a role from a web identity token file.
+// the shared files: static keys, SSO settings, or a role from a web identity token file. A credential process
+// is not one of them: the SDK would run it with the plugin process environment.
 func hasFileBackedCredentials(profile *config.SharedConfig) bool {
-	return profile != nil && (profile.Credentials.HasKeys() || profile.CredentialProcess != "" ||
+	return profile != nil && (profile.Credentials.HasKeys() ||
 		profile.SSOSessionName != "" || profile.SSOStartURL != "" || profile.SSOAccountID != "" ||
 		(profile.WebIdentityTokenFile != "" && profile.RoleARN != ""))
 }
+
+// assumeWebIdentityRole assumes the CLI-level role with its web identity token. The token is the credential,
+// so the STS client is unsigned and built from the invocation's values alone; upstream would load the plugin
+// process environment for it.
+func assumeWebIdentityRole(ctx context.Context, v *venv.Venv, transport *awsTransport, role iam.RoleOptions) (aws.Credentials, error) {
+	token, err := awshelper.TokenFetcher{FS: v.FS, Token: role.WebIdentityToken}.FetchToken(ctx)
+	if err != nil {
+		return aws.Credentials{}, fmt.Errorf("reading the web identity token of the IAM role %s: %w", role.RoleARN, err)
+	}
+	name := cmpFirst(role.AssumeRoleSessionName, iam.GetDefaultAssumeRoleSessionName())
+	duration := int64(iam.DefaultAssumeRoleDuration)
+	if role.AssumeRoleDuration > 0 {
+		duration = role.AssumeRoleDuration
+	}
+	client := sts.NewFromConfig(aws.Config{
+		Region:      awsRegion(v.Env),
+		Credentials: aws.AnonymousCredentials{},
+		HTTPClient:  &http.Client{Transport: transport, Timeout: awsResolveTimeout},
+		APIOptions:  []func(*middleware.Stack) error{transport.prefixBeforeSigning},
+	})
+	result, err := client.AssumeRoleWithWebIdentity(ctx, &sts.AssumeRoleWithWebIdentityInput{
+		RoleArn: aws.String(role.RoleARN), RoleSessionName: aws.String(name), WebIdentityToken: aws.String(string(token)),
+		DurationSeconds: aws.Int32(int32(duration)), //nolint:gosec // STS bounds the duration to 12 hours.
+	})
+	if err != nil {
+		return aws.Credentials{}, fmt.Errorf("assuming the IAM role %s with its web identity token: %w", role.RoleARN, err)
+	}
+	if result.Credentials == nil {
+		return aws.Credentials{}, fmt.Errorf("assuming the IAM role %s with its web identity token: %w", role.RoleARN, ErrAWSCredentials)
+	}
+	return aws.Credentials{
+		AccessKeyID: aws.ToString(result.Credentials.AccessKeyId), SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
+		SessionToken: aws.ToString(result.Credentials.SessionToken), CanExpire: result.Credentials.Expiration != nil, Expires: aws.ToTime(result.Credentials.Expiration),
+	}, nil
+}
+
+// snapshotSharedFiles copies the shared credentials and config files into a private directory and returns env
+// pointing at the copies. A file that does not exist stays missing. Web identity roles read no shared file.
+func snapshotSharedFiles(env map[string]string) (map[string]string, func(), error) {
+	if selectsWebIdentityRole(env) {
+		return env, func() {}, nil
+	}
+	dir, err := os.MkdirTemp("", "atmos-aws-snapshot-")
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: snapshotting the shared AWS files: %w", ErrAWSCredentials, err)
+	}
+	cleanup := func() { _ = os.RemoveAll(dir) }
+	files, snapshot := resolvedSharedFiles(env), maps.Clone(env)
+	for _, name := range []string{"AWS_SHARED_CREDENTIALS_FILE", "AWS_CONFIG_FILE"} {
+		copied := filepath.Join(dir, strings.ToLower(name))
+		snapshot[name] = copied
+		content, err := os.ReadFile(files[name])
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err == nil {
+			err = os.WriteFile(copied, content, 0o600)
+		}
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("%w: snapshotting the shared AWS file %s: %w", ErrAWSCredentials, files[name], err)
+		}
+	}
+	return snapshot, cleanup, nil
+}
+
+// afterProfileValidated runs between the validation of a profile snapshot and its resolution. Tests use it to
+// change the shared files in that window.
+var afterProfileValidated = func() {}

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"errors"
+	"math/big"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -108,9 +109,22 @@ func localExpressions(body *hclsyntax.Body) map[string]hclsyntax.Expression {
 
 type sensitivityScanner struct {
 	locals   map[string]hclsyntax.Expression
-	includes map[string]map[string]hclsyntax.Expression
+	includes map[string]exposedInclude
 	paths    [][]string
 }
+
+// exposedInclude is what an exposed include contributes to the include.<alias> references of the file.
+type exposedInclude struct {
+	// locals are the locals of the included file.
+	locals map[string]hclsyntax.Expression
+	// inputs is the inputs attribute of the included file, if any.
+	inputs hclsyntax.Expression
+	// known is false when the included file is exposed but was not found among the parsed files.
+	known bool
+}
+
+// unknownExpression stands in for a value that cannot be inspected: it reads as sensitive as a whole.
+var unknownExpression hclsyntax.Expression = &hclsyntax.FunctionCallExpr{Name: "sensitive"}
 
 // walk records the paths below prefix that expression marks sensitive.
 func (s *sensitivityScanner) walk(expression hclsyntax.Expression, prefix []string, depth int) {
@@ -261,35 +275,53 @@ type sensitivityReference struct {
 	rest       hcl.Traversal
 }
 
-// reference selects a local in this file or in an exposed include.
+// reference selects a local in this file, or a local or input of an exposed include. Names are read with
+// traversalKey, so local.name and local["name"] select the same value.
 func (s *sensitivityScanner) reference(traversal hcl.Traversal) (sensitivityReference, bool) {
 	if len(traversal) < 2 {
 		return sensitivityReference{}, false
 	}
 	if traversal.RootName() == localName {
-		name, ok := traversal[1].(hcl.TraverseAttr)
+		name, ok := traversalKey(traversal[1])
 		if !ok {
 			return sensitivityReference{}, false
 		}
-		value, found := s.locals[name.Name]
+		value, found := s.locals[name]
 		return sensitivityReference{value, s.locals, traversal[2:]}, found
 	}
-	if traversal.RootName() == "include" && len(traversal) >= 4 {
-		alias, aliasOK := traversal[1].(hcl.TraverseAttr)
-		section, sectionOK := traversal[2].(hcl.TraverseAttr)
-		name, nameOK := traversal[3].(hcl.TraverseAttr)
-		if aliasOK && sectionOK && nameOK && section.Name == "locals" {
-			locals := s.includes[alias.Name]
-			value, found := locals[name.Name]
-			return sensitivityReference{value, locals, traversal[4:]}, found
+	if traversal.RootName() != "include" || len(traversal) < 3 {
+		return sensitivityReference{}, false
+	}
+	alias, aliasOK := traversalKey(traversal[1])
+	section, sectionOK := traversalKey(traversal[2])
+	exposed, exposedFound := s.includes[alias]
+	if !aliasOK || !sectionOK || !exposedFound {
+		return sensitivityReference{}, false
+	}
+	switch section {
+	case "locals":
+		if len(traversal) < 4 {
+			return sensitivityReference{}, false
 		}
+		name, nameOK := traversalKey(traversal[3])
+		if !nameOK {
+			return sensitivityReference{}, false
+		}
+		value, found := exposed.locals[name]
+		return sensitivityReference{value, exposed.locals, traversal[4:]}, found
+	case inputsName:
+		// A child's merged inputs may omit the parent's (no_merge), so the parent's own expression decides.
+		if !exposed.known {
+			return sensitivityReference{unknownExpression, nil, nil}, true
+		}
+		return sensitivityReference{exposed.inputs, exposed.locals, traversal[3:]}, exposed.inputs != nil
 	}
 	return sensitivityReference{}, false
 }
 
-// exposedIncludes associates an include alias with the parsed file's locals.
-func exposedIncludes(body *hclsyntax.Body, file string, bodies map[string]*hclsyntax.Body, evaluated config.IncludeConfigsMap) map[string]map[string]hclsyntax.Expression {
-	result := make(map[string]map[string]hclsyntax.Expression)
+// exposedIncludes associates an include alias with the parsed file's locals and inputs.
+func exposedIncludes(body *hclsyntax.Body, file string, bodies map[string]*hclsyntax.Body, evaluated config.IncludeConfigsMap) map[string]exposedInclude {
+	result := make(map[string]exposedInclude)
 	for _, block := range body.Blocks {
 		if block.Type != "include" || len(block.Labels) == 0 {
 			continue
@@ -298,9 +330,16 @@ func exposedIncludes(body *hclsyntax.Body, file string, bodies map[string]*hclsy
 		if !ok {
 			continue
 		}
-		if included := includedBody(path, file, bodies); included != nil {
-			result[block.Labels[0]] = localExpressions(included)
+		included := includedBody(path, file, bodies)
+		if included == nil {
+			result[block.Labels[0]] = exposedInclude{}
+			continue
 		}
+		exposed := exposedInclude{locals: localExpressions(included), known: true}
+		if attribute := included.Attributes[inputsName]; attribute != nil {
+			exposed.inputs = attribute.Expr
+		}
+		result[block.Labels[0]] = exposed
 	}
 	return result
 }
@@ -375,9 +414,15 @@ func descend(expression hclsyntax.Expression, key string) (child hclsyntax.Expre
 	case *hclsyntax.FunctionCallExpr:
 		return nil, node.Name == "sensitive"
 	case *hclsyntax.ObjectConsExpr:
-		// A later member replaces an earlier one with the same key, as HCL evaluates the literal.
+		// A later member replaces an earlier one with the same key, as HCL evaluates the literal. A later
+		// key that is not static may name the same member, so no earlier member can be selected: the
+		// caller scans the whole object instead.
 		for i := len(node.Items) - 1; i >= 0; i-- {
-			if name, ok := staticKey(node.Items[i].KeyExpr); ok && name == key {
+			name, ok := staticKey(node.Items[i].KeyExpr)
+			if !ok {
+				return nil, false
+			}
+			if name == key {
 				return node.Items[i].ValueExpr, false
 			}
 		}
@@ -411,4 +456,110 @@ func pathExists(value any, path []string) bool {
 	}
 	child, found := object[path[0]]
 	return found && pathExists(child, path[1:])
+}
+
+// indexDiscardsSensitive reports whether source[key] drops a sensitive value that may have been logged.
+func (s *sensitivityScanner) indexDiscardsSensitive(index *hclsyntax.IndexExpr, depth int) bool {
+	if s.containsSensitive(index.Key, depth) && s.mayLogValue(index.Key, depth) {
+		// The selected member is named by a sensitive value, which is not the selected result.
+		return true
+	}
+	key, diags := index.Key.Value(nil)
+	if diags.HasErrors() {
+		key = cty.DynamicVal
+	}
+	return s.selectionDiscards(index.Collection, []cty.Value{key}, false, depth)
+}
+
+// relativeDiscardsSensitive reports whether source.attr or source[key] steps drop a sensitive value that may
+// have been logged.
+func (s *sensitivityScanner) relativeDiscardsSensitive(relative *hclsyntax.RelativeTraversalExpr, depth int) bool {
+	keys := make([]cty.Value, 0, len(relative.Traversal))
+	for _, step := range relative.Traversal {
+		switch typed := step.(type) {
+		case hcl.TraverseAttr:
+			keys = append(keys, cty.StringVal(typed.Name))
+		case hcl.TraverseIndex:
+			keys = append(keys, typed.Key)
+		default:
+			keys = append(keys, cty.DynamicVal)
+		}
+	}
+	return s.selectionDiscards(relative.Source, keys, false, depth)
+}
+
+// selectionDiscards follows keys into source and reports whether any step drops a member that holds a
+// sensitive value that may have been logged. Selecting the sensitive member itself retains it: the sink
+// then registers the selected result. A selection that cannot be followed fails closed. wrapped means
+// source is the argument of `sensitive`, so every member of it is sensitive.
+func (s *sensitivityScanner) selectionDiscards(source hclsyntax.Expression, keys []cty.Value, wrapped bool, depth int) bool {
+	if len(keys) == 0 {
+		return false
+	}
+	source = unwrapParentheses(source)
+	if call, ok := source.(*hclsyntax.FunctionCallExpr); ok && call.Name == "sensitive" && len(call.Args) == 1 {
+		return s.selectionDiscards(call.Args[0], keys, true, depth)
+	}
+	if (!wrapped && !s.containsSensitive(source, depth)) || !s.mayLogValue(source, depth) {
+		return false
+	}
+	selected, others, ok := selectMember(source, keys[0])
+	if !ok {
+		return true
+	}
+	for _, other := range others {
+		if (wrapped || s.containsSensitive(other, depth)) && s.mayLogValue(other, depth) {
+			return true
+		}
+	}
+	return s.selectionDiscards(selected, keys[1:], wrapped, depth)
+}
+
+// selectMember returns the member of an object or tuple literal that key selects, and the expressions of
+// every other member. It reports false when the key or the literal's own keys are not statically known.
+func selectMember(source hclsyntax.Expression, key cty.Value) (selected hclsyntax.Expression, others []hclsyntax.Expression, ok bool) {
+	if !key.IsKnown() || key.IsNull() {
+		return nil, nil, false
+	}
+	switch node := source.(type) {
+	case *hclsyntax.ObjectConsExpr:
+		if !key.Type().Equals(cty.String) {
+			return nil, nil, false
+		}
+		match := -1
+		for i, item := range node.Items {
+			name, known := staticKey(item.KeyExpr)
+			if !known {
+				return nil, nil, false
+			}
+			if name == key.AsString() {
+				match = i
+			}
+		}
+		if match < 0 {
+			return nil, nil, false
+		}
+		for i, item := range node.Items {
+			// A repeated key is replaced by the last member, so the earlier ones are dropped too.
+			if i != match {
+				others = append(others, item.ValueExpr)
+			}
+		}
+		return node.Items[match].ValueExpr, others, true
+	case *hclsyntax.TupleConsExpr:
+		if !key.Type().Equals(cty.Number) {
+			return nil, nil, false
+		}
+		position, accuracy := key.AsBigFloat().Int64()
+		if accuracy != big.Exact || position < 0 || position >= int64(len(node.Exprs)) {
+			return nil, nil, false
+		}
+		for i, expression := range node.Exprs {
+			if int64(i) != position {
+				others = append(others, expression)
+			}
+		}
+		return node.Exprs[position], others, true
+	}
+	return nil, nil, false
 }

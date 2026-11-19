@@ -12,15 +12,16 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/policy/planfile"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
 
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_plan_runtime_test.go -package=$GOPACKAGE -mock_names=reviewedPlanRuntime=MockReviewedPlanRuntime,planIdentityRuntime=MockPlanIdentityRuntime,planShowRunner=MockPlanShowRunner
@@ -1479,4 +1480,199 @@ func TestWorkdirDigestExcludesCustomDataDirOutsideModules(t *testing.T) {
 	rewrite("data/environment", "third-workspace")
 	changed, _ := digest("")
 	assert.NotEqual(t, again, changed, "outside the effective data directory the file is content")
+}
+
+// writeDigestFile writes content to a slash-separated path below dir, creating parents.
+func writeDigestFile(t *testing.T, dir, name, content string) {
+	t.Helper()
+	path := filepath.Join(dir, filepath.FromSlash(name))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+}
+
+// bothDigests returns the working directory digest and the rebuild digest of root.
+func bothDigests(t *testing.T, root, plan, dataDir string) (workdir, rebuild string) {
+	t.Helper()
+	workdir, err := configurationWorkdirDigest(root, plan, dataDir)
+	require.NoError(t, err)
+	rebuild, err = configurationRebuildDigest(root, plan, dataDir, nil)
+	require.NoError(t, err)
+	return workdir, rebuild
+}
+
+// Downloaded modules below a data directory outside the workdir are executed content, so both digests
+// must bind them. The mutable data beside them (workspace marker, providers) still does not move them.
+func TestWorkdirDigestBindsModulesOfADataDirOutsideTheWorkdir(t *testing.T) {
+	root := t.TempDir()
+	dataDir := t.TempDir()
+	plan := filepath.Join(root, "reviewed.planfile")
+	writeDigestFile(t, root, "main.tf", "module")
+	writeDigestFile(t, dataDir, "modules/vpc/script.sh", "reviewed script")
+	baseWorkdir, baseRebuild := bothDigests(t, root, plan, dataDir)
+
+	writeDigestFile(t, dataDir, "environment", "other-workspace")
+	writeDigestFile(t, dataDir, "providers/registry/lock.json", "provider")
+	workdir, rebuild := bothDigests(t, root, plan, dataDir)
+	assert.Equal(t, baseWorkdir, workdir, "the workspace marker and providers are mutable execution data")
+	assert.Equal(t, baseRebuild, rebuild, "the workspace marker and providers are mutable execution data")
+
+	writeDigestFile(t, dataDir, "modules/vpc/script.sh", "tampered script")
+	workdir, rebuild = bothDigests(t, root, plan, dataDir)
+	assert.NotEqual(t, baseWorkdir, workdir, "a downloaded module outside the workdir stays bound")
+	assert.NotEqual(t, baseRebuild, rebuild, "a downloaded module outside the workdir stays bound")
+}
+
+// A data directory outside the workdir that holds no downloaded modules adds nothing to the digests.
+func TestWorkdirDigestIgnoresAnExternalDataDirWithoutModules(t *testing.T) {
+	root := t.TempDir()
+	dataDir := filepath.Join(t.TempDir(), "absent")
+	plan := filepath.Join(root, "reviewed.planfile")
+	writeDigestFile(t, root, "main.tf", "module")
+	withDefault, err := configurationWorkdirDigest(root, plan, "")
+	require.NoError(t, err)
+	absent, err := configurationWorkdirDigest(root, plan, dataDir)
+	require.NoError(t, err)
+	assert.Equal(t, withDefault, absent)
+}
+
+// TF_DATA_DIR pointing at the workdir itself, or at one of its parents, must not classify the root
+// configuration as mutable Terraform data. Only the established runtime paths are excluded.
+func TestWorkdirDigestKeepsConfigurationWhenTheDataDirOverlapsTheWorkdir(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "component")
+	plan := filepath.Join(root, "reviewed.planfile")
+	for name, dataDir := range map[string]string{"workdir itself": root, "parent of the workdir": parent} {
+		t.Run(name, func(t *testing.T) {
+			writeDigestFile(t, root, "main.tf", "module v1")
+			writeDigestFile(t, root, "nested/child.tf", "child v1")
+			baseWorkdir, baseRebuild := bothDigests(t, root, plan, dataDir)
+
+			writeDigestFile(t, root, "main.tf", "module v2")
+			workdir, rebuild := bothDigests(t, root, plan, dataDir)
+			assert.NotEqual(t, baseWorkdir, workdir, "root configuration stays bound")
+			assert.NotEqual(t, baseRebuild, rebuild, "root configuration stays bound")
+
+			writeDigestFile(t, root, "nested/child.tf", "child v2")
+			changed, _ := bothDigests(t, root, plan, dataDir)
+			assert.NotEqual(t, workdir, changed, "nested configuration stays bound")
+		})
+	}
+}
+
+// With the data directory at the workdir, the established runtime paths of a data directory stay excluded.
+func TestWorkdirDigestExcludesRuntimePathsWhenTheDataDirIsTheWorkdir(t *testing.T) {
+	root := t.TempDir()
+	plan := filepath.Join(root, "reviewed.planfile")
+	writeDigestFile(t, root, "main.tf", "module")
+	writeDigestFile(t, root, "modules/vpc/main.tf", "downloaded module")
+	baseWorkdir, baseRebuild := bothDigests(t, root, plan, root)
+
+	writeDigestFile(t, root, "environment", "other-workspace")
+	writeDigestFile(t, root, "plugin_path", "path")
+	writeDigestFile(t, root, "providers/registry/lock.json", "provider")
+	workdir, rebuild := bothDigests(t, root, plan, root)
+	assert.Equal(t, baseWorkdir, workdir)
+	assert.Equal(t, baseRebuild, rebuild)
+
+	writeDigestFile(t, root, "modules/vpc/main.tf", "tampered module")
+	workdir, _ = bothDigests(t, root, plan, root)
+	assert.NotEqual(t, baseWorkdir, workdir, "downloaded modules stay bound")
+}
+
+// TF_DATA_DIR set through extra_arguments is applied to some phases only, so one digest cannot match
+// every phase. A reviewed plan is rejected before it is recorded, and a recorded one before it is applied.
+func TestReviewedPlanRejectsADataDirFromExtraArguments(t *testing.T) {
+	extra := func(environment map[string]string) *schema.ComponentExecution {
+		return &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"init"}, Environment: environment}}}
+	}
+	t.Run("snapshot", func(t *testing.T) {
+		config, info, execCtx, _, path := planFixture(t)
+		info.ComponentExecution = extra(map[string]string{"TF_DATA_DIR": filepath.Join(t.TempDir(), "data")})
+		_, err := takePlanSnapshot(t.Context(), config, info, execCtx, path)
+		require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	})
+	t.Run("snapshot accepts other environment", func(t *testing.T) {
+		config, info, execCtx, _, path := planFixture(t)
+		info.ComponentExecution = extra(map[string]string{"TF_LOG": "debug"})
+		_, err := takePlanSnapshot(t.Context(), config, info, execCtx, path)
+		require.NoError(t, err)
+	})
+	t.Run("restore", func(t *testing.T) {
+		config, info, execCtx, _, path := planFixture(t)
+		observeFixturePlan(t, config, info, execCtx, path)
+		require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+		execCtx.preparedConfiguration.Execution = extra(map[string]string{"TF_DATA_DIR": "elsewhere"})
+		// Rewrite the record as an older run that accepted the layout would have.
+		rewriteRecordExecution(t, path, execCtx.preparedConfiguration.Execution)
+		info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+		prepared, rebuild, err := restoreOrRebuildConfigurationPlan(t.Context(), config, info)
+		require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+		require.Nil(t, prepared)
+		require.Nil(t, rebuild)
+	})
+}
+
+// A relative working_directory override takes the retained-path shortcut, which must select the explicit
+// source subdirectory the plan ran in, as planning does.
+func TestRetainedWorkdirShortcutSelectsTheSourceSubdirectory(t *testing.T) {
+	override := filepath.Join("components", "network")
+	tests := []struct {
+		name     string
+		metadata map[string]any
+		create   string
+		want     func(root string) string
+		wantErr  error
+	}{
+		{name: "subdirectory present", metadata: map[string]any{"source_subdir": "modules/app"}, create: filepath.Join("components", "network", "modules", "app"), want: func(root string) string { return filepath.Join(root, "components", "network", "modules", "app") }},
+		{name: "no subdirectory keeps the override", metadata: map[string]any{}, create: filepath.Join("components", "network"), want: func(root string) string { return filepath.Join(root, "components", "network") }},
+		{name: "subdirectory absent keeps the override", metadata: map[string]any{"source_subdir": "modules/app"}, create: filepath.Join("components", "network"), want: func(root string) string { return filepath.Join(root, "components", "network") }},
+		{name: "escaping subdirectory is rejected", metadata: map[string]any{"source_subdir": "../escape"}, create: filepath.Join("components", "network"), wantErr: errUtils.ErrWorkdirProvision},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			require.NoError(t, os.MkdirAll(filepath.Join(root, test.create), 0o700))
+			config := &schema.AtmosConfiguration{BasePath: root}
+			metadata := map[string]any{"working_directory": override}
+			for key, value := range test.metadata {
+				metadata[key] = value
+			}
+			info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"metadata": metadata}}
+
+			err := useRetainedWorkdir(config, info)
+			if test.wantErr != nil {
+				require.ErrorIs(t, err, test.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			want := test.want(root)
+			assert.Equal(t, want, ConstructTerraformComponentWorkingDir(config, info))
+			if test.name == "subdirectory absent keeps the override" {
+				return
+			}
+			// A later provisioning step resolves the subpath again and must not join it a second time.
+			again, err := component.ApplyWorkdirSubpathToSection(info)
+			require.NoError(t, err)
+			assert.Equal(t, want, again)
+		})
+	}
+}
+
+// rewriteRecordExecution replaces the execution metadata stored in the plan record beside path.
+func rewriteRecordExecution(t *testing.T, path string, execution *schema.ComponentExecution) {
+	t.Helper()
+	data, err := os.ReadFile(path + configurationPlanSuffix)
+	require.NoError(t, err)
+	var record map[string]any
+	require.NoError(t, json.Unmarshal(data, &record))
+	encoded, err := json.Marshal(execution)
+	require.NoError(t, err)
+	var value any
+	require.NoError(t, json.Unmarshal(encoded, &value))
+	prepared, ok := record["Prepared"].(map[string]any)
+	require.True(t, ok)
+	prepared["Execution"] = value
+	data, err = json.Marshal(record)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path+configurationPlanSuffix, data, 0o600))
 }

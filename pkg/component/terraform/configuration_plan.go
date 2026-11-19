@@ -141,6 +141,9 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 		}
 		plan.WorkingDirectory = workdir
 	}
+	if err := rejectExtraArgumentsDataDir(plan.Prepared.Execution); err != nil {
+		return nil, nil, err
+	}
 	if err := verifyReviewedArtifacts(ctx, config, info, plan, path); err != nil {
 		return nil, nil, err
 	}

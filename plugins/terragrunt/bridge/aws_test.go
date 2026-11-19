@@ -683,3 +683,154 @@ func TestAWSRejectsAmbientCredentialSourceInRoleProfiles(t *testing.T) {
 	signers, _ := server.seen()
 	require.Empty(t, signers, "no role may be assumed with process credentials")
 }
+
+// envCredentialProcessMarker gates the test binary into acting as an AWS credential_process helper. It is
+// only ever read by TestMain, so a helper started with the plugin process environment is observable.
+const envCredentialProcessMarker = "_ATMOS_TEST_CREDENTIAL_PROCESS_MARKER"
+
+func TestMain(m *testing.M) {
+	if marker := os.Getenv(envCredentialProcessMarker); marker != "" {
+		// Act as a credential_process helper: record that it ran, then print static credentials.
+		_ = os.WriteFile(marker, []byte("ran"), 0o600)
+		fmt.Fprint(os.Stdout, `{"Version":1,"AccessKeyId":"AKIAHELPER","SecretAccessKey":"helper-secret"}`)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+// webIdentitySTS answers AssumeRoleWithWebIdentity and records the bodies it received.
+func webIdentitySTS(t *testing.T, bodies *atomic.Value) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		bodies.Store(string(body))
+		w.Header().Set("Content-Type", "text/xml")
+		fmt.Fprintf(w, `<AssumeRoleWithWebIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><AssumeRoleWithWebIdentityResult><Credentials><AccessKeyId>ASIACOMMANDWEB</AccessKeyId><SecretAccessKey>web</SecretAccessKey><SessionToken>web-token</SessionToken><Expiration>%s</Expiration></Credentials></AssumeRoleWithWebIdentityResult></AssumeRoleWithWebIdentityResponse>`, time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+// A command-level web identity role is assumed with an invocation-scoped, unsigned STS call, so the
+// invocation does not need base credentials. The plugin process STS endpoint never sees the token.
+func TestAWSCommandLevelWebIdentityRoleNeedsNoBaseCredentials(t *testing.T) {
+	var ambientCalls atomic.Int32
+	ambient := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		ambientCalls.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer ambient.Close()
+	t.Setenv("AWS_ENDPOINT_URL_STS", ambient.URL)
+	var body atomic.Value
+	server := webIdentitySTS(t, &body)
+	token := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(token, []byte("command-jwt"), 0o600))
+	env := map[string]string{
+		"TG_IAM_ASSUME_ROLE": "arn:aws:iam::123456789012:role/deploy", "TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN": token,
+		"TG_IAM_ASSUME_ROLE_SESSION_NAME": "atmos-command", "AWS_ENDPOINT_URL_STS": server.URL, "AWS_EC2_METADATA_DISABLED": "true",
+	}
+
+	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+
+	assert.Equal(t, "ASIACOMMANDWEB", scoped.Env[envAccessKeyID])
+	assert.Equal(t, "web-token", scoped.Env[envSessionToken])
+	assert.Contains(t, body.Load(), "Action=AssumeRoleWithWebIdentity")
+	assert.Contains(t, body.Load(), "WebIdentityToken=command-jwt")
+	assert.Contains(t, body.Load(), "RoleSessionName=atmos-command")
+	assert.Zero(t, ambientCalls.Load(), "the process STS endpoint must never receive the invocation token")
+}
+
+// Ordinary AssumeRole still needs base credentials: without them the role is not assumed and the call
+// fails with the missing-credentials cause.
+func TestAWSOrdinaryRoleStillRequiresBaseCredentials(t *testing.T) {
+	server := newSTSServer(t)
+	env := map[string]string{
+		"TG_IAM_ASSUME_ROLE": "arn:aws:iam::123456789012:role/deploy", "AWS_ENDPOINT_URL_STS": server.URL, "AWS_EC2_METADATA_DISABLED": "true",
+	}
+
+	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+	_, err := accountID(t, scoped)
+
+	require.ErrorIs(t, err, ErrAWSCredentials)
+	require.ErrorContains(t, err, "supplies no AWS credentials")
+	assert.Equal(t, awsUnresolvedKey, scoped.Env[envAccessKeyID])
+	signers, _ := server.seen()
+	assert.Empty(t, signers)
+}
+
+// credential_process helpers run with the plugin process environment in the pinned SDK, which has no seam for
+// an invocation environment. Such a profile is rejected, at the end of a source_profile chain too, and the
+// helper never starts.
+func TestAWSRejectsCredentialProcessProfiles(t *testing.T) {
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	marker := filepath.Join(t.TempDir(), "ran")
+	t.Setenv(envCredentialProcessMarker, marker)
+	server := newSTSServer(t)
+	credentials, configFile := writeProfile(t, "static", "AKIASTATIC")
+	require.NoError(t, os.WriteFile(configFile, []byte(fmt.Sprintf("[profile helper]\ncredential_process = %q\n[profile viahelper]\nrole_arn = arn:aws:iam::1:role/test\nsource_profile = helper\n", executable)), 0o600))
+	base := map[string]string{"AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile, "AWS_ENDPOINT_URL_STS": server.URL, "AWS_EC2_METADATA_DISABLED": "true"}
+
+	for _, profile := range []string{"helper", "viahelper"} {
+		t.Run(profile, func(t *testing.T) {
+			env := map[string]string{"AWS_PROFILE": profile}
+			for name, value := range base {
+				env[name] = value
+			}
+			scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+			require.Equal(t, awsUnresolvedKey, scoped.Env[envAccessKeyID])
+			_, err := accountID(t, scoped)
+			require.ErrorIs(t, err, ErrAWSCredentials)
+			require.ErrorContains(t, err, "credential_process")
+			require.NoFileExists(t, marker, "the helper must never run with the plugin process environment")
+		})
+	}
+
+	t.Run("static profiles still resolve", func(t *testing.T) {
+		env := map[string]string{"AWS_PROFILE": "static"}
+		for name, value := range base {
+			env[name] = value
+		}
+		scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+		assert.Equal(t, "AKIASTATIC", scoped.Env[envAccessKeyID])
+	})
+}
+
+// The profile that passed validation is the one that resolves: rewriting the shared files in between must not
+// let the SDK select an ambient provider of the plugin process.
+func TestAWSResolvesTheValidatedProfileSnapshot(t *testing.T) {
+	var ambientCalls atomic.Int32
+	ambient := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		ambientCalls.Add(1)
+		_, _ = io.WriteString(w, `{"AccessKeyId":"AKIAAMBIENT","SecretAccessKey":"secret","Token":"ambient-token","Expiration":"2099-01-01T00:00:00Z"}`)
+	}))
+	defer ambient.Close()
+	t.Setenv("AWS_CONTAINER_CREDENTIALS_FULL_URI", ambient.URL)
+	t.Setenv("AWS_CONTAINER_AUTHORIZATION_TOKEN", "ambient-authorization")
+	credentials, configFile := writeProfile(t, "racy", "AKIARACY")
+	env := map[string]string{"AWS_PROFILE": "racy", "AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile, "AWS_EC2_METADATA_DISABLED": "true"}
+	previous := afterProfileValidated
+	t.Cleanup(func() { afterProfileValidated = previous })
+	afterProfileValidated = func() {
+		require.NoError(t, os.WriteFile(credentials, []byte("[unrelated]\naws_access_key_id = AKIAOTHER\naws_secret_access_key = other\n"), 0o600))
+		require.NoError(t, os.WriteFile(configFile, []byte("[profile racy]\nregion = eu-west-1\n"), 0o600))
+	}
+
+	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+
+	assert.Equal(t, "AKIARACY", scoped.Env[envAccessKeyID], "the validated snapshot resolves, not the rewritten files")
+	assert.Zero(t, ambientCalls.Load(), "the process credential endpoint must never receive a request")
+}
+
+// Without a rewrite the snapshot changes nothing, and missing shared files are still reported by the profile lookup.
+func TestAWSSnapshotKeepsMissingFilesMissing(t *testing.T) {
+	dir := t.TempDir()
+	env := map[string]string{"AWS_PROFILE": "absent", "AWS_SHARED_CREDENTIALS_FILE": filepath.Join(dir, "none"), "AWS_CONFIG_FILE": filepath.Join(dir, "none-config"), "AWS_EC2_METADATA_DISABLED": "true"}
+
+	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+
+	assert.Equal(t, awsUnresolvedKey, scoped.Env[envAccessKeyID])
+	entries, err := filepath.Glob(filepath.Join(os.TempDir(), "atmos-aws-snapshot-*"))
+	require.NoError(t, err)
+	assert.Empty(t, entries, "the snapshot directory is removed after resolution")
+}

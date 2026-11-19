@@ -286,7 +286,7 @@ func useRetainedWorkdir(config *schema.AtmosConfiguration, info *schema.ConfigAn
 				return err
 			}
 			info.ComponentSection[provWorkdir.WorkdirPathKey] = filepath.Join(base, clean)
-			return nil
+			return selectRetainedSourceSubdir(info)
 		}
 	}
 	fallback, err := u.GetComponentPath(config, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
@@ -294,6 +294,24 @@ func useRetainedWorkdir(config *schema.AtmosConfiguration, info *schema.ConfigAn
 		return fmt.Errorf("failed to resolve component path: %w", err)
 	}
 	_, err = component.ResolveRetainedWorkdir(config, info, cfg.TerraformComponentType, fallback)
+	return err
+}
+
+// selectRetainedSourceSubdir applies the explicit source subdirectory to the retained workdir the shortcut
+// set, as planning does: the plan ran in the module directory below the override, so that is the directory
+// the reviewed plan is bound to. A subdirectory that is not on disk yet keeps the override as the workdir,
+// like the resolution of an absolute workdir; one that is invalid or escapes its root is rejected.
+func selectRetainedSourceSubdir(info *schema.ConfigAndStacksInfo) error {
+	metadata, _ := info.ComponentSection["metadata"].(map[string]any)
+	if subdir, _ := metadata["source_subdir"].(string); subdir == "" {
+		return nil
+	}
+	root, _ := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	_, present, err := component.ResolvePendingSubpath(info, root)
+	if err != nil || !present {
+		return err
+	}
+	_, err = component.ApplyWorkdirSubpathToSection(info)
 	return err
 }
 
