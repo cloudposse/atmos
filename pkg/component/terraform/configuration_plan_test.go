@@ -2009,7 +2009,7 @@ func TestStalePlanStashIsKeptWhenRestoreFails(t *testing.T) {
 	// A read-only plan file makes writing the earlier contents back fail.
 	require.NoError(t, os.Chmod(plan, 0o400))
 
-	err = settle(true)
+	err = settle(false)
 
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.ErrorContains(t, err, stashes[0])
