@@ -198,26 +198,28 @@ func Generate(atmosConfig *schema.AtmosConfiguration, baseDir string, docsGenera
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrPathResolution, err)
 	}
-	return generateDocument(atmosConfig, absoluteDir, docsGenerate, defaultTemplateRenderer{})
+	_, err = generateDocument(atmosConfig, absoluteDir, docsGenerate, defaultTemplateRenderer{})
+	return err
 }
 
 // generateDocument merges the docs inputs, optionally runs terraform-docs, renders, and writes the document.
+// It returns the resolved output path.
 func generateDocument(
 	atmosConfig *schema.AtmosConfiguration,
 	baseDir string,
 	docsGenerate *schema.DocsGenerate,
 	renderer templateRenderer,
-) error {
+) (string, error) {
 	// 1) Merge YAML inputs.
 	mergedData, err := mergeInputs(atmosConfig, baseDir, docsGenerate)
 	if err != nil {
-		return errors.Join(errUtils.ErrMergeInputYAMLs, err)
+		return "", errors.Join(errUtils.ErrMergeInputYAMLs, err)
 	}
 
 	// 2) Generate terraform docs if enabled.
 	module, err := applyTerraformDocs(atmosConfig, baseDir, docsGenerate, mergedData)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if _, ok := mergedData["terraform_docs"]; !ok {
 		mergedData["terraform_docs"] = ""
@@ -226,29 +228,29 @@ func generateDocument(
 	// 3) Fetch the template.
 	chosenTemplate, err := fetchTemplate(atmosConfig, docsGenerate, baseDir)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// 4) Render final document using the injected renderer.
 	rendered, err := renderer.Render("docs-generate", chosenTemplate, mergedData, module)
 	if err != nil {
-		return errors.Join(errUtils.ErrRenderTemplate, err)
+		return "", errors.Join(errUtils.ErrRenderTemplate, err)
 	}
 
 	// 5) Resolve and write final document.
 	outputPath, err := resolvePath(docsGenerate.Output, baseDir, defaultReadmeOutput)
 	if err != nil {
-		return fmt.Errorf("%w: %s: %w", errUtils.ErrResolveOutputPath, docsGenerate.Output, err)
+		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrResolveOutputPath, docsGenerate.Output, err)
 	}
 	if err = os.WriteFile(outputPath, []byte(rendered), defaultFilePermissions); err != nil {
-		return fmt.Errorf("%w: %s: %w", errUtils.ErrWriteOutput, outputPath, err)
+		return "", fmt.Errorf("%w: %s: %w", errUtils.ErrWriteOutput, outputPath, err)
 	}
 
 	ui.Writeln("")
 	ui.Success("Generated docs")
 	ui.Writeln("")
 	log.Debug("Documentation generated", "output", outputPath)
-	return nil
+	return outputPath, nil
 }
 
 // fetchAndParseYAML reads a YAML file from a local path or downloads it from a remote URL.

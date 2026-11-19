@@ -115,6 +115,8 @@ atmos terraform plan --all -s dev --max-concurrency 4
 
 Concurrent plan output is isolated per component. Use `--log-order grouped` to print each component's logs together after it finishes, or keep the default `stream` mode to see logs as they arrive. To reduce noise from unchanged components, use `--hide=no-changes`.
 
+Grouped output prefixes every stdout and stderr line with `[stack/component]`, just like stream mode, so the originating component stays visible while scrolling. Saved per-component log files remain unprefixed.
+
 ```shell
 atmos terraform plan --all -s dev \
   --max-concurrency 4 \
