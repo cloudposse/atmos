@@ -623,3 +623,59 @@ download_dir = include.root.inputs.cache
 		})
 	}
 }
+
+// subdirSourceFixture writes a unit two levels below a root that also holds `modules/vpc` and a
+// sibling `modules/shared`, then points the unit's `terraform.source` at the given spelling.
+func subdirSourceFixture(t *testing.T, source string) (model.Request, string) {
+	t.Helper()
+	top := t.TempDir()
+	unit := filepath.Join(top, "stack", "unit")
+	require.NoError(t, os.MkdirAll(unit, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(top, "modules", "vpc"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(top, "modules", "shared"), 0o755))
+	request := nativeUnitAt(t, unit, "")
+	encoded, err := json.Marshal(source)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(encoded)+" }"), 0o644))
+	return request, top
+}
+
+func TestResolveLocalSubdirSourceKeepsRootAndSubdirectory(t *testing.T) {
+	request, top := subdirSourceFixture(t, "../../modules//vpc")
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	// The unit path may resolve through a symlinked temp directory, such as /private on macOS.
+	resolved, err := filepath.EvalSymlinks(top)
+	require.NoError(t, err)
+	root := filepath.Join(resolved, "modules")
+	require.Equal(t, root+"//vpc", result.Source)
+	require.Contains(t, result.Folders, root)
+	require.True(t, filepath.IsAbs(result.Source))
+}
+
+func TestResolveLocalSubdirSourceRejectsMissingPartsSafely(t *testing.T) {
+	for name, source := range map[string]string{
+		"missing subdirectory": "../../modules//absent-secret-name",
+		"missing root":         "../../absent-root-secret//vpc",
+	} {
+		t.Run(name, func(t *testing.T) {
+			request, _ := subdirSourceFixture(t, source)
+			_, err := Resolve(t.Context(), request)
+			var problem *model.Problem
+			require.ErrorAs(t, err, &problem)
+			require.Equal(t, model.CodeInvalidSource, problem.Code)
+			require.True(t, problem.Safe)
+			require.NotContains(t, problem.Detail, "secret")
+			require.NotContains(t, strings.Join(problem.Hints, " "), "secret")
+		})
+	}
+}
+
+func TestResolveRemoteSubdirSourceIsUnchanged(t *testing.T) {
+	source := "git::https://example.invalid/repo.git//modules/vpc?ref=v1"
+	request, _ := subdirSourceFixture(t, source)
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, source, result.Source)
+	require.NotContains(t, result.Folders, "modules")
+}

@@ -419,7 +419,14 @@ func TestManifestMetadataHardLinkIsolation(t *testing.T) {
 	require.NoFileExists(t, metadata)
 	entries, err := os.ReadDir(filepath.Join(directory, ".atmos"))
 	require.NoError(t, err)
-	require.Empty(t, entries, "no temporary metadata remains")
+	var left []string
+	for _, entry := range entries {
+		// The advisory lock stays: removing a lock file another writer may wait on is racy.
+		if entry.Name() != filepath.Base(workdirLockName) {
+			left = append(left, entry.Name())
+		}
+	}
+	require.Empty(t, left, "no temporary metadata remains")
 }
 
 func TestWriteFilesOverwritePreservesOtherHardLinks(t *testing.T) {
@@ -480,4 +487,22 @@ func TestWriteFilesReplacementPreservesUnspecifiedMode(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0o640), info.Mode().Perm())
 	require.Equal(t, "after", read(t, directory, "generated.tf"))
+}
+
+// A generated file that cannot be removed keeps the generated-file classification and names the
+// path, and the underlying permission error stays inspectable.
+func TestRemovalFailureKeepsTheGeneratedFileClassification(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions do not prevent removal on Windows")
+	}
+	root := t.TempDir()
+	nested := filepath.Join(root, "nested")
+	require.NoError(t, os.MkdirAll(nested, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(nested, "old.tf"), []byte("old"), 0o600))
+	require.NoError(t, os.Chmod(nested, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(nested, 0o755) })
+	err := WriteFiles(root, []schema.ComponentConfigurationFile{{Path: "nested/old.tf", IfExists: "remove"}})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, err, os.ErrPermission)
+	require.ErrorContains(t, err, "nested/old.tf")
 }

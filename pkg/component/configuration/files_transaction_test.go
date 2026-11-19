@@ -91,7 +91,17 @@ func TestWriteFilesSerializesWritersPerWorkdir(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(root, "shared.tf"))
 	require.NoError(t, err)
 	assert.Equal(t, contentDigest(content), recorded["shared.tf"], "the manifest matches the bytes that landed")
-	assert.Equal(t, workdirLockPath(root), workdirLockPath(filepath.Join(root, ".", "")))
+	lock, err := workdirLockPath(root)
+	require.NoError(t, err)
+	spelled, err := workdirLockPath(filepath.Join(root, ".", ""))
+	require.NoError(t, err)
+	assert.Equal(t, lock, spelled)
+	// The lock lives in the working directory, so writers with different TMPDIR values share it.
+	t.Setenv("TMPDIR", t.TempDir())
+	elsewhere, err := workdirLockPath(root)
+	require.NoError(t, err)
+	assert.Equal(t, lock, elsewhere)
+	assert.FileExists(t, lock)
 }
 
 func mustRoot(t *testing.T, directory string) *os.Root {

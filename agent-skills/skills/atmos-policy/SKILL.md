@@ -31,8 +31,11 @@ Distinguish input kind, component type, and CI provider:
   successful plan, including no-change plans, and again before applying the evaluated private copy.
   Implicit apply/deploy and direct destroy are rejected when plan policies are enabled.
 - `operation`: lifecycle event, component type/name, stack, command, status, exit code, dry-run.
-  Current integration uses existing Terraform, Helmfile, Helm, and Kubernetes hooks. Do not claim
-  enforcement for Packer, Ansible, containers, emulators, or custom components yet.
+  Current integration uses existing Terraform, Helmfile, Helm, and Kubernetes hooks, plus
+  `atmos docs generate` (`before.docs.generate`/`after.docs.generate`): `component_type: docs`,
+  `command: generate`, `component` is the doc type (for example `readme`), and `stack` is empty.
+  `action: hooks` rules dispatch hooks there too. Do not claim enforcement for Packer, Ansible,
+  containers, emulators, or custom components yet.
 - `plugin` (`on: plugin`): native plugin registries, packages, and local builds (`origin`, `path`, `profiles`, `operation`)
   checked before install, activation, test, publish, and sign. See `atmos-plugins` for inputs and recipes.
 - GitHub Actions context: `ci.provider == 'github-actions'`, `ci.schema == 'github-actions/v1'`.

@@ -836,3 +836,84 @@ func TestDiscoveryExcludedUnitKeepsEdgesForExcludeDependencies(t *testing.T) {
 		})
 	}
 }
+
+// A scope below a pruned directory finds nothing, exactly like a root-wide scan, while ordinary
+// scopes stay discoverable.
+func TestScopedWalkPrunesItsAncestors(t *testing.T) {
+	root := scanTree(t, "live/.terragrunt-cache/run/terragrunt.hcl", "live/node_modules/pkg/terragrunt.hcl", "live/prod/vpc/terragrunt.hcl")
+	for _, pattern := range []string{"live/.terragrunt-cache/run", "live/node_modules/pkg/**"} {
+		scan, err := discoveryPaths(root, []string{pattern}, nil)
+		require.NoError(t, err)
+		require.Empty(t, relativeUnits(t, root, scan), pattern)
+	}
+	scan, err := discoveryPaths(root, []string{"live/prod"}, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/prod/vpc/terragrunt.hcl"}, relativeUnits(t, root, scan))
+	scan, err = discoveryPaths(root, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/prod/vpc/terragrunt.hcl"}, relativeUnits(t, root, scan), "the root-wide scan agrees")
+}
+
+// writeStaleUnits materializes standalone-looking units, as an earlier successful generation would.
+func writeStaleUnits(t *testing.T, root string, dirs ...string) {
+	t.Helper()
+	module, err := json.Marshal(filepath.ToSlash(filepath.Join(root, "modules", "unit")))
+	require.NoError(t, err)
+	for _, dir := range dirs {
+		path := filepath.Join(root, filepath.FromSlash(dir), "terragrunt.hcl")
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte("terraform { source = "+string(module)+" }\n"), 0o644))
+	}
+}
+
+// A stack whose generation now fails still owns what an earlier generation materialized.
+func TestDiscoveryKeepsStaleOutputsOfFailedStackOutOfStandalonePass(t *testing.T) {
+	for name, declaration := range map[string]string{
+		"no_dot_terragrunt_stack": `path = "app"
+  no_dot_terragrunt_stack = true`,
+		"dot stack directory": `path = "app"`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := stackProject(t, map[string]string{
+				"live/terragrunt.stack.hcl": "unit \"app\" {\n  source = values.missing\n  " + declaration + "\n}\n",
+			})
+			stale := "live/app"
+			if name == "dot stack directory" {
+				stale = "live/.terragrunt-stack/app"
+			}
+			writeStaleUnits(t, root, stale, "live/other")
+
+			result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**", "live/.terragrunt-stack/**"}, Environment: map[string]string{}})
+			require.NoError(t, err)
+			require.Equal(t, []string{"live/other"}, inventoryNames(t, result), "the stale child is not listed, the genuine sibling is")
+			require.Empty(t, result.Inventory[0].GenerationRoot)
+			require.Len(t, result.Failures, 1)
+			require.Equal(t, "terragrunt.stack.hcl", result.Failures[0].Name)
+		})
+	}
+}
+
+// When a declaration's location is not literal, the whole failed stack directory is claimed.
+func TestDiscoveryFailsClosedForNonLiteralStackOutputs(t *testing.T) {
+	root := stackProject(t, map[string]string{
+		"live/terragrunt.stack.hcl": "unit \"app\" {\n  source = values.missing\n  path = values.where\n}\n",
+	})
+	writeStaleUnits(t, root, "live/app", "elsewhere")
+
+	result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**", "elsewhere/**"}, Environment: map[string]string{}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"default/elsewhere"}, inventoryNames(t, result), "units outside the failed stack stay discoverable")
+	require.Len(t, result.Failures, 1)
+}
+
+// Negative path: without a failing stack, a unit that no stack declares is still discovered.
+func TestDiscoveryStillListsUnitsNoFailedStackDeclares(t *testing.T) {
+	root := stackProject(t, map[string]string{
+		"live/terragrunt.stack.hcl": "unit \"app\" {\n  source = values.missing\n  path = \"app\"\n  no_dot_terragrunt_stack = true\n}\n",
+	})
+	writeStaleUnits(t, root, "live/other")
+
+	result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**"}, Environment: map[string]string{}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/other"}, inventoryNames(t, result))
+}

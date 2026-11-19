@@ -1937,6 +1937,9 @@ type DocsGenerate struct {
 	Template  string                      `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 	Output    string                      `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
 	Terraform TerraformDocsReadmeSettings `yaml:"terraform,omitempty" json:"terraform,omitempty" mapstructure:"terraform"`
+	// Hooks declares lifecycle hooks (before.docs.generate / after.docs.generate) for this doc type.
+	// The map is decoded into hook definitions by pkg/hooks, which schema cannot import.
+	Hooks map[string]any `yaml:"hooks,omitempty" json:"hooks,omitempty" mapstructure:"hooks"`
 }
 
 type ArgsAndFlagsInfo struct {

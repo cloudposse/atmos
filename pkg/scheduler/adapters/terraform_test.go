@@ -18,9 +18,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/asciicast"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
-	iolib "github.com/cloudposse/atmos/pkg/io"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -2286,10 +2287,18 @@ func TestTerraformOutputFinishNodeGroupedOutput(t *testing.T) {
 		os.Stderr = oldStderr
 	}()
 
+	castPath := filepath.Join(t.TempDir(), "grouped.cast")
+	recorder, err := asciicast.Start(&asciicast.Options{Path: castPath})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, recorder.Discard()) })
+	t.Cleanup(ioLayer.SetRecorder(recorder))
+	require.NoError(t, ioLayer.RegisterPattern(`\[dev/app\] grouped-prefix-context-secret`))
+
 	output := &terraformOutput{command: "plan", logOrder: terraformLogOrderGrouped}
+	token := "ghp_" + strings.Repeat("a", 36)
 	output.finishNode(&dependency.Node{Component: "app", Stack: "dev"}, TerraformExecutionResult{
-		Stdout: "stdout",
-		Stderr: "stderr",
+		Stdout: "stdout\n\n\x1b[32mlast stdout\x1b[0m\n" + token + "\ngrouped-prefix-context-secret",
+		Stderr: "stderr\rprogress\r\nlast stderr\n" + token + "\ngrouped-prefix-context-secret",
 	}, nil)
 
 	require.NoError(t, stdoutWriter.Close())
@@ -2299,10 +2308,26 @@ func TestTerraformOutputFinishNodeGroupedOutput(t *testing.T) {
 	stderrBytes, err := io.ReadAll(stderrReader)
 	require.NoError(t, err)
 
-	require.Contains(t, string(stdoutBytes), "stdout")
-	require.Contains(t, string(stderrBytes), "plan output succeeded")
-	require.Contains(t, string(stderrBytes), "stderr")
-	require.Contains(t, string(stderrBytes), "end plan output")
+	require.Equal(t, "[dev/app] stdout\n[dev/app] \n[dev/app] \x1b[32mlast stdout\x1b[0m\n"+
+		"[dev/app] <MASKED>\n<MASKED>\n", string(stdoutBytes))
+	require.Equal(t, "\n[dev/app] plan output succeeded\n"+
+		"[dev/app] stderr\n[dev/app] progress\n[dev/app] last stderr\n[dev/app] <MASKED>\n<MASKED>\n"+
+		"[dev/app] end plan output\n", string(stderrBytes))
+
+	require.NoError(t, recorder.Close())
+	castBytes, err := os.ReadFile(castPath)
+	require.NoError(t, err)
+	recorded := map[string]string{}
+	for _, line := range bytes.Split(bytes.TrimSpace(castBytes), []byte("\n"))[1:] {
+		var event [3]json.RawMessage
+		require.NoError(t, json.Unmarshal(line, &event))
+		var stream, content string
+		require.NoError(t, json.Unmarshal(event[1], &stream))
+		require.NoError(t, json.Unmarshal(event[2], &content))
+		recorded[stream] += content
+	}
+	require.Equal(t, string(stdoutBytes), recorded["o"])
+	require.Equal(t, string(stderrBytes), recorded["e"])
 }
 
 func TestTerraformOutputFinishNodeSkipsNoChangesWhenHidden(t *testing.T) {
@@ -3754,12 +3779,12 @@ func TestExecuteTerraformExcludeDependenciesIgnoresContractedEdges(t *testing.T)
 
 func TestExecuteTerraformAllExcludedCIResults(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
-	ioCtx, err := iolib.NewContext()
+	ioCtx, err := ioLayer.NewContext()
 	require.NoError(t, err)
 	ui.InitFormatter(ioCtx)
 	t.Cleanup(ui.Reset)
 	var output bytes.Buffer
-	t.Cleanup(iolib.PushUIWriter(&output))
+	t.Cleanup(ioLayer.PushUIWriter(&output))
 	handler := &capturingTerraformPlanCIResultHandler{}
 	stacks := excludeStacks(map[string]map[string]any{
 		"vpc": {"actions": []any{"plan"}}, "database": {"actions": []any{"plan"}}, "app": {"actions": []any{"plan"}},

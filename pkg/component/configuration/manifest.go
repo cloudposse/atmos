@@ -36,30 +36,51 @@ type manifest struct {
 // readManifest returns the recorded digests, or none when the manifest is absent or unreadable.
 // An unreadable manifest only costs stale-file cleanup for one run, so it is never an error.
 func readManifest(root *os.Root) map[string]string {
+	files, _ := loadManifest(root)
+	if files == nil {
+		return map[string]string{}
+	}
+	return files
+}
+
+// loadManifest reads the recorded files. A missing manifest is empty, and so is a corrupt or aliased
+// one, which only costs cleanup. A manifest that exists but cannot be read, such as one without read
+// permission, is an error: treating it as empty would let an empty batch unlink it and lose the
+// ownership of files that are still in the working directory.
+func loadManifest(root *os.Root) (map[string]string, error) {
 	directory, err := destinationDirectory(root, filepath.Dir(manifestName), false)
 	if err != nil {
-		return map[string]string{}
+		return manifestReadFailure(err)
 	}
 	defer directory.Close()
 	file, err := openExistingGeneratedFile(directory, filepath.Base(manifestName))
 	if err != nil {
-		return map[string]string{}
+		return manifestReadFailure(err)
 	}
 	defer file.Close()
 	data, err := io.ReadAll(file)
 	if err != nil {
-		return map[string]string{}
+		return nil, err
 	}
 	var stored manifest
 	if json.Unmarshal(data, &stored) != nil || stored.Files == nil {
-		return map[string]string{}
+		return map[string]string{}, nil
 	}
 	// Clean recorded paths, so a manifest written before keys were cleaned still matches.
 	files := make(map[string]string, len(stored.Files))
 	for path, digest := range stored.Files {
 		files[filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))] = digest
 	}
-	return files
+	return files, nil
+}
+
+// manifestReadFailure treats absence and unsafe (linked or non-regular) metadata as an empty
+// manifest, and reports any other failure, such as missing read permission.
+func manifestReadFailure(err error) (map[string]string, error) {
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, errUtils.ErrPluginInvalidConfig) {
+		return map[string]string{}, nil
+	}
+	return nil, err
 }
 
 // writeManifest records the generated files. A failure keeps its filesystem cause and carries the
@@ -228,6 +249,8 @@ type fileState struct {
 	exists  bool
 	content []byte
 	mode    os.FileMode
+	// info identifies the captured file, so rollback can leave a path the run did not change.
+	info os.FileInfo
 }
 
 // capture remembers a path's state the first time the run is about to change it. Only regular
@@ -271,7 +294,7 @@ func (r restorePoint) captureFrom(directory *os.Root, path, leaf string) error {
 	if err != nil {
 		return err
 	}
-	r[path] = &fileState{exists: true, content: content, mode: info.Mode().Perm()}
+	r[path] = &fileState{exists: true, content: content, mode: info.Mode().Perm(), info: info}
 	return nil
 }
 
@@ -303,14 +326,29 @@ func (r restorePoint) restoreFile(root *os.Root, path string) error {
 	if !state.exists {
 		return removeFile(directory, leaf)
 	}
+	if state.unchanged(directory, leaf) {
+		// Replacing an untouched file would break its other hard links for nothing.
+		return nil
+	}
 	return restoreContents(directory, leaf, state)
+}
+
+// unchanged reports whether the leaf is still the captured file, with the captured mode and bytes.
+func (s *fileState) unchanged(directory *os.Root, leaf string) bool {
+	current, err := directory.Lstat(leaf)
+	if err != nil || s.info == nil || !os.SameFile(s.info, current) || current.Mode().Perm() != s.mode {
+		return false
+	}
+	digest, ok := fileDigest(directory, leaf)
+	return ok && digest == contentDigest(s.content)
 }
 
 // restoreContents replaces the directory entry instead of truncating a possible hard link.
 // A private exclusive temporary file keeps the original bytes and mode together, and both
 // writes and permission changes use its handle rather than following a substituted leaf.
 func restoreContents(directory *os.Root, leaf string, state *fileState) (result error) {
-	temporary := "." + leaf + "." + rand.Text() + ".tmp"
+	// A fixed prefix keeps the name within the filesystem's name limit whatever the leaf's length.
+	temporary := ".atmos-restore-" + rand.Text() + ".tmp"
 	file, err := directory.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, state.mode)
 	if err != nil {
 		return err

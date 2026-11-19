@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
@@ -416,5 +417,59 @@ func TestOpenTofuGeneratedBackendRejected(t *testing.T) {
 				require.ErrorIs(t, err, ErrUnsupportedExecution)
 			})
 		}
+	}
+}
+
+// A JSON generate path is read without evaluation, so a template such as ${"backend.tf"} reaches the
+// check literally. It could name a backend file once evaluated, so it fails closed.
+func TestBackendGenerationRejectsInterpolatedJSONPaths(t *testing.T) {
+	for name, test := range map[string]struct {
+		path string
+		safe bool
+	}{
+		"interpolated": {path: `${\"backend.tf\"}`},
+		"directive":    {path: `%{if true}backend.tf%{endif}`},
+		"literal":      {path: "extra.txt", safe: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			content := `{"generate": {"extra": {"path": "` + test.path + `", "if_exists": "overwrite", "contents": "terraform { backend \"s3\" {} }"}}}`
+			file, diagnostics := hclparse.NewParser().ParseJSON([]byte(content), "terragrunt.hcl.json")
+			require.False(t, diagnostics.HasErrors(), diagnostics.Error())
+			err := checkBackendGenerationFile(file)
+			if test.safe {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, ErrUnsupportedExecution)
+		})
+	}
+}
+
+// A generate block whose literal path and contents declare a backend fails discovery, so bulk
+// preflight stops before a healthy prerequisite runs. A declaration that needs evaluation, or one
+// that writes no backend, still discovers.
+func TestDiscoveryRejectsLiteralGeneratedBackends(t *testing.T) {
+	for name, test := range map[string]struct {
+		generate string
+		rejected bool
+	}{
+		"literal backend":  {generate: "generate \"backend\" {\n path = \"backend.tf\"\n if_exists = \"overwrite\"\n contents = \"terraform {\\n backend \\\"local\\\" {}\\n}\\n\"\n}\n", rejected: true},
+		"dynamic path":     {generate: "generate \"backend\" {\n path = get_env(\"TARGET\", \"backend.tf\")\n if_exists = \"overwrite\"\n contents = \"terraform {\\n backend \\\"local\\\" {}\\n}\\n\"\n}\n"},
+		"disabled backend": {generate: "generate \"backend\" {\n path = \"backend.tf\"\n if_exists = \"overwrite\"\n disable = true\n contents = \"terraform {\\n backend \\\"local\\\" {}\\n}\\n\"\n}\n"},
+		"provider only":    {generate: "generate \"provider\" {\n path = \"provider.tf\"\n if_exists = \"overwrite\"\n contents = \"provider \\\"null\\\" {}\\n\"\n}\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := nativeUnit(t, test.generate)
+			request.Phase = "discover"
+			_, err := Resolve(t.Context(), request)
+			if !test.rejected {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, ErrUnsupportedExecution)
+			var problem *model.Problem
+			require.ErrorAs(t, err, &problem)
+			require.Equal(t, "generate", problem.Key)
+		})
 	}
 }

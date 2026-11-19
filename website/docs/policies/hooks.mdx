@@ -46,6 +46,11 @@ atmos terraform plan vpc -s dev
 The hook runs after a successful plan, including a detailed exit code of `2`. A failing TFLint
 process fails the command. `--skip-hooks` cannot skip this required hook.
 
+Policies also apply to `atmos docs generate`. Its events are `before.docs.generate` and
+`after.docs.generate`, the operation input has `component_type: docs` and no stack, and the
+`component` is the generator name. Rules may use `match` selectors such as `components` or
+`component_types`; a `stacks` selector never matches because the operation has no stack. See [`atmos docs generate`](/cli/commands/docs/generate#hooks).
+
 ## Hook requirements
 
 <dl>

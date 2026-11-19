@@ -401,6 +401,15 @@ func emptyTokenFile(t *testing.T) string {
 
 func TestRejectRuntimeArtifacts(t *testing.T) {
 	require.NoError(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{{Path: "backend.tf", IfExists: "overwrite"}}))
+	// The unit's own lock file copy carries its provider pins; only that exact copy is allowed.
+	require.NoError(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{{Path: ".terraform.lock.hcl", IfExists: "overwrite", UnitFileCopy: true}}))
+	for _, file := range []schema.ComponentConfigurationFile{
+		{Path: "nested/.terraform.lock.hcl", IfExists: "overwrite", UnitFileCopy: true},
+		{Path: ".terraform.lock.hcl", IfExists: "overwrite_terragrunt", UnitFileCopy: true},
+		{Path: "terraform.tfstate", IfExists: "overwrite", UnitFileCopy: true},
+	} {
+		require.ErrorIs(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{file}), errUtils.ErrPluginInvalidConfig, file.Path)
+	}
 	for _, path := range []string{"examples/terraform.tfstate", "nested/provider.tf", "Nested/PROVIDER.tf", "terraform.tfstate.example"} {
 		require.NoError(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{{Path: path}}), path)
 	}
@@ -589,6 +598,7 @@ func TestReviewedPlanKeepsGeneratedErrorPolicyFile(t *testing.T) {
 	require.NoError(t, err)
 	path := filepath.Join(execution.workingDir, "reviewed.planfile")
 	require.NoError(t, os.WriteFile(path, []byte("reviewed plan"), 0o600))
+	observeFixturePlan(t, project.config, plan, execution, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, plan, execution, []string{"-out=" + path}))
 	apply := project.reviewedApply(t, path)
 	_, err = testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
@@ -630,7 +640,7 @@ func TestPolicySnapshotRejectsPlanRewrittenBeforePublication(t *testing.T) {
 			execution.planPolicy = &planfile.Guard{}
 			ctx := execution.observePlanSnapshots(t.Context(), config, info, []string{"plan", "-out=" + published})
 			snapshot := ctx.Value(planSnapshotKey{}).(*planSnapshotter)
-			run := snapshot.around([]string{"plan", "-out=" + private}, func() error { return os.WriteFile(private, []byte("engine plan"), 0o600) })
+			run := snapshot.around([]string{"plan", "-out=" + private}, func() error { return os.WriteFile(private, []byte("engine plan"), 0o600) }, failedOnError)
 			require.NoError(t, run())
 			digest, err := fileDigest(private)
 			require.NoError(t, err)
