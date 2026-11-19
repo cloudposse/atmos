@@ -17,6 +17,9 @@ type Subject struct {
 	Metadata SubjectMetadata `json:"metadata"`
 	// TemplateLeft identifies unresolved metadata under a configured delimiter.
 	TemplateLeft string `json:"template_left,omitempty"`
+	// Stackless marks a subject that is an operation (such as `atmos docs generate`) with no stack.
+	// Selectors on stack, tags, and labels still evaluate; an empty stack is not an error.
+	Stackless bool `json:"stackless,omitempty"`
 }
 
 // SubjectMetadata contains only data used for attachment, never executable configuration.
@@ -105,7 +108,7 @@ func (s *Selector) Matches(subject *Subject) (bool, error) {
 }
 
 func validateSubject(subject *Subject) error {
-	if subject == nil || subject.Name == "" || subject.Stack == "" || subject.ComponentType == "" {
+	if subject == nil || subject.Name == "" || (subject.Stack == "" && !subject.Stackless) || subject.ComponentType == "" {
 		return fmt.Errorf("%w: attachment requires an instance identity and metadata", errUtils.ErrPolicyInputUnavailable)
 	}
 	if unresolvedMetadata(subject.Metadata, subject.TemplateLeft) {

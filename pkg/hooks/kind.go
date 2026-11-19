@@ -53,6 +53,11 @@ type ExecContext struct {
 	// sets ATMOS_HOOK_STATUS and injects `.status` into the template context).
 	Outcome Outcome
 
+	// OperationEnv holds extra ATMOS_* variables describing a repo-level operation
+	// (for example ATMOS_DOCS_OUTPUT_PATH for docs generate). Engines export them
+	// alongside the standard component variables. Nil for component lifecycles.
+	OperationEnv map[string]string
+
 	// ToolchainPATH is the PATH fragment containing directories for any
 	// dependencies.tools that were auto-installed for this component's
 	// hooks. Populated by Hooks.preflight; consumed by CommandEngine
