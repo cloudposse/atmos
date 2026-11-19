@@ -56,7 +56,7 @@ func ResolveConfigurationState(ctx context.Context, config *schema.AtmosConfigur
 		return nil, fmt.Errorf("%w: the configuration runtime does not support state lookup for component `%s` in stack `%s`", errUtils.ErrPluginUnsupportedExtension, component, stack)
 	}
 	env, _ := sections["env"].(map[string]any)
-	environment, err := (&defaultEnvironmentSetup{}).SetupEnvironment(&ComponentConfig{Env: env, BaseEnvironment: configurationEnvironment(request.AuthManagers)}, request.AuthContext)
+	environment, err := setupOutputEnvironment(&ComponentConfig{Env: env, BaseEnvironment: configurationEnvironment(request.AuthManagers)}, request.AuthContext, false)
 	if err != nil {
 		return nil, err
 	}

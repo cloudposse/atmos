@@ -52,8 +52,15 @@ var prohibitedEnvVarPrefixes = []string{
 // 3. Component's env section.
 func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, authContext *schema.AuthContext) (map[string]string, error) {
 	defer perf.Track(nil, "output.defaultEnvironmentSetup.SetupEnvironment")()
+	return setupOutputEnvironment(config, authContext, true)
+}
 
-	environMap := outputBaseEnvironment(config.BaseEnvironment)
+// setupOutputEnvironment keeps Terraform runner filtering separate from plugin evaluation.
+func setupOutputEnvironment(config *ComponentConfig, authContext *schema.AuthContext, runner bool) (map[string]string, error) {
+	environMap := evaluationBaseEnvironment(config.BaseEnvironment)
+	if runner {
+		environMap = outputBaseEnvironment(config.BaseEnvironment)
+	}
 
 	// Add auth-based environment variables if authContext is provided.
 	if authContext != nil && authContext.AWS != nil {
@@ -79,7 +86,13 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 		}
 	}
 
-	mergeOutputComponentEnvironment(environMap, config.Env)
+	if runner {
+		mergeOutputComponentEnvironment(environMap, config.Env)
+	} else {
+		for key, value := range config.Env {
+			environMap[key] = fmt.Sprint(value)
+		}
+	}
 
 	// When components.terraform.init.pass_vars is enabled, export the component's
 	// vars as TF_VAR_* so the internal `terraform init` (run while resolving
@@ -99,6 +112,19 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 		"count", len(environMap),
 	)
 	return environMap, nil
+}
+
+func evaluationBaseEnvironment(base []string) map[string]string {
+	if base == nil {
+		base = os.Environ()
+	}
+	environment := make(map[string]string, len(base))
+	for _, entry := range base {
+		if key, value, ok := strings.Cut(entry, "="); ok {
+			environment[key] = value
+		}
+	}
+	return environment
 }
 
 // configurePluginCache applies the shared provider-cache policy to an internal
