@@ -3,6 +3,7 @@ package tests
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,6 +29,17 @@ func setupJITSourceWorkdirFixture(t *testing.T) {
 	require.NoError(t, os.CopyFS(sandbox, os.DirFS(fixture)))
 	gitmirror.RewriteJITSourceURIs(t, sandbox, gitmirror.InitJITSourceRepo(t))
 	t.Chdir(sandbox)
+}
+
+func configureJITWorkdirEngine(t *testing.T) string {
+	t.Helper()
+	executable, logPath := setupJITEngine(t)
+	path := filepath.Join("stacks", "deploy", "dev.yaml")
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	data = []byte(strings.Replace(string(data), "    vpc-remote-workdir:\n", "    vpc-remote-workdir:\n      command: "+strconv.Quote(executable)+"\n", 1))
+	require.NoError(t, os.WriteFile(path, data, 0o600))
+	return logPath
 }
 
 // TestJITSource_WorkdirWithLocalComponent verifies that when:
@@ -62,18 +74,19 @@ func TestJITSource_WorkdirWithLocalComponent(t *testing.T) {
 		0o644,
 	))
 
-	// Run terraform plan with --dry-run to trigger the provisioning flow
-	// without actually running terraform. The dry-run flag skips terraform
-	// execution but still runs through the JIT provisioning logic.
-	cmd.RootCmd.SetArgs([]string{
-		"terraform", "plan", "vpc-remote-workdir",
-		"--stack", "dev",
-		"--dry-run",
-	})
-
-	// Execute - this may error due to terraform not being configured,
-	// but the provisioning should have been attempted.
-	_ = cmd.Execute()
+	logPath := configureJITWorkdirEngine(t)
+	workdir := filepath.Join(".workdir", "terraform", "dev-vpc-remote-workdir-b01dcf0a")
+	cmd.RootCmd.SetArgs([]string{"terraform", "plan", "vpc-remote-workdir", "--stack", "dev", "--dry-run"})
+	require.NoError(t, cmd.Execute())
+	require.NoDirExists(t, workdir, "cold dry-run must not download source")
+	require.NoFileExists(t, logPath, "dry-run must not execute the engine")
+	localAfter, err := os.ReadFile(filepath.Join(localComponent, "main.tf"))
+	require.NoError(t, err)
+	require.Equal(t, localMarker+"\n\nresource \"null_resource\" \"local\" {}\n", string(localAfter))
+	resetSourceCommandState(t)
+	cmd.RootCmd.SetArgs([]string{"terraform", "plan", "vpc-remote-workdir", "--stack", "dev"})
+	require.NoError(t, cmd.Execute())
+	requireJITEngineCommand(t, logPath, workdir, "plan")
 
 	// Check the workdir path where the component should have been provisioned.
 	// With source + workdir enabled, the workdir should contain files from REMOTE source,
@@ -196,17 +209,14 @@ func TestJITSource_WorkdirWithLocalComponent_AllSubcommands(t *testing.T) {
 				0o644,
 			))
 
-			// Run terraform <subcommand> with --dry-run to trigger the provisioning flow
-			// without actually running terraform.
-			cmd.RootCmd.SetArgs([]string{
-				"terraform", tc.subcommand, "vpc-remote-workdir",
-				"--stack", "dev",
-				"--dry-run",
-			})
-
-			// Execute - this may error due to terraform not being configured,
-			// but the provisioning should have been attempted.
-			_ = cmd.Execute()
+			logPath := configureJITWorkdirEngine(t)
+			cmd.RootCmd.SetArgs([]string{"terraform", tc.subcommand, "vpc-remote-workdir", "--stack", "dev"})
+			require.NoError(t, cmd.Execute())
+			expectedCommand := tc.subcommand
+			if expectedCommand == "deploy" {
+				expectedCommand = "apply"
+			}
+			requireJITEngineCommand(t, logPath, filepath.Join(".workdir", "terraform", "dev-vpc-remote-workdir-b01dcf0a"), expectedCommand)
 
 			// Check the workdir path where the component should have been provisioned.
 			workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-remote-workdir-b01dcf0a")

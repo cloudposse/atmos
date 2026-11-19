@@ -35,16 +35,16 @@ func TestProvidersMissing(t *testing.T) {
 			want:        true,
 		},
 		{
-			name:        "lock has providers, providers dir exists",
+			name:        "lock has providers, empty providers dir",
 			lockContent: validLockFile,
 			makeDirs:    []string{"providers"},
-			want:        false,
+			want:        true,
 		},
 		{
-			name:        "lock has providers, plugins dir exists",
+			name:        "lock has providers, empty plugins dir",
 			lockContent: validLockFile,
 			makeDirs:    []string{"plugins"},
-			want:        false,
+			want:        true,
 		},
 		{
 			name:        "lock has zero providers",

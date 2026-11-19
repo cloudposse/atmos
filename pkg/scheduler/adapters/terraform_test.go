@@ -715,7 +715,7 @@ func TestExecuteTerraformInitUsesForwardDependencyOrder(t *testing.T) {
 func TestExecuteTerraformNodeHooksBeforeFailureAbortsNodeWithoutExecutor(t *testing.T) {
 	stacks := terraformAdapterTestStacks()
 	var executed []string
-	sentinelErr := errors.New("before hook failed")
+	sentinelErr := fmt.Errorf("before hook failed: %w", errUtils.ExitCodeError{Code: 2})
 	nodeHooks := &testNodeHooks{
 		beforeErr: map[string]error{"vpc@dev": sentinelErr},
 	}
@@ -738,6 +738,11 @@ func TestExecuteTerraformNodeHooksBeforeFailureAbortsNodeWithoutExecutor(t *test
 	require.Error(t, err)
 	require.ErrorIs(t, err, errUtils.ErrPerComponentHookFailed)
 	require.ErrorIs(t, err, sentinelErr)
+	var prerequisiteErr *errUtils.PrerequisiteError
+	require.ErrorAs(t, err, &prerequisiteErr)
+	require.ErrorIs(t, prerequisiteErr, sentinelErr)
+	require.Equal(t, 2, errUtils.GetExitCode(prerequisiteErr))
+	require.Contains(t, nodeHooks.afterCalls, "vpc@dev", "after-hooks still receive the failed node outcome")
 	require.NotContains(t, executed, "vpc@dev", "the executor must never run for a node whose before-hook failed")
 }
 
@@ -2397,6 +2402,7 @@ func TestTerraformSummaryHelperBranches(t *testing.T) {
 	require.False(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "apply"}, errUtils.ExitCodeError{Code: 2}))
 	require.False(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, errors.New("failed")))
 	require.True(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, errUtils.ExitCodeError{Code: 2}))
+	require.False(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2})))
 
 	require.Equal(t, 0, processedCount(nil))
 	require.Equal(t, 1, processedCount(&scheduler.AggregateResult{Results: []scheduler.Result{{Value: true}}}))

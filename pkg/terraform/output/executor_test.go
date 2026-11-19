@@ -2244,6 +2244,40 @@ func jitSections() map[string]any {
 	}
 }
 
+// With auto-provisioning off, outputs run in the workdir already on disk, and the
+// metadata.component subpath must select the same directory the local-state reader uses.
+func TestEnsureWorkdirProvisioned_AppliesSubpathWhenAutoProvisionIsOff(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)
+	defer ctrl.Finish()
+	mockProvisioner.EXPECT().Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	workdir := t.TempDir()
+	module := filepath.Join(workdir, "modules", "x")
+	require.NoError(t, os.MkdirAll(module, 0o755))
+	config.AutoProvisionWorkdirForOutputs = false
+	config.ComponentPath = workdir
+	sections := jitSections()
+	sections["metadata"] = map[string]any{"component": "modules/x"}
+
+	require.NoError(t, executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, sections, nil, "vpc", "dev", config))
+	assert.Equal(t, module, config.ComponentPath)
+
+	t.Run("a subpath missing on disk falls back to the workdir root", func(t *testing.T) {
+		config.ComponentPath = workdir
+		sections["metadata"] = map[string]any{"component": "modules/absent"}
+		require.NoError(t, executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, sections, nil, "vpc", "dev", config))
+		assert.Equal(t, workdir, config.ComponentPath)
+	})
+
+	t.Run("a component without a workdir keeps its path", func(t *testing.T) {
+		config.ComponentPath = workdir
+		plain := map[string]any{"metadata": map[string]any{"component": "modules/x"}}
+		require.NoError(t, executor.ensureWorkdirProvisioned(context.Background(), &schema.AtmosConfiguration{}, plain, nil, "vpc", "dev", config))
+		assert.Equal(t, workdir, config.ComponentPath)
+	})
+}
+
 func TestEnsureWorkdirProvisioned_CallsProvisionerWhenEnabled(t *testing.T) {
 	ResetWorkdirProvisionCache()
 	ctrl, mockProvisioner, executor, config := setupEnsureWorkdirTest(t)

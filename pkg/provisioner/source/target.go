@@ -17,6 +17,10 @@ import (
 // used by render/deploy/plan) and by the `source pull` / `source delete` commands, so the commands
 // always act on exactly the directory the runtime reads from.
 type Target struct {
+	// Instance is the stack component identity owning a source workdir.
+	Instance string
+	// EnforceOwner rejects reuse of an explicit workdir owned by another instance.
+	EnforceOwner bool
 	// Dir is the absolute or base-path-relative destination directory.
 	Dir string
 	// IsWorkdir reports that Dir is an isolated per-instance workdir rather than a shared
@@ -60,7 +64,23 @@ func ResolveTarget(
 	if err != nil {
 		return nil, err
 	}
-	return &Target{Dir: dir, IsWorkdir: isWorkdir, Component: component}, nil
+	instance, _ := componentConfig["atmos_component"].(string)
+	if instance == "" {
+		instance = fallbackComponent
+	}
+	if instance == "" {
+		instance = component
+	}
+	enforceOwner, err := enforceSourceWorkdirOwner(atmosConfig, componentConfig, isWorkdir)
+	if err != nil {
+		return nil, err
+	}
+	target := &Target{Dir: dir, IsWorkdir: isWorkdir, Component: component, Instance: instance, EnforceOwner: enforceOwner}
+	stack, _ := componentConfig["atmos_stack"].(string)
+	if err := validateTargetOwner(target, stack); err != nil {
+		return nil, err
+	}
+	return target, nil
 }
 
 // validateComponentName rejects component names that cannot safely name a directory under the

@@ -197,7 +197,7 @@ func TestNilRequestsFailWithoutPanicking(t *testing.T) {
 func TestDescriptionUsesManifestIdentityAndExports(t *testing.T) {
 	info := description()
 	require.Equal(t, "cloudposse/auth-secrets", info.PluginName)
-	require.Equal(t, "1.1.0", info.PluginVersion)
+	require.Equal(t, "1.1.1", info.PluginVersion)
 	require.Len(t, info.Services, 2)
 	require.Equal(t, "secrets/store", info.Exports[0].Kind)
 	require.Equal(t, "secrets/env", info.Exports[1].Kind)

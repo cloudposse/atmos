@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -62,6 +63,11 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	if doubleDashIndex > 0 {
 		finalArgs = lo.Slice(args, 0, doubleDashIndex)
 		argsAfterDoubleDash = lo.Slice(args, doubleDashIndex+1, len(args))
+	} else if len(args) > 0 {
+		// The synthetic operation name is not part of Cobra's RunE argument slice.
+		positional, separated := flags.SplitArgsAtDash(cmd, args[1:])
+		finalArgs = append([]string{args[0]}, positional...)
+		argsAfterDoubleDash = separated
 	}
 
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
@@ -104,7 +110,8 @@ func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) 
 		return handlePathResolutionError(err)
 	}
 
-	log.Debug("Resolved component from path",
+	log.Debug(
+		"Resolved component from path",
 		"original_path", info.ComponentFromArg,
 		"resolved_component", resolvedComponent,
 		"stack", info.Stack,

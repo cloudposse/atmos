@@ -11,7 +11,7 @@ Atmos supports pluggable component types through the component registry pattern.
 - **Component Provider**: An implementation of the `ComponentProvider` interface that defines how Atmos interacts with a specific component type.
 - **Component Registry**: A global registry that manages all component providers using thread-safe registration.
 - **Plugin Configuration**: Component-specific settings stored in the `Components.Plugins` map in `atmos.yaml`.
-- **Self-Registration**: Providers automatically register themselves via `init()` functions.
+- **Self-Registration**: Custom providers can register themselves via `init()` functions. The host registers the built-in Terraform provider with its required runtime services.
 
 ## When to Create a Component Plugin
 
@@ -64,6 +64,9 @@ type ComponentProvider interface {
 
 // ExecutionContext provides all information needed to execute a component command.
 type ExecutionContext struct {
+    Context             context.Context
+    Options             []ExecutionOption
+    WorkingDir          string
     AtmosConfig         *schema.AtmosConfiguration
     ComponentType       string
     Component           string
@@ -134,6 +137,10 @@ func DefaultConfig() Config {
 ### 3. Implement the Provider
 
 Create your provider implementation:
+
+The example below registers a custom `yourtype` provider on package import. Choose a unique type name. Registering the same type again replaces its existing provider; use this behavior only for an intentional override.
+
+The built-in Terraform provider follows a different pattern. Importing `pkg/component/terraform` does not register it. The host calls `component.Register(terraformcomponent.New(terraformExecutor))` in `internal/exec/terraform.go`. `NewTerraformExecutor` binds shared host services to the component-owned runtime. A custom provider that registers as `terraform` replaces that host registration if it runs later.
 
 ```go
 // pkg/component/yourtype/yourtype.go
@@ -532,7 +539,7 @@ import (
 )
 ```
 
-The blank import triggers the `init()` function which registers the provider.
+For the custom provider in this guide, the blank import triggers the `init()` function that registers it. The built-in Terraform provider requires host registration instead.
 
 ## Configuration
 
@@ -826,10 +833,11 @@ output, err := cmd.CombinedOutput()
 
 The component registry pattern is designed to eventually migrate all component types to plugins:
 
-**Phase 1-3 (Current)**: Built-in types (terraform, helmfile, packer) remain static
-**Phase 4**: New types use plugin pattern
-**Phase 5**: Migrate built-in types to plugin implementations
-**Phase 6**: Unified plugin architecture
+The host registers the built-in Terraform provider with a component-owned `Executor`. The compatibility entry point selects the registered provider for single and scheduled operations. Terraform execution, initialization, workspaces, authentication orchestration, shell sessions, UI routing, policy, generation, plan comparison, and state/output lookup live in `pkg/component/terraform`. The executor receives shared stack, template, process, authentication, and reporting services through instance bindings. `internal/exec/terraform.go` contains registration, service composition, and compatibility entry points. The component package does not import `internal/exec`.
+
+Execution callers can pass streams, environment, cancellation, and reporting callbacks through `ExecutionContext.Options`. The internal `ShellCommandOption` API remains a compatibility alias. Providers must preserve these options when delegating execution.
+
+Helmfile and Packer still use their existing execution paths. External component plugins and independent discovery and preparation capabilities remain separate steps. See the [Terraform refactor plan](prd/terraform-component-registry-refactor.md) for the dependency order and acceptance criteria.
 
 Your plugin will be compatible with this migration path as long as it implements the `ComponentProvider` interface.
 
@@ -838,7 +846,7 @@ Your plugin will be compatible with this migration path as long as it implements
 - Review the mock component implementation: `pkg/component/mock/`
 - Check the component registry pattern PRD: `docs/prd/component-registry-pattern.md`
 - See interface definition: `pkg/component/provider.go`
-- Look at existing built-in types for patterns (though they don't use the registry yet)
+- Look at `pkg/component/terraform` for a provider with injected lifecycle services, and `pkg/component/helm` for an existing registered component.
 
 ## Summary
 
@@ -846,7 +854,7 @@ Creating a component plugin involves:
 
 1. ✅ Define your Config struct with component-specific settings
 2. ✅ Implement the ComponentProvider interface (8 methods)
-3. ✅ Self-register via init() function
+3. ✅ Register your custom provider via an init() function, or supply required services through host registration
 4. ✅ Write comprehensive tests (>90% coverage)
 5. ✅ Document your configuration structure
 6. ✅ Use sentinel errors for error handling

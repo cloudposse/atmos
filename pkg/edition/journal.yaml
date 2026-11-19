@@ -2,6 +2,13 @@
 # Append changes here; keep old/new in the configuration field's type.
 # Quote dates and string values such as "true" and "false".
 # The CLI embeds this file; the website generates its index from the same file.
+- date: "2026-10-28"
+  key: components.source.working_directory_precedence
+  kind: behavior
+  old: source workdir provisioning ignores working_directory when workdir is enabled
+  new: explicit source working_directory takes precedence over the generated workdir path, with migration required for an existing old workdir
+  description: Source provisioning, shell execution, and reference lookups use the same explicit directory; earlier editions retain the generated workdir path.
+  ref: https://github.com/cloudposse/atmos/pull/3545
 - date: "2026-10-26"
   key: templates.settings.sprig.enabled
   kind: value

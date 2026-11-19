@@ -9,8 +9,10 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	componentpath "github.com/cloudposse/atmos/pkg/component"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -33,6 +35,10 @@ func ReadTerraformBackendLocal(
 
 	workspace := GetTerraformWorkspace(componentSections)
 	componentPath := resolveLocalBackendComponentPath(atmosConfig, componentSections)
+	componentPath, err := resolveSourceLocalBackendPath(atmosConfig, componentSections, componentPath)
+	if err != nil {
+		return nil, err
+	}
 
 	var tfStateFilePath string
 	if backendPath := configuredLocalBackendPath(componentSections); backendPath != "" {
@@ -67,6 +73,20 @@ func ReadTerraformBackendLocal(
 	}
 
 	return content, nil
+}
+
+// resolveSourceLocalBackendPath shares source target and nested-module placement with execution.
+func resolveSourceLocalBackendPath(config *schema.AtmosConfiguration, sections *map[string]any, fallback string) (string, error) {
+	if !provSource.HasSource(*sections) || !provWorkdir.IsWorkdirEnabled(*sections) {
+		return fallback, nil
+	}
+	target, err := provSource.ResolveTarget(config, "terraform", getAtmosComponentInstanceFromSections(sections), *sections)
+	if err != nil {
+		return "", err
+	}
+	metadata, _ := (*sections)["metadata"].(map[string]any)
+	subpath, _ := metadata["component"].(string)
+	return componentpath.ResolveWorkdirSubpath(subpath, target.Dir)
 }
 
 func configuredLocalBackendPath(sections *map[string]any) string {

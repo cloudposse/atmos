@@ -30,14 +30,20 @@ import (
 type syncWriter struct {
 	mu sync.Mutex
 	w  io.Writer
+	// sharedMu optionally serializes multiple wrappers of the same destination.
+	sharedMu *sync.Mutex
 }
 
 // Write implements io.Writer, guarding the wrapped writer with a mutex.
 func (s *syncWriter) Write(p []byte) (int, error) {
 	defer perf.Track(nil, "exec.syncWriter.Write")()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	mu := &s.mu
+	if s.sharedMu != nil {
+		mu = s.sharedMu
+	}
+	mu.Lock()
+	defer mu.Unlock()
 	return s.w.Write(p)
 }
 
