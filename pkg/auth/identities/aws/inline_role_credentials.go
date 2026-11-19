@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha1" //nolint:gosec // The SDK and the AWS CLI name SSO token cache files after the SHA-1 of the cache key.
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -31,6 +32,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/signin"
+	"github.com/aws/aws-sdk-go-v2/service/sso"
+	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -38,13 +41,13 @@ import (
 )
 
 // The pinned AWS SDK (config v1.33) reads its credential chain inputs with os.Getenv and offers no way to
-// pass another environment. The base credentials of an inline role must come from the invocation
-// environment, and changing the process environment would leak into concurrent invocations. So the chain is
-// assembled here, in the SDK's order, from the invocation environment alone: static keys, a web identity
-// token file, the shared profile, container credentials, then instance metadata. Only the profile sources
-// that the shared files fully describe (keys, web identity, SSO, and login) are left to the SDK, with every
-// input that selects them passed as an explicit option, including the SSO token cache of the invocation home.
-// A credential_process runs from here too, because the SDK starts it with the environment of the process.
+// pass another environment, and its configuration loader also parses and validates the settings of the
+// process. The base credentials of an inline role must come from the invocation environment alone, and
+// changing the process environment would leak into concurrent invocations. So the chain is assembled here, in
+// the SDK's order, from the invocation environment and the shared files that it names: static keys, a web
+// identity token file, the shared profile and its source profiles, container credentials, then instance
+// metadata. The SDK's config loader is never called; only its shared file parser and its credential providers
+// are. A credential_process runs from here too, because the SDK starts it with the environment of the process.
 
 const (
 	credentialSourceEnvironment = "Environment"
@@ -114,12 +117,7 @@ func baseCredentialsProvider(ctx context.Context, env map[string]string, region 
 		return provider, "", err
 	}
 	region = cmp.Or(region, profile.Region)
-	chain := profileChain(profile)
-	if root := chain[len(chain)-1]; !profileSourceNeedsEnvironment(root) {
-		provider, err := sdkProfileCredentials(ctx, env, profile.Profile, region, root)
-		return provider, profile.Region, err
-	}
-	provider, err := envProfileCredentials(env, chain, region)
+	provider, err := envProfileCredentials(env, profileChain(profile), region)
 	return provider, profile.Region, err
 }
 
@@ -197,90 +195,6 @@ func profileChain(profile *config.SharedConfig) []*config.SharedConfig {
 	return chain
 }
 
-// profileSourceNeedsEnvironment reports whether the profile's starting credentials come from the invocation
-// environment rather than from the shared files alone: a credential_source, a credential_process that runs
-// with that environment, or no source at all so that container and instance credentials apply.
-func profileSourceNeedsEnvironment(root *config.SharedConfig) bool {
-	switch {
-	case root.Credentials.HasKeys(), root.WebIdentityTokenFile != "":
-		return false
-	case root.LoginSession != "":
-		// The SDK reads the login cache directory from the process environment, so the invocation's own
-		// AWS_LOGIN_CACHE_DIRECTORY and home would be ignored.
-		return true
-	case root.SSOSessionName != "", root.SSORegion != "", root.SSOAccountID != "", root.SSOStartURL != "", root.SSORoleName != "":
-		return false
-	default:
-		return true
-	}
-}
-
-// profileSourceUsesSTSOnly reports whether the SDK builds only STS clients from the configuration that
-// resolves a profile chain with this root, so that the STS endpoint can be the configuration's endpoint.
-func profileSourceUsesSTSOnly(root *config.SharedConfig) bool {
-	return root.SSOSessionName == "" && root.SSORegion == "" && root.SSOAccountID == "" && root.SSOStartURL == "" &&
-		root.SSORoleName == "" && root.LoginSession == ""
-}
-
-// sdkProfileCredentials lets the SDK resolve a profile whose source the shared files describe. The profile,
-// files, region, and SSO token cache are explicit, so the SDK does not consult the process environment to
-// choose them. The root is the profile that holds the source of the chain.
-func sdkProfileCredentials(ctx context.Context, env map[string]string, profile, region string, root *config.SharedConfig) (aws.CredentialsProvider, error) {
-	// Keys and web identity need no token cache; the remaining SDK-managed source is SSO.
-	if !root.Credentials.HasKeys() && root.WebIdentityTokenFile == "" && invocationHomeDir(env) == "" {
-		return nil, fmt.Errorf("%w: SSO token cache requires an invocation home directory", errUtils.ErrInvalidAuthConfig)
-	}
-	configFile, credentialsFile := invocationSharedFiles(env)
-	options := []func(*config.LoadOptions) error{
-		config.WithSharedConfigProfile(profile),
-		config.WithSharedConfigFiles([]string{configFile}),
-		config.WithSharedCredentialsFiles([]string{credentialsFile}),
-		config.WithWebIdentityRoleCredentialOptions(func(o *stscreds.WebIdentityRoleOptions) {
-			o.Client = invocationSTSClient(env, region, nil)
-		}),
-	}
-	if region != "" {
-		options = append(options, config.WithRegion(region))
-	}
-	options = append(options, ssoTokenCacheOptions(env, root)...)
-	// The SDK builds the STS client of a role_arn and source_profile chain itself, so the invocation STS
-	// endpoint is set as the endpoint of the loaded configuration. Only STS clients are built from it when
-	// the chain starts from keys, a web identity, or a credential process; SSO and login chains also build
-	// clients of other services, which this endpoint must not reach.
-	if endpoint := invocationSTSEndpoint(env); endpoint != "" && profileSourceUsesSTSOnly(root) {
-		options = append(options, config.WithBaseEndpoint(endpoint))
-	}
-	cfg, err := config.LoadDefaultConfig(ctx, options...)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, err)
-	}
-	return cfg.Credentials, nil
-}
-
-// ssoTokenCacheOptions points the SDK at the SSO token cache of the invocation home. The SDK derives the
-// cache path from the home directory of the process, and a session profile and a legacy profile each have
-// an option for it: a session's token provider is keyed by the session name, a legacy profile by its start
-// URL, as in the AWS CLI. Anything else leaves the SDK's own resolution untouched.
-func ssoTokenCacheOptions(env map[string]string, root *config.SharedConfig) []func(*config.LoadOptions) error {
-	home := invocationHomeDir(env)
-	switch {
-	case home == "":
-		return nil
-	case root.SSOSessionName != "":
-		path := ssoCachedTokenPath(home, root.SSOSessionName)
-		return []func(*config.LoadOptions) error{config.WithSSOTokenProviderOptions(func(o *ssocreds.SSOTokenProviderOptions) {
-			o.CachedTokenFilepath = path
-		})}
-	case root.SSOStartURL != "":
-		path := ssoCachedTokenPath(home, root.SSOStartURL)
-		return []func(*config.LoadOptions) error{config.WithSSOProviderOptions(func(o *ssocreds.Options) {
-			o.CachedTokenFilepath = path
-		})}
-	default:
-		return nil
-	}
-}
-
 // ssoCachedTokenPath is the cache file of an SSO login: ~/.aws/sso/cache/<sha1-hex of the key>.json.
 func ssoCachedTokenPath(home, key string) string {
 	sum := sha1.Sum([]byte(key)) //nolint:gosec // The cache file name is defined by the AWS CLI, not chosen for security.
@@ -296,7 +210,7 @@ func envProfileCredentials(env map[string]string, chain []*config.SharedConfig, 
 	}
 	for i := len(chain) - 1; i >= 0; i-- {
 		hop := chain[i]
-		if hop.RoleARN == "" {
+		if hop.RoleARN == "" || (i == len(chain)-1 && webIdentityRoot(hop)) {
 			continue
 		}
 		if hop.MFASerial != "" {
@@ -306,6 +220,12 @@ func envProfileCredentials(env map[string]string, chain []*config.SharedConfig, 
 			func(o *stscreds.AssumeRoleOptions) { applyProfileRoleOptions(o, hop) }))
 	}
 	return provider, nil
+}
+
+// webIdentityRoot reports whether the profile's role is the one its web identity token assumes, which the
+// source credentials already did, so the role must not be assumed a second time.
+func webIdentityRoot(profile *config.SharedConfig) bool {
+	return !profile.Credentials.HasKeys() && profile.WebIdentityTokenFile != "" && profile.Source == nil
 }
 
 func applyProfileRoleOptions(options *stscreds.AssumeRoleOptions, profile *config.SharedConfig) {
@@ -324,13 +244,58 @@ func applyProfileRoleOptions(options *stscreds.AssumeRoleOptions, profile *confi
 func profileSourceCredentials(env map[string]string, chain []*config.SharedConfig, region string) (aws.CredentialsProvider, error) {
 	root, selected := chain[len(chain)-1], chain[0]
 	switch {
+	case root.Credentials.HasKeys():
+		return credentials.StaticCredentialsProvider{Value: root.Credentials}, nil
+	case root.CredentialSource != "":
+		return namedSourceCredentials(env, root.CredentialSource, selected)
+	case root.WebIdentityTokenFile != "":
+		return stscreds.NewWebIdentityRoleProvider(invocationSTSClient(env, region, nil), root.RoleARN,
+			stscreds.IdentityTokenFile(root.WebIdentityTokenFile), func(o *stscreds.WebIdentityRoleOptions) { o.RoleSessionName = root.RoleSessionName }), nil
+	case root.SSOSessionName != "" || root.SSOStartURL != "" || root.SSORegion != "" || root.SSOAccountID != "" || root.SSORoleName != "":
+		return ssoCredentials(env, root)
 	case root.LoginSession != "":
 		return loginSessionCredentials(env, root, region)
-	case root.CredentialSource == "":
-		return unnamedSourceCredentials(env, root, selected)
 	default:
-		return namedSourceCredentials(env, root.CredentialSource, selected)
+		return unnamedSourceCredentials(env, root, selected)
 	}
+}
+
+// ssoCredentials resolves an SSO profile from the cached login of the invocation home, in the session form
+// (a token provider keyed by the session name) and the legacy form (keyed by the start URL), as in the AWS CLI.
+func ssoCredentials(env map[string]string, root *config.SharedConfig) (aws.CredentialsProvider, error) {
+	home := invocationHomeDir(env)
+	if home == "" {
+		return nil, fmt.Errorf("%w: SSO token cache requires an invocation home directory", errUtils.ErrInvalidAuthConfig)
+	}
+	startURL, ssoRegion, cacheKey := root.SSOStartURL, root.SSORegion, root.SSOStartURL
+	if root.SSOSessionName != "" {
+		if root.SSOSession == nil {
+			return nil, fmt.Errorf("%w: SSO session %q is not defined", errUtils.ErrInvalidAuthConfig, root.SSOSessionName)
+		}
+		startURL, ssoRegion, cacheKey = cmp.Or(root.SSOSession.SSOStartURL, startURL), cmp.Or(root.SSOSession.SSORegion, ssoRegion), root.SSOSessionName
+	}
+	if startURL == "" || ssoRegion == "" || root.SSOAccountID == "" || root.SSORoleName == "" {
+		return nil, fmt.Errorf("%w: an SSO profile needs a start URL, a region, an account ID, and a role name", errUtils.ErrInvalidAuthConfig)
+	}
+	path := ssoCachedTokenPath(home, cacheKey)
+	portal := sso.Options{Region: ssoRegion}
+	if endpoint := cmp.Or(env["AWS_ENDPOINT_URL_SSO"], env["AWS_ENDPOINT_URL"]); endpoint != "" {
+		portal.BaseEndpoint = aws.String(endpoint)
+	}
+	return aws.NewCredentialsCache(ssocreds.New(sso.New(portal), root.SSOAccountID, root.SSORoleName, startURL, func(o *ssocreds.Options) {
+		o.CachedTokenFilepath = path
+		if root.SSOSessionName != "" {
+			o.SSOTokenProvider = ssocreds.NewSSOTokenProvider(ssooidc.New(oidcOptions(env, ssoRegion)), path)
+		}
+	})), nil
+}
+
+func oidcOptions(env map[string]string, region string) ssooidc.Options {
+	options := ssooidc.Options{Region: region}
+	if endpoint := cmp.Or(env["AWS_ENDPOINT_URL_SSO_OIDC"], env["AWS_ENDPOINT_URL"]); endpoint != "" {
+		options.BaseEndpoint = aws.String(endpoint)
+	}
+	return options
 }
 
 // namedSourceCredentials resolves the credential_source of a profile source: the invocation environment, a
@@ -372,7 +337,25 @@ func loginSessionCredentials(env map[string]string, root *config.SharedConfig, r
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, err)
 	}
 	client := signin.New(signin.Options{Region: cmp.Or(region, root.Region)})
-	return aws.NewCredentialsCache(logincreds.New(client, path)), nil
+	login := logincreds.New(client, path)
+	return aws.NewCredentialsCache(aws.CredentialsProviderFunc(func(ctx context.Context) (aws.Credentials, error) {
+		// The SDK provider dereferences a cache that holds a JSON null, so it is rejected here.
+		if err := checkLoginCache(path); err != nil {
+			return aws.Credentials{}, err
+		}
+		return login.Retrieve(ctx)
+	})), nil
+}
+
+// checkLoginCache rejects a login token cache that decodes to nothing. A missing or unreadable cache is left
+// for the SDK provider to report.
+func checkLoginCache(path string) error {
+	contents, readErr := os.ReadFile(path)
+	var token *map[string]any
+	if readErr == nil && json.Unmarshal(contents, &token) == nil && token == nil {
+		return fmt.Errorf("%w: the login token cache %s is empty", errUtils.ErrAuthenticationFailed, path)
+	}
+	return nil
 }
 
 // unnamedSourceCredentials resolves a profile source that names no credential_source: its credential_process

@@ -381,7 +381,7 @@ func ssoTokenCache(t *testing.T, home, key, token string) {
 }
 
 // ssoPortal serves the SSO role credentials API and records the bearer token of each request.
-func ssoPortal(t *testing.T) *[]string {
+func ssoPortal(t *testing.T) (*[]string, string) {
 	t.Helper()
 	var mu sync.Mutex
 	var tokens []string
@@ -394,8 +394,7 @@ func ssoPortal(t *testing.T) *[]string {
 		}}))
 	}))
 	t.Cleanup(server.Close)
-	t.Setenv("AWS_ENDPOINT_URL_SSO", server.URL)
-	return &tokens
+	return &tokens, server.URL
 }
 
 // An SSO profile reads its cached login from the invocation home, in both profile forms, and never from the
@@ -415,15 +414,15 @@ func TestBaseCredentialsFromAnSSOProfileReadTheInvocationTokenCache(t *testing.T
 	}
 	for name, form := range forms {
 		t.Run(name, func(t *testing.T) {
-			tokens := ssoPortal(t)
+			tokens, portalURL := ssoPortal(t)
 			processHome := t.TempDir()
 			t.Setenv("HOME", processHome)
 			t.Setenv("USERPROFILE", processHome)
 			ssoTokenCache(t, processHome, form.cacheKey, "process-login")
 			home := homeWithProfiles(t, "", form.config)
-			invocation := append(invocationHome(home), "AWS_PROFILE=sso")
+			invocation := append(invocationHome(home), "AWS_PROFILE=sso", "AWS_ENDPOINT_URL_SSO="+portalURL)
 
-			_, _, err := resolveBase(t, "AWS_PROFILE=sso", "AWS_CONFIG_FILE="+filepath.Join(home, ".aws", "config"))
+			_, _, err := resolveBase(t, "AWS_PROFILE=sso", "AWS_ENDPOINT_URL_SSO="+portalURL, "AWS_CONFIG_FILE="+filepath.Join(home, ".aws", "config"))
 			require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig, "an explicit profile without an invocation home cannot select the process cache")
 			assert.Empty(t, *tokens, "the process login is never sent when the invocation home is absent")
 
@@ -572,4 +571,16 @@ func TestEnvironmentCredentialAliasesOverrideProfile(t *testing.T) {
 		require.Equal(t, wantKey, selected.AccessKeyID)
 		require.Equal(t, wantSecret, selected.SecretAccessKey)
 	}
+}
+
+func TestInvocationProfileIgnoresInvalidProcessSDKSettings(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "credentials")
+	require.NoError(t, os.WriteFile(file, []byte("[default]\naws_access_key_id = profile-key\naws_secret_access_key = profile-secret\n"), 0o600))
+	t.Setenv("AWS_RETRY_MODE", "invalid")
+	t.Setenv("AWS_MAX_ATTEMPTS", "not-a-number")
+
+	result, err := baseCredentials(t.Context(), map[string]string{"AWS_SHARED_CREDENTIALS_FILE": file})
+
+	require.NoError(t, err, "settings of the Atmos process must not break an invocation profile")
+	require.Equal(t, "profile-key", result.AccessKeyID)
 }

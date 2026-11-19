@@ -101,7 +101,6 @@ func writeLoginToken(t *testing.T, session, dir, accessKeyID string) {
 func TestLoginSessionIsResolvedFromTheInvocationEnvironment(t *testing.T) {
 	session := "arn:aws:iam::123456789012:user/example"
 	root := &config.SharedConfig{LoginSession: session, Region: "us-east-1"}
-	assert.True(t, profileSourceNeedsEnvironment(root), "the SDK would read the login cache from the process environment")
 
 	// The process environment names a different cache that holds other credentials.
 	processCache := t.TempDir()
@@ -144,7 +143,9 @@ func TestLoginSessionIsResolvedFromTheInvocationEnvironment(t *testing.T) {
 
 func TestContainerEndpointClientBoundsRequests(t *testing.T) {
 	release := make(chan struct{})
+	hangingStarted := make(chan struct{}, 16)
 	hanging := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hangingStarted <- struct{}{}
 		select {
 		case <-release:
 		case <-time.After(30 * time.Second):
@@ -167,6 +168,14 @@ func TestContainerEndpointClientBoundsRequests(t *testing.T) {
 			_ = resp.Body.Close()
 		}
 		require.Error(t, err)
+		var netErr net.Error
+		require.ErrorAs(t, err, &netErr, "the failure must be a network error, not a setup problem")
+		assert.True(t, netErr.Timeout(), "the failure must be a timeout, got: %v", err)
+		select {
+		case <-hangingStarted:
+		default:
+			t.Fatal("the hanging handler never received the request")
+		}
 		assert.Less(t, time.Since(start), 10*time.Second)
 	})
 
@@ -259,4 +268,26 @@ func TestContainerHTTPSPreservesSDKTransport(t *testing.T) {
 	}
 	_, err := checkContainerEndpoint("HTTP://203.0.113.1/credentials")
 	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig, "normalized HTTP still enforces the address allowlist")
+}
+
+func TestLoginSessionNullCacheIsAnAuthenticationError(t *testing.T) {
+	const session = "arn:aws:iam::123456789012:user/example"
+	root := &config.SharedConfig{LoginSession: session, Region: "us-east-1"}
+	dir := t.TempDir()
+	path, err := logincreds.StandardCachedTokenFilepath(session, dir)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+	require.NoError(t, os.WriteFile(path, []byte("null\n"), 0o600))
+	provider, err := loginSessionCredentials(map[string]string{"AWS_LOGIN_CACHE_DIRECTORY": dir}, root, "")
+	require.NoError(t, err)
+
+	require.NotPanics(t, func() { _, err = provider.Retrieve(t.Context()) })
+
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+
+	// A valid cached token keeps working.
+	writeLoginToken(t, session, dir, "AKIAVALID")
+	retrieved, err := provider.Retrieve(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "AKIAVALID", retrieved.AccessKeyID)
 }

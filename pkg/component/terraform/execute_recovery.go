@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -54,11 +55,39 @@ func (r *recoveryReporter) SignalsWritten(path string) {
 }
 
 // attemptFunc runs the hooks and the command once. It returns the exit status 2 of
-// `plan -detailed-exitcode` separately, because that is a result and not a failure.
-type attemptFunc func(opts []component.ExecutionOption, hookStderr io.Writer) (changes, err error)
+// `plan -detailed-exitcode` separately, because that is a result and not a failure. It records the
+// standard error of every step that failed in failed, so a policy never sees output of a step that
+// succeeded.
+type attemptFunc func(opts []component.ExecutionOption, failed *failureText) (changes, err error)
+
+// failureText collects the standard error of the steps, hooks and command, that failed during one
+// attempt. Error handling matches its policies against this text only.
+type failureText struct {
+	mu   sync.Mutex
+	text strings.Builder
+}
+
+// add records the output of a failed step. A nil receiver records nothing.
+func (f *failureText) add(text string) {
+	if f == nil || strings.TrimSpace(text) == "" {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.text.WriteString(text)
+	f.text.WriteString("\n")
+}
+
+// recorded returns the collected output.
+func (f *failureText) recorded() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.text.String()
+}
 
 // recoverPhase runs an attempt under the component's errors policy. Error text for matching is
-// the command's standard error, as it is for Terragrunt, so output on stdout never triggers a policy.
+// the standard error of the steps that failed, as it is for Terragrunt, so output on stdout, or a
+// warning from a step that succeeded, never triggers a policy.
 func (e *Executor) recoverPhase(info *schema.ConfigAndStacksInfo, phase *executionPhase, policy *schema.ComponentErrors, opts []component.ExecutionOption, attempt attemptFunc) error {
 	defer perf.Track(nil, "terraform.Executor.recoverPhase")()
 
@@ -75,10 +104,10 @@ func (e *Executor) recoverPhase(info *schema.ConfigAndStacksInfo, phase *executi
 		if attempts > 1 {
 			resetExecMetadataBufs(stdoutMetadata, stderrMetadata)
 		}
-		var stderr bytes.Buffer
+		var failed failureText
 		var runErr error
-		changes, runErr = attempt(withStderrCapture(opts, &stderr), &stderr)
-		return stderr.String(), runErr
+		changes, runErr = attempt(opts, &failed)
+		return failed.recorded(), runErr
 	})
 	switch {
 	case err != nil:
@@ -105,6 +134,61 @@ func withStderrCapture(opts []component.ExecutionOption, buffer *bytes.Buffer) [
 		writer = io.MultiWriter(probe.StderrCapture, writer)
 	}
 	return append(slices.Clone(opts), component.WithStderrCapture(writer))
+}
+
+// phaseAttempts runs one phase's hooks and command, once per recovery attempt.
+//
+// The retry scope is the work that did not complete. A command that finished, such as a saved-plan
+// apply that changed state, is never run again because a later hook failed: the retry runs only the
+// hooks that follow it, and the before hooks that preceded it are not repeated.
+type phaseAttempts struct {
+	config  *schema.ComponentExecution
+	info    *schema.ConfigAndStacksInfo
+	phase   *executionPhase
+	args    []string
+	env     []string
+	runner  *hookRunner
+	capture *phaseCapture
+	action  phaseAction
+	// completed reports that the command finished in an earlier attempt, and changes is the exit
+	// status 2 result it reported, if any.
+	completed bool
+	changes   error
+}
+
+// run makes one attempt. With -detailed-exitcode, exit status 2 reports a plan with changes: hooks
+// must not see that as a failure, but the status still has to reach the caller once the hooks are done.
+func (a *phaseAttempts) run(opts []component.ExecutionOption, failed *failureText) (changesPresent, runErr error) {
+	config := a.config
+	if a.completed {
+		stripped := *config
+		stripped.BeforeHooks = nil
+		config = &stripped
+	}
+	var commandStderr bytes.Buffer
+	if failed != nil {
+		opts = withStderrCapture(opts, &commandStderr)
+	}
+	a.runner.failed = failed
+	runErr = execution.Run(component.ContextFromOptions(opts...), config, a.phase.command, a.runner, func() (execution.Output, error) {
+		if a.completed {
+			return nil, nil
+		}
+		output, actionErr := runPhaseAction(a.info, a.args, opts, a.capture, a.action)
+		switch {
+		case isDetailedExitCodeChanges(a.phase.command, a.args, a.env, actionErr, opts...):
+			// Mark the completed plan here, so the recovery path reports it the same way.
+			a.changes = &successfulPlanChanges{error: actionErr}
+			a.completed = true
+			return output, nil
+		case actionErr == nil:
+			a.completed = true
+		default:
+			failed.add(commandStderr.String())
+		}
+		return output, actionErr
+	})
+	return a.changes, runErr
 }
 
 // warnOverlappingRetry tells the user that two retry mechanisms apply to the same component.
@@ -146,14 +230,15 @@ func endIgnoredRun(info *schema.ConfigAndStacksInfo, ignored *schema.ComponentIg
 
 // runReadConfigHooks runs the unit's read-config after hooks once its configuration is read. They
 // run on every command that prepares the unit, in the unit's configuration directory, before any
-// source is fetched. Hooks written for `read-config` and `terragrunt-read-config` both run.
+// source is fetched. Hooks written for `read-config` and `terragrunt-read-config` both run. They come
+// from the execution the invocation runs, so a saved-plan apply runs the apply-time metadata.
 func (e *Executor) runReadConfigHooks(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) error {
 	defer perf.Track(atmosConfig, "terraform.Executor.runReadConfigHooks")()
 
-	if prepared == nil || prepared.Execution == nil || info.DryRun {
+	if prepared == nil || info.ComponentExecution == nil || info.DryRun {
 		return nil
 	}
-	hooks := execution.HooksFor(prepared.Execution.AfterHooks, execution.CommandReadConfig, execution.CommandReadConfigAlias)
+	hooks := execution.HooksFor(info.ComponentExecution.AfterHooks, execution.CommandReadConfig, execution.CommandReadConfigAlias)
 	if len(hooks) == 0 {
 		return nil
 	}
