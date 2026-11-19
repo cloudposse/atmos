@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -37,8 +38,10 @@ func TestSSHConcurrentPublishersRecoverFromThrottling(t *testing.T) {
 		dirs[i] = sshPublisherFixture(t, env, seed, i)
 	}
 	type result struct {
-		err   error
-		waits []time.Duration
+		err       error
+		waits     []time.Duration
+		stderr    string
+		publisher int
 	}
 	results := make(chan result, publishers)
 	start := make(chan struct{})
@@ -48,15 +51,16 @@ func TestSSHConcurrentPublishersRecoverFromThrottling(t *testing.T) {
 		go func() {
 			<-start
 			clock := &advancingPushClock{}
+			var stderr bytes.Buffer
 			opts := &atmosgit.PushOptions{RepoContext: atmosgit.RepoContext{Workdir: dir, Env: server.env, Remote: server.remote(fmt.Sprintf("client-%d", i)), Branch: "main"}}
-			err := New().pushWithRetry(ctx, opts, sshRetryPolicy(), retry.WithClock(clock))
-			results <- result{err: err, waits: clock.waits}
+			err := New(WithStderr(&stderr)).pushWithRetry(ctx, opts, sshRetryPolicy(), retry.WithClock(clock))
+			results <- result{err: err, waits: clock.waits, stderr: stderr.String(), publisher: i}
 		}()
 	}
 	close(start)
 	for range publishers {
 		result := <-results
-		assert.NoError(t, result.err)
+		assert.NoError(t, result.err, "publisher %d Git stderr:\n%s", result.publisher, result.stderr)
 		if assert.NotEmpty(t, result.waits) {
 			assert.GreaterOrEqual(t, result.waits[0], time.Minute)
 			assert.LessOrEqual(t, result.waits[0], 90*time.Second)
