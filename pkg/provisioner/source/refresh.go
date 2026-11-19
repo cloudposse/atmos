@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -71,10 +72,19 @@ func vendorSourcePreserving(ctx context.Context, config *schema.AtmosConfigurati
 	// The timer callback runs on its own goroutine, so it uses the hook captured here rather than
 	// reading the package variable when it fires (tests replace that variable).
 	warn := warnSourceRefreshLockWait
-	warning := time.AfterFunc(sourceRefreshLockWarnAfter, func() { warn(ctx, target) })
-	defer warning.Stop()
+	warningDone := make(chan struct{})
+	warning := time.AfterFunc(sourceRefreshLockWarnAfter, func() {
+		defer close(warningDone)
+		warn(ctx, target)
+	})
+	stopWarning := sync.OnceFunc(func() {
+		if !warning.Stop() {
+			<-warningDone
+		}
+	})
+	defer stopWarning()
 	err = lock.WithExclusive(ctx, func() error {
-		warning.Stop()
+		stopWarning()
 		return stageSourceRefresh(ctx, config, spec, target, opts)
 	})
 	if errors.Is(err, filelock.ErrAcquire) {
