@@ -40,6 +40,7 @@ import (
 	configcmd "github.com/cloudposse/atmos/cmd/config"
 	_ "github.com/cloudposse/atmos/cmd/container"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
+	_ "github.com/cloudposse/atmos/cmd/docs"
 	doctorcmd "github.com/cloudposse/atmos/cmd/doctor"
 	_ "github.com/cloudposse/atmos/cmd/emulator"
 	_ "github.com/cloudposse/atmos/cmd/env"

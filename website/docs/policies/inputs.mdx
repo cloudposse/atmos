@@ -53,7 +53,7 @@ for fields, operations, local development handling, and reusable CEL/Starlark ex
 
 ## Operation input
 
-Use `on: operation` for Terraform, Helmfile, Helm, and Kubernetes lifecycle events.
+Use `on: operation` for Terraform, Helmfile, Helm, Kubernetes, and documentation generation lifecycle events.
 
 ```json
 {
@@ -71,10 +71,10 @@ Use `on: operation` for Terraform, Helmfile, Helm, and Kubernetes lifecycle even
 | Field | Type | Meaning |
 |---|---|---|
 | `event` | String | Canonical `before.<component_type>.<command>` or `after.<component_type>.<command>` lifecycle event |
-| `component_type` | String | `terraform`, `helmfile`, `helm`, or `kubernetes` |
+| `component_type` | String | `terraform`, `helmfile`, `helm`, `kubernetes`, or `docs` |
 | `command` | String | Operation represented by the normalized event; deploy aliases use apply events |
-| `component` | String | Component argument |
-| `stack` | String | Selected stack |
+| `component` | String | Component argument; for `docs`, the `docs.generate` generator name |
+| `stack` | String | Selected stack; empty for `docs` |
 | `status` | String | `success` or `failure`; before-events begin with `success`. A Terraform plan exit code of `2` counts as success unless policy enforcement failed |
 | `exit_code` | Integer | Recorded command exit code; not proof that policies passed |
 | `dry_run` | Boolean | Whether this invocation is a dry-run |

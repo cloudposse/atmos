@@ -308,7 +308,7 @@ Atmos will:
 
         Supported values:
         - `stream` *(default)* — print log lines as they arrive, interleaved across components
-        - `grouped` — buffer each component's output and print it as a contiguous block after the component finishes
+        - `grouped` — buffer each component's output and print it as a contiguous block after the component finishes, prefixing every stdout and stderr line with `[stack/component]`. Saved per-component log files remain unprefixed.
 
         **Environment variable:** `ATMOS_TERRAFORM_INIT_LOG_ORDER`
 

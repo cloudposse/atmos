@@ -17,7 +17,7 @@ func TestDelegatedMutationsAcquireCanonicalClaim(t *testing.T) {
 	for _, operation := range []string{"sign", "evidence", "delete"} {
 		t.Run(operation, func(t *testing.T) {
 			ctx := context.Background()
-			spec := signedSpec(t, noneSpec()).withOpts(WithLockWait(time.Second))
+			spec := signedSpec(t, noneSpec()).withOpts(WithLockWait(100 * time.Millisecond))
 			repo := newRepo(t, spec)
 			pinned := publish(t, repo, &prepareSpec{}, artifact.PublishOptions{}).Pinned
 			subject := recordSubject(t, repo, &pinned)
@@ -47,9 +47,11 @@ func TestDelegatedMutationsAcquireCanonicalClaim(t *testing.T) {
 			held, err := repo.Lock(ctx, artifact.LockRequest{Resource: lockResource, Owner: "direct"})
 			require.NoError(t, err)
 			before := objectSnapshot(t, spec.fake)
-			wait, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
-			defer cancel()
-			require.ErrorIs(t, mutate(wait, delegated), context.DeadlineExceeded)
+			// Use the repository wait limit, not cancellation: an interrupted PUT can still
+			// arrive after the holder is released and leave an ambiguous claim.
+			err = mutate(ctx, delegated)
+			require.ErrorIs(t, err, errUtils.ErrArtifactConflict)
+			require.NotErrorIs(t, err, errUtils.ErrArtifactPublicationAmbiguous)
 			assert.Equal(t, before, objectSnapshot(t, spec.fake), "failed acquisition must not mutate target data or evidence")
 			require.NoError(t, held.Release(ctx))
 			require.NoError(t, mutate(ctx, delegated))

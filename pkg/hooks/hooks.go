@@ -72,9 +72,25 @@ type Hooks struct {
 
 	// outcome is the lifecycle operation result (success/failure) for the next
 	// RunAll, set by SetOutcome. Zero value defaults to success.
-	outcome      Outcome
+	outcome Outcome
+	// operationEnv carries extra ATMOS_* variables for repo-level operations
+	// built by NewOperationHooks. Nil for component hooks.
+	operationEnv map[string]string
+	// operation marks hooks built by NewOperationHooks (no component dependencies section).
+	operation    bool
 	policyBundle *policy.Bundle
 	policyCI     *policy.CISnapshot
+}
+
+// sortedHookNames returns the hook names in lexical order. Execution, preflight, and
+// verification all iterate in this order so a run is deterministic.
+func (h *Hooks) sortedHookNames() []string {
+	names := make([]string, 0, len(h.items))
+	for name := range h.items {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 func (h Hooks) HasHooks() bool {
@@ -171,7 +187,7 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 	if outcome.Status == "" {
 		outcome.Status = RunSuccess
 	}
-	if err := h.runPolicyHooks(&hookRunContext{event: event, atmosConfig: atmosConfig, info: info, cmd: cmd, args: args, outcome: outcome}); err != nil {
+	if err := h.runPolicyHooks(&hookRunContext{event: event, atmosConfig: atmosConfig, info: info, cmd: cmd, args: args, outcome: outcome, operationEnv: h.operationEnv}); err != nil {
 		return err
 	}
 
@@ -205,8 +221,10 @@ func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, 
 		args:        args,
 		filter:      filter,
 		outcome:     outcome,
+
+		operationEnv: h.operationEnv,
 	}
-	for name := range h.items {
+	for _, name := range h.sortedHookNames() {
 		hook := h.items[name]
 		if err := h.runHookIfMatch(name, &hook, &runCtx); err != nil {
 			return err
@@ -223,6 +241,9 @@ type hookRunContext struct {
 	args        []string
 	filter      hookFilter
 	outcome     Outcome
+	// operationEnv mirrors Hooks.operationEnv so policy-selected hooks, which run on a
+	// separate trusted Hooks value, still receive the operation variables.
+	operationEnv map[string]string
 }
 
 func (h *Hooks) runHookIfMatch(name string, hook *Hook, ctx *hookRunContext) error {
@@ -285,6 +306,7 @@ func (h *Hooks) runResolvedHook(name string, kind *Kind, executionHook *Hook, ct
 		Args:          ctx.args,
 		HookName:      name,
 		Outcome:       ctx.outcome,
+		OperationEnv:  ctx.operationEnv,
 		ToolchainPATH: h.toolchainPATH,
 		Stdout:        h.stdout,
 		Stderr:        h.stderr,
@@ -784,7 +806,7 @@ func (h *Hooks) markPreflightDone(filter hookFilter) {
 }
 
 func (h *Hooks) hasUnskippedHooks(filter *hookFilter) (bool, error) {
-	for name := range h.items {
+	for _, name := range h.sortedHookNames() {
 		hook := h.items[name]
 		if !hook.MatchesEvent(filter.event) {
 			continue
@@ -864,13 +886,13 @@ func (h *Hooks) installDeps(atmosConfig *schema.AtmosConfiguration, info *schema
 }
 
 // verifyAllBinaries checks every hook's command resolves on the
-// toolchain-augmented PATH so failures surface before terraform runs.
+// toolchain-augmented PATH so failures surface before the operation runs.
 // Store-kind hooks have no Command and are skipped naturally. Hooks that
 // won't run for the current outcome status (per their `when`) are skipped so
 // an unrelated hook's misconfiguration cannot block the hooks that do run
 // (e.g. a success-only hook with a missing binary must not fail the failure path).
 func (h *Hooks) verifyAllBinaries(filter hookFilter) error {
-	for name := range h.items {
+	for _, name := range h.sortedHookNames() {
 		if filter.skipPredicate != nil && filter.skipPredicate(name) {
 			continue
 		}
@@ -909,7 +931,7 @@ func (h *Hooks) verifyHookBinary(name string, hook *Hook) error {
 		return unknownHookKindError(name, hook.Kind)
 	}
 	// Step-kind hooks have no Command to resolve on PATH; instead verify the
-	// named step type is registered so a typo fails before terraform runs
+	// named step type is registered so a typo fails before the operation runs
 	// rather than mid-lifecycle.
 	if hook.Kind == stepKindName {
 		return verifyStepHookType(name, hook.Type)
@@ -924,10 +946,14 @@ func (h *Hooks) verifyHookBinary(name string, hook *Hook) error {
 	if err := verifyCommandAvailable(resolved.Command, h.toolchainPATH); err != nil {
 		// The cause already wraps ErrCommandNotFound with the command name, so
 		// build on it directly instead of stacking a second sentinel prefix.
-		return errUtils.Build(err).
-			WithExplanationf("Hook %q (kind %s) requires %q, which is not installed and not on PATH", name, hook.Kind, resolved.Command).
-			WithHintf("Declare `%s: \"<version>\"` in the component's dependencies.tools to auto-install it before terraform runs", resolved.Command).
-			WithHintf("Alternatively, install %s manually so it appears on PATH", resolved.Command).
+		builder := errUtils.Build(err).
+			WithExplanationf("Hook %q (kind %s) requires %q, which is not installed and not on PATH", name, hook.Kind, resolved.Command)
+		if !h.operation {
+			// Component hooks can auto-install pinned tools from the component's dependencies.
+			builder = builder.WithHintf("Declare `%s: \"<version>\"` in the component's dependencies.tools to auto-install it before the command runs", resolved.Command)
+		}
+		return builder.
+			WithHintf("Install %s so it appears on PATH", resolved.Command).
 			WithContext("hook", name).
 			WithContext("kind", hook.Kind).
 			WithContext("command", resolved.Command).

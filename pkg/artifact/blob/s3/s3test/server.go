@@ -1,6 +1,7 @@
 package s3test
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -113,6 +114,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	if fault != nil {
 		s.rec.update(index, func(rr *Request) { rr.Faulted = true })
 	}
+	if fault != nil && fault.Action == Gate {
+		defer close(fault.Done)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "IncompleteBody", err.Error())
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		close(fault.Entered)
+		<-fault.Release
+	}
 	rw := &statusWriter{ResponseWriter: w}
 	if fault != nil && s.applyEarlyFault(rw, r, fault) {
 		s.finish(index, rw)
@@ -149,7 +161,7 @@ func (s *Server) applyEarlyFault(w *statusWriter, r *http.Request, fault *Fault)
 		return true
 	case Delay:
 		sleep(r.Context(), fault.Delay)
-	case DropAfterCommit:
+	case DropAfterCommit, Gate:
 	}
 	return false
 }

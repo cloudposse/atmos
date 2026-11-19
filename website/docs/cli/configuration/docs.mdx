@@ -66,6 +66,9 @@ Each named section under `docs.generate` supports the following options:
 
   <dt>`terraform`</dt>
   <dd>Optional terraform-docs configuration for including Terraform documentation in the output.</dd>
+
+  <dt>`hooks`</dt>
+  <dd>Optional map of lifecycle hooks that run around generation, on the `before.docs.generate` and `after.docs.generate` events. Hooks use the same kinds and fields as [component hooks](/stacks/hooks); see [Hooks](#hooks).</dd>
 </dl>
 
 ### Terraform Documentation Options
@@ -110,6 +113,36 @@ generator names retain terraform-docs section defaults when these options are om
 Visibility, `hide_empty`, and `indent_level` settings are honored for unpinned
 projects and editions on or after `2026-10-17`. Earlier edition pins retain the
 legacy formatter behavior, which ignored these settings.
+
+## Hooks
+
+Declare `hooks` under a generator to run steps or commands before and after it generates, for
+example to publish the result to a wiki. Each hook has the same fields as a
+[component hook](/stacks/hooks), and its `events` must be `before.docs.generate` or
+`after.docs.generate`:
+
+<File title="atmos.yaml">
+```yaml
+docs:
+  generate:
+    readme:
+      input:
+        - "./README.yaml"
+      template: "./README.md.gotmpl"
+      output: "./README.md"
+      hooks:
+        announce:
+          kind: step
+          type: log
+          events: [after.docs.generate]
+          with:
+            content: "Generated {{ .docs.output_path }}"
+```
+</File>
+
+Hook steps receive `ATMOS_DOCS_TYPE`, `ATMOS_DOCS_OUTPUT_PATH`, and `ATMOS_DOCS_BASE_DIR`. See
+[`atmos docs generate`](/cli/commands/docs/generate#hooks) for ordering, failure handling, an
+`http` step example, and policy support.
 
 ## Multiple Documentation Generators
 

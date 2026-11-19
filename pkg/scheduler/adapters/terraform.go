@@ -1902,7 +1902,7 @@ func (o *terraformOutput) finishNode(node *dependency.Node, result TerraformExec
 	}
 	o.groupMu.Lock()
 	defer o.groupMu.Unlock()
-	label := terraformNodeLabel(node)
+	label := ioLayer.MaskString(terraformNodeLabel(node))
 	status := "succeeded"
 	if execErr != nil {
 		status = "failed"
@@ -1913,8 +1913,12 @@ func (o *terraformOutput) finishNode(node *dependency.Node, result TerraformExec
 		command = terraformDefaultCommand
 	}
 	writeGroupedOutputMarker(stderr, "\n["+label+"] "+command+" output "+status+"\n")
-	replayGroupedOutput(ioLayer.MaskWriter(os.Stdout), result.Stdout)
-	replayGroupedOutput(stderr, result.Stderr)
+	stdout := ioLayer.NewLinePrefixWriter(label, ioLayer.MaskWriter(os.Stdout), &o.outputMu)
+	replayGroupedOutput(ioLayer.MaskWriter(stdout), result.Stdout)
+	_ = stdout.Flush()
+	stderrOutput := ioLayer.NewLinePrefixWriter(label, stderr, &o.outputMu)
+	replayGroupedOutput(ioLayer.MaskWriter(stderrOutput), result.Stderr)
+	_ = stderrOutput.Flush()
 	writeGroupedOutputMarker(stderr, "["+label+"] end "+command+" output\n")
 }
 

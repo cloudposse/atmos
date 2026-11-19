@@ -1077,3 +1077,47 @@ func TestTemplateGolden(t *testing.T) {
 		})
 	}
 }
+
+// TestPlanTemplateRunLink verifies the plan template links the CI run only when a run URL exists.
+func TestPlanTemplateRunLink(t *testing.T) {
+	const runURL = "https://github.com/owner/repo/actions/runs/123"
+	tests := []struct {
+		name     string
+		ci       *provider.Context
+		wantLink string
+	}{
+		{name: "run URL present", ci: &provider.Context{RunURL: runURL}, wantLink: "[View full run](" + runURL + ")"},
+		{name: "run URL empty", ci: &provider.Context{}},
+		{name: "nil CI context", ci: nil},
+	}
+
+	content, err := defaultTemplates.ReadFile("templates/plan.md")
+	require.NoError(t, err)
+	tmpl, err := template.New("plan").Parse(string(content))
+	require.NoError(t, err)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Stack:     "dev",
+					Component: "vpc",
+					Command:   "plan",
+					CI:        tt.ci,
+					Result:    &plugin.OutputResult{HasChanges: true},
+				},
+				Resources:        plugin.ResourceCounts{Create: 1},
+				CreatedResources: []string{"aws_vpc.main"},
+			}
+			var buf strings.Builder
+			require.NoError(t, tmpl.Execute(&buf, ctx))
+			rendered := buf.String()
+			if tt.wantLink == "" {
+				assert.NotContains(t, rendered, "View full run")
+				return
+			}
+			assert.Contains(t, rendered, tt.wantLink)
+			assert.True(t, strings.HasSuffix(strings.TrimSpace(rendered), "job summary, and logs."), "link is the footer")
+		})
+	}
+}
