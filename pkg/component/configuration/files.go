@@ -2,10 +2,8 @@ package configuration
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -46,17 +44,25 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 	}
 	// One writer per canonical workdir at a time, across processes, from the manifest read through
 	// rollback: two overlapping runs would otherwise record each other's digests as stale.
+	lockPath, err := workdirLockPath(directory)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), lockTimeout)
 	defer cancel()
-	return filelock.New(workdirLockPath(directory)).WithExclusive(ctx, func() error {
+	return filelock.New(lockPath).WithExclusive(ctx, func() error {
 		return writeFilesLocked(directory, files)
 	})
 }
 
-// workdirLockPath names the advisory lock for a working directory. The lock lives outside the
-// directory, keyed by its canonical path, so every spelling of the directory shares one lock and
-// the lock file never becomes part of the provisioned module.
-func workdirLockPath(directory string) string {
+// workdirLockName is the advisory lock beside the manifest, in the bookkeeping directory that saved-plan
+// digests and source refreshes already skip.
+const workdirLockName = ".atmos/generated-files.lock"
+
+// workdirLockPath returns the advisory lock for a working directory, creating its directory. The
+// lock lives in the working directory itself, so every writer shares it whatever its temporary
+// directory, and the canonical path gives every spelling of the directory one in-process lock.
+func workdirLockPath(directory string) (string, error) {
 	canonical, err := filepath.Abs(directory)
 	if err != nil {
 		canonical = directory
@@ -64,10 +70,16 @@ func workdirLockPath(directory string) string {
 	if resolved, err := filepath.EvalSymlinks(canonical); err == nil {
 		canonical = resolved
 	}
-	// The digest only names the lock file, so a non-cryptographic 128-bit FNV-1a digest suffices.
-	hash := fnv.New128a()
-	_, _ = hash.Write([]byte(canonical))
-	return filepath.Join(os.TempDir(), "atmos-generated-files-"+hex.EncodeToString(hash.Sum(nil))+".lock")
+	root, err := os.OpenRoot(canonical)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
+	}
+	defer root.Close()
+	// Creating the directory through the root refuses a link that leaves the working directory.
+	if err := root.MkdirAll(filepath.Dir(workdirLockName), directoryMode); err != nil {
+		return "", generatedFileError(workdirLockName, err)
+	}
+	return filepath.Join(canonical, filepath.FromSlash(workdirLockName)), nil
 }
 
 func writeFilesLocked(directory string, files []schema.ComponentConfigurationFile) error {
@@ -79,7 +91,10 @@ func writeFilesLocked(directory string, files []schema.ComponentConfigurationFil
 	if err := validateFiles(root, files); err != nil {
 		return err
 	}
-	previous := readManifest(root)
+	previous, err := loadManifest(root)
+	if err != nil {
+		return generatedFileError(manifestName, err)
+	}
 	undo := make(restorePoint)
 	current := make(map[string]string, len(files))
 	completed := make(map[string]bool, len(files))
@@ -172,7 +187,13 @@ func writeFile(root *os.Root, file schema.ComponentConfigurationFile, recorded s
 	defer directory.Close()
 	leaf := file
 	leaf.Path = filepath.Base(file.Path)
-	return writeOwnedFile(directory, leaf, recorded)
+	digest, err := writeOwnedFile(directory, leaf, recorded)
+	// Ownership, removal, and write failures keep the generated-file classification and the full
+	// path; errors already classified keep their own wording.
+	if err != nil && !errors.Is(err, errUtils.ErrPluginInvalidConfig) {
+		return "", generatedFileError(file.Path, err)
+	}
+	return digest, err
 }
 
 // writeOwnedFile applies policies within a pinned, non-symlink destination directory.
