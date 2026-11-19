@@ -88,6 +88,13 @@ func RemoveHostBackend(directory string) error {
 	return removeHostBackendFile(root, hostBackendReceipt)
 }
 
+// HostBackendPaths lists the files RemoveHostBackend may remove, relative to the working directory.
+func HostBackendPaths() []string {
+	defer perf.Track(nil, "backend.HostBackendPaths")()
+
+	return []string{hostBackendName, hostBackendReceipt}
+}
+
 // WillRemoveHostBackend reports whether RemoveHostBackend would remove the named file: it is the
 // host backend, its receipt exists, and the bytes still match what the host wrote. Any other
 // state, including an unreadable one, is not provably removable.

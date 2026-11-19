@@ -448,6 +448,14 @@ func (e *unitEvaluator) unitResolution(cfg *config.TerragruntConfig) (*model.Res
 			return nil, problem
 		}
 		result.Folders = []string{result.Source}
+	} else if localSubdirSource(result.Source) {
+		// A local `dir//subdir` source copies the whole `dir` tree and selects `subdir` inside it.
+		if problem := localSubdirSourceProblem(e.environment.FS, e.path, result.Source); problem != nil {
+			return nil, problem
+		}
+		root, _ := copiedSourceRoot(filepath.Dir(e.path), result.Source)
+		result.Source = absoluteSubdirSource(root, result.Source)
+		result.Folders = []string{root}
 	} else if err := validateRemoteSource(result.Source); err != nil {
 		return nil, err
 	}

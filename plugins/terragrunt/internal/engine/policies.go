@@ -129,6 +129,16 @@ func localSubdirSource(source string) bool {
 	return filepath.IsAbs(source) || strings.HasPrefix(source, ".")
 }
 
+// absoluteSubdirSource rebuilds a local `dir//subdir` source on its resolved root, so the root no
+// longer depends on the host's working directory and the `//` root/subdirectory split survives.
+func absoluteSubdirSource(root, source string) string {
+	_, subdirectory, _ := strings.Cut(filepath.ToSlash(source), "//")
+	if subdirectory == "" {
+		return root
+	}
+	return root + "//" + subdirectory
+}
+
 // validateRemoteSource preserves the getter URI for Atmos's source provisioner.
 // Registry sources need Terragrunt version selection and are not interchangeable
 // with direct archive or Git sources.

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/backend"
 )
@@ -203,4 +204,74 @@ func TestRetainedBackendFileExcludedOnlyWhenHandoffRemovesIt(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "backend.tf.json"), []byte(`{"terraform":{"backend":{"local":{}}}}`), 0o600))
 	require.ErrorIs(t, validateRetainedConfiguration(directory, skipped, true), errUtils.ErrPluginInvalidConfig, "a modified file has no matching receipt")
+}
+
+// generateHostBackend writes a host-owned backend and its receipt, and returns their contents by path.
+func generateHostBackend(t *testing.T, directory string) map[string][]byte {
+	t.Helper()
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{}}}
+	require.NoError(t, backend.GenerateFile(config, info, directory))
+	paths := backend.HostBackendPaths()
+	require.Len(t, paths, 2)
+	contents := make(map[string][]byte, len(paths))
+	for _, path := range paths {
+		content, err := os.ReadFile(filepath.Join(directory, filepath.FromSlash(path)))
+		require.NoError(t, err, path)
+		contents[path] = content
+	}
+	return contents
+}
+
+func TestInvalidDestinationPreservesHostBackendAndReceipt(t *testing.T) {
+	directory := t.TempDir()
+	before := generateHostBackend(t, directory)
+	// A directory at an overwrite target makes the replacement batch invalid.
+	require.NoError(t, os.Mkdir(filepath.Join(directory, "provider.tf"), 0o700))
+	prepared := &schema.PreparedComponentConfiguration{BackendGenerated: true, Files: []schema.ComponentConfigurationFile{
+		{Path: "remote.tf", Content: []byte("# generated backend"), IfExists: "overwrite"},
+		{Path: "provider.tf", Content: []byte("# generated"), IfExists: "overwrite"},
+	}}
+	require.Error(t, writePreparedConfiguration(directory, prepared))
+	for path, content := range before {
+		after, err := os.ReadFile(filepath.Join(directory, filepath.FromSlash(path)))
+		require.NoError(t, err, path)
+		assert.Equal(t, content, after, path)
+	}
+	assert.NoFileExists(t, filepath.Join(directory, "remote.tf"))
+}
+
+func TestHandoffRestoredWhenHandoffFailsAfterRemoval(t *testing.T) {
+	directory := t.TempDir()
+	before := generateHostBackend(t, directory)
+	failure := errUtils.ErrPluginInvalidConfig
+	err := configuration.WriteFilesWithHandoff(directory, nil, &configuration.Handoff{
+		Paths: backend.HostBackendPaths(),
+		Run: func() error {
+			require.NoError(t, backend.RemoveHostBackend(directory))
+			return failure
+		},
+	})
+	require.ErrorIs(t, err, failure)
+	for path, content := range before {
+		after, readErr := os.ReadFile(filepath.Join(directory, filepath.FromSlash(path)))
+		require.NoError(t, readErr, path)
+		assert.Equal(t, content, after, path)
+	}
+}
+
+func TestValidBatchReplacesHostBackend(t *testing.T) {
+	directory := t.TempDir()
+	generateHostBackend(t, directory)
+	prepared := &schema.PreparedComponentConfiguration{BackendGenerated: true, Files: []schema.ComponentConfigurationFile{
+		{Path: "remote.tf", Content: []byte("# generated backend"), IfExists: "overwrite"},
+	}}
+	require.NoError(t, writePreparedConfiguration(directory, prepared))
+	for _, path := range backend.HostBackendPaths() {
+		assert.NoFileExists(t, filepath.Join(directory, filepath.FromSlash(path)))
+	}
+	content, err := os.ReadFile(filepath.Join(directory, "remote.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# generated backend", string(content))
 }

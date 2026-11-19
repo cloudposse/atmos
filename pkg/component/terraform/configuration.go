@@ -230,12 +230,15 @@ func writePreparedConfiguration(directory string, prepared *schema.PreparedCompo
 	if err := validateRetainedConfiguration(directory, prepared.Files, prepared.BackendGenerated); err != nil {
 		return err
 	}
-	if prepared.BackendGenerated {
-		if err := backend.RemoveHostBackend(directory); err != nil {
-			return err
-		}
+	if !prepared.BackendGenerated {
+		return configuration.WriteFiles(directory, prepared.Files)
 	}
-	return configuration.WriteFiles(directory, prepared.Files)
+	// The removal runs inside the batch's lock, after every destination validates, and is put back
+	// when the batch fails, so a rejected batch keeps the existing host backend and its receipt.
+	return configuration.WriteFilesWithHandoff(directory, prepared.Files, &configuration.Handoff{
+		Paths: backend.HostBackendPaths(),
+		Run:   func() error { return backend.RemoveHostBackend(directory) },
+	})
 }
 
 // validateRetainedConfiguration runs before any backend cleanup or file writes.

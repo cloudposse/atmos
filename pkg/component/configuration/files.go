@@ -39,7 +39,24 @@ const (
 func WriteFiles(directory string, files []schema.ComponentConfigurationFile) error {
 	defer perf.Track(nil, "configuration.WriteFiles")()
 
-	if len(files) == 0 && !manifestExists(directory) {
+	return WriteFilesWithHandoff(directory, files, nil)
+}
+
+// Handoff is an operation that must run after every destination validates and before the batch
+// writes, such as relinquishing a file the batch replaces. Paths lists the files it may change, so
+// the batch can put them back when it fails.
+type Handoff struct {
+	Paths []string
+	Run   func() error
+}
+
+// WriteFilesWithHandoff is WriteFiles with a handoff that shares the batch's lock and rollback: it
+// runs only after every destination is valid, and a failure of the handoff or of the batch restores
+// the handoff's paths, so a rejected batch leaves the files it would have replaced in place.
+func WriteFilesWithHandoff(directory string, files []schema.ComponentConfigurationFile, handoff *Handoff) error {
+	defer perf.Track(nil, "configuration.WriteFilesWithHandoff")()
+
+	if len(files) == 0 && handoff == nil && !manifestExists(directory) {
 		return nil
 	}
 	// One writer per canonical workdir at a time, across processes, from the manifest read through
@@ -51,7 +68,7 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 	ctx, cancel := context.WithTimeout(context.Background(), lockTimeout)
 	defer cancel()
 	return filelock.New(lockPath).WithExclusive(ctx, func() error {
-		return writeFilesLocked(directory, files)
+		return writeFilesLocked(directory, files, handoff)
 	})
 }
 
@@ -82,7 +99,22 @@ func workdirLockPath(directory string) (string, error) {
 	return filepath.Join(canonical, filepath.FromSlash(workdirLockName)), nil
 }
 
-func writeFilesLocked(directory string, files []schema.ComponentConfigurationFile) error {
+// runHandoff captures the handoff's paths and runs it. It returns the restore point for those paths,
+// which the caller restores when the handoff or the batch fails.
+func runHandoff(root *os.Root, handoff *Handoff) (restorePoint, error) {
+	if handoff == nil || handoff.Run == nil {
+		return nil, nil
+	}
+	undo := make(restorePoint)
+	for _, path := range handoff.Paths {
+		if err := undo.capture(root, path); err != nil {
+			return nil, generatedFileError(path, err)
+		}
+	}
+	return undo, handoff.Run()
+}
+
+func writeFilesLocked(directory string, files []schema.ComponentConfigurationFile, handoff *Handoff) (err error) {
 	root, err := os.OpenRoot(directory)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
@@ -91,6 +123,23 @@ func writeFilesLocked(directory string, files []schema.ComponentConfigurationFil
 	if err := validateFiles(root, files); err != nil {
 		return err
 	}
+	handoffUndo, err := runHandoff(root, handoff)
+	if handoffUndo != nil {
+		defer func() {
+			if err != nil {
+				err = errors.Join(err, handoffUndo.restore(root))
+			}
+		}()
+	}
+	if err != nil {
+		return err
+	}
+	return writeBatch(root, files)
+}
+
+// writeBatch writes the files against the recorded manifest, removes stale generated files, and
+// records the new manifest, rolling back what it changed when it cannot record ownership.
+func writeBatch(root *os.Root, files []schema.ComponentConfigurationFile) error {
 	previous, err := loadManifest(root)
 	if err != nil {
 		return generatedFileError(manifestName, err)
