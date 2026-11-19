@@ -586,8 +586,13 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed fu
 		// A plan already at the output path was not written by this run. It is moved aside so that only a
 		// file this subprocess creates can be fingerprinted, and it is restored if none is created, which
 		// also covers help-only runs that exit successfully without writing a plan.
-		settleStale, stashErr := stashStalePlan(writtenPath)
-		defer settleStale()
+		settleStale, stashErr := stashStalePlan(s.execCtx.componentPath, writtenPath)
+		defer func() {
+			// A plan that could not be restored stays in its stash, and the binding fails naming it.
+			if err := settleStale(); err != nil {
+				s.result, s.err = nil, err
+			}
+		}()
 		if stashErr != nil {
 			s.err = stashErr
 			return run()
@@ -625,17 +630,22 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed fu
 // stashStalePlan moves a file that already exists at the plan output path aside, so any file found
 // there after the subprocess was written by that run. The returned settle function must run once the
 // observation is complete: it discards the stashed file when the run wrote a new one and otherwise
-// restores it, so a run that wrote nothing leaves the earlier file as it was.
-func stashStalePlan(path string) (func(), error) {
-	noop := func() {}
-	if _, err := os.Lstat(path); err != nil {
+// restores it, so a run that wrote nothing leaves the earlier file as it was. A directory at the
+// output path is rejected without being moved.
+func stashStalePlan(root, path string) (func() error, error) {
+	noop := func() error { return nil }
+	info, err := os.Lstat(path)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return noop, nil
 		}
 		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
 	}
-	// The directory is skipped by the working directory digest, so the stash cannot alter a snapshot.
-	dir, err := os.MkdirTemp(filepath.Dir(path), stalePlanDirPrefix)
+	if info.IsDir() {
+		return noop, fmt.Errorf("%w: plan output %s is a directory", errUtils.ErrPlanVerificationFailed, path)
+	}
+	// The stash directory is skipped by the working directory digest, so it cannot alter a snapshot.
+	dir, err := os.MkdirTemp(stalePlanStashParent(root, path), stalePlanDirPrefix)
 	if err != nil {
 		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
 	}
@@ -644,12 +654,38 @@ func stashStalePlan(path string) (func(), error) {
 		_ = os.Remove(dir)
 		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
 	}
-	return func() {
-		if _, err := os.Lstat(path); err != nil {
-			_ = os.Rename(stashed, path)
+	return func() error { return settleStalePlan(path, stashed, dir) }, nil
+}
+
+// settleStalePlan discards the stash when the run wrote a new plan and otherwise restores the earlier
+// plan. The stash is removed only after the restore succeeds or a replacement is confirmed; otherwise
+// it is kept for recovery and the error names it.
+func settleStalePlan(path, stashed, dir string) error {
+	_, err := os.Lstat(path)
+	switch {
+	case err == nil:
+		// The run wrote a replacement.
+	case os.IsNotExist(err):
+		if err := os.Rename(stashed, path); err != nil {
+			return fmt.Errorf("%w: restore the earlier plan from %s: %w", errUtils.ErrPlanVerificationFailed, stashed, err)
 		}
-		_ = os.RemoveAll(dir)
-	}, nil
+	default:
+		return fmt.Errorf("%w: earlier plan kept at %s: %w", errUtils.ErrPlanVerificationFailed, stashed, err)
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
+	}
+	return nil
+}
+
+// stalePlanStashParent returns where the stash directory is created: beside the plan, except inside
+// downloaded modules, whose every file is digested, where it moves to the component directory.
+func stalePlanStashParent(root, path string) string {
+	parent := filepath.Dir(path)
+	if root != "" && insideTerraformModules(root, parent) {
+		return root
+	}
+	return parent
 }
 
 // stalePlanDirPrefix names the directory that holds a plan found at the output path before a run.

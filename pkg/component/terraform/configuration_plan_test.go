@@ -1205,3 +1205,66 @@ func TestConfigurationPlanPreservesReviewedFileAbsence(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, data)
 }
+
+func TestStashStalePlanRejectsDirectoryOutputs(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "plans")
+	require.NoError(t, os.MkdirAll(filepath.Join(output, "keep"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(output, "keep", "file"), []byte("data"), 0o600))
+
+	_, err := stashStalePlan("", output)
+
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	data, readErr := os.ReadFile(filepath.Join(output, "keep", "file"))
+	require.NoError(t, readErr, "the directory must stay where it was")
+	require.Equal(t, "data", string(data))
+}
+
+func TestStalePlanStashStaysOutOfDownloadedModules(t *testing.T) {
+	root := t.TempDir()
+	modules := filepath.Join(root, ".terraform", "modules")
+	require.NoError(t, os.MkdirAll(modules, 0o755))
+	plan := filepath.Join(modules, "reviewed.plan")
+	require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+
+	settle, err := stashStalePlan(root, plan)
+	require.NoError(t, err)
+	entries, err := os.ReadDir(modules)
+	require.NoError(t, err)
+	require.Empty(t, entries, "the stash must not be created inside the digested module tree")
+
+	require.NoError(t, settle())
+	data, err := os.ReadFile(plan)
+	require.NoError(t, err)
+	require.Equal(t, "earlier", string(data))
+	rootEntries, err := os.ReadDir(root)
+	require.NoError(t, err)
+	require.Len(t, rootEntries, 1, "only .terraform remains once the stash is settled")
+	require.Equal(t, ".terraform", rootEntries[0].Name())
+}
+
+func TestStalePlanStashIsKeptWhenRestoreFails(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs directory write permissions to be enforced")
+	}
+	out := filepath.Join(t.TempDir(), "out")
+	require.NoError(t, os.MkdirAll(out, 0o755))
+	plan := filepath.Join(out, "reviewed.plan")
+	require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+
+	settle, err := stashStalePlan("", plan)
+	require.NoError(t, err)
+	stashes, err := filepath.Glob(filepath.Join(out, stalePlanDirPrefix+"*", "plan"))
+	require.NoError(t, err)
+	require.Len(t, stashes, 1)
+	// A read-only output directory makes moving the earlier plan back fail.
+	require.NoError(t, os.Chmod(out, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(out, 0o755) })
+
+	err = settle()
+
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorContains(t, err, stashes[0])
+	data, readErr := os.ReadFile(stashes[0])
+	require.NoError(t, readErr, "the stash must be kept for recovery")
+	require.Equal(t, "earlier", string(data))
+}
