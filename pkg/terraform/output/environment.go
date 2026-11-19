@@ -90,7 +90,7 @@ func setupOutputEnvironment(config *ComponentConfig, authContext *schema.AuthCon
 		mergeOutputComponentEnvironment(environMap, config.Env)
 	} else {
 		for key, value := range config.Env {
-			environMap[key] = fmt.Sprintf("%v", value)
+			environMap[key] = fmt.Sprint(value)
 		}
 	}
 

@@ -389,7 +389,7 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() er
 			if s.execCtx.planPolicy != nil {
 				writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
 			}
-			if runErr != nil && (!detailedExitCodeEnabled(phaseArgs) || resolveExitCode(runErr) != detailedExitCodeChangesDetected) {
+			if planCommandFailed(phaseArgs, runErr) {
 				return runErr
 			}
 			digest, digestErr := fileDigest(writtenPath)
@@ -402,6 +402,11 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() er
 		}
 		return runErr
 	}
+}
+
+// planCommandFailed leaves Terraform's detailed plan status available for binding.
+func planCommandFailed(args []string, err error) bool {
+	return err != nil && (!detailedExitCodeEnabled(args) || resolveExitCode(err) != detailedExitCodeChangesDetected)
 }
 
 // reviewedSnapshot returns the configuration Terraform read, or takes a fresh snapshot when no
