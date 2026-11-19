@@ -14,6 +14,7 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/spf13/afero"
+	"github.com/zclconf/go-cty/cty"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
@@ -28,6 +29,7 @@ var (
 	errDuplicateUnit        = errors.New("duplicate unit instance")
 	errDuplicateStack       = errors.New("duplicate stack instance")
 	errDependencyWorkspace  = errors.New("native output dependencies with non-default workspaces require a dependency backend adapter")
+	errDependencyConfigPath = errors.New("dependency config_path must be a string")
 )
 
 // DiscoveryError carries only a filesystem identity and a fixed category across
@@ -459,6 +461,9 @@ func outputDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntCon
 		}
 		if !dep.ConfigPath.IsKnown() || dep.ConfigPath.IsNull() {
 			continue
+		}
+		if dep.ConfigPath.Type() != cty.String {
+			return nil, fmt.Errorf("%w: unit %s, dependency %q", errDependencyConfigPath, path, dep.Name)
 		}
 		physical, err := dependencyConfigPath(environment, path, dep.ConfigPath.AsString())
 		if err != nil {
