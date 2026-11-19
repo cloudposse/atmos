@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -704,6 +705,7 @@ func buildAtmosEnv(ctx *ExecContext, outputFile, outputDir string) map[string]st
 	for k, v := range OutcomeEnv(ctx.Outcome) {
 		env[k] = v
 	}
+	maps.Copy(env, ctx.OperationEnv)
 	if ctx.HookDepth > 0 {
 		env[HookDepthEnvVar] = strconv.Itoa(ctx.HookDepth)
 	}
@@ -988,6 +990,15 @@ func ApplyOnFailure(ctx *ExecContext, runErr error) error {
 	return applyOnFailure(ctx, runErr)
 }
 
+// hookDisplayName names the failing hook for error messages, falling back to the hook's
+// kind when the execution context carries no name (directly constructed contexts).
+func hookDisplayName(ctx *ExecContext) string {
+	if ctx.HookName != "" {
+		return fmt.Sprintf("%q", ctx.HookName)
+	}
+	return fmt.Sprintf("%q", ctx.Hook.Kind)
+}
+
 // applyOnFailure returns nil or an error depending on the configured failure
 // mode. "warn" (default) logs and returns nil; "fail" propagates the error;
 // "ignore" drops it entirely.
@@ -1001,7 +1012,7 @@ func applyOnFailure(ctx *ExecContext, runErr error) error {
 	}
 	switch mode {
 	case OnFailureFail:
-		return fmt.Errorf("hook (kind %s) failed: %w", ctx.Hook.Kind, runErr)
+		return fmt.Errorf("hook %s (kind %s, event %s) failed: %w", hookDisplayName(ctx), ctx.Hook.Kind, ctx.Event.Normalize(), runErr)
 	case OnFailureIgnore:
 		log.Debug(
 			"Hook command failed (ignored per on_failure)",

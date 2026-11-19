@@ -136,7 +136,9 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 			return changesPresent
 		}
 		if snapshots, ok := ctx.Value(planSnapshotKey{}).(*planSnapshotter); ok {
-			run = snapshots.around(phaseArgs, run)
+			run = snapshots.around(phaseArgs, run, func(err error) bool {
+				return err != nil && !isDetailedExitCodeChanges(phase.command, phaseArgs, env, err, phaseOpts...)
+			})
 		}
 		err := run()
 		// A plan that reports changes completed; only a real failure is given to init recovery.
@@ -216,26 +218,12 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 		defer capture.cleanup()
 	}
 	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: &phaseInfo, phase: phase, opts: hookOptions(opts), capture: capture}
-	// With -detailed-exitcode, exit status 2 reports a plan with changes. Hooks must not see that
-	// as a failure, but the status still has to reach the caller once the hooks are done.
 	env := slices.Concat(envpkg.ConvertMapToSlice(atmosConfig.Env), phaseInfo.ComponentEnvList)
-	attempt := func(attemptOpts []component.ExecutionOption, hookStderr io.Writer) (changesPresent, runErr error) {
-		runner.recoveryStderr = hookStderr
-		runErr = execution.Run(component.ContextFromOptions(attemptOpts...), config, phase.command, runner, func() (execution.Output, error) {
-			output, actionErr := runPhaseAction(&phaseInfo, applied.Args, attemptOpts, capture, action)
-			if isDetailedExitCodeChanges(phase.command, applied.Args, env, actionErr, attemptOpts...) {
-				// Mark the completed plan here, so the recovery path reports it the same way.
-				changesPresent = &successfulPlanChanges{error: actionErr}
-				return output, nil
-			}
-			return output, actionErr
-		})
-		return changesPresent, runErr
-	}
+	attempts := &phaseAttempts{config: config, info: &phaseInfo, phase: phase, args: applied.Args, env: env, runner: runner, capture: capture, action: action}
 	if config.Errors != nil {
-		return e.recoverPhase(&phaseInfo, phase, config.Errors, opts, attempt)
+		return e.recoverPhase(&phaseInfo, phase, config.Errors, opts, attempts.run)
 	}
-	changesPresent, err := attempt(opts, nil)
+	changesPresent, err := attempts.run(opts, nil)
 	if err != nil {
 		return err
 	}
@@ -362,8 +350,9 @@ type hookRunner struct {
 	opts        []component.ExecutionOption
 	// capture records hook output for error hook matching; nil means no error hooks exist.
 	capture *phaseCapture
-	// recoveryStderr is per attempt and separate from the caller's command capture.
-	recoveryStderr io.Writer
+	// failed receives the standard error of a hook that fails, for error handling policies. It is
+	// per attempt and separate from the caller's command capture; nil means no policy applies.
+	failed *failureText
 }
 
 // RunHook runs one hook and returns its captured output for error hook matching.
@@ -381,10 +370,7 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 		file = r.capture.create()
 		captured = file
 	}
-	stderrCapture := captured
-	if r.recoveryStderr != nil {
-		stderrCapture = io.MultiWriter(captured, &syncWriter{w: r.recoveryStderr})
-	}
+	stderrCapture, finishStderr := r.failureCapture(captured)
 	opts := append(
 		slices.Clone(r.opts),
 		component.WithStdoutOverride(stdout),
@@ -406,10 +392,26 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 		return nil, err
 	}
 	err = r.executor.services.ExecuteShellCommand(*r.atmosConfig, hook.Execute[0], arguments, directory, env, false, "", opts...)
+	finishStderr(err)
 	if file == nil {
 		return nil, err
 	}
 	return file.finish(), err
+}
+
+// failureCapture adds a private capture of the hook's standard error beside captured. The returned
+// function hands that output to error handling when the hook failed, so a hook that succeeded never
+// influences how a policy treats another step.
+func (r *hookRunner) failureCapture(captured io.Writer) (io.Writer, func(error)) {
+	if r.failed == nil {
+		return captured, func(error) {}
+	}
+	var stderr bytes.Buffer
+	return io.MultiWriter(captured, &syncWriter{w: &stderr}), func(err error) {
+		if err != nil {
+			r.failed.add(stderr.String())
+		}
+	}
 }
 
 // hookArguments returns the arguments a hook runs with. A tflint hook gets the stack's final inputs

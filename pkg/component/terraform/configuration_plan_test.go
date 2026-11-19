@@ -96,8 +96,17 @@ func planFixture(t *testing.T) (*schema.AtmosConfiguration, *schema.ConfigAndSta
 	return config, info, execCtx, runtime, path
 }
 
+// observeFixturePlan simulates a successful plan subprocess for binding tests.
+func observeFixturePlan(t *testing.T, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, path string) {
+	t.Helper()
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
+	require.NoError(t, snapshotter.around([]string{"plan", "-out=" + path}, func() error { return nil }, failedOnError)())
+	execCtx.planSnapshots = snapshotter
+}
+
 func TestConfigurationPlanRestoresReviewedPreparation(t *testing.T) {
 	config, info, execCtx, _, path := planFixture(t)
+	observeFixturePlan(t, config, info, execCtx, path)
 	err := recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out", filepath.Base(path)})
 	require.NoError(t, err)
 	stat, err := os.Stat(path + configurationPlanSuffix)
@@ -127,6 +136,7 @@ func TestConfigurationPlanRejectsChangedBinding(t *testing.T) {
 				require.NoError(t, os.MkdirAll(filepath.Dir(module), 0o700))
 				require.NoError(t, os.WriteFile(module, []byte("reviewed"), 0o600))
 			}
+			observeFixturePlan(t, config, info, execCtx, path)
 			require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out=" + path}))
 			info.SubCommand = "apply"
 			info.UseTerraformPlan = true
@@ -242,6 +252,7 @@ func TestConfigurationPlanRecordHoldsNoInputsOrBackendValues(t *testing.T) {
 	execCtx.preparedConfiguration.Inputs = map[string]any{"password": "input-secret-value"}
 	execCtx.preparedConfiguration.Backend = map[string]any{"access_key": "backend-secret-value"}
 	runtime.state.Backend = execCtx.preparedConfiguration.Backend
+	observeFixturePlan(t, config, info, execCtx, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
 
 	data, err := os.ReadFile(path + configurationPlanSuffix)
@@ -275,6 +286,7 @@ func TestConfigurationPlanRecordHoldsNoSensitiveGeneratedFiles(t *testing.T) {
 			for _, file := range execCtx.preparedConfiguration.Files[:3] {
 				require.NoError(t, os.WriteFile(filepath.Join(execCtx.workingDir, file.Path), file.Content, 0o600))
 			}
+			observeFixturePlan(t, config, info, execCtx, path)
 			require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
 			data, err := os.ReadFile(path + configurationPlanSuffix)
 			require.NoError(t, err)
@@ -307,6 +319,7 @@ func TestConfigurationPlanRejectsChangedSensitiveFileOutsideTheWorkdirDigest(t *
 	execCtx.preparedConfiguration.Files = []schema.ComponentConfigurationFile{{Path: filepath.ToSlash(relative), Content: reviewed, IfExists: "overwrite", Sensitive: true}}
 	require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(execCtx.workingDir, relative)), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(execCtx.workingDir, relative), reviewed, 0o600))
+	observeFixturePlan(t, config, info, execCtx, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
 	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
 
@@ -387,6 +400,7 @@ func TestConfigurationPlanExplicitAbsolutePathVerifiesLikeCanonicalPath(t *testi
 	execCtx.workingDir, execCtx.componentPath = relativeWorkdir, relativeWorkdir
 	canonical := filepath.Join(relativeWorkdir, ConstructTerraformComponentPlanfileName(info))
 	require.NoError(t, os.WriteFile(canonical, []byte("reviewed plan"), 0o600))
+	observeFixturePlan(t, config, info, execCtx, canonical)
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + filepath.Base(canonical)}))
 
 	absolute, err := filepath.Abs(canonical)
@@ -404,6 +418,7 @@ func TestConfigurationPlanExplicitAbsolutePathVerifiesLikeCanonicalPath(t *testi
 func TestRelativeWorkingDirectoryPlanCanMoveToAnotherCheckout(t *testing.T) {
 	config, info, execCtx, _, path := planFixture(t)
 	info.ComponentSection = map[string]any{"metadata": map[string]any{"working_directory": filepath.Join("components", "network")}}
+	observeFixturePlan(t, config, info, execCtx, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
 
 	otherRoot := t.TempDir()
@@ -442,6 +457,7 @@ func TestConfigurationPlanMissingPlanExplainsWhatHappened(t *testing.T) {
 	})
 	t.Run("plan file without an Atmos record", func(t *testing.T) {
 		config, info, execCtx, _, path := planFixture(t)
+		observeFixturePlan(t, config, info, execCtx, path)
 		require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
 		require.NoError(t, os.Remove(path+configurationPlanSuffix))
 		info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
@@ -457,6 +473,7 @@ func TestConfigurationPlanRestoreThenFinish(t *testing.T) {
 				config, info, execCtx, _, _ := planFixture(t)
 				canonical := ConstructTerraformComponentPlanfilePath(config, info)
 				require.NoError(t, os.WriteFile(canonical, []byte("reviewed plan"), 0o600))
+				observeFixturePlan(t, config, info, execCtx, canonical)
 				require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + canonical}))
 				info.SubCommand, info.UseTerraformPlan = subcommand, true
 				switch selection {
@@ -495,6 +512,7 @@ func TestFinishConfigurationPlan(t *testing.T) {
 		config, info, execCtx, _, _ := planFixture(t)
 		canonical := ConstructTerraformComponentPlanfilePath(config, info)
 		require.NoError(t, os.WriteFile(canonical, []byte("reviewed plan"), 0o600))
+		observeFixturePlan(t, config, info, execCtx, canonical)
 		require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + canonical}))
 		info.SubCommand = subcommand
 		return config, info, canonical
@@ -1135,6 +1153,7 @@ func TestConfigurationPlanRoundTripNumericBackend(t *testing.T) {
 	config, info, execCtx, fixture, path := planFixture(t)
 	execCtx.preparedConfiguration.Backend["port"] = 1234
 	execCtx.preparedConfiguration.Backend["timeout"] = json.Number("1.0")
+	observeFixturePlan(t, config, info, execCtx, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out", filepath.Base(path)}))
 	fixture.state.Backend["port"] = float64(1234)
 	fixture.state.Backend["timeout"] = 1
@@ -1166,8 +1185,8 @@ func TestNewConfigurationPlanRejectsAPlanRewrittenAfterTerraformWroteIt(t *testi
 
 	snapshot.planDigest = ""
 	plan, err = newConfigurationPlan(&schema.AtmosConfiguration{}, info, execCtx, snapshot, path)
-	require.NoError(t, err, "a snapshot without an observed digest binds the plan as it is")
-	require.NotEqual(t, captured, plan.PlanDigest)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed, "an unobserved plan must not be bound")
+	require.Nil(t, plan)
 }
 
 // Configuration that merely starts with the state file's name stays bound to the saved plan, while the
@@ -1235,6 +1254,9 @@ func TestConfigurationPlanPreservesReviewedOverwriteBytes(t *testing.T) {
 	require.NoError(t, os.WriteFile(generated, reviewed, 0o600))
 	snapshot, err := takePlanSnapshot(t.Context(), config, info, execCtx, path)
 	require.NoError(t, err)
+	// The plan was observed as written by this run, before the after-hook below.
+	snapshot.planDigest, err = fileDigest(path)
+	require.NoError(t, err)
 	execCtx.planSnapshots = &planSnapshotter{result: snapshot}
 	// An after-hook must not change the bytes captured in the record.
 	require.NoError(t, os.WriteFile(generated, []byte("# after C"), 0o600))
@@ -1264,6 +1286,7 @@ func TestSavedPlanBindsFilteredEnvironmentDefaults(t *testing.T) {
 			}
 			execCtx.preparedConfiguration.Execution = execution
 			require.NoError(t, applyStackOverrides(config, info, execCtx.preparedConfiguration))
+			observeFixturePlan(t, config, info, execCtx, path)
 			require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out", filepath.Base(path)}))
 			record, err := os.ReadFile(path + configurationPlanSuffix)
 			require.NoError(t, err)
@@ -1286,6 +1309,7 @@ func TestSavedPlanBindsFilteredEnvironmentDefaults(t *testing.T) {
 func TestConfigurationPlanPreservesReviewedFileAbsence(t *testing.T) {
 	config, info, execCtx, _, path := planFixture(t)
 	execCtx.preparedConfiguration.Files = []schema.ComponentConfigurationFile{{Path: "override.tf", Content: []byte("# prepared but removed by before-hook"), IfExists: "overwrite"}}
+	observeFixturePlan(t, config, info, execCtx, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
 	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
 	prepared, err := restoreConfigurationPlan(t.Context(), config, info)
@@ -1296,6 +1320,7 @@ func TestConfigurationPlanPreservesReviewedFileAbsence(t *testing.T) {
 	// An empty file is different from an absent one and must survive restoration.
 	require.NoError(t, os.WriteFile(filepath.Join(execCtx.workingDir, "override.tf"), []byte{}, 0o600))
 	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "plan", false, ""
+	observeFixturePlan(t, config, info, execCtx, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
 	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
 	prepared, err = restoreConfigurationPlan(t.Context(), config, info)
@@ -1312,6 +1337,7 @@ func TestRestoredPlanChecksStackEnvironmentBeforeRebuild(t *testing.T) {
 	info.ComponentSection = map[string]any{"metadata": map[string]any{"working_directory": filepath.Join("components", "network")}}
 	info.ComponentEnvSection = map[string]any{"PROVIDER_TOKEN": "reviewed-secret"}
 	execCtx.preparedConfiguration.Execution = &schema.ComponentExecution{}
+	observeFixturePlan(t, config, info, execCtx, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
 	otherRoot := t.TempDir()
 	otherWorkdir := filepath.Join(otherRoot, "components", "network")
@@ -1340,6 +1366,7 @@ func TestRestoredPlanChecksStackEnvironmentBeforeRebuild(t *testing.T) {
 
 func TestConfigurationPlanRejectsRecordWithoutEnvironmentBinding(t *testing.T) {
 	config, info, execCtx, _, path := planFixture(t)
+	observeFixturePlan(t, config, info, execCtx, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
 	data, err := os.ReadFile(path + configurationPlanSuffix)
 	require.NoError(t, err)

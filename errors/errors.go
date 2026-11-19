@@ -150,6 +150,7 @@ var (
 	ErrRefuseWriteThroughSymlink             = errors.New("refusing to write through symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
+	ErrDocsHooksUnavailable                  = errors.New("docs generate hooks are configured but the hook engine is not available")
 	ErrUnsupportedInputType                  = errors.New("unsupported input type")
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_template' (or the deprecated 'stacks.name_pattern') needs to be specified in 'atmos.yaml'")
 	ErrStackNamePatternPartMissing           = errors.New("stack name pattern references a context part that is not defined in the stack file")

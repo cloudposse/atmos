@@ -21,7 +21,7 @@ import (
 
 func TestOutputDependenciesRejectsNonStringConfigPath(t *testing.T) {
 	cfg := &config.TerragruntConfig{TerragruntDependencies: config.Dependencies{{Name: "network", ConfigPath: cty.NumberIntVal(42)}}}
-	_, err := outputDependencies(nil, cfg, "unit/terragrunt.hcl")
+	_, err := outputDependencies(nil, cfg, "unit/terragrunt.hcl", false)
 	require.ErrorIs(t, err, errDependencyConfigPath)
 	require.ErrorContains(t, err, "unit/terragrunt.hcl")
 	require.ErrorContains(t, err, "network")
@@ -748,4 +748,172 @@ func TestDiscoveryDistinguishesLogicalUnitAliases(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"default/alias", "default/root"}, inventoryNames(t, result))
 	require.NotEqual(t, result.Inventory[0].Config.Path, result.Inventory[1].Config.Path)
+}
+
+// excludedUnitProject writes a healthy unit, a dependency target and an `excluded` unit with the given body.
+func excludedUnitProject(t *testing.T, excludedBody string) string {
+	t.Helper()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "module"), 0o755))
+	units := map[string]string{
+		"healthy":  `terraform { source = "../module" }`,
+		"shared":   `terraform { source = "../module" }`,
+		"excluded": excludedBody,
+	}
+	for name, content := range units {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, name), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, name, "terragrunt.hcl"), []byte(content), 0o644))
+	}
+	return root
+}
+
+func inventoryUnit(t *testing.T, result *model.Resolution, root, name string) model.Resolution {
+	t.Helper()
+	index := slices.IndexFunc(result.Inventory, func(unit model.DiscoveredUnit) bool {
+		return unit.Config.Path == filepath.Join(root, name, "terragrunt.hcl")
+	})
+	require.NotEqual(t, -1, index, "unit %s must stay in the inventory", name)
+	return result.Inventory[index].Config
+}
+
+func TestDiscoveryExcludedUnitDefersSourceTransportError(t *testing.T) {
+	for _, test := range []struct {
+		command string
+		failed  bool
+	}{
+		{command: "plan"},
+		{command: "apply", failed: true},
+	} {
+		t.Run(test.command, func(t *testing.T) {
+			root := excludedUnitProject(t, "terraform { source = \"ftp://example.invalid/module.zip\" }\nexclude {\n if = true\n actions = [\"plan\"]\n no_run = true\n}\n")
+			result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, Command: test.command, Environment: map[string]string{}})
+			require.NoError(t, err)
+			inventoryUnit(t, result, root, "healthy")
+			if test.failed {
+				require.Len(t, result.Failures, 1, "an active unit with the same source still fails validation")
+				require.Equal(t, model.CodeInvalidSource, asProblem(t, result.Failures[0].Err).Code)
+				return
+			}
+			require.Empty(t, result.Failures)
+			excluded := inventoryUnit(t, result, root, "excluded")
+			require.True(t, PreventsRun(excluded.Exclude, "plan"))
+			require.Equal(t, "ftp://example.invalid/module.zip", excluded.Source)
+		})
+	}
+}
+
+func TestDiscoveryExcludedUnitKeepsEdgesForExcludeDependencies(t *testing.T) {
+	body := "terraform { source = \"../module\" }\nexclude {\n if = true\n actions = [\"destroy\"]\n no_run = true\n exclude_dependencies = %t\n}\n" +
+		"dependency \"shared\" {\n config_path = \"../shared\"\n}\ndependency \"missing\" {\n config_path = \"../absent\"\n}\ndependencies { paths = [\"../shared\", \"../absent\"] }\n"
+	shared := []string(nil)
+	for _, test := range []struct {
+		name     string
+		withDeps bool
+		command  string
+		want     []string
+	}{
+		{name: "kept for exclude_dependencies", withDeps: true, command: "destroy", want: []string{"shared"}},
+		{name: "dropped without exclude_dependencies", withDeps: false, command: "destroy", want: shared},
+		{name: "active unit reads its dependencies strictly", withDeps: true, command: "plan"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := excludedUnitProject(t, fmt.Sprintf(body, test.withDeps))
+			result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, Command: test.command, Environment: map[string]string{}})
+			require.NoError(t, err)
+			if test.command == "plan" {
+				require.Len(t, result.Failures, 1, "a missing dependency of an active unit still fails")
+				return
+			}
+			require.Empty(t, result.Failures)
+			excluded := inventoryUnit(t, result, root, "excluded")
+			want := []string{}
+			for _, name := range test.want {
+				want = append(want, filepath.Join(root, name, "terragrunt.hcl"))
+			}
+			require.ElementsMatch(t, want, excluded.Dependencies)
+			require.ElementsMatch(t, want, excluded.OutputDependencies)
+		})
+	}
+}
+
+// A scope below a pruned directory finds nothing, exactly like a root-wide scan, while ordinary
+// scopes stay discoverable.
+func TestScopedWalkPrunesItsAncestors(t *testing.T) {
+	root := scanTree(t, "live/.terragrunt-cache/run/terragrunt.hcl", "live/node_modules/pkg/terragrunt.hcl", "live/prod/vpc/terragrunt.hcl")
+	for _, pattern := range []string{"live/.terragrunt-cache/run", "live/node_modules/pkg/**"} {
+		scan, err := discoveryPaths(root, []string{pattern}, nil)
+		require.NoError(t, err)
+		require.Empty(t, relativeUnits(t, root, scan), pattern)
+	}
+	scan, err := discoveryPaths(root, []string{"live/prod"}, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/prod/vpc/terragrunt.hcl"}, relativeUnits(t, root, scan))
+	scan, err = discoveryPaths(root, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/prod/vpc/terragrunt.hcl"}, relativeUnits(t, root, scan), "the root-wide scan agrees")
+}
+
+// writeStaleUnits materializes standalone-looking units, as an earlier successful generation would.
+func writeStaleUnits(t *testing.T, root string, dirs ...string) {
+	t.Helper()
+	module, err := json.Marshal(filepath.ToSlash(filepath.Join(root, "modules", "unit")))
+	require.NoError(t, err)
+	for _, dir := range dirs {
+		path := filepath.Join(root, filepath.FromSlash(dir), "terragrunt.hcl")
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte("terraform { source = "+string(module)+" }\n"), 0o644))
+	}
+}
+
+// A stack whose generation now fails still owns what an earlier generation materialized.
+func TestDiscoveryKeepsStaleOutputsOfFailedStackOutOfStandalonePass(t *testing.T) {
+	for name, declaration := range map[string]string{
+		"no_dot_terragrunt_stack": `path = "app"
+  no_dot_terragrunt_stack = true`,
+		"dot stack directory": `path = "app"`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := stackProject(t, map[string]string{
+				"live/terragrunt.stack.hcl": "unit \"app\" {\n  source = values.missing\n  " + declaration + "\n}\n",
+			})
+			stale := "live/app"
+			if name == "dot stack directory" {
+				stale = "live/.terragrunt-stack/app"
+			}
+			writeStaleUnits(t, root, stale, "live/other")
+
+			result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**", "live/.terragrunt-stack/**"}, Environment: map[string]string{}})
+			require.NoError(t, err)
+			require.Equal(t, []string{"live/other"}, inventoryNames(t, result), "the stale child is not listed, the genuine sibling is")
+			require.Empty(t, result.Inventory[0].GenerationRoot)
+			require.Len(t, result.Failures, 1)
+			require.Equal(t, "terragrunt.stack.hcl", result.Failures[0].Name)
+		})
+	}
+}
+
+// When a declaration's location is not literal, the whole failed stack directory is claimed.
+func TestDiscoveryFailsClosedForNonLiteralStackOutputs(t *testing.T) {
+	root := stackProject(t, map[string]string{
+		"live/terragrunt.stack.hcl": "unit \"app\" {\n  source = values.missing\n  path = values.where\n}\n",
+	})
+	writeStaleUnits(t, root, "live/app", "elsewhere")
+
+	result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**", "elsewhere/**"}, Environment: map[string]string{}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"default/elsewhere"}, inventoryNames(t, result), "units outside the failed stack stay discoverable")
+	require.Len(t, result.Failures, 1)
+}
+
+// Negative path: without a failing stack, a unit that no stack declares is still discovered.
+func TestDiscoveryStillListsUnitsNoFailedStackDeclares(t *testing.T) {
+	root := stackProject(t, map[string]string{
+		"live/terragrunt.stack.hcl": "unit \"app\" {\n  source = values.missing\n  path = \"app\"\n  no_dot_terragrunt_stack = true\n}\n",
+	})
+	writeStaleUnits(t, root, "live/other")
+
+	result, err := Resolve(t.Context(), model.Request{Phase: "inventory", BasePath: root, IncludedPaths: []string{"live/**"}, Environment: map[string]string{}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/other"}, inventoryNames(t, result))
 }

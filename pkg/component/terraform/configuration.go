@@ -360,12 +360,15 @@ func writePreparedConfiguration(directory string, prepared *schema.PreparedCompo
 	if err := validateRetainedConfiguration(directory, prepared.Files, prepared.BackendGenerated); err != nil {
 		return err
 	}
-	if prepared.BackendGenerated {
-		if err := backend.RemoveHostBackend(directory); err != nil {
-			return err
-		}
+	if !prepared.BackendGenerated {
+		return configuration.WriteFiles(directory, prepared.Files)
 	}
-	return configuration.WriteFiles(directory, prepared.Files)
+	// The removal runs inside the batch's lock, after every destination validates, and is put back
+	// when the batch fails, so a rejected batch keeps the existing host backend and its receipt.
+	return configuration.WriteFilesWithHandoff(directory, prepared.Files, &configuration.Handoff{
+		Paths: backend.HostBackendPaths(),
+		Run:   func() error { return backend.RemoveHostBackend(directory) },
+	})
 }
 
 // validateRetainedConfiguration runs before any backend cleanup or file writes.
@@ -498,11 +501,17 @@ func checkConfigurationWorkspaceForPlatform(info *schema.ConfigAndStacksInfo, pl
 // even with an overwrite policy.
 func rejectRuntimeArtifacts(files []schema.ComponentConfigurationFile) error {
 	for _, file := range files {
-		if isRuntimeArtifact(file.Path) {
+		if isRuntimeArtifact(file.Path) && !isAdjacentLockFileCopy(file) {
 			return fmt.Errorf("%w: generated file %s overlaps Terraform state or workdir runtime files", errUtils.ErrPluginInvalidConfig, file.Path)
 		}
 	}
 	return nil
+}
+
+// isAdjacentLockFileCopy reports the provider's literal copy of the lock file beside the unit,
+// which carries the unit's provider pins. Generated lock files at any path stay rejected.
+func isAdjacentLockFileCopy(file schema.ComponentConfigurationFile) bool {
+	return file.UnitFileCopy && file.IfExists == "overwrite" && filepath.ToSlash(filepath.Clean(file.Path)) == ".terraform.lock.hcl"
 }
 
 func isRuntimeArtifact(path string) bool {

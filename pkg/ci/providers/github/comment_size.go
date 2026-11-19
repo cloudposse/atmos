@@ -13,12 +13,12 @@ const issueCommentMaxBytes = 65536
 
 // limitIssueCommentBody keeps the upsert marker and a visible truncation notice
 // ahead of the retained content. The full summary remains untouched at the caller.
-func limitIssueCommentBody(body, marker string) (string, error) {
+// When runURL is non-empty, the notice links to it so readers can open the full output.
+func limitIssueCommentBody(body, marker, runURL string) (string, error) {
 	if len(body) <= issueCommentMaxBytes {
 		return body, nil
 	}
-	const notice = "> [!WARNING]\n> Comment truncated to fit GitHub's size limit. Consult the workflow summary, logs, or artifacts for the full output.\n\n"
-	prefix := notice
+	prefix := truncationNotice(runURL)
 	if marker != "" {
 		prefix = marker + "\n" + prefix
 		body = strings.ReplaceAll(body, marker, "")
@@ -35,4 +35,14 @@ func limitIssueCommentBody(body, marker string) (string, error) {
 		}
 	}
 	return prefix + body, nil
+}
+
+// truncationNotice returns the warning prepended to truncated comments. With a
+// run URL, it links to the run, whose job summary holds the full output.
+func truncationNotice(runURL string) string {
+	const base = "> [!WARNING]\n> Comment truncated to fit GitHub's size limit. Consult the workflow summary, logs, or artifacts for the full output."
+	if runURL == "" {
+		return base + "\n\n"
+	}
+	return base + " [View the full run](" + runURL + ").\n\n"
 }

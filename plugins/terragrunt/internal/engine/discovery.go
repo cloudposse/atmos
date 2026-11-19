@@ -76,6 +76,9 @@ type projectDiscovery struct {
 	// generated records units and stacks reached through parent traversal so an
 	// independent pass cannot discover materialized children again.
 	generated map[string]bool
+	// ownedTrees holds directories of stacks that failed before their outputs could be listed, so
+	// stale materialized children under them are not discovered as standalone units.
+	ownedTrees []string
 	// childFailures holds generated children that failed, with their generation root, so the
 	// failures of stacks that turn out to be templates can be dropped.
 	childFailures []childFailure
@@ -168,6 +171,8 @@ func (d *projectDiscovery) discoverStacks(stacks []string) error {
 				return err
 			}
 			failures[path] = err
+			// Outputs of an earlier generation may remain on disk and still belong to this stack.
+			d.claimDeclaredOutputs(path)
 		}
 	}
 	for _, path := range stacks {
@@ -191,7 +196,7 @@ func (d *projectDiscovery) discoverStacks(stacks []string) error {
 // disk by an earlier generate) belongs to that stack and is not added twice.
 func (d *projectDiscovery) discoverStandaloneUnits(units []string) error {
 	for _, path := range units {
-		if d.skipped(path) || d.generated[path] {
+		if d.skipped(path) || d.generated[path] || d.ownedByFailedStack(path) {
 			continue
 		}
 		dir := filepath.Dir(path)
@@ -447,6 +452,10 @@ func (e *unitEvaluator) resolveUnitInventory(ctx context.Context) (*model.Resolu
 	if err := checkExecutionSyntax(e.environment.FS, cfg, e.path); err != nil {
 		return nil, err
 	}
+	// A literal generated backend fails preparation, so it fails discovery too, before preflight.
+	if err := checkLiteralGeneratedBackends(e.environment.FS, backendConfigurationPaths(cfg, e.path)); err != nil {
+		return nil, err
+	}
 	result := &model.Resolution{Path: e.path, Files: append(e.pctx.FilesRead.Paths(), e.path)}
 	if err := applyParity(cfg, e.request, e.path, result); err != nil {
 		return nil, err
@@ -454,7 +463,9 @@ func (e *unitEvaluator) resolveUnitInventory(ctx context.Context) (*model.Resolu
 	if err := inventoryWorkspaceProblem(e.request, cfg, e.path); err != nil {
 		return nil, err
 	}
-	if err := inventorySource(e.environment, cfg, e.path, result); err != nil {
+	if err := inventorySource(e.environment, cfg, e.path, result); err != nil && !e.operationExcluded(result) {
+		// A unit that cannot run this operation keeps its evaluated exclusion, so the bulk
+		// pre-flight skips it instead of rejecting the run; an active unit still fails.
 		return nil, err
 	}
 	if err := e.populateInventoryDependencies(cfg, result); err != nil {
@@ -463,17 +474,26 @@ func (e *unitEvaluator) resolveUnitInventory(ctx context.Context) (*model.Resolu
 	return result, nil
 }
 
-// populateInventoryDependencies keeps output reads in the scheduling dependency set.
+// operationExcluded reports whether the unit's exclude block makes the requested operation a no-op.
+func (e *unitEvaluator) operationExcluded(result *model.Resolution) bool {
+	return PreventsRun(result.Exclude, OperationCommand(e.request.Command, e.request.Arguments))
+}
+
+// populateInventoryDependencies keeps output reads in the scheduling dependency set. A unit that
+// cannot run the operation is not validated against its dependencies. When its block sets
+// exclude_dependencies the scheduler still needs the edges to exclude the targets, so the resolvable
+// ones are kept and unresolvable targets are tolerated.
 func (e *unitEvaluator) populateInventoryDependencies(cfg *config.TerragruntConfig, result *model.Resolution) error {
-	if PreventsRun(result.Exclude, OperationCommand(e.request.Command, e.request.Arguments)) {
+	excluded := e.operationExcluded(result)
+	if excluded && !result.Exclude.ExcludeDependencies {
 		return nil
 	}
 	var err error
-	if result.OutputDependencies, err = outputDependencies(e.environment, cfg, e.path); err != nil {
+	if result.OutputDependencies, err = outputDependencies(e.environment, cfg, e.path, excluded); err != nil {
 		return err
 	}
 	// Output reads also require a scheduling edge before preparation.
-	order, err := orderDependencies(e.environment, cfg, e.path)
+	order, err := orderDependencies(e.environment, cfg, e.path, excluded)
 	if err != nil {
 		return err
 	}
@@ -485,7 +505,9 @@ func (e *unitEvaluator) populateInventoryDependencies(cfg *config.TerragruntConf
 	return nil
 }
 
-func outputDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string) ([]string, error) {
+// outputDependencies lists the units whose outputs the unit reads. With tolerant set, a target that
+// cannot be resolved is skipped instead of failing the unit.
+func outputDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string, tolerant bool) ([]string, error) {
 	var result []string
 	for _, dep := range cfg.TerragruntDependencies {
 		if (dep.Enabled != nil && !*dep.Enabled) || (dep.SkipOutputs != nil && *dep.SkipOutputs) {
@@ -495,10 +517,16 @@ func outputDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntCon
 			continue
 		}
 		if dep.ConfigPath.Type() != cty.String {
+			if tolerant {
+				continue
+			}
 			return nil, fmt.Errorf("%w: unit %s, dependency %q", errDependencyConfigPath, path, dep.Name)
 		}
 		physical, err := dependencyConfigPath(environment, path, dep.ConfigPath.AsString())
 		if err != nil {
+			if tolerant {
+				continue
+			}
 			return nil, err
 		}
 		if !slices.Contains(result, physical) {
@@ -508,7 +536,8 @@ func outputDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntCon
 	return result, nil
 }
 
-func orderDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string) ([]string, error) {
+// orderDependencies lists the units the unit waits for, tolerating unresolvable targets as outputDependencies does.
+func orderDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string, tolerant bool) ([]string, error) {
 	if cfg.Dependencies == nil {
 		return nil, nil
 	}
@@ -516,6 +545,9 @@ func orderDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConf
 	for _, dependency := range cfg.Dependencies.Paths {
 		physical, err := dependencyConfigPath(environment, path, dependency)
 		if err != nil {
+			if tolerant {
+				continue
+			}
 			return nil, err
 		}
 		if !slices.Contains(result, physical) {

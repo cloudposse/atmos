@@ -19,7 +19,7 @@ Use this skill for global `atmos.yaml` options that are not owned by a narrower 
 | `logs` | Log level, log file path, log color, debug output behavior |
 | `errors` | Error output formatting and error reporting options |
 | `env` | Environment variables applied to Atmos operations |
-| `docs` | Documentation generation defaults |
+| `docs` | Documentation generation defaults, including `docs.generate.<type>.hooks` (`before.docs.generate`/`after.docs.generate`; see `atmos-hooks`) |
 | `metadata` | Project-level metadata such as name, tags, and version |
 | `version` | Minimum or maximum Atmos version constraints |
 
