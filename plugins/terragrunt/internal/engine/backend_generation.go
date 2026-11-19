@@ -185,8 +185,13 @@ func nonBackendGeneration(disabled, disabledKnown bool, path string, pathOK bool
 	if !disabledKnown || disabled {
 		return disabledKnown && disabled
 	}
+	// JSON syntax read without an evaluation context returns a template literally, such as
+	// ${"backend.tf"}. It is dynamic and could name a backend file once evaluated, so it fails closed.
+	if !pathOK || strings.Contains(path, "${") || strings.Contains(path, "%{") {
+		return false
+	}
 	path = filepath.Clean(path)
-	if !pathOK || !filepath.IsLocal(path) || path == "." {
+	if !filepath.IsLocal(path) || path == "." {
 		return false
 	}
 	if !terraformConfigurationFile(path) {

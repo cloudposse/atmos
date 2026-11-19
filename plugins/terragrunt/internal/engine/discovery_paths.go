@@ -167,6 +167,11 @@ func (w *discoveryWalker) walk(pattern string) error {
 		w.scan.Warnings = append(w.scan.Warnings, symlinkWarning(link))
 		return nil
 	}
+	// A scoped walk starts below the project root, so it never visits the directories above its
+	// start; they get the same pruning a root-wide scan applies, such as .terragrunt-cache.
+	if prunedAncestor(w.root, start) {
+		return nil
+	}
 	return filepath.WalkDir(start, func(path string, entry fs.DirEntry, walkErr error) error {
 		if os.IsNotExist(walkErr) && path == start {
 			return nil
@@ -176,6 +181,26 @@ func (w *discoveryWalker) walk(pattern string) error {
 		}
 		return w.visit(path, entry)
 	})
+}
+
+// prunedDirectory reports a directory discovery never descends into: hidden directories, such as
+// .terragrunt-cache and .terragrunt-stack, and node_modules.
+func prunedDirectory(name string) bool {
+	return strings.HasPrefix(name, ".") || name == "node_modules"
+}
+
+// prunedAncestor reports whether a directory between root and start, inclusive of start, is pruned.
+func prunedAncestor(root, start string) bool {
+	rel, err := filepath.Rel(root, start)
+	if err != nil || rel == "." {
+		return false
+	}
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if prunedDirectory(part) {
+			return true
+		}
+	}
+	return false
 }
 
 // symlinkedAncestor reports the first directory symlink between root and start, inclusive of start,
@@ -219,7 +244,7 @@ func (w *discoveryWalker) visit(path string, entry fs.DirEntry) error {
 		}
 	}
 	if entry.IsDir() {
-		if path != w.root && (strings.HasPrefix(entry.Name(), ".") || entry.Name() == "node_modules") {
+		if path != w.root && prunedDirectory(entry.Name()) {
 			return filepath.SkipDir
 		}
 		return nil

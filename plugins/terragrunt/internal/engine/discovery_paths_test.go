@@ -699,3 +699,20 @@ func TestDiscoveryDistinguishesLogicalUnitAliases(t *testing.T) {
 	require.Equal(t, []string{"default/alias", "default/root"}, inventoryNames(t, result))
 	require.NotEqual(t, result.Inventory[0].Config.Path, result.Inventory[1].Config.Path)
 }
+
+// A scope below a pruned directory finds nothing, exactly like a root-wide scan, while ordinary
+// scopes stay discoverable.
+func TestScopedWalkPrunesItsAncestors(t *testing.T) {
+	root := scanTree(t, "live/.terragrunt-cache/run/terragrunt.hcl", "live/node_modules/pkg/terragrunt.hcl", "live/prod/vpc/terragrunt.hcl")
+	for _, pattern := range []string{"live/.terragrunt-cache/run", "live/node_modules/pkg/**"} {
+		scan, err := discoveryPaths(root, []string{pattern}, nil)
+		require.NoError(t, err)
+		require.Empty(t, relativeUnits(t, root, scan), pattern)
+	}
+	scan, err := discoveryPaths(root, []string{"live/prod"}, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/prod/vpc/terragrunt.hcl"}, relativeUnits(t, root, scan))
+	scan, err = discoveryPaths(root, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/prod/vpc/terragrunt.hcl"}, relativeUnits(t, root, scan), "the root-wide scan agrees")
+}

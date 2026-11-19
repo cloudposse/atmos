@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/stretchr/testify/require"
 )
 
@@ -328,5 +329,30 @@ func TestOpenTofuGeneratedBackendRejected(t *testing.T) {
 				require.ErrorIs(t, err, ErrUnsupportedExecution)
 			})
 		}
+	}
+}
+
+// A JSON generate path is read without evaluation, so a template such as ${"backend.tf"} reaches the
+// check literally. It could name a backend file once evaluated, so it fails closed.
+func TestBackendGenerationRejectsInterpolatedJSONPaths(t *testing.T) {
+	for name, test := range map[string]struct {
+		path string
+		safe bool
+	}{
+		"interpolated": {path: `${\"backend.tf\"}`},
+		"directive":    {path: `%{if true}backend.tf%{endif}`},
+		"literal":      {path: "extra.txt", safe: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			content := `{"generate": {"extra": {"path": "` + test.path + `", "if_exists": "overwrite", "contents": "terraform { backend \"s3\" {} }"}}}`
+			file, diagnostics := hclparse.NewParser().ParseJSON([]byte(content), "terragrunt.hcl.json")
+			require.False(t, diagnostics.HasErrors(), diagnostics.Error())
+			err := checkBackendGenerationFile(file)
+			if test.safe {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, ErrUnsupportedExecution)
+		})
 	}
 }
