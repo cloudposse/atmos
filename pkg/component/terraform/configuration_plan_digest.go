@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -335,74 +334,22 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed fu
 			return run()
 		}
 		s.observed = path
-		writtenPath := s.writtenPlanPath(path, phaseArgs)
-		// A plan already at the output path was not written by this run. It is moved aside so that only a
-		// file this subprocess creates can be fingerprinted, and it is restored if none is created, which
-		// also covers help-only runs that exit successfully without writing a plan.
+		// The engine output path differs from the bound path when a policy publishes the artifact.
+		writtenPath := path
+		if s.execCtx.planPolicy != nil {
+			writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
+		}
+		// A plan already at the output path was not written by this run. It is emptied in place, with a
+		// private copy kept, so that only a plan this subprocess writes can be fingerprinted, and it is
+		// restored if none is written, which also covers help-only runs that exit successfully.
 		settleStale, stashErr := stashStalePlan(s.execCtx.componentPath, effectiveDataDir(s.config, s.info), writtenPath)
-		defer s.settleStaleStash(settleStale, &runResult, failed)
+		defer func() { runResult = s.settle(settleStale, runResult, failed) }()
 		if stashErr != nil {
 			s.err = stashErr
 			return run()
 		}
-		return s.observeRun(path, writtenPath, run, failed)
+		return s.observe(path, writtenPath, run, failed)
 	}
-}
-
-// writtenPlanPath returns where the engine writes the plan. It differs from the bound path when a
-// policy publishes the artifact.
-func (s *planSnapshotter) writtenPlanPath(path string, phaseArgs []string) string {
-	if s.execCtx.planPolicy != nil {
-		return plannedOutputPath(s.execCtx.componentPath, phaseArgs)
-	}
-	return path
-}
-
-// settleStaleStash settles the stashed earlier plan once the observation is complete. A plan that could
-// not be restored stays in its stash, and the binding fails naming it. When Terraform also failed, the
-// stash location joins its error: the pipeline returns that error before the binding is read, and the
-// exit code the hooks classify is unchanged. The earlier plan is discarded only when the phase
-// succeeded by the same classification the binding uses; a failed run never displaces it, even when
-// it left a partial plan behind.
-func (s *planSnapshotter) settleStaleStash(settle func(succeeded bool) error, runResult *error, failed func(error) bool) {
-	if err := settle(!failed(*runResult)); err != nil {
-		s.result, s.err = nil, err
-		if *runResult != nil {
-			*runResult = errors.Join(*runResult, err)
-		}
-	}
-}
-
-// observeRun fingerprints the configuration before and after one subprocess run and keeps the unchanged
-// snapshot for the binding.
-func (s *planSnapshotter) observeRun(path, writtenPath string, run func() error, failed func(error) bool) error {
-	before, beforeErr := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
-	runErr := run()
-	if beforeErr != nil {
-		// The command still completes and its outcome is reported; the binding is what fails.
-		s.err = beforeErr
-		return runErr
-	}
-	after, err := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
-	switch {
-	case err != nil:
-		s.err = err
-	case *after != *before:
-		s.err = fmt.Errorf("%w: configuration changed while Terraform ran", errUtils.ErrPlanVerificationFailed)
-	default:
-		// Fingerprint the actual engine output before after hooks, including private policy plans.
-		if failed(runErr) {
-			return runErr
-		}
-		digest, digestErr := writtenPlanDigest(writtenPath)
-		if digestErr != nil {
-			s.err = digestErr
-			return digestErr
-		}
-		after.planDigest = digest
-		s.result = after
-	}
-	return runErr
 }
 
 // reviewedSnapshot returns the configuration Terraform read, or takes a fresh snapshot when no
