@@ -1084,3 +1084,40 @@ func TestTransformsSensitiveInputsWhenAnExpandedMergeArgumentReplacesTheKey(t *t
 		})
 	}
 }
+
+// A file read by read_terragrunt_config resolves its own nested reads relative to its own directory, so a
+// public file of the same name next to the caller cannot stand in for the one the target reads.
+func TestSensitiveInputsResolveNestedReadsFromTheTargetFile(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "repo")
+	unit := filepath.Join(root, "app", unitFile)
+	target := filepath.Join(root, "app", "sub", "target.hcl")
+	nested := filepath.Join(root, "app", "sub", "nested.hcl")
+	decoy := filepath.Join(root, "app", "nested.hcl")
+	const read = `read_terragrunt_config("sub/target.hcl").inputs.token`
+	const targetBody = `inputs = { token = read_terragrunt_config("nested.hcl").inputs.token }`
+	for _, test := range []struct {
+		name  string
+		files map[string]string
+		want  [][]string
+	}{
+		{"decoy next to the caller cannot mask a sensitive nested read", map[string]string{target: targetBody, nested: `inputs = { token = sensitive("s") }`, decoy: `inputs = { token = "t" }`}, [][]string{{"copy"}}},
+		{"nested read relative to the target holding nothing sensitive", map[string]string{target: targetBody, nested: `inputs = { token = "t" }`, decoy: `inputs = { token = "t" }`}, nil},
+		{"nested read in the same directory as the caller", map[string]string{target: targetBody, decoy: `inputs = { token = sensitive("s") }`}, [][]string{{"copy"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			require.NoError(t, fsys.MkdirAll(filepath.Dir(target), 0o755))
+			files := map[string]string{unit: "inputs = {\n copy = " + read + "\n}\n"}
+			for name, content := range test.files {
+				files[name] = content
+			}
+			writeFiles(t, fsys, files)
+			read := []string{unit}
+			for name := range test.files {
+				read = append(read, name)
+			}
+
+			assert.Equal(t, test.want, SensitiveInputs(fsys, read, map[string]any{"copy": "s"}))
+		})
+	}
+}

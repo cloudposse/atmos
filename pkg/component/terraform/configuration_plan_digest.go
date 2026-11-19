@@ -339,8 +339,8 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed fu
 		// A plan already at the output path was not written by this run. It is moved aside so that only a
 		// file this subprocess creates can be fingerprinted, and it is restored if none is created, which
 		// also covers help-only runs that exit successfully without writing a plan.
-		settleStale, stashErr := stashStalePlan(s.execCtx.componentPath, writtenPath)
-		defer s.settleStaleStash(settleStale, &runResult)
+		settleStale, stashErr := stashStalePlan(s.execCtx.componentPath, effectiveDataDir(s.config, s.info), writtenPath)
+		defer s.settleStaleStash(settleStale, &runResult, failed)
 		if stashErr != nil {
 			s.err = stashErr
 			return run()
@@ -361,9 +361,11 @@ func (s *planSnapshotter) writtenPlanPath(path string, phaseArgs []string) strin
 // settleStaleStash settles the stashed earlier plan once the observation is complete. A plan that could
 // not be restored stays in its stash, and the binding fails naming it. When Terraform also failed, the
 // stash location joins its error: the pipeline returns that error before the binding is read, and the
-// exit code the hooks classify is unchanged.
-func (s *planSnapshotter) settleStaleStash(settle func() error, runResult *error) {
-	if err := settle(); err != nil {
+// exit code the hooks classify is unchanged. The earlier plan is discarded only when the phase
+// succeeded by the same classification the binding uses; a failed run never displaces it, even when
+// it left a partial plan behind.
+func (s *planSnapshotter) settleStaleStash(settle func(succeeded bool) error, runResult *error, failed func(error) bool) {
+	if err := settle(!failed(*runResult)); err != nil {
 		s.result, s.err = nil, err
 		if *runResult != nil {
 			*runResult = errors.Join(*runResult, err)
@@ -545,17 +547,15 @@ func placeDataDir(root, dataDir string) dataDirPlacement {
 }
 
 // insideDataDirOutsideModules reports whether path holds mutable data of the data directory, which is
-// everything but its modules subtree. When the data directory contains the workdir itself, only the
-// established runtime paths count: the rest is the reviewed configuration, which must stay bound.
+// limited to the established runtime paths outside its modules subtree. Anything else beside them
+// is the reviewed configuration, which must stay bound: a custom data directory such as `data` can sit
+// next to local module sources (`data/child`) that Terraform executes during apply.
 func (s workdirScope) insideDataDirOutsideModules(path string) bool {
 	relative, ok := relativeInside(s.dataDir, path)
 	if !ok || relative == "." || inModulesSubtree(relative) {
 		return false
 	}
-	if s.placement == dataDirOverlapsWorkdir {
-		return establishedRuntimePath(relative)
-	}
-	return true
+	return establishedRuntimePath(relative)
 }
 
 // establishedRuntimePath reports whether a path relative to a data directory is data Terraform

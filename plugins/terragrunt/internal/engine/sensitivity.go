@@ -368,11 +368,11 @@ func (s *sensitivityScanner) readsSensitiveConfig(call *hclsyntax.FunctionCallEx
 	if !ok {
 		return true
 	}
-	target := includedBody(path, s.file, s.bodies)
+	target, targetFile := includedFile(path, s.file, s.bodies)
 	if target == nil || slices.ContainsFunc(target.Blocks, func(block *hclsyntax.Block) bool { return block.Type == "include" }) {
 		return true
 	}
-	reader := &sensitivityScanner{locals: localExpressions(target), file: s.file, bodies: s.bodies}
+	reader := &sensitivityScanner{locals: localExpressions(target), file: targetFile, bodies: s.bodies}
 	expressions := make([]hclsyntax.Expression, 0, len(reader.locals)+1)
 	if attribute := target.Attributes[inputsName]; attribute != nil {
 		expressions = append(expressions, attribute.Expr)
@@ -429,16 +429,23 @@ func exposedIncludePath(block *hclsyntax.Block, evaluated config.IncludeConfigsM
 
 // includedBody finds the parsed include at the unit directory or an ancestor.
 func includedBody(path, file string, bodies map[string]*hclsyntax.Body) *hclsyntax.Body {
+	body, _ := includedFile(path, file, bodies)
+	return body
+}
+
+// includedFile resolves path like includedBody and also returns the filename the body was found under, which
+// is the base for any configuration that file reads in turn.
+func includedFile(path, file string, bodies map[string]*hclsyntax.Body) (*hclsyntax.Body, string) {
 	for dir := filepath.Dir(file); ; dir = filepath.Dir(dir) {
 		candidate := filepath.Clean(path)
 		if !filepath.IsAbs(path) {
 			candidate = filepath.Join(dir, path)
 		}
 		if included := bodies[candidate]; included != nil {
-			return included
+			return included, candidate
 		}
 		if parent := filepath.Dir(dir); parent == dir || filepath.IsAbs(path) {
-			return nil
+			return nil, ""
 		}
 	}
 }

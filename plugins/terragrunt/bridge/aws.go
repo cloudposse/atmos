@@ -441,14 +441,16 @@ func (t *awsTransport) prefixBeforeSigning(stack *middleware.Stack) error {
 // the service.
 var ssoOperationPaths = map[string]string{"SSO/GetRoleCredentials": "/federation/credentials", "SSO OIDC/CreateToken": "/token"}
 
-// pinSSOEndpoint keeps the bearer-token requests of SSO and SSO OIDC clients on AWS hosts. The SDK builds the
-// clients of an SSO profile before it applies service options and reads AWS_ENDPOINT_URL[_SSO[_OIDC]] from the
-// plugin process itself, so a process endpoint would otherwise receive the token. A request resolved to any
-// other host goes to the default AWS host of the client's region instead, where the invocation transport
-// applies the endpoint the invocation approved, if any. A call without a known default fails closed.
+// pinSSOEndpoint keeps the bearer-token requests of SSO and SSO OIDC clients on the regional service host. The
+// SDK builds the clients of an SSO profile before it applies service options and reads
+// AWS_ENDPOINT_URL[_SSO[_OIDC]] from the plugin process itself, so a process endpoint would otherwise receive
+// the token, and a host that merely ends in an AWS suffix is no safer than any other. A request resolved to
+// any host but the canonical one goes to the canonical host of the client's region instead, where the
+// invocation transport applies the endpoint the invocation approved, if any. A call without a known operation
+// or region fails closed.
 func pinSSOEndpoint(ctx context.Context, req *smithyhttp.Request) error {
 	service := awsmiddleware.GetServiceID(ctx)
-	if service != "SSO" && service != "SSO OIDC" || isAWSHost(req.URL.Hostname()) {
+	if service != "SSO" && service != "SSO OIDC" {
 		return nil
 	}
 	path, known := ssoOperationPaths[service+"/"+awsmiddleware.GetOperationName(ctx)]
@@ -463,6 +465,9 @@ func pinSSOEndpoint(ctx context.Context, req *smithyhttp.Request) error {
 	host := "oidc." + region + "." + domain
 	if service == "SSO" {
 		host = "portal.sso." + region + "." + domain
+	}
+	if req.URL.Scheme == "https" && req.URL.Host == host {
+		return nil
 	}
 	req.URL.Scheme, req.URL.Host, req.URL.Path, req.URL.RawPath = "https", host, path, ""
 	req.Host = ""

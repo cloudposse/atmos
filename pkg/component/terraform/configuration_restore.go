@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -318,7 +320,10 @@ func (r *reviewedRebuild) verify(workdir string) error {
 			WithHint("Restore `.terraform.lock.hcl` together with the plan (`atmos terraform planfile download` does), or create a new plan.").
 			Err()
 	}
-	return r.verifySensitiveFiles(workdir)
+	if err := r.verifySensitiveFiles(workdir); err != nil {
+		return err
+	}
+	return verifyPublicRecords(workdir, r.plan.PublicFiles)
 }
 
 // verifySensitiveFiles checks the sensitive generated files, which the rebuild digest may exclude (for
@@ -559,7 +564,13 @@ func (s workdirScope) normalizeModuleManifest(raw []byte) []byte {
 	return normalized
 }
 
-// relativeModuleDir returns dir relative to the data directory, or dir unchanged when it lies elsewhere.
+// normalizedModuleDirPrefix marks a manifest Dir that was rewritten relative to the data directory. A NUL
+// byte cannot occur in a path, so a Dir that was already relative and lies outside the data directory
+// never collides with a rewritten one, and changing the selected module directory changes the digest.
+const normalizedModuleDirPrefix = "\x00data-dir/"
+
+// relativeModuleDir returns dir as a marked path relative to the data directory, or dir unchanged when it
+// lies elsewhere.
 func (s workdirScope) relativeModuleDir(dir string) string {
 	native := filepath.FromSlash(dir)
 	if !filepath.IsAbs(native) {
@@ -570,7 +581,27 @@ func (s workdirScope) relativeModuleDir(dir string) string {
 		return dir
 	}
 	if relative, ok := relativeInside(s.dataDir, resolved); ok {
-		return filepath.ToSlash(relative)
+		return normalizedModuleDirPrefix + filepath.ToSlash(relative)
 	}
 	return dir
+}
+
+// verifyPublicRecords checks every recorded public file in workdir against its record. A rebuilt workdir
+// digest can exclude generated files (for example below a Terragrunt cache), so each record is verified
+// directly. Files with a removal policy have no record and therefore stay absent without error.
+func verifyPublicRecords(workdir string, records map[string]publicFileRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+	root, err := os.OpenRoot(workdir)
+	if err != nil {
+		return planIOError(err)
+	}
+	defer root.Close()
+	for _, path := range slices.Sorted(maps.Keys(records)) {
+		if _, err := verifyPublicFile(root, path, records[path]); err != nil {
+			return err
+		}
+	}
+	return nil
 }

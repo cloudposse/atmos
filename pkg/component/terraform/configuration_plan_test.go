@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1793,6 +1795,153 @@ func TestWorkdirDigestHashesAnUnparseableModuleManifest(t *testing.T) {
 	assert.NotEqual(t, base, changed)
 }
 
+// A manifest Dir that was already relative and lies outside the data directory must not collide with a
+// Dir rewritten relative to the data directory, or changing the selected module directory goes unnoticed.
+func TestWorkdirDigestDistinguishesNormalizedModuleDirsFromRelativeOnes(t *testing.T) {
+	root := t.TempDir()
+	plan := filepath.Join(root, "reviewed.planfile")
+	writeDigestFile(t, root, "main.tf", "module")
+	writeManifestDir := func(dataDir, dir string) {
+		t.Helper()
+		writeDigestFile(t, dataDir, "modules/vpc/script.sh", "script")
+		manifest := map[string]any{"Modules": []map[string]string{{"Key": "vpc", "Source": "registry/vpc", "Dir": dir}}}
+		data, err := json.Marshal(manifest)
+		require.NoError(t, err)
+		writeDigestFile(t, dataDir, "modules/modules.json", string(data))
+	}
+	inside := t.TempDir()
+	writeManifestDir(inside, filepath.ToSlash(filepath.Join(inside, "modules", "vpc")))
+	insideWorkdir, insideRebuild := bothDigests(t, root, plan, inside)
+
+	tests := []struct {
+		name string
+		dir  string
+		same bool
+	}{
+		{name: "relative Dir that spells the normalized path", dir: "modules/vpc"},
+		{name: "relative Dir elsewhere", dir: "other/vpc"},
+		{name: "Dir below the data directory on another runner root", dir: "", same: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			other := t.TempDir()
+			dir := test.dir
+			if test.same {
+				dir = filepath.ToSlash(filepath.Join(other, "modules", "vpc"))
+			}
+			writeManifestDir(other, dir)
+			workdir, rebuild := bothDigests(t, root, plan, other)
+			if test.same {
+				assert.Equal(t, insideWorkdir, workdir)
+				assert.Equal(t, insideRebuild, rebuild)
+				return
+			}
+			assert.NotEqual(t, insideWorkdir, workdir)
+			assert.NotEqual(t, insideRebuild, rebuild)
+		})
+	}
+}
+
+// A custom data directory below the workdir may sit beside local module sources. Only the runtime files
+// Terraform writes there stay excluded, so a changed neighbor such as data/child moves the digest.
+func TestWorkdirDigestKeepsLocalModulesBesideACustomDataDir(t *testing.T) {
+	root := t.TempDir()
+	plan := filepath.Join(root, "reviewed.planfile")
+	writeDigestFile(t, root, "main.tf", "module")
+	writeDigestFile(t, root, "data/child/main.tf", "reviewed child")
+	writeDigestFile(t, root, "data/environment", "default")
+	writeDigestFile(t, root, "data/terraform.tfstate", "state")
+	writeDigestFile(t, root, "data/providers/registry/lock.json", "provider")
+	baseWorkdir, baseRebuild := bothDigests(t, root, plan, "data")
+
+	tests := []struct {
+		name    string
+		file    string
+		content string
+		same    bool
+	}{
+		{name: "workspace marker", file: "data/environment", content: "other", same: true},
+		{name: "backend state", file: "data/terraform.tfstate", content: "other", same: true},
+		{name: "installed provider", file: "data/providers/registry/lock.json", content: "other", same: true},
+		{name: "neighboring local module", file: "data/child/main.tf", content: "tampered child"},
+		{name: "new neighboring local module file", file: "data/child/extra.tf", content: "extra"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			writeDigestFile(t, root, test.file, test.content)
+			t.Cleanup(func() {
+				if test.same {
+					return
+				}
+				writeDigestFile(t, root, "data/child/main.tf", "reviewed child")
+				require.NoError(t, os.RemoveAll(filepath.Join(root, "data", "child", "extra.tf")))
+			})
+			workdir, rebuild := bothDigests(t, root, plan, "data")
+			if test.same {
+				assert.Equal(t, baseWorkdir, workdir)
+				assert.Equal(t, baseRebuild, rebuild)
+				return
+			}
+			assert.NotEqual(t, baseWorkdir, workdir)
+			assert.NotEqual(t, baseRebuild, rebuild)
+		})
+	}
+}
+
+// A rebuilt workdir must still hold every recorded public file, even where the rebuild digest does not
+// look (below a Terragrunt cache). Files absent under a removal policy have no record and stay absent.
+func TestVerifyRebuildChecksRecordedPublicFiles(t *testing.T) {
+	const cached = ".terragrunt-cache/unit/generated.tf"
+	build := func(t *testing.T) (*reviewedRebuild, string) {
+		t.Helper()
+		workdir := t.TempDir()
+		plan := filepath.Join(workdir, "reviewed.planfile")
+		writeDigestFile(t, workdir, "main.tf", "module")
+		writeDigestFile(t, workdir, cached, "reviewed")
+		digest, err := configurationRebuildDigest(workdir, plan, "", nil)
+		require.NoError(t, err)
+		sum := sha256.Sum256([]byte("reviewed"))
+		reviewed := &configurationPlan{
+			RebuildDigest: digest,
+			Prepared:      &schema.PreparedComponentConfiguration{},
+			PublicFiles: map[string]publicFileRecord{
+				cached:      {Present: true, Digest: hex.EncodeToString(sum[:])},
+				"absent.tf": {},
+			},
+		}
+		return &reviewedRebuild{plan: reviewed, planPath: plan, workdir: workdir}, workdir
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(t *testing.T, workdir string)
+		fails  bool
+	}{
+		{name: "unchanged files verify", mutate: func(*testing.T, string) {}},
+		{name: "changed public file", fails: true, mutate: func(t *testing.T, workdir string) {
+			writeDigestFile(t, workdir, cached, "tampered")
+		}},
+		{name: "missing public file", fails: true, mutate: func(t *testing.T, workdir string) {
+			require.NoError(t, os.Remove(filepath.Join(workdir, filepath.FromSlash(cached))))
+		}},
+		{name: "file recorded absent now present", fails: true, mutate: func(t *testing.T, workdir string) {
+			writeDigestFile(t, workdir, "absent.tf", "appeared")
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			rebuild, workdir := build(t)
+			test.mutate(t, workdir)
+			err := rebuild.verify(workdir)
+			if test.fails {
+				require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 // The failure to resolve the retained base path keeps its cause and is classified as a workdir failure.
 func TestUseRetainedWorkdirWrapsABasePathFailure(t *testing.T) {
 	cause := errors.New("working directory unreadable")
@@ -1812,7 +1961,7 @@ func TestStashStalePlanRejectsDirectoryOutputs(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(output, "keep"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(output, "keep", "file"), []byte("data"), 0o600))
 
-	_, err := stashStalePlan("", output)
+	_, err := stashStalePlan("", "", output)
 
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	data, readErr := os.ReadFile(filepath.Join(output, "keep", "file"))
@@ -1827,14 +1976,14 @@ func TestStalePlanStashStaysOutOfDownloadedModules(t *testing.T) {
 	plan := filepath.Join(modules, "reviewed.plan")
 	require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
 
-	settle, err := stashStalePlan(root, plan)
+	settle, err := stashStalePlan(root, "", plan)
 	require.NoError(t, err)
 	entries, err := os.ReadDir(modules)
 	require.NoError(t, err)
 	require.Len(t, entries, 1, "the stash must not be created inside the digested module tree")
 	require.Equal(t, "reviewed.plan", entries[0].Name())
 
-	require.NoError(t, settle())
+	require.NoError(t, settle(true))
 	data, err := os.ReadFile(plan)
 	require.NoError(t, err)
 	require.Equal(t, "earlier", string(data))
@@ -1852,7 +2001,7 @@ func TestStalePlanStashIsKeptWhenRestoreFails(t *testing.T) {
 	plan := filepath.Join(out, "reviewed.plan")
 	require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
 
-	settle, err := stashStalePlan("", plan)
+	settle, err := stashStalePlan("", "", plan)
 	require.NoError(t, err)
 	stashes, err := filepath.Glob(filepath.Join(out, stalePlanDirPrefix+"*", "plan"))
 	require.NoError(t, err)
@@ -1860,7 +2009,7 @@ func TestStalePlanStashIsKeptWhenRestoreFails(t *testing.T) {
 	// A read-only plan file makes writing the earlier contents back fail.
 	require.NoError(t, os.Chmod(plan, 0o400))
 
-	err = settle()
+	err = settle(true)
 
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.ErrorContains(t, err, stashes[0])
@@ -1876,7 +2025,7 @@ func TestStalePlanStashEmptiesThePlanInPlace(t *testing.T) {
 	before, err := os.Stat(target)
 	require.NoError(t, err)
 
-	settle, err := stashStalePlan("", target)
+	settle, err := stashStalePlan("", "", target)
 	require.NoError(t, err)
 
 	after, err := os.Stat(target)
@@ -1897,7 +2046,7 @@ func TestStalePlanStashEmptiesThePlanInPlace(t *testing.T) {
 
 	// A run that writes a plan keeps it, and the stash is discarded.
 	require.NoError(t, os.WriteFile(target, []byte("fresh"), 0o600))
-	require.NoError(t, settle())
+	require.NoError(t, settle(true))
 	data, err := os.ReadFile(target)
 	require.NoError(t, err)
 	require.Equal(t, "fresh", string(data))
@@ -1913,7 +2062,7 @@ func TestStalePlanStashWritesThroughASymlink(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 
-	settle, err := stashStalePlan("", link)
+	settle, err := stashStalePlan("", "", link)
 	require.NoError(t, err)
 	info, err := os.Lstat(link)
 	require.NoError(t, err)
@@ -1923,7 +2072,7 @@ func TestStalePlanStashWritesThroughASymlink(t *testing.T) {
 	require.Empty(t, data, "the target is emptied, as Terraform would rewrite it through the link")
 
 	// A run that writes nothing gets the earlier plan back in the target.
-	require.NoError(t, settle())
+	require.NoError(t, settle(true))
 	data, err = os.ReadFile(target)
 	require.NoError(t, err)
 	require.Equal(t, "earlier", string(data))
@@ -1962,4 +2111,177 @@ func TestFailedRunReportsTheStashLocation(t *testing.T) {
 	require.Equal(t, 1, errUtils.GetExitCode(err), "the exit code the hooks classify is unchanged")
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.ErrorContains(t, err, stalePlanDirPrefix, "the operator learns where the earlier plan is kept")
+}
+
+func TestStalePlanStashStaysOutOfTheEffectiveModulesDirectory(t *testing.T) {
+	t.Run("custom data directory below the workdir", func(t *testing.T) {
+		root := t.TempDir()
+		modules := filepath.Join(root, "custom-data", modulesDirName)
+		require.NoError(t, os.MkdirAll(modules, 0o755))
+		plan := filepath.Join(modules, "reviewed.plan")
+		require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+
+		settle, err := stashStalePlan(root, "custom-data", plan)
+		require.NoError(t, err)
+		entries, err := os.ReadDir(modules)
+		require.NoError(t, err)
+		require.Len(t, entries, 1, "the stash must not be created inside the digested custom modules tree")
+		require.Equal(t, "reviewed.plan", entries[0].Name())
+
+		require.NoError(t, settle(true))
+		data, err := os.ReadFile(plan)
+		require.NoError(t, err)
+		require.Equal(t, "earlier", string(data))
+		rootEntries, err := os.ReadDir(root)
+		require.NoError(t, err)
+		require.Len(t, rootEntries, 1, "only the data directory remains once the stash is settled")
+	})
+
+	t.Run("data directory outside the workdir", func(t *testing.T) {
+		root := t.TempDir()
+		external := t.TempDir()
+		modules := filepath.Join(external, modulesDirName)
+		require.NoError(t, os.MkdirAll(modules, 0o755))
+		plan := filepath.Join(modules, "reviewed.plan")
+		require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+
+		settle, err := stashStalePlan(root, external, plan)
+		require.NoError(t, err)
+		entries, err := os.ReadDir(modules)
+		require.NoError(t, err)
+		require.Len(t, entries, 1, "the stash must not be created inside the external modules tree")
+		stashes, err := filepath.Glob(filepath.Join(root, stalePlanDirPrefix+"*", "plan"))
+		require.NoError(t, err)
+		require.Len(t, stashes, 1, "the stash moves to the component directory")
+
+		require.NoError(t, settle(true))
+		require.NoDirExists(t, filepath.Dir(stashes[0]))
+	})
+
+	t.Run("a plan outside every modules directory keeps its stash beside it", func(t *testing.T) {
+		root := t.TempDir()
+		plan := filepath.Join(root, "reviewed.plan")
+		require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+
+		settle, err := stashStalePlan(root, "custom-data", plan)
+		require.NoError(t, err)
+		stashes, err := filepath.Glob(filepath.Join(root, stalePlanDirPrefix+"*", "plan"))
+		require.NoError(t, err)
+		require.Len(t, stashes, 1)
+		require.NoError(t, settle(true))
+	})
+}
+
+func TestStalePlanSettlementFollowsTheRunOutcome(t *testing.T) {
+	tests := []struct {
+		name        string
+		succeeded   bool
+		replacement string
+		want        string
+	}{
+		{name: "a successful run keeps the plan it wrote", succeeded: true, replacement: "fresh", want: "fresh"},
+		{name: "a failed run with a partial replacement gets the earlier plan back", succeeded: false, replacement: "partial", want: "earlier"},
+		{name: "a failed run that wrote nothing gets the earlier plan back", succeeded: false, replacement: "", want: "earlier"},
+		{name: "a successful run that wrote nothing gets the earlier plan back", succeeded: true, replacement: "", want: "earlier"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := t.TempDir()
+			plan := filepath.Join(out, "reviewed.plan")
+			require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+			settle, err := stashStalePlan("", "", plan)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(plan, []byte(tt.replacement), 0o600))
+
+			require.NoError(t, settle(tt.succeeded))
+
+			data, err := os.ReadFile(plan)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, string(data))
+			stashes, err := filepath.Glob(filepath.Join(out, stalePlanDirPrefix+"*"))
+			require.NoError(t, err)
+			require.Empty(t, stashes, "the stash is removed once the plan is settled")
+		})
+	}
+}
+
+func TestPartialPlanFromAFailedRunRestoresTheEarlierPlan(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
+	terraformFailed := errUtils.ExitCodeError{Code: 1}
+	run := func() error {
+		require.NoError(t, os.WriteFile(path, []byte("partial"), 0o600))
+		return terraformFailed
+	}
+
+	err := snapshotter.around([]string{"plan", "-out=" + path}, run, failedOnError)()
+
+	require.ErrorIs(t, err, terraformFailed)
+	require.NoError(t, snapshotter.err)
+	data, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.Equal(t, "reviewed plan", string(data), "a partial replacement never displaces the reviewed plan")
+}
+
+func TestChangesPresentStatusKeepsTheNewPlan(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
+	changesPresent := errUtils.ExitCodeError{Code: 2}
+	run := func() error {
+		require.NoError(t, os.WriteFile(path, []byte("new plan"), 0o600))
+		return changesPresent
+	}
+	acceptsChangesPresent := func(err error) bool { return err != nil && errUtils.GetExitCode(err) != 2 }
+
+	err := snapshotter.around([]string{"plan", "-detailed-exitcode", "-out=" + path}, run, acceptsChangesPresent)()
+
+	require.ErrorIs(t, err, changesPresent)
+	require.NoError(t, snapshotter.err)
+	require.NotNil(t, snapshotter.result, "the accepted status still binds the plan")
+	data, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.Equal(t, "new plan", string(data))
+	stashes, globErr := filepath.Glob(filepath.Join(filepath.Dir(path), stalePlanDirPrefix+"*"))
+	require.NoError(t, globErr)
+	require.Empty(t, stashes, "the earlier copy is discarded once the run succeeded")
+}
+
+func TestStalePlanBackupIsCreatedThroughTheSecuredPath(t *testing.T) {
+	var created []string
+	original := createSensitiveTemp
+	createSensitiveTemp = func(directory string) (*os.File, string, error) {
+		created = append(created, directory)
+		return original(directory)
+	}
+	t.Cleanup(func() { createSensitiveTemp = original })
+
+	out := t.TempDir()
+	plan := filepath.Join(out, "reviewed.plan")
+	require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+	settle, err := stashStalePlan("", "", plan)
+	require.NoError(t, err)
+	require.Len(t, created, 1, "the backup is written through the restricted creation path")
+	stashes, err := filepath.Glob(filepath.Join(out, stalePlanDirPrefix+"*", "plan"))
+	require.NoError(t, err)
+	require.Len(t, stashes, 1)
+	require.Equal(t, filepath.Dir(stashes[0]), created[0])
+	data, err := os.ReadFile(stashes[0])
+	require.NoError(t, err)
+	require.Equal(t, "earlier", string(data))
+
+	// Recovery of a plan Terraform removed recreates it through the same path, with no stray temporary file.
+	require.NoError(t, os.Remove(plan))
+	require.NoError(t, settle(false))
+	require.Len(t, created, 2, "a missing plan is recreated through the restricted creation path")
+	data, err = os.ReadFile(plan)
+	require.NoError(t, err)
+	require.Equal(t, "earlier", string(data))
+	leftovers, err := filepath.Glob(filepath.Join(out, ".atmos-plan-*"))
+	require.NoError(t, err)
+	require.Empty(t, leftovers)
+	if runtime.GOOS != "windows" {
+		info, statErr := os.Stat(plan)
+		require.NoError(t, statErr)
+		require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
 }

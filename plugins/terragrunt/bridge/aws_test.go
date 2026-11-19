@@ -25,10 +25,12 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/gruntwork-io/terragrunt/internal/awshelper"
 	"github.com/gruntwork-io/terragrunt/internal/iam"
 	"github.com/gruntwork-io/terragrunt/internal/venv"
@@ -1005,6 +1007,47 @@ func TestAWSSSORequestsDefaultToAWSHostsWithoutOverrides(t *testing.T) {
 			mu.Lock()
 			defer mu.Unlock()
 			assert.Equal(t, host, sent[0], "the request reaches the default AWS host")
+		})
+	}
+}
+
+func TestPinSSOEndpointAllowsOnlyTheCanonicalRegionalHost(t *testing.T) {
+	const getRole, createToken = "GetRoleCredentials", "CreateToken"
+	tests := []struct {
+		name, service, operation, region, url string
+		wantURL                               string
+		wantErr                               bool
+	}{
+		{name: "canonical portal host is unchanged", service: "SSO", operation: getRole, region: "eu-west-1", url: "https://portal.sso.eu-west-1.amazonaws.com/federation/credentials", wantURL: "https://portal.sso.eu-west-1.amazonaws.com/federation/credentials"},
+		{name: "canonical oidc host is unchanged", service: "SSO OIDC", operation: createToken, region: "eu-west-1", url: "https://oidc.eu-west-1.amazonaws.com/token", wantURL: "https://oidc.eu-west-1.amazonaws.com/token"},
+		{name: "attacker host with an AWS suffix", service: "SSO", operation: getRole, region: "eu-west-1", url: "https://evil.example.amazonaws.com/x", wantURL: "https://portal.sso.eu-west-1.amazonaws.com/federation/credentials"},
+		{name: "another AWS service host", service: "SSO OIDC", operation: createToken, region: "eu-west-1", url: "https://s3.eu-west-1.amazonaws.com/token", wantURL: "https://oidc.eu-west-1.amazonaws.com/token"},
+		{name: "another region's host", service: "SSO", operation: getRole, region: "eu-west-1", url: "https://portal.sso.us-east-1.amazonaws.com/federation/credentials", wantURL: "https://portal.sso.eu-west-1.amazonaws.com/federation/credentials"},
+		{name: "plain http on the canonical host", service: "SSO", operation: getRole, region: "eu-west-1", url: "http://portal.sso.eu-west-1.amazonaws.com/federation/credentials", wantURL: "https://portal.sso.eu-west-1.amazonaws.com/federation/credentials"},
+		{name: "china region domain", service: "SSO", operation: getRole, region: "cn-north-1", url: "https://evil.amazonaws.com/x", wantURL: "https://portal.sso.cn-north-1.amazonaws.com.cn/federation/credentials"},
+		{name: "unknown operation fails closed", service: "SSO", operation: "ListAccounts", region: "eu-west-1", url: "https://portal.sso.eu-west-1.amazonaws.com/assignment/accounts", wantErr: true},
+		{name: "missing region fails closed", service: "SSO OIDC", operation: createToken, region: "", url: "https://oidc.eu-west-1.amazonaws.com/token", wantErr: true},
+		{name: "non-SSO request is untouched", service: "STS", operation: "AssumeRole", region: "eu-west-1", url: "https://evil.example.amazonaws.com/x", wantURL: "https://evil.example.amazonaws.com/x"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := smithyhttp.NewStackRequest().(*smithyhttp.Request)
+			parsed, err := url.Parse(tt.url)
+			require.NoError(t, err)
+			req.URL = parsed
+			ctx := awsmiddleware.SetServiceID(t.Context(), tt.service)
+			ctx = awsmiddleware.SetOperationName(ctx, tt.operation)
+			ctx = awsmiddleware.SetRegion(ctx, tt.region)
+
+			err = pinSSOEndpoint(ctx, req)
+
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrAWSCredentials)
+				assert.Equal(t, tt.url, req.URL.String(), "a failed request is left as it was")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantURL, req.URL.String())
 		})
 	}
 }
