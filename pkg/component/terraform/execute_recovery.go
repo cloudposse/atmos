@@ -287,19 +287,72 @@ func endIgnoredRun(info *schema.ConfigAndStacksInfo, ignored *schema.ComponentIg
 // runReadConfigHooks runs the unit's read-config after hooks once its configuration is read. They
 // run on every command that prepares the unit, in the unit's configuration directory, before any
 // source is fetched. Hooks written for `read-config` and `terragrunt-read-config` both run. They come
-// from the execution the invocation runs, so a saved-plan apply runs the apply-time metadata.
+// from the execution the invocation runs, so a saved-plan apply runs the apply-time metadata. A
+// module source the provider deferred until these hooks had run is resolved when they are done.
 func (e *Executor) runReadConfigHooks(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) error {
 	defer perf.Track(atmosConfig, "terraform.Executor.runReadConfigHooks")()
 
-	if prepared == nil || info.ComponentExecution == nil || info.DryRun {
+	if prepared == nil || info.DryRun {
 		return nil
 	}
-	hooks := execution.HooksFor(info.ComponentExecution.AfterHooks, execution.CommandReadConfig, execution.CommandReadConfigAlias)
-	if len(hooks) == 0 {
+	var hooks []schema.ComponentHook
+	if info.ComponentExecution != nil {
+		hooks = execution.HooksFor(info.ComponentExecution.AfterHooks, execution.CommandReadConfig, execution.CommandReadConfigAlias)
+	}
+	if len(hooks) > 0 {
+		stage := lifecycleStage{command: execution.CommandReadConfig, config: &schema.ComponentExecution{AfterHooks: hooks}}
+		if err := e.runLifecycle(ctx, atmosConfig, info, stage, func(context.Context) error { return nil }); err != nil {
+			return err
+		}
+	}
+	return resolveDeferredSource(ctx, atmosConfig, info, prepared)
+}
+
+// resolveDeferredSource completes a preparation whose module source the provider left as written
+// until the unit's read-config hooks had run, because such a hook can create the credentials that
+// resolving the source needs. The provider prepares the unit once more and resolves the source with
+// the exclusion guard and the errors policies of a single preparation. Only the source, and whether
+// the run still goes ahead, are taken from that second preparation: the unit's configuration was read
+// once, before the hooks, as Terragrunt reads it. A dry run and a saved-plan apply never get here
+// with a deferred source: a dry run prepares nothing, and a saved plan holds the source its plan resolved.
+func resolveDeferredSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) error {
+	if !prepared.SourceDeferred {
 		return nil
 	}
-	stage := lifecycleStage{command: execution.CommandReadConfig, config: &schema.ComponentExecution{AfterHooks: hooks}}
-	return e.runLifecycle(ctx, atmosConfig, info, stage, func(context.Context) error { return nil })
+	runtime, ok := atmosConfig.ComponentConfigurations.(schema.ComponentConfigurationDeferredSource)
+	if !ok {
+		return fmt.Errorf("%w: the configuration provider of component %q in stack %q deferred its module source but cannot resolve it", errUtils.ErrPluginUnsupportedExtension, info.ComponentFromArg, info.Stack)
+	}
+	resolved, err := runtime.ResolveDeferredSource(ctx, info)
+	if err != nil {
+		return err
+	}
+	if resolved == nil || resolved.SourceDeferred {
+		return fmt.Errorf("%w: the module source of component %q in stack %q is still unresolved after its read-config hooks ran", errUtils.ErrPluginProtocol, info.ComponentFromArg, info.Stack)
+	}
+	prepared.Exclusion, prepared.IgnoredRun = resolved.Exclusion, resolved.IgnoredRun
+	if err := endUnrunnableSource(atmosConfig, info, prepared); err != nil {
+		return err
+	}
+	prepared.Source, prepared.SourceAuthorization, prepared.SourceDeferred = resolved.Source, resolved.SourceAuthorization, false
+	applyPreparedSource(info, prepared)
+	return nil
+}
+
+// endUnrunnableSource ends the run of a unit whose deferred source was not resolved: the operation is
+// excluded, or an ignore policy matched the failure. It reports both as a single preparation does.
+func endUnrunnableSource(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) error {
+	if excludedFromOperation(info, prepared) {
+		skipExcluded(info)
+		return errUtils.ErrComponentExcluded
+	}
+	if prepared.IgnoredRun == nil {
+		return nil
+	}
+	if err := refreshIgnoredSignals(atmosConfig, info, prepared); err != nil {
+		return err
+	}
+	return endIgnoredRun(info, prepared.IgnoredRun)
 }
 
 // initFromModuleWrapper runs the unit's init-from-module hooks around a source fetch. It returns

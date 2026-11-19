@@ -111,11 +111,10 @@ func (e *unitEvaluator) resolveUnit(ctx context.Context) (*model.Resolution, err
 	if err != nil {
 		return nil, err
 	}
-	result, err := e.unitResolution(ctx, cfg)
+	result, err := e.unitResolution(ctx, cfg, execution)
 	if err != nil {
 		return nil, err
 	}
-	result.Execution = execution
 	result.Files = append(result.Files, applyFiles...)
 	if err := resolveBackend(cfg, result, e.request); err != nil {
 		return nil, err
@@ -420,9 +419,10 @@ func (f withoutInputsFS) projectFile(file afero.File, name string) (afero.File, 
 	return memory.Open(name)
 }
 
-// unitResolution preserves local directory identities and remote getter URIs.
-func (e *unitEvaluator) unitResolution(ctx context.Context, cfg *config.TerragruntConfig) (*model.Resolution, error) {
-	result := &model.Resolution{Path: e.path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(e.pctx.FilesRead.Paths(), e.path)}
+// unitResolution preserves local directory identities and remote getter URIs. The execution is the
+// unit's hooks and extra arguments, which decide when a registry source is resolved.
+func (e *unitEvaluator) unitResolution(ctx context.Context, cfg *config.TerragruntConfig, execution *model.Execution) (*model.Resolution, error) {
+	result := &model.Resolution{Path: e.path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(e.pctx.FilesRead.Paths(), e.path), Execution: execution}
 	if err := unitSettings(ctx, cfg, e.request, e.path, result); err != nil {
 		return nil, err
 	}

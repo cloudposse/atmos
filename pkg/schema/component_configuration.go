@@ -42,6 +42,14 @@ type ComponentConfigurationIAMProbe interface {
 	ProbeIAM(context.Context, *ConfigAndStacksInfo) (*ComponentIAM, error)
 }
 
+// ComponentConfigurationDeferredSource is implemented by providers that can leave a module source
+// unresolved until the host has run the hooks that precede the source fetch. Such a hook can create
+// the credentials that resolving the source needs. The host calls it once, after those hooks, for a
+// preparation whose SourceDeferred is set, and takes the resolved source from the result.
+type ComponentConfigurationDeferredSource interface {
+	ResolveDeferredSource(context.Context, *ConfigAndStacksInfo) (*PreparedComponentConfiguration, error)
+}
+
 // ComponentConfigurationFailureRuntime reports components that a provider discovered but could not
 // evaluate. Bulk commands use it to reject every selected broken component before they run any
 // infrastructure command. A nil error means the component is healthy or unknown to the provider.
@@ -89,6 +97,11 @@ type PreparedComponentConfiguration struct {
 	SourceAuthorization *SourceAuthorization `json:"-"`
 	// SensitiveInputKeys projects provider sensitivity paths onto whole input variables.
 	SensitiveInputKeys map[string]bool
+	// SourceDeferred is set when the provider left Source as written, because resolving it must wait
+	// until the host has run the unit's read-config hooks. The host then asks the provider's
+	// ComponentConfigurationDeferredSource for the resolved source. It is never part of a saved plan:
+	// a plan is saved only after its source is resolved.
+	SourceDeferred bool `json:"-"`
 }
 
 // SourceAuthorization is never serialized with a source URL or saved plan.

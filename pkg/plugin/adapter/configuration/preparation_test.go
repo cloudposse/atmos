@@ -271,6 +271,83 @@ func TestPrepareTranslatesAnIgnoredRun(t *testing.T) {
 	}
 }
 
+// A provider leaves a registry source as written when the unit has read-config after hooks, which the
+// host runs after preparation. Only that case is deferred: an excluded operation and an ignored run
+// end the unit's run, and any other source is final.
+func TestPrepareMarksAnUnresolvedRegistrySourceAsDeferred(t *testing.T) {
+	const registry = "tfr://registry.example/acme/vpc/aws?version=1.0.0"
+	for name, test := range map[string]struct {
+		response *pluginv1.PrepareComponentResponse
+		want     bool
+	}{
+		"registry source as written": {&pluginv1.PrepareComponentResponse{ModuleSource: registry}, true},
+		"excluded operation":         {&pluginv1.PrepareComponentResponse{ModuleSource: registry, Exclude: &pluginv1.ComponentExclude{Condition: true, Actions: []string{"apply"}}}, false},
+		"ignored run":                {&pluginv1.PrepareComponentResponse{ModuleSource: registry, RunIgnored: true}, false},
+		"resolved source":            {&pluginv1.PrepareComponentResponse{ModuleSource: "git::https://github.com/acme/terraform-aws-vpc.git?ref=v1.0.0"}, false},
+		"local source":               {&pluginv1.PrepareComponentResponse{ModuleSource: "/project/modules/vpc"}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			session, provider, info := preparationSession(t)
+			response := test.response
+			response.Engine, response.State = "opentofu", &pluginv1.ComponentStateIdentity{}
+			var sent *pluginv1.ComponentRequest
+			provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+				sent = request
+				return response, nil
+			})
+			prepared, err := session.Prepare(t.Context(), info)
+			require.NoError(t, err)
+			require.Equal(t, test.want, prepared.SourceDeferred)
+			require.Empty(t, sent.Operation.Options, "the first preparation never claims that the hooks have run")
+		})
+	}
+}
+
+// Once the host has run the read-config hooks it prepares the unit again and says so with an
+// operation option, so the provider resolves the registry source on that call.
+func TestResolveDeferredSourceTellsTheProviderThatHooksHaveRun(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	var sent *pluginv1.ComponentRequest
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+		sent = request
+		return &pluginv1.PrepareComponentResponse{Engine: "opentofu", State: &pluginv1.ComponentStateIdentity{}, ModuleSource: "git::https://github.com/acme/terraform-aws-vpc.git?ref=v1.0.0"}, nil
+	}).Times(1)
+	prepared, err := session.ResolveDeferredSource(t.Context(), info)
+	require.NoError(t, err)
+	require.Equal(t, "git::https://github.com/acme/terraform-aws-vpc.git?ref=v1.0.0", prepared.Source)
+	require.False(t, prepared.SourceDeferred)
+	require.Len(t, sent.Operation.Options, 1)
+	completed, err := adapter.DecodeValue(sent.Operation.Options["source_hooks_completed"])
+	require.NoError(t, err)
+	require.Equal(t, true, completed)
+	require.Equal(t, "apply", sent.Operation.Command)
+	require.True(t, sent.Effects.Network, "resolving the registry source needs the same effects as a preparation")
+}
+
+// The second preparation keeps what a single one returns for a run that ends, and rejects a provider
+// that leaves the source unresolved again, because the host could neither fetch it nor ask a third time.
+func TestResolveDeferredSourceKeepsRunEndingResultsAndRejectsAnUnresolvedSource(t *testing.T) {
+	const registry = "tfr://registry.example/acme/vpc/aws?version=1.0.0"
+	respond := func(t *testing.T, response *pluginv1.PrepareComponentResponse) (*schema.PreparedComponentConfiguration, error) {
+		t.Helper()
+		session, provider, info := preparationSession(t)
+		response.Engine, response.State, response.ModuleSource = "opentofu", &pluginv1.ComponentStateIdentity{}, registry
+		provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(response, nil)
+		return session.ResolveDeferredSource(t.Context(), info)
+	}
+
+	ignored, err := respond(t, &pluginv1.PrepareComponentResponse{RunIgnored: true, IgnoredPolicy: "private"})
+	require.NoError(t, err)
+	require.Equal(t, &schema.ComponentIgnoredRun{Policy: "private"}, ignored.IgnoredRun)
+
+	excluded, err := respond(t, &pluginv1.PrepareComponentResponse{Exclude: &pluginv1.ComponentExclude{Condition: true, Actions: []string{"apply"}}})
+	require.NoError(t, err)
+	require.Equal(t, &schema.ComponentExclusion{Actions: []string{"apply"}}, excluded.Exclusion)
+
+	_, err = respond(t, &pluginv1.PrepareComponentResponse{})
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+}
+
 func TestPreparedErrorsRejectsPoliciesTheHostCannotHonor(t *testing.T) {
 	empty, err := preparedErrors(&pluginv1.ComponentErrorsConfiguration{})
 	require.NoError(t, err)

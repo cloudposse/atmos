@@ -18,6 +18,10 @@ type Request struct {
 	Environment    map[string]string `json:"environment"`
 	// Features are explicit feature flag overrides (name to raw value), applied to every unit.
 	Features map[string]string `json:"features,omitempty"`
+	// SourceHooksCompleted reports that the host has run the unit's read-config after hooks. A unit
+	// with such hooks keeps its registry source unresolved until then, because a hook can create the
+	// credentials the registry client reads.
+	SourceHooksCompleted bool `json:"source_hooks_completed,omitempty"`
 }
 
 type Resolution struct {

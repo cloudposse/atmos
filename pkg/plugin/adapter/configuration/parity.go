@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"slices"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -131,5 +133,53 @@ func applyParity(prepared *schema.PreparedComponentConfiguration, result *plugin
 	prepared.TerraformBinary = result.GetTerraformBinary()
 	prepared.Exclusion = preparedExclusion(result.GetExclude())
 	prepared.FeatureFlags = result.GetFeatureFlags()
+	prepared.SourceDeferred = sourceDeferred(result)
 	return nil
+}
+
+// registrySourceScheme prefixes a module registry source that has not been resolved to the getter
+// URL the source provisioner downloads.
+const registrySourceScheme = "tfr://"
+
+// optionSourceHooksCompleted is the operation option that tells the provider that the host has run
+// the unit's read-config after hooks. The provider and the host share the name.
+const optionSourceHooksCompleted = "source_hooks_completed"
+
+// sourceDeferred reports whether the provider left a registry source as written for the host to ask
+// for again. A provider does that for a unit with read-config after hooks, which the host runs once
+// preparation has returned and which can create the registry credentials. An excluded operation and an
+// ignored run keep their source as written too, but they end the run, so nothing is left to resolve.
+func sourceDeferred(result *pluginv1.PrepareComponentResponse) bool {
+	return strings.HasPrefix(result.GetModuleSource(), registrySourceScheme) && !result.GetRunIgnored() && preparedExclusion(result.GetExclude()) == nil
+}
+
+// ResolveDeferredSource prepares the unit again once the host has run its read-config after hooks, so
+// that the provider resolves the registry source the first preparation left as written. The provider
+// applies the same exclusion guard and errors policies as in a single preparation. Warnings were
+// printed by the first preparation and are not repeated.
+func (s *Session) ResolveDeferredSource(ctx context.Context, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
+	defer perf.Track(nil, "configuration.Session.ResolveDeferredSource")()
+
+	selected, err := s.componentRequest(ctx, info)
+	if err != nil {
+		return nil, err
+	}
+	completed, err := adapter.EncodeObject(true)
+	if err != nil {
+		return nil, err
+	}
+	selected.request.Operation.Options = map[string]*pluginv1.ComponentValue{optionSourceHooksCompleted: completed}
+	result, err := s.runProviderPrepare(ctx, info, selected)
+	if err != nil {
+		return nil, err
+	}
+	prepared, err := preparedConfiguration(result)
+	if err != nil {
+		return nil, err
+	}
+	// A source that is still unresolved would be deferred forever, and the host cannot fetch it.
+	if prepared.SourceDeferred {
+		return nil, fmt.Errorf("%w: the provider left the module source unresolved after its read-config hooks ran", errUtils.ErrPluginProtocol)
+	}
+	return prepared, nil
 }

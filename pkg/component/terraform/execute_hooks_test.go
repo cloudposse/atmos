@@ -1621,3 +1621,118 @@ func TestAfterFetchHookResolvesRelativeDirectoryAgainstTheSelectedModule(t *test
 	require.NoError(t, wrapper(t.Context(), &source.Target{Dir: t.TempDir(), IsWorkdir: true}, func(context.Context) error { return nil }))
 	require.Equal(t, absolute, shell.calls[0].dir)
 }
+
+// deferredSourceFixture is a unit whose provider left a registry source as written, with the
+// read-config hook that creates the registry credentials.
+type deferredSourceFixture struct {
+	config   *schema.AtmosConfiguration
+	runtime  *MockDeferredSourceRuntime
+	info     *schema.ConfigAndStacksInfo
+	prepared *schema.PreparedComponentConfiguration
+	shell    *shellFixture
+	// credentials is the file the hook creates.
+	credentials string
+}
+
+const (
+	deferredRegistrySource = "tfr://registry.example/acme/vpc/aws?version=1.0.0"
+	resolvedRegistrySource = "git::https://github.com/acme/terraform-aws-vpc.git?ref=v1.0.0"
+)
+
+func newDeferredSourceFixture(t *testing.T) *deferredSourceFixture {
+	t.Helper()
+	root := t.TempDir()
+	fixture := &deferredSourceFixture{credentials: filepath.Join(root, "registry.tfrc"), runtime: NewMockDeferredSourceRuntime(gomock.NewController(t))}
+	fixture.config = &schema.AtmosConfiguration{TerraformDirAbsolutePath: root, ComponentConfigurations: fixture.runtime}
+	execution := &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{{Name: "login", Commands: []string{"read-config"}, Execute: []string{"registry-login"}, WorkingDirectory: root}}}
+	fixture.prepared = &schema.PreparedComponentConfiguration{Source: deferredRegistrySource, SourceDeferred: true, Execution: execution}
+	fixture.info = hookInfo("plan", execution)
+	fixture.info.Stack, fixture.info.ComponentFromArg, fixture.info.FinalComponent = "dev", "app", "app"
+	fixture.info.ComponentSection = map[string]any{"source": map[string]any{"uri": deferredRegistrySource, "ttl": "1h"}}
+	fixture.shell = newShellFixture(t, func(*shellCall) error {
+		return os.WriteFile(fixture.credentials, []byte("credentials"), 0o600)
+	})
+	return fixture
+}
+
+// A read-config hook can create the credentials of a private registry, so the provider is asked for
+// the registry source only after the hook has run, and the unit continues with the resolved source.
+func TestDeferredSourceIsResolvedAfterReadConfigHooks(t *testing.T) {
+	fixture := newDeferredSourceFixture(t)
+	authorization := &schema.SourceAuthorization{Origin: "https://registry.example", Header: "Bearer hook-secret"}
+	fixture.runtime.EXPECT().ResolveDeferredSource(gomock.Any(), fixture.info).DoAndReturn(func(context.Context, *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
+		require.FileExists(t, fixture.credentials, "the hook creates the credentials before the first registry request")
+		return &schema.PreparedComponentConfiguration{Source: resolvedRegistrySource, SourceAuthorization: authorization, Inputs: map[string]any{"second": "evaluation"}}, nil
+	}).Times(1)
+
+	require.NoError(t, hookExecutor(fixture.shell).runReadConfigHooks(t.Context(), fixture.config, fixture.info, fixture.prepared))
+	require.Equal(t, []string{"registry-login"}, fixture.shell.names())
+	require.Equal(t, resolvedRegistrySource, fixture.prepared.Source)
+	require.False(t, fixture.prepared.SourceDeferred)
+	require.Same(t, authorization, fixture.prepared.SourceAuthorization)
+	require.Same(t, authorization, fixture.info.SourceAuthorization)
+	require.Equal(t, map[string]any{"uri": resolvedRegistrySource, "ttl": "1h"}, fixture.info.ComponentSection["source"])
+	require.Nil(t, fixture.prepared.Inputs, "the configuration is read once, before the hooks; only the source comes from the second preparation")
+}
+
+// Without a deferred source the provider is not asked again, whether or not the unit has such hooks.
+func TestReadConfigHooksDoNotPrepareAgainWithoutADeferredSource(t *testing.T) {
+	for name, source := range map[string]string{"a resolved registry source": resolvedRegistrySource, "a local source": "./module"} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newDeferredSourceFixture(t)
+			fixture.prepared.Source, fixture.prepared.SourceDeferred = source, false
+			// The mock has no expectation, so asking the provider again fails the test.
+			require.NoError(t, hookExecutor(fixture.shell).runReadConfigHooks(t.Context(), fixture.config, fixture.info, fixture.prepared))
+			require.Equal(t, []string{"registry-login"}, fixture.shell.names())
+			require.Equal(t, source, fixture.prepared.Source)
+			require.Equal(t, map[string]any{"uri": deferredRegistrySource, "ttl": "1h"}, fixture.info.ComponentSection["source"], "the component's source is left as preparation set it")
+		})
+	}
+}
+
+// The preparation that follows the hooks can still end the run: its exclusion guard and its ignore
+// policies apply, and a failure is returned as it is. The unresolved source is never fetched.
+func TestDeferredSourceResolutionCanEndTheRun(t *testing.T) {
+	failure := errors.New("registry rejected the request")
+	for name, test := range map[string]struct {
+		resolved *schema.PreparedComponentConfiguration
+		err      error
+		want     error
+	}{
+		"excluded":         {resolved: &schema.PreparedComponentConfiguration{Source: deferredRegistrySource, Exclusion: &schema.ComponentExclusion{Actions: []string{"plan"}}}, want: errUtils.ErrComponentExcluded},
+		"ignored":          {resolved: &schema.PreparedComponentConfiguration{Source: deferredRegistrySource, IgnoredRun: &schema.ComponentIgnoredRun{Policy: "private", Message: "no access"}}, want: errUtils.ErrComponentRunIgnored},
+		"failed":           {err: failure, want: failure},
+		"still unresolved": {resolved: &schema.PreparedComponentConfiguration{Source: deferredRegistrySource, SourceDeferred: true}, want: errUtils.ErrPluginProtocol},
+		"no answer":        {want: errUtils.ErrPluginProtocol},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newDeferredSourceFixture(t)
+			fixture.runtime.EXPECT().ResolveDeferredSource(gomock.Any(), gomock.Any()).Return(test.resolved, test.err).Times(1)
+			err := hookExecutor(fixture.shell).runReadConfigHooks(t.Context(), fixture.config, fixture.info, fixture.prepared)
+			require.ErrorIs(t, err, test.want)
+			require.Equal(t, []string{"registry-login"}, fixture.shell.names(), "the hooks run before the provider is asked")
+			require.Equal(t, deferredRegistrySource, fixture.prepared.Source)
+			require.Equal(t, map[string]any{"uri": deferredRegistrySource, "ttl": "1h"}, fixture.info.ComponentSection["source"])
+		})
+	}
+}
+
+// A failing hook, a dry run, and a provider that cannot resolve a deferred source never reach the registry.
+func TestDeferredSourceIsNotResolvedWithoutItsHooks(t *testing.T) {
+	failing := newDeferredSourceFixture(t)
+	failing.shell = newShellFixture(t, func(*shellCall) error { return errors.New("login failed") })
+	err := hookExecutor(failing.shell).runReadConfigHooks(t.Context(), failing.config, failing.info, failing.prepared)
+	require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
+	require.True(t, failing.prepared.SourceDeferred)
+
+	dry := newDeferredSourceFixture(t)
+	dry.info.DryRun = true
+	quiet := newShellFixture(t, nil)
+	require.NoError(t, hookExecutor(quiet).runReadConfigHooks(t.Context(), dry.config, dry.info, dry.prepared))
+	require.Empty(t, quiet.calls)
+
+	unsupported := newDeferredSourceFixture(t)
+	unsupported.config.ComponentConfigurations = NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	err = hookExecutor(unsupported.shell).runReadConfigHooks(t.Context(), unsupported.config, unsupported.info, unsupported.prepared)
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+}

@@ -262,7 +262,16 @@ type iamProbingRuntime interface {
 
 var _ iamProbingRuntime = (*MockIAMProbingRuntime)(nil)
 
-//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_iam_probing_runtime_test.go -package=$GOPACKAGE -mock_names=iamProbingRuntime=MockIAMProbingRuntime
+// deferredSourceRuntime is a configuration runtime whose provider can leave a module source
+// unresolved until the unit's read-config hooks have run.
+type deferredSourceRuntime interface {
+	schema.ComponentConfigurationRuntime
+	schema.ComponentConfigurationDeferredSource
+}
+
+var _ deferredSourceRuntime = (*MockDeferredSourceRuntime)(nil)
+
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_iam_probing_runtime_test.go -package=$GOPACKAGE -mock_names=iamProbingRuntime=MockIAMProbingRuntime,deferredSourceRuntime=MockDeferredSourceRuntime
 
 func TestPrepareConfigurationStagesIAMForEvaluation(t *testing.T) {
 	recorded := fakeAssume(t, nil)
