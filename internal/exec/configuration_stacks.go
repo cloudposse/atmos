@@ -88,3 +88,10 @@ func compiledManifestSchema(path string) (*jsonschema.Schema, error) {
 	cacheCompiledSchema(path, compiled)
 	return compiled, nil
 }
+
+// importConfigurationComponents routes configured provider schemes before YAML or
+// remote-source resolution. The provider's units come back as a manifest fragment that
+// joins the importing manifest, so they are components of the importing stack.
+func importConfigurationComponents(config *schema.AtmosConfiguration, uri string, declaration *schema.StackImport, loadOptions *StackLoadOptions) (map[string]any, bool, error) {
+	return configuration.ImportComponents(config, uri, declaration, loadOptions != nil && loadOptions.StaticOnly)
+}
