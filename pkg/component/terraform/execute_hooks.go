@@ -103,36 +103,10 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 		if captured, ok := ctx.Value(mainCommandArgsKey{}).(*[]string); ok {
 			*captured = slices.Clone(phaseArgs)
 		}
-		run := func() error {
-			var changesPresent error
-			err := ExecuteShellCommandWithRetry(
-				atmosConfig,
-				phaseInfo,
-				info.SubCommand,
-				func(o ...component.ExecutionOption) error {
-					err := e.executeReviewedStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
-						componentPath:  componentPath,
-						args:           phaseArgs,
-						gatePhase:      info.SubCommand,
-						subCommand:     info.SubCommand,
-						redirectStdErr: info.RedirectStdErr,
-						shellOpts:      o,
-					})
-					// Classify with the effective arguments and environment before legacy
-					// output matching can retry a plan that already succeeded.
-					if isDetailedExitCodeChanges(phase.command, phaseArgs, env, err, o...) {
-						changesPresent = err
-						return nil
-					}
-					return err
-				},
-				phaseOpts...,
-			)
-			if err != nil {
-				return err
-			}
-			return changesPresent
-		}
+		run := e.mainShellRun(atmosConfig, &mainShellRequest{
+			info: info, phaseInfo: phaseInfo, command: phase.command, componentPath: componentPath,
+			args: phaseArgs, env: env, opts: phaseOpts,
+		})
 		if snapshots, ok := ctx.Value(planSnapshotKey{}).(*planSnapshotter); ok {
 			run = snapshots.around(phaseArgs, run, func(err error) bool {
 				return err != nil && !isDetailedExitCodeChanges(phase.command, phaseArgs, env, err, phaseOpts...)
@@ -148,6 +122,51 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 		}
 		return err
 	})
+}
+
+// mainShellRequest holds what one run of the main Terraform command needs.
+type mainShellRequest struct {
+	info, phaseInfo        *schema.ConfigAndStacksInfo
+	command, componentPath string
+	args, env              []string
+	opts                   []component.ExecutionOption
+}
+
+// mainShellRun returns one run of the main Terraform command. A "changes present" status from
+// -detailed-exitcode is classified before legacy output matching can retry a plan that already
+// succeeded, and is returned once the retries settle.
+func (e *Executor) mainShellRun(atmosConfig *schema.AtmosConfiguration, r *mainShellRequest) func() error {
+	info, phaseInfo, command, componentPath, phaseArgs, env, phaseOpts := r.info, r.phaseInfo, r.command, r.componentPath, r.args, r.env, r.opts
+	return func() error {
+		var changesPresent error
+		err := ExecuteShellCommandWithRetry(
+			atmosConfig,
+			phaseInfo,
+			info.SubCommand,
+			func(o ...component.ExecutionOption) error {
+				err := e.executeReviewedStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
+					componentPath:  componentPath,
+					args:           phaseArgs,
+					gatePhase:      info.SubCommand,
+					subCommand:     info.SubCommand,
+					redirectStdErr: info.RedirectStdErr,
+					shellOpts:      o,
+				})
+				// Classify with the effective arguments and environment before legacy
+				// output matching can retry a plan that already succeeded.
+				if isDetailedExitCodeChanges(command, phaseArgs, env, err, o...) {
+					changesPresent = err
+					return nil
+				}
+				return err
+			},
+			phaseOpts...,
+		)
+		if err != nil {
+			return err
+		}
+		return changesPresent
+	}
 }
 
 // executeReviewedStreamingOrShell verifies the reviewed files immediately before each attempt.
