@@ -573,6 +573,26 @@ func hasFileBackedCredentials(profile *config.SharedConfig) bool {
 		(profile.WebIdentityTokenFile != "" && profile.RoleARN != ""))
 }
 
+const (
+	// minAssumeRoleDuration and maxAssumeRoleDuration are the session durations in seconds that STS accepts.
+	minAssumeRoleDuration = 900
+	maxAssumeRoleDuration = 43200
+)
+
+// webIdentityDuration returns the session duration for the web identity assumption: the default when none is
+// set, otherwise the configured seconds when STS would accept them. The range check also bounds the value
+// before it narrows to the 32 bits of the STS request.
+func webIdentityDuration(seconds int64) (int32, error) {
+	if seconds <= 0 {
+		return iam.DefaultAssumeRoleDuration, nil
+	}
+	if seconds < minAssumeRoleDuration || seconds > maxAssumeRoleDuration {
+		return 0, fmt.Errorf("%w: the session duration of %d seconds is outside the %d to %d seconds STS accepts",
+			ErrAWSCredentials, seconds, minAssumeRoleDuration, maxAssumeRoleDuration)
+	}
+	return int32(seconds), nil
+}
+
 // assumeWebIdentityRole assumes the CLI-level role with its web identity token. The token is the credential,
 // so the STS client is unsigned and built from the invocation's values alone; upstream would load the plugin
 // process environment for it.
@@ -582,9 +602,9 @@ func assumeWebIdentityRole(ctx context.Context, v *venv.Venv, transport *awsTran
 		return aws.Credentials{}, fmt.Errorf("reading the web identity token of the IAM role %s: %w", role.RoleARN, err)
 	}
 	name := cmpFirst(role.AssumeRoleSessionName, iam.GetDefaultAssumeRoleSessionName())
-	duration := int64(iam.DefaultAssumeRoleDuration)
-	if role.AssumeRoleDuration > 0 {
-		duration = role.AssumeRoleDuration
+	duration, err := webIdentityDuration(role.AssumeRoleDuration)
+	if err != nil {
+		return aws.Credentials{}, fmt.Errorf("assuming the IAM role %s with its web identity token: %w", role.RoleARN, err)
 	}
 	client := sts.NewFromConfig(aws.Config{
 		Region:      awsRegion(v.Env),
@@ -594,7 +614,7 @@ func assumeWebIdentityRole(ctx context.Context, v *venv.Venv, transport *awsTran
 	})
 	result, err := client.AssumeRoleWithWebIdentity(ctx, &sts.AssumeRoleWithWebIdentityInput{
 		RoleArn: aws.String(role.RoleARN), RoleSessionName: aws.String(name), WebIdentityToken: aws.String(string(token)),
-		DurationSeconds: aws.Int32(int32(duration)), //nolint:gosec // STS bounds the duration to 12 hours.
+		DurationSeconds: aws.Int32(duration),
 	})
 	if err != nil {
 		return aws.Credentials{}, fmt.Errorf("assuming the IAM role %s with its web identity token: %w", role.RoleARN, err)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -573,6 +574,38 @@ func TestAWSWebIdentityRoleFromInvocationTokenFile(t *testing.T) {
 	assert.Contains(t, action, "AssumeRoleWithWebIdentity")
 	assert.Contains(t, action, "RoleSessionName=atmos-web")
 	assert.Zero(t, ambientCalls.Load(), "the process STS endpoint must never receive the invocation token")
+}
+
+// The web identity session duration is bounded before it narrows to the 32 bits of the STS request: an unset
+// value takes the default, and anything STS would refuse is rejected instead of being truncated.
+func TestWebIdentityDurationIsBoundedBeforeNarrowing(t *testing.T) {
+	tests := []struct {
+		name    string
+		seconds int64
+		want    int32
+		wantErr bool
+	}{
+		{name: "unset takes the default", seconds: 0, want: 3600},
+		{name: "negative takes the default", seconds: -5, want: 3600},
+		{name: "lowest accepted", seconds: 900, want: 900},
+		{name: "highest accepted", seconds: 43200, want: 43200},
+		{name: "below the lowest", seconds: 899, wantErr: true},
+		{name: "above the highest", seconds: 43201, wantErr: true},
+		{name: "would wrap to a small int32", seconds: 1<<32 + 3600, wantErr: true},
+		{name: "the largest int64", seconds: math.MaxInt64, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := webIdentityDuration(tt.seconds)
+
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrAWSCredentials)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 // An assumed role session is reused only for the same assumption: a different or rotated web identity token,
