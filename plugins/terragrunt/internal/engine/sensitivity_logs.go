@@ -385,11 +385,10 @@ func (u *unitEvaluator) buildResolution(ctx context.Context, cfg *config.Terragr
 	if err != nil {
 		return nil, err
 	}
-	result, err := u.unitResolution(ctx, cfg)
+	result, err := u.unitResolution(ctx, cfg, execution)
 	if err != nil {
 		return nil, err
 	}
-	result.Execution = execution
 	result.SensitiveInputs = sensitivity.inputs
 	result.Files = append(result.Files, applyFiles...)
 	if err := resolveBackend(cfg, result, request); err != nil {

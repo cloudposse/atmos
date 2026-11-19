@@ -199,18 +199,19 @@ func tflintExtraVariables(command string, execution *model.Execution) []string {
 }
 
 // extraArgumentVariables lists the --var and --var-file flags one extra_arguments block implies.
-// Both `-var=x` and `-var x` forms are recognized, as Terraform accepts both.
+// The `-var=x` and `-var x` forms, with one or two leading dashes, are recognized, as Terraform accepts them.
 // TF_VAR_ entries of env_vars are not turned into --var flags, unlike Terragrunt: a flag would
 // override terraform.tfvars, while Terraform ranks the environment below it. The hook inherits the
 // phase environment, and TFLint reads TF_VAR_ variables with the same precedence as Terraform.
 func extraArgumentVariables(extra *model.ExtraArguments) []string {
 	var variables []string
 	for i := 0; i < len(extra.Arguments); i++ {
-		argument := extra.Arguments[i]
+		// One or two leading dashes name the same option.
+		argument := strings.TrimPrefix(strings.TrimPrefix(extra.Arguments[i], "-"), "-")
 		for _, flag := range []string{"var", "var-file"} {
-			if value, found := strings.CutPrefix(argument, "-"+flag+"="); found {
+			if value, found := strings.CutPrefix(argument, flag+"="); found {
 				variables = append(variables, "--"+flag+"="+value)
-			} else if argument == "-"+flag && i+1 < len(extra.Arguments) {
+			} else if argument == flag && i+1 < len(extra.Arguments) {
 				i++
 				variables = append(variables, "--"+flag+"="+extra.Arguments[i])
 			}

@@ -91,6 +91,42 @@ func TestPreparationCarriesSensitiveRegistryAuthorization(t *testing.T) {
 	require.NotContains(t, response.ModuleSource, "secret")
 }
 
+// The host prepares a unit again once its read-config after hooks have run, and says so with the one
+// supported operation option. The evaluator sees it only when the host sent true.
+func TestSourceHooksCompletedOptionReachesTheEvaluator(t *testing.T) {
+	for name, test := range map[string]struct {
+		options func(t *testing.T) map[string]*pluginv1.ComponentValue
+		want    bool
+	}{
+		"absent": {func(*testing.T) map[string]*pluginv1.ComponentValue { return nil }, false},
+		"true": {func(t *testing.T) map[string]*pluginv1.ComponentValue {
+			value, err := encode(true)
+			require.NoError(t, err)
+			return map[string]*pluginv1.ComponentValue{optionSourceHooksCompleted: value}
+		}, true},
+		"false": {func(t *testing.T) map[string]*pluginv1.ComponentValue {
+			value, err := encode(false)
+			require.NoError(t, err)
+			return map[string]*pluginv1.ComponentValue{optionSourceHooksCompleted: value}
+		}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := componentRequest(t)
+			request.Operation.Options = test.options(t)
+			var seen []bool
+			p := New(func(_ context.Context, req model.Request) (*model.Resolution, error) {
+				if req.Phase != "discover" {
+					seen = append(seen, req.SourceHooksCompleted)
+				}
+				return &model.Resolution{Source: "git::https://example.test/module.git", WorkingDir: filepath.Join(request.RootDirectory, "cache")}, nil
+			})
+			_, err := p.Prepare(t.Context(), request)
+			require.NoError(t, err)
+			require.Equal(t, []bool{test.want}, seen)
+		})
+	}
+}
+
 func TestRequestsRejectUnsupportedBeforeEvaluation(t *testing.T) {
 	for _, test := range []struct {
 		name   string
@@ -102,6 +138,11 @@ func TestRequestsRejectUnsupportedBeforeEvaluation(t *testing.T) {
 		{"cli fallback", func(r *pluginv1.ComponentRequest) { r.Operation.Mode = "cli" }},
 		{"options", func(r *pluginv1.ComponentRequest) {
 			r.Operation.Options = map[string]*pluginv1.ComponentValue{"unsupported": {}}
+		}},
+		{"option value of another type", func(r *pluginv1.ComponentRequest) {
+			value, err := encode("yes")
+			require.NoError(t, err)
+			r.Operation.Options = map[string]*pluginv1.ComponentValue{optionSourceHooksCompleted: value}
 		}},
 		{"source traversal", func(r *pluginv1.ComponentRequest) { r.Source = "../escape" }},
 		{"missing effects", func(r *pluginv1.ComponentRequest) { r.Effects = nil }},

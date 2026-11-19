@@ -172,10 +172,20 @@ func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.Confi
 	info.PreparedSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
 	info.ConfigurationSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
 	info.ComponentExecution = withoutStackEnvironment(invocationExecution(info, prepared), info.ComponentEnvSection)
-	info.SourceAuthorization = prepared.SourceAuthorization
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
 	info.TerraformWorkspace = prepared.Workspace
 	info.ComponentSection["vars"] = prepared.Inputs
+	applyPreparedSource(info, prepared)
+	info.ComponentSection["backend_type"] = prepared.BackendType
+	info.ComponentSection["backend"] = prepared.Backend
+	info.SetBackendFileGeneration(!prepared.BackendGenerated)
+	warnOnCacheLocalState(info, prepared)
+}
+
+// applyPreparedSource points the component at the module the provider prepared, with the
+// invocation-only authorization for fetching it.
+func applyPreparedSource(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
+	info.SourceAuthorization = prepared.SourceAuthorization
 	source, _ := info.ComponentSection["source"].(map[string]any)
 	source = maps.Clone(source)
 	if source == nil {
@@ -185,10 +195,6 @@ func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.Confi
 	// A local module changes without its location changing. The source provisioner stamps a local
 	// directory and refreshes the retained workdir only when that stamp changes, so no TTL is set.
 	info.ComponentSection["source"] = source
-	info.ComponentSection["backend_type"] = prepared.BackendType
-	info.ComponentSection["backend"] = prepared.Backend
-	info.SetBackendFileGeneration(!prepared.BackendGenerated)
-	warnOnCacheLocalState(info, prepared)
 }
 
 // prepareForRebuild evaluates the unit again for a plan restored without its working directory, the

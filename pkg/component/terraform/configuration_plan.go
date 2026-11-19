@@ -134,12 +134,8 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 	if err != nil {
 		return nil, nil, err
 	}
-	if plan.WorkingIdentity != "" {
-		workdir := filepath.Clean(ConstructTerraformComponentWorkingDir(config, info))
-		if relativeWorkdirIdentity(config, info, workdir) != plan.WorkingIdentity {
-			return nil, nil, fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
-		}
-		plan.WorkingDirectory = workdir
+	if err := bindReviewedWorkdirIdentity(config, info, plan); err != nil {
+		return nil, nil, err
 	}
 	if err := rejectExtraArgumentsDataDir(plan.Prepared.Execution); err != nil {
 		return nil, nil, err
@@ -160,6 +156,20 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 	info.UseTerraformPlan = true
 	info.PlanFile = absolute
 	return plan.Prepared, rebuild, nil
+}
+
+// bindReviewedWorkdirIdentity checks that the working directory is the one the plan ran in and records its
+// path. A plan saved without a working identity has nothing to check.
+func bindReviewedWorkdirIdentity(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, plan *configurationPlan) error {
+	if plan.WorkingIdentity == "" {
+		return nil
+	}
+	workdir := filepath.Clean(ConstructTerraformComponentWorkingDir(config, info))
+	if relativeWorkdirIdentity(config, info, workdir) != plan.WorkingIdentity {
+		return fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
+	}
+	plan.WorkingDirectory = workdir
+	return nil
 }
 
 // restoreReviewedWorkdir settles the reviewed plan's working directory. A retained workdir gets the

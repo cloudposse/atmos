@@ -150,6 +150,9 @@ var toolEnvironment = map[string]string{
 func applyOptions(env map[string]string, options map[string]*pluginv1.ComponentValue) (map[string]string, error) {
 	var features map[string]string
 	for _, name := range slices.Sorted(maps.Keys(options)) {
+		if name == optionSourceHooksCompleted {
+			continue
+		}
 		if name == "feature" {
 			if err := decode(options[name], &features); err != nil {
 				return nil, optionProblem(name, "Use name=value pairs such as `--terragrunt-feature alpha=true`.")
@@ -179,9 +182,33 @@ func optionProblem(name, hint string) *model.Problem {
 	return &model.Problem{Code: model.CodeUnsupportedSetting, Summary: fmt.Sprintf("Invalid provider option `%s`", name), Hints: []string{hint}, Key: "options." + name, Safe: true, Err: ErrUnsupported}
 }
 
+// optionSourceHooksCompleted is the operation option the host sets to true when it prepares a unit again
+// after running the unit's read-config after hooks, so that the registry source that the first preparation
+// left as written is resolved. The host and the plugin share the name.
+const optionSourceHooksCompleted = "source_hooks_completed"
+
+// sourceHooksCompleted reads the source_hooks_completed option. A value that is not a boolean is rejected,
+// so the host never believes an option was honored when it was not. Every other option is validated by
+// applyOptions.
+func sourceHooksCompleted(options map[string]*pluginv1.ComponentValue) (bool, error) {
+	value, present := options[optionSourceHooksCompleted]
+	if !present {
+		return false, nil
+	}
+	var completed bool
+	if decode(value, &completed) != nil {
+		return false, ErrUnsupported
+	}
+	return completed, nil
+}
+
 func operation(root, name string, op *pluginv1.ComponentOperation, invocation *pluginv1.Invocation) (model.Request, error) {
 	if name != "terragrunt" || !filepath.IsAbs(root) || op == nil || !supportedOperationMode(op.Mode) {
 		return model.Request{}, ErrUnsupported
+	}
+	completed, err := sourceHooksCompleted(op.Options)
+	if err != nil {
+		return model.Request{}, err
 	}
 	env := maps.Clone(invocation.GetEnvironment())
 	if env == nil {
@@ -195,7 +222,7 @@ func operation(root, name string, op *pluginv1.ComponentOperation, invocation *p
 	if binary == "" {
 		binary = "terraform"
 	}
-	request := model.Request{BasePath: root, Mode: ModeNative, Command: op.Command, Arguments: slices.Clone(op.TerraformArguments), Tofu: binary, Environment: env, Features: features}
+	request := model.Request{BasePath: root, Mode: ModeNative, Command: op.Command, Arguments: slices.Clone(op.TerraformArguments), Tofu: binary, Environment: env, Features: features, SourceHooksCompleted: completed}
 	if op.Mode == "iam-probe" {
 		request.Phase = "iam"
 	}

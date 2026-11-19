@@ -291,3 +291,13 @@ func TestLoginSessionNullCacheIsAnAuthenticationError(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "AKIAVALID", retrieved.AccessKeyID)
 }
+
+// A plain-HTTP endpoint named by host name is checked when the connection is made, by the validated dialer,
+// so building the provider never waits on a resolver that has no deadline of its own.
+func TestContainerEndpointHostNameIsNotResolvedWhileValidatingTheURL(t *testing.T) {
+	client, err := checkContainerEndpoint("http://credentials.invalid/creds")
+	require.NoError(t, err)
+	require.NotNil(t, client, "the validated transport rejects a disallowed address when it dials")
+	_, err = checkContainerEndpoint("http://203.0.113.1/creds")
+	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig, "a literal address is still checked immediately")
+}

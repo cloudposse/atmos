@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,12 +26,13 @@ var registryClient *http.Client
 
 // prepareRemoteSource validates a remote module source and resolves a registry source to the getter URL
 // that the Atmos source provisioner downloads. Resolution talks to the registry, so it only happens when
-// the unit is prepared for a command: discovery and state identity keep the source as written.
+// the unit is prepared for a command: discovery and state identity keep the source as written. A unit
+// whose read-config after hooks have not run yet keeps it as written too, see awaitsSourceHooks.
 func prepareRemoteSource(ctx context.Context, logger log.Logger, request *model.Request, cfg *config.TerragruntConfig, result *model.Resolution) error {
 	if err := validateRemoteSource(result.Source); err != nil {
 		return err
 	}
-	if !strings.HasPrefix(result.Source, registryScheme) || request.Phase == "backend" {
+	if !strings.HasPrefix(result.Source, registryScheme) || request.Phase == "backend" || awaitsSourceHooks(request, result.Execution) {
 		return nil
 	}
 	constraint := registryVersionConstraint(cfg)
@@ -65,6 +67,25 @@ func prepareRemoteSource(ctx context.Context, logger log.Logger, request *model.
 	result.Source = resolved
 	result.RegistryAuth = auth
 	return nil
+}
+
+// awaitsSourceHooks reports whether registry resolution has to wait for the host. The host runs a
+// unit's read-config after hooks once preparation has returned, and such a hook can create the
+// credentials the registry client reads, for example the CLI configuration file. So a unit with such
+// a hook is prepared twice: the first preparation leaves the registry source as written and never
+// contacts the registry, and the host prepares the unit again, with SourceHooksCompleted set, when
+// the hooks have run. Hooks written for either spelling of the stage count, as they do in the host.
+func awaitsSourceHooks(request *model.Request, execution *model.Execution) bool {
+	if request.SourceHooksCompleted || execution == nil {
+		return false
+	}
+	for i := range execution.AfterHooks {
+		commands := execution.AfterHooks[i].Commands
+		if slices.Contains(commands, model.LifecycleReadConfig) || slices.Contains(commands, model.LifecycleReadConfigAlias) {
+			return true
+		}
+	}
+	return false
 }
 
 // retryRegistryResolution applies the unit's source-fetch policies to registry discovery and version

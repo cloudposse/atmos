@@ -185,6 +185,31 @@ func TestRemoteStateEncryptionChecksTheUnitExecutable(t *testing.T) {
 	}
 }
 
+// TestRemoteStateEncryptionChecksTheEffectiveExecutable checks that the executable the host resolved after a
+// stack `command` or command-line override decides whether the encryption block is supported.
+func TestRemoteStateEncryptionChecksTheEffectiveExecutable(t *testing.T) {
+	for _, test := range []struct {
+		name, unit, effective string
+		rejected              bool
+	}{
+		{name: "stack Terraform over unit OpenTofu", unit: "/opt/bin/tofu", effective: "/opt/bin/terraform", rejected: true},
+		{name: "stack OpenTofu over unit Terraform", unit: "/opt/bin/terraform", effective: "/opt/bin/tofu"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := &model.Resolution{Path: "unit/terragrunt.hcl", TerraformBinary: test.unit}
+			request := &model.Request{Tofu: test.unit, Environment: map[string]string{effectiveBinaryEnvironment: test.effective}}
+			err := checkEncryption(true, true, result, request)
+			if !test.rejected {
+				require.NoError(t, err)
+				return
+			}
+			var problem *model.Problem
+			require.ErrorAs(t, err, &problem)
+			require.Equal(t, "remote_state.encryption", problem.Key)
+		})
+	}
+}
+
 func TestGeneratedBackendIdentityRejectedAcrossPhases(t *testing.T) {
 	for _, phase := range []string{"", "backend"} {
 		for backendIndex, backend := range []string{

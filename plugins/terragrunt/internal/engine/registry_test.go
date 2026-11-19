@@ -520,3 +520,214 @@ func TestRejectedResolvedSourceOmitsURLCredentials(t *testing.T) {
 		})
 	}
 }
+
+// privateRegistry is a module registry that answers 401 to every request without the bearer token
+// "hook-secret", and a unit that names a module in it.
+type privateRegistry struct {
+	request model.Request
+	// source is the unit's source as written.
+	source string
+	// hostname is the registry host without its port, as a credentials block names it.
+	hostname string
+	// credentials is the CLI configuration file the unit's environment names. It does not exist
+	// until login creates it.
+	credentials string
+	// requests counts the registry requests, and unauthorized those that carried no valid token.
+	requests, unauthorized atomic.Int32
+}
+
+// login does what a read-config hook of the unit does in the host: it creates the CLI configuration
+// file that holds the registry token.
+func (r *privateRegistry) login(t *testing.T) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(r.credentials, []byte(fmt.Sprintf("credentials %q {\n  token = \"hook-secret\"\n}\n", r.hostname)), 0o600))
+}
+
+const (
+	registryLoginHook = `
+  after_hook "registry_login" {
+    commands = ["read-config"]
+    execute  = ["registry-login"]
+  }`
+	privateModuleURL = "git::https://github.com/acme/terraform-aws-vpc.git?ref=v1.0.0"
+)
+
+// newPrivateRegistry starts the registry and writes a unit whose terraform block holds the registry
+// source followed by body.
+func newPrivateRegistry(t *testing.T, body string) *privateRegistry {
+	t.Helper()
+	registry := &privateRegistry{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		registry.requests.Add(1)
+		if r.Header.Get("Authorization") != "Bearer hook-secret" {
+			registry.unauthorized.Add(1)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path == "/.well-known/terraform.json" {
+			fmt.Fprint(w, `{"modules.v1":"/v1/modules/"}`)
+			return
+		}
+		w.Header().Set("X-Terraform-Get", "github.com/acme/terraform-aws-vpc?ref=v1.0.0")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	server := httptest.NewTLSServer(mux)
+	t.Cleanup(server.Close)
+	previous := registryClient
+	registryClient = server.Client()
+	t.Cleanup(func() { registryClient = previous })
+	address, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	registry.hostname = address.Hostname()
+	registry.source = "tfr://" + address.Host + "/acme/vpc/aws?version=1.0.0"
+	registry.request = registryUnit(t, `source = "`+registry.source+`"`+body)
+	registry.credentials = filepath.Join(filepath.Dir(registry.request.Path), "registry.tfrc")
+	registry.request.Environment["TF_CLI_CONFIG_FILE"] = registry.credentials
+	registry.request.Environment["TOFU_CLI_CONFIG_FILE"] = registry.credentials
+	return registry
+}
+
+// A read-config after hook can create the credentials file of a private registry. The host runs that
+// hook only once preparation has returned, so the first preparation must not contact the registry:
+// the source stays as written, and the preparation that follows the hook resolves it.
+func TestRegistrySourceWaitsForReadConfigHooks(t *testing.T) {
+	for _, command := range []string{model.LifecycleReadConfig, model.LifecycleReadConfigAlias} {
+		t.Run(command, func(t *testing.T) {
+			registry := newPrivateRegistry(t, `
+  after_hook "registry_login" {
+    commands = ["`+command+`"]
+    execute  = ["registry-login"]
+  }`)
+
+			first, err := Resolve(t.Context(), registry.request)
+			require.NoError(t, err, "the registry must not be asked before the hook has created the credentials")
+			assert.EqualValues(t, 0, registry.requests.Load(), "the first registry request must follow the read-config hook")
+			assert.Equal(t, registry.source, first.Source, "the source stays as written until the hook has run")
+			assert.Nil(t, first.RunIgnored)
+			require.NotNil(t, first.Execution)
+			require.Len(t, first.Execution.AfterHooks, 1, "the host receives the hook it has to run")
+			assert.Equal(t, "registry_login", first.Execution.AfterHooks[0].Name)
+
+			registry.login(t)
+			registry.request.SourceHooksCompleted = true
+			second, err := Resolve(t.Context(), registry.request)
+			require.NoError(t, err)
+			assert.Equal(t, privateModuleURL, second.Source)
+			assert.Positive(t, registry.requests.Load())
+			assert.EqualValues(t, 0, registry.unauthorized.Load(), "every registry request carries the token the hook supplied")
+			assert.Equal(t, first.WorkingDir, second.WorkingDir, "the working directory is named after the source as written")
+		})
+	}
+}
+
+// Deferral is only for a registry source with a read-config after hook. A registry source without
+// such a hook resolves in the single preparation, as before.
+func TestRegistrySourceWithoutReadConfigHookResolvesAtOnce(t *testing.T) {
+	for name, hooks := range map[string]string{
+		"no hooks": "",
+		"a plan hook": `
+  after_hook "notify" {
+    commands = ["plan"]
+    execute  = ["notify"]
+  }`,
+		"an init-from-module hook": `
+  after_hook "fetched" {
+    commands = ["init-from-module"]
+    execute  = ["fetched"]
+  }`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			registry := newPrivateRegistry(t, hooks)
+			registry.login(t)
+			result, err := Resolve(t.Context(), registry.request)
+			require.NoError(t, err)
+			assert.Equal(t, privateModuleURL, result.Source)
+			assert.Positive(t, registry.requests.Load())
+			assert.EqualValues(t, 0, registry.unauthorized.Load())
+		})
+	}
+}
+
+// A read-config after hook changes nothing for a source that is not a registry source.
+func TestReadConfigHookLeavesOtherSourcesUnchanged(t *testing.T) {
+	for _, completed := range []bool{false, true} {
+		registry := newPrivateRegistry(t, registryLoginHook)
+		unit := "terraform {\n  source = \"" + privateModuleURL + "\"" + registryLoginHook + "\n}\n"
+		require.NoError(t, os.WriteFile(registry.request.Path, []byte(unit), 0o644))
+		registry.request.SourceHooksCompleted = completed
+		result, err := Resolve(t.Context(), registry.request)
+		require.NoError(t, err)
+		assert.Equal(t, privateModuleURL, result.Source)
+		assert.EqualValues(t, 0, registry.requests.Load())
+	}
+}
+
+// The preparation that follows the hooks keeps the exclusion guard and the errors policies of a
+// single preparation: a prevented operation never contacts the registry, an ignore policy ends the
+// run, and a retry policy retries.
+func TestDeferredRegistrySourceKeepsGuardAndPolicies(t *testing.T) {
+	t.Run("excluded", func(t *testing.T) {
+		registry := newPrivateRegistry(t, registryLoginHook+`
+}
+exclude {
+  if      = true
+  actions = ["plan"]
+  no_run  = true`)
+		registry.login(t)
+		registry.request.SourceHooksCompleted = true
+		result, err := Resolve(t.Context(), registry.request)
+		require.NoError(t, err)
+		assert.EqualValues(t, 0, registry.requests.Load(), "a prevented plan must not contact the registry")
+		assert.Equal(t, registry.source, result.Source)
+	})
+	t.Run("ignored", func(t *testing.T) {
+		registry := newPrivateRegistry(t, registryLoginHook+`
+}
+errors {
+  ignore "private" {
+    ignorable_errors = ["status code 401"]
+    message = "no access"
+  }`)
+		first, err := Resolve(t.Context(), registry.request)
+		require.NoError(t, err)
+		assert.Nil(t, first.RunIgnored, "nothing failed yet: the registry was not asked")
+		assert.EqualValues(t, 0, registry.requests.Load())
+
+		// The hook did not create the credentials, so the registry rejects the request.
+		registry.request.SourceHooksCompleted = true
+		second, err := Resolve(t.Context(), registry.request)
+		require.NoError(t, err)
+		require.NotNil(t, second.RunIgnored)
+		assert.Equal(t, model.IgnoredRun{Policy: "private", Message: "no access"}, *second.RunIgnored)
+		assert.Equal(t, registry.source, second.Source)
+		assert.EqualValues(t, 1, registry.requests.Load(), "an ignored failure is not retried")
+	})
+	t.Run("retried", func(t *testing.T) {
+		registry := newPrivateRegistry(t, registryLoginHook+`
+}
+errors {
+  retry "private" {
+    retryable_errors = ["status code 401"]
+    max_attempts = 3
+    sleep_interval_sec = 0
+  }`)
+		registry.request.SourceHooksCompleted = true
+		_, err := Resolve(t.Context(), registry.request)
+		var problem *model.Problem
+		require.ErrorAs(t, err, &problem)
+		assert.Equal(t, model.CodeInvalidSource, problem.Code)
+		assert.EqualValues(t, 3, registry.requests.Load(), "the failure is retried up to max_attempts")
+		assert.EqualValues(t, 3, registry.unauthorized.Load())
+	})
+}
+
+// A backend read never resolves a registry source, whether or not the hooks have run.
+func TestDeferredRegistrySourceIsNotResolvedForBackendReads(t *testing.T) {
+	registry := newPrivateRegistry(t, registryLoginHook)
+	registry.login(t)
+	registry.request.Phase, registry.request.SourceHooksCompleted = phaseBackend, true
+	_, err := Resolve(t.Context(), registry.request)
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, registry.requests.Load())
+}
