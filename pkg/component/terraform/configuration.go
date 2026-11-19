@@ -587,7 +587,7 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed fu
 		// private copy kept, so that only a plan this subprocess writes can be fingerprinted, and it is
 		// restored if none is written, which also covers help-only runs that exit successfully.
 		settleStale, stashErr := stashStalePlan(s.execCtx.componentPath, writtenPath)
-		defer func() { runResult = s.settle(settleStale, runResult) }()
+		defer func() { runResult = s.settle(settleStale, runResult, failed) }()
 		if stashErr != nil {
 			s.err = stashErr
 			return run()
