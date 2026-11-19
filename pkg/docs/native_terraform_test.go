@@ -198,13 +198,15 @@ func TestGenerateDocument_NativeTerraformRenderIsolation(t *testing.T) {
 		dir := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(dir, "main.tf"), []byte(`variable "`+name+`" { type = string }`), 0o600))
 		docs := nativeDocsTestConfig(t, `{{ range (terraform).Inputs }}{{ .Name }}{{ end }}`)
-		require.NoError(t, generateDocument(&schema.AtmosConfiguration{}, dir, &docs, renderer))
+		_, err := generateDocument(&schema.AtmosConfiguration{}, dir, &docs, renderer)
+		require.NoError(t, err)
 		assert.Equal(t, name, readDocsTestFile(t, docs.Output))
 	}
 	// A subsequent render without Terraform must not inherit the previous module.
 	docs := nativeDocsTestConfig(t, `{{ if terraform }}leaked{{ else }}unavailable{{ end }}`)
 	docs.Terraform.Enabled = false
-	require.NoError(t, generateDocument(&schema.AtmosConfiguration{}, t.TempDir(), &docs, renderer))
+	_, genErr := generateDocument(&schema.AtmosConfiguration{}, t.TempDir(), &docs, renderer)
+	require.NoError(t, genErr)
 	assert.Equal(t, "unavailable", readDocsTestFile(t, docs.Output))
 	// The helper is not registered globally for unrelated template consumers.
 	_, err := datasource.Render(nil, "unrelated", `{{ terraform }}`, map[string]any{}, nil)

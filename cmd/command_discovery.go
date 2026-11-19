@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	tuiutils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/browser"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/reexec"
@@ -28,8 +29,9 @@ import (
 )
 
 // Dependencies are replaceable so discovery tests never open a browser, prompt,
-// or fetch an example. The browser helper is shared with the existing docs command.
+// or fetch an example.
 var (
+	openDocsURL      = func(url string) error { return browser.New().Open(url) }
 	discoverySelect  = selectCommandExample
 	discoveryConfirm = confirmCommandExample
 	discoveryInit    = initializeCommandExample

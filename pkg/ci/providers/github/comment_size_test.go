@@ -87,3 +87,55 @@ func TestPostComment_RejectsOversizedMarker(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrCICommentPostFailed)
 	assert.Empty(t, s.CommentsFor("owner", "repo", 42))
 }
+
+// TestPostComment_TruncationNoticeRunLink verifies the truncation notice links the run when known
+// and is unchanged when it is not.
+func TestPostComment_TruncationNoticeRunLink(t *testing.T) {
+	const runURL = "https://github.com/owner/repo/actions/runs/123"
+	tests := []struct {
+		name       string
+		runURL     string
+		wantNotice string
+	}{
+		{
+			name:       "with run URL",
+			runURL:     runURL,
+			wantNotice: "> [!WARNING]\n> Comment truncated to fit GitHub's size limit. Consult the workflow summary, logs, or artifacts for the full output. [View the full run](" + runURL + ").\n\n",
+		},
+		{
+			name:       "without run URL",
+			wantNotice: "> [!WARNING]\n> Comment truncated to fit GitHub's size limit. Consult the workflow summary, logs, or artifacts for the full output.\n\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := ghtest.NewServer(t)
+			p := newTestProvider(t, s)
+			marker := "<!-- atmos:ci:plan:vpc:dev -->"
+			_, err := p.PostComment(context.Background(), &provider.PostCommentOptions{
+				Owner: "owner", Repo: "repo", PRNumber: 42,
+				Marker: marker, Body: strings.Repeat("x", 70000) + marker,
+				Behavior: provider.CommentBehaviorCreate, RunURL: tt.runURL,
+			})
+			require.NoError(t, err)
+			comments := s.CommentsFor("owner", "repo", 42)
+			require.Len(t, comments, 1)
+			assert.True(t, strings.HasPrefix(comments[0].Body, marker+"\n"+tt.wantNotice+"x"), "notice must follow the marker exactly")
+			assert.LessOrEqual(t, len(comments[0].Body), 65536)
+		})
+	}
+}
+
+// TestPostComment_RunURLIgnoredWhenNotTruncated verifies short bodies are posted unchanged.
+func TestPostComment_RunURLIgnoredWhenNotTruncated(t *testing.T) {
+	s := ghtest.NewServer(t)
+	p := newTestProvider(t, s)
+	_, err := p.PostComment(context.Background(), &provider.PostCommentOptions{
+		Owner: "owner", Repo: "repo", PRNumber: 42,
+		Body: "short", Behavior: provider.CommentBehaviorCreate, RunURL: "https://example.com/run/1",
+	})
+	require.NoError(t, err)
+	comments := s.CommentsFor("owner", "repo", 42)
+	require.Len(t, comments, 1)
+	assert.Equal(t, "short", comments[0].Body)
+}

@@ -5773,6 +5773,20 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "hooks": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Hooks declares lifecycle hooks (before.docs.generate / after.docs.generate) for this doc type.\nThe map is decoded into hook definitions by pkg/hooks, which schema cannot import."
         }
       },
       "type": "object"
