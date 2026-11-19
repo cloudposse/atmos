@@ -138,9 +138,10 @@ func verifyPlanStackEnvironment(info *schema.ConfigAndStacksInfo, plan *configur
 // settle restores or discards the stashed plan. A plan that could not be restored stays in its stash,
 // and the binding fails naming it. When Terraform also failed, the stash location joins its error:
 // the pipeline returns that error before the binding is read, and the exit code the hooks classify is
-// unchanged.
-func (s *planSnapshotter) settle(settleStale func() error, runResult error) error {
-	err := settleStale()
+// unchanged. The earlier plan is discarded only when the phase succeeded by the same classification
+// the binding uses; a failed run never displaces it, even when it left a partial plan behind.
+func (s *planSnapshotter) settle(settleStale func(succeeded bool) error, runResult error, failed func(error) bool) error {
+	err := settleStale(!failed(runResult))
 	if err == nil {
 		return runResult
 	}
@@ -185,11 +186,12 @@ func (s *planSnapshotter) observe(path, writtenPath string, run func() error, fa
 // empties the file in place, so a non-empty file found there after the subprocess was written by that
 // run. Emptying in place keeps the file's mode and follows a symlink, so Terraform writes the new plan
 // exactly where it would have without the stash, and a private plan is never recreated with broader
-// permissions. The returned settle function must run once the observation is complete: it discards
-// the copy when the run wrote a new plan and otherwise restores the earlier contents. A directory or
+// permissions. The returned settle function must run once the observation is complete, with whether the
+// Terraform phase succeeded: it discards the copy only when the run succeeded and wrote a new plan, and
+// otherwise restores the earlier contents. A directory or
 // other non-regular output is rejected without being touched.
-func stashStalePlan(root, path string) (func() error, error) {
-	noop := func() error { return nil }
+func stashStalePlan(root, path string) (func(succeeded bool) error, error) {
+	noop := func(bool) error { return nil }
 	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -218,18 +220,18 @@ func stashStalePlan(root, path string) (func() error, error) {
 		_ = os.RemoveAll(dir)
 		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
 	}
-	return func() error { return settleStalePlan(path, stashed, dir, info.Mode().Perm()) }, nil
+	return func(succeeded bool) error { return settleStalePlan(path, stashed, dir, info.Mode().Perm(), succeeded) }, nil
 }
 
-// settleStalePlan discards the copy when the run wrote a new plan and otherwise writes the earlier
-// contents back through the same path. The copy is removed only after the restore succeeds or a
+// settleStalePlan discards the copy only when the run succeeded and wrote a new plan; otherwise it
+// writes the earlier contents back through the same path, replacing a partial plan a failed run left. The copy is removed only after the restore succeeds or a
 // replacement is confirmed; otherwise it is kept for recovery and the error names it.
-func settleStalePlan(path, stashed, dir string, mode os.FileMode) error {
+func settleStalePlan(path, stashed, dir string, mode os.FileMode, succeeded bool) error {
 	info, err := os.Stat(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("%w: earlier plan kept at %s: %w", errUtils.ErrPlanVerificationFailed, stashed, err)
 	}
-	if err != nil || info.Size() == 0 {
+	if !succeeded || err != nil || info.Size() == 0 {
 		if err := restoreStalePlan(path, stashed, mode); err != nil {
 			return fmt.Errorf("%w: restore the earlier plan from %s: %w", errUtils.ErrPlanVerificationFailed, stashed, err)
 		}

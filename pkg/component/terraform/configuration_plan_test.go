@@ -1272,7 +1272,7 @@ func TestStalePlanStashStaysOutOfDownloadedModules(t *testing.T) {
 	require.Len(t, entries, 1, "the stash must not be created inside the digested module tree")
 	require.Equal(t, "reviewed.plan", entries[0].Name())
 
-	require.NoError(t, settle())
+	require.NoError(t, settle(true))
 	data, err := os.ReadFile(plan)
 	require.NoError(t, err)
 	require.Equal(t, "earlier", string(data))
@@ -1298,7 +1298,7 @@ func TestStalePlanStashIsKeptWhenRestoreFails(t *testing.T) {
 	// A read-only plan file makes writing the earlier contents back fail.
 	require.NoError(t, os.Chmod(plan, 0o400))
 
-	err = settle()
+	err = settle(false)
 
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.ErrorContains(t, err, stashes[0])
@@ -1335,7 +1335,7 @@ func TestStalePlanStashEmptiesThePlanInPlace(t *testing.T) {
 
 	// A run that writes a plan keeps it, and the stash is discarded.
 	require.NoError(t, os.WriteFile(target, []byte("fresh"), 0o600))
-	require.NoError(t, settle())
+	require.NoError(t, settle(true))
 	data, err := os.ReadFile(target)
 	require.NoError(t, err)
 	require.Equal(t, "fresh", string(data))
@@ -1361,7 +1361,7 @@ func TestStalePlanStashWritesThroughASymlink(t *testing.T) {
 	require.Empty(t, data, "the target is emptied, as Terraform would rewrite it through the link")
 
 	// A run that writes nothing gets the earlier plan back in the target.
-	require.NoError(t, settle())
+	require.NoError(t, settle(true))
 	data, err = os.ReadFile(target)
 	require.NoError(t, err)
 	require.Equal(t, "earlier", string(data))
@@ -1400,4 +1400,78 @@ func TestFailedRunReportsTheStashLocation(t *testing.T) {
 	require.Equal(t, 1, errUtils.GetExitCode(err), "the exit code the hooks classify is unchanged")
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.ErrorContains(t, err, stalePlanDirPrefix, "the operator learns where the earlier plan is kept")
+}
+
+func TestStalePlanSettlementFollowsTheRunOutcome(t *testing.T) {
+	tests := []struct {
+		name        string
+		succeeded   bool
+		replacement string
+		want        string
+	}{
+		{name: "a successful run keeps the plan it wrote", succeeded: true, replacement: "fresh", want: "fresh"},
+		{name: "a failed run with a partial replacement gets the earlier plan back", succeeded: false, replacement: "partial", want: "earlier"},
+		{name: "a failed run that wrote nothing gets the earlier plan back", succeeded: false, replacement: "", want: "earlier"},
+		{name: "a successful run that wrote nothing gets the earlier plan back", succeeded: true, replacement: "", want: "earlier"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := t.TempDir()
+			plan := filepath.Join(out, "reviewed.plan")
+			require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+			settle, err := stashStalePlan("", plan)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(plan, []byte(tt.replacement), 0o600))
+
+			require.NoError(t, settle(tt.succeeded))
+
+			data, err := os.ReadFile(plan)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, string(data))
+			stashes, err := filepath.Glob(filepath.Join(out, stalePlanDirPrefix+"*"))
+			require.NoError(t, err)
+			require.Empty(t, stashes, "the stash is removed once the plan is settled")
+		})
+	}
+}
+
+func TestPartialPlanFromAFailedRunRestoresTheEarlierPlan(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
+	terraformFailed := errUtils.ExitCodeError{Code: 1}
+	run := func() error {
+		require.NoError(t, os.WriteFile(path, []byte("partial"), 0o600))
+		return terraformFailed
+	}
+
+	err := snapshotter.around([]string{"plan", "-out=" + path}, run, failedOnError)()
+
+	require.ErrorIs(t, err, terraformFailed)
+	require.NoError(t, snapshotter.err)
+	data, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.Equal(t, "reviewed plan", string(data), "a partial replacement never displaces the reviewed plan")
+}
+
+func TestChangesPresentStatusKeepsTheNewPlan(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
+	changesPresent := errUtils.ExitCodeError{Code: 2}
+	run := func() error {
+		require.NoError(t, os.WriteFile(path, []byte("new plan"), 0o600))
+		return changesPresent
+	}
+	acceptsChangesPresent := func(err error) bool { return err != nil && errUtils.GetExitCode(err) != 2 }
+
+	err := snapshotter.around([]string{"plan", "-detailed-exitcode", "-out=" + path}, run, acceptsChangesPresent)()
+
+	require.ErrorIs(t, err, changesPresent)
+	require.NoError(t, snapshotter.err)
+	require.NotNil(t, snapshotter.result, "the accepted status still binds the plan")
+	data, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.Equal(t, "new plan", string(data))
+	stashes, globErr := filepath.Glob(filepath.Join(filepath.Dir(path), stalePlanDirPrefix+"*"))
+	require.NoError(t, globErr)
+	require.Empty(t, stashes, "the earlier copy is discarded once the run succeeded")
 }
