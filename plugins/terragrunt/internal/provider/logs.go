@@ -8,6 +8,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/zclconf/go-cty/cty"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
@@ -28,7 +29,16 @@ import (
 type callLogs struct {
 	sink   *engine.LogSink
 	stream *api.LogStream
+	// cancel ends the stream's context. entries arms it after the flush wait, which aborts both the
+	// delivery in flight and the senders waiting for room in a full queue.
+	cancel context.CancelFunc
+	// flush is how long entries may wait for the stream to finish.
+	flush time.Duration
 }
+
+// logFlushWait bounds how long a call waits for Atmos to show the events still queued when the call ends.
+// Events cut off by the bound are reported to Atmos as omitted rather than holding the call.
+const logFlushWait = 5 * time.Second
 
 // withLogs makes the evaluation of one call report the Terragrunt logger's events. The caller must call
 // entries before it returns, so the events delivered live are shown before the result.
@@ -37,9 +47,12 @@ func (p *Provider) withLogs(ctx context.Context, invocation *pluginv1.Invocation
 	for _, value := range values {
 		redactSensitive(sink, value)
 	}
-	logs := &callLogs{sink: sink}
+	logs := &callLogs{sink: sink, flush: logFlushWait}
 	if p.api != nil && sink.Enabled() {
-		logs.stream = p.api.OpenLogs(ctx, invocation.GetId())
+		// The stream gets its own context, so that finalizing it never cancels the call itself.
+		var streamCtx context.Context
+		streamCtx, logs.cancel = context.WithCancel(ctx)
+		logs.stream = p.api.OpenLogs(streamCtx, invocation.GetId())
 		sink.Forward(func(entry *model.LogEntry) { logs.stream.Send(logEntry(entry)) })
 	}
 	return engine.WithLogSink(ctx, sink), logs
@@ -98,9 +111,16 @@ func plainValue(value cty.Value) (any, error) {
 	return plain, nil
 }
 
-// entries waits for the events delivered live to be shown, for a bounded time, stops delivery, and returns the
-// events Atmos has not shown, in order, in their wire form. It is safe to call more than once.
+// entries allows up to five seconds for final delivery, including waiting for queue space in Send.
+// Expiration cancels only the log stream; cut-off events count as omitted to avoid repeating an
+// unacknowledged write. Undelivered fallback events are returned in order. It is safe to call more than once.
 func (l *callLogs) entries() []*pluginv1.LogEntry {
+	if l.cancel != nil {
+		// One timer covers the sends below and Close: a stalled Atmos cannot hold the call past the bound.
+		timer := time.AfterFunc(l.flush, l.cancel)
+		defer timer.Stop()
+		defer l.cancel()
+	}
 	collected := l.sink.Entries()
 	entries := make([]*pluginv1.LogEntry, 0, len(collected))
 	for i := range collected {

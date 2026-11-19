@@ -10,7 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -52,10 +54,10 @@ func (r *logReceiver) snapshot() ([]*pluginv1.LogEntry, int, string) {
 
 // apiClient binds an API client to a real in-process connection. A nil receiver serves no log service,
 // like an Atmos that predates live delivery.
-func apiClient(t *testing.T, receiver *logReceiver) *api.Client {
+func apiClient(t *testing.T, receiver *logReceiver, options ...grpc.ServerOption) *api.Client {
 	t.Helper()
 	listener := bufconn.Listen(1 << 20)
-	server := grpc.NewServer()
+	server := grpc.NewServer(options...)
 	if receiver != nil {
 		pluginv1.RegisterLogServer(server, receiver)
 	}
@@ -265,5 +267,30 @@ func TestEarlyEvaluationFailureWithholdsUnitPaths(t *testing.T) {
 				assert.Empty(t, detail.Logs, "live events must not be repeated in the failure")
 			}
 		})
+	}
+}
+
+// Finalizing the events does not hold the call when Atmos stops taking them: the wait is bounded and the
+// events that could not be shown are reported as omitted.
+func TestEntriesDoNotWaitForeverForAStalledAtmos(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	stall := grpc.UnaryInterceptor(func(context.Context, any, *grpc.UnaryServerInfo, grpc.UnaryHandler) (any, error) {
+		<-release
+		return &emptypb.Empty{}, nil
+	})
+	callCtx, logs := New(nil, WithAPI(apiClient(t, &logReceiver{}, stall))).withLogs(t.Context(), &pluginv1.Invocation{Id: "call-stalled", LogLevel: "debug"}, t.TempDir())
+	logs.flush = 100 * time.Millisecond
+	logs.sink.Event(log.InfoLevel, "first", "")
+
+	finished := make(chan []*pluginv1.LogEntry, 1)
+	go func() { finished <- logs.entries() }()
+	select {
+	case entries := <-finished:
+		require.NotEmpty(t, entries)
+		assert.Contains(t, entries[len(entries)-1].GetMessage(), "not shown")
+		assert.NoError(t, callCtx.Err(), "finalizing the events does not cancel the call")
+	case <-time.After(10 * time.Second):
+		t.Fatal("entries did not return while Atmos stopped taking events")
 	}
 }
