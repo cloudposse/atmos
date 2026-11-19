@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
+	"github.com/zclconf/go-cty/cty/convert"
 )
 
 const (
@@ -301,7 +302,7 @@ func (s *sensitivityScanner) reference(traversal hcl.Traversal) (sensitivityRefe
 	switch section {
 	case "locals":
 		if len(traversal) < 4 {
-			return sensitivityReference{}, false
+			return wholeLocals(exposed), true
 		}
 		name, nameOK := traversalKey(traversal[3])
 		if !nameOK {
@@ -317,6 +318,27 @@ func (s *sensitivityScanner) reference(traversal hcl.Traversal) (sensitivityRefe
 		return sensitivityReference{exposed.inputs, exposed.locals, traversal[3:]}, exposed.inputs != nil
 	}
 	return sensitivityReference{}, false
+}
+
+// wholeLocals stands for include.<alias>.locals itself, which copies every local of the included file. A
+// file that was not found cannot be inspected, so it reads as sensitive as a whole.
+func wholeLocals(exposed exposedInclude) sensitivityReference {
+	if !exposed.known {
+		return sensitivityReference{unknownExpression, nil, nil}
+	}
+	names := make([]string, 0, len(exposed.locals))
+	for name := range exposed.locals {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	object := &hclsyntax.ObjectConsExpr{}
+	for _, name := range names {
+		object.Items = append(object.Items, hclsyntax.ObjectConsItem{
+			KeyExpr:   &hclsyntax.LiteralValueExpr{Val: cty.StringVal(name)},
+			ValueExpr: exposed.locals[name],
+		})
+	}
+	return sensitivityReference{object, exposed.locals, nil}
 }
 
 // exposedIncludes associates an include alias with the parsed file's locals and inputs.
@@ -474,8 +496,57 @@ func (s *sensitivityScanner) indexDiscardsSensitive(index *hclsyntax.IndexExpr, 
 // relativeDiscardsSensitive reports whether source.attr or source[key] steps drop a sensitive value that may
 // have been logged.
 func (s *sensitivityScanner) relativeDiscardsSensitive(relative *hclsyntax.RelativeTraversalExpr, depth int) bool {
-	keys := make([]cty.Value, 0, len(relative.Traversal))
-	for _, step := range relative.Traversal {
+	return s.selectionDiscards(relative.Source, traverserKeys(relative.Traversal), false, depth)
+}
+
+// splatDiscardsSensitive reports whether source[*].attr drops a sensitive value that may have been logged.
+// A splat selects the same steps from every element of a tuple, or from a single value that is not a
+// collection, so each element is followed like a selection of its own. A source or a projection that cannot
+// be followed fails closed, while a projection that only keeps the sensitive member retains it.
+func (s *sensitivityScanner) splatDiscardsSensitive(splat *hclsyntax.SplatExpr, depth int) bool {
+	keys, ok := splatKeys(splat.Each)
+	if !ok {
+		return s.containsSensitive(splat.Source, depth) && s.mayLogValue(splat.Source, depth)
+	}
+	source, wrapped := splat.Source, false
+	if call, isCall := unwrapParentheses(source).(*hclsyntax.FunctionCallExpr); isCall && call.Name == "sensitive" && len(call.Args) == 1 {
+		source, wrapped = call.Args[0], true
+	}
+	if tuple, isTuple := unwrapParentheses(source).(*hclsyntax.TupleConsExpr); isTuple {
+		for _, element := range tuple.Exprs {
+			if s.selectionDiscards(element, keys, wrapped, depth) {
+				return true
+			}
+		}
+		return false
+	}
+	return s.selectionDiscards(source, keys, wrapped, depth)
+}
+
+// splatKeys returns the steps a splat's projection applies to each element. The projection is written
+// against the anonymous element, so it is a chain of attribute and index steps that ends at it.
+func splatKeys(projection hclsyntax.Expression) ([]cty.Value, bool) {
+	switch node := projection.(type) {
+	case *hclsyntax.AnonSymbolExpr:
+		return nil, true
+	case *hclsyntax.RelativeTraversalExpr:
+		keys, ok := splatKeys(node.Source)
+		return append(keys, traverserKeys(node.Traversal)...), ok
+	case *hclsyntax.IndexExpr:
+		keys, ok := splatKeys(node.Collection)
+		key, diags := node.Key.Value(nil)
+		if diags.HasErrors() {
+			key = cty.DynamicVal
+		}
+		return append(keys, key), ok
+	}
+	return nil, false
+}
+
+// traverserKeys lists the keys a traversal selects; a step that is not an attribute or an index is unknown.
+func traverserKeys(traversal hcl.Traversal) []cty.Value {
+	keys := make([]cty.Value, 0, len(traversal))
+	for _, step := range traversal {
 		switch typed := step.(type) {
 		case hcl.TraverseAttr:
 			keys = append(keys, cty.StringVal(typed.Name))
@@ -485,7 +556,7 @@ func (s *sensitivityScanner) relativeDiscardsSensitive(relative *hclsyntax.Relat
 			keys = append(keys, cty.DynamicVal)
 		}
 	}
-	return s.selectionDiscards(relative.Source, keys, false, depth)
+	return keys
 }
 
 // selectionDiscards follows keys into source and reports whether any step drops a member that holds a
@@ -523,7 +594,9 @@ func selectMember(source hclsyntax.Expression, key cty.Value) (selected hclsynta
 	}
 	switch node := source.(type) {
 	case *hclsyntax.ObjectConsExpr:
-		if !key.Type().Equals(cty.String) {
+		// HCL names an object member by the string its key converts to, so 1 selects "1".
+		key, ok = convertedKey(key, cty.String)
+		if !ok {
 			return nil, nil, false
 		}
 		match := -1
@@ -547,7 +620,9 @@ func selectMember(source hclsyntax.Expression, key cty.Value) (selected hclsynta
 		}
 		return node.Items[match].ValueExpr, others, true
 	case *hclsyntax.TupleConsExpr:
-		if !key.Type().Equals(cty.Number) {
+		// HCL names a tuple element by the number its key converts to, so "1" selects element 1.
+		key, ok = convertedKey(key, cty.Number)
+		if !ok {
 			return nil, nil, false
 		}
 		position, accuracy := key.AsBigFloat().Int64()
@@ -562,4 +637,14 @@ func selectMember(source hclsyntax.Expression, key cty.Value) (selected hclsynta
 		return node.Exprs[position], others, true
 	}
 	return nil, nil, false
+}
+
+// convertedKey converts a selection key to the type HCL indexes the collection with. A key that does not
+// convert, such as "x" for a tuple, is reported as unusable so the selection fails closed.
+func convertedKey(key cty.Value, target cty.Type) (cty.Value, bool) {
+	converted, err := convert.Convert(key, target)
+	if err != nil || !converted.IsKnown() || converted.IsNull() {
+		return cty.NilVal, false
+	}
+	return converted, true
 }

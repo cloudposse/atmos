@@ -857,13 +857,46 @@ func TestAWSResolvesTheValidatedProfileSnapshot(t *testing.T) {
 
 // Without a rewrite the snapshot changes nothing, and missing shared files are still reported by the profile lookup.
 func TestAWSSnapshotKeepsMissingFilesMissing(t *testing.T) {
+	// An isolated temporary root keeps other tests and processes out of the cleanup assertion. os.TempDir reads
+	// TMPDIR on Unix and TMP/TEMP on Windows, which is where os.MkdirTemp("") creates the snapshot directory.
+	tempRoot := t.TempDir()
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, tempRoot)
+	}
+	pattern := filepath.Join(tempRoot, "atmos-aws-snapshot-*")
 	dir := t.TempDir()
 	env := map[string]string{"AWS_PROFILE": "absent", "AWS_SHARED_CREDENTIALS_FILE": filepath.Join(dir, "none"), "AWS_CONFIG_FILE": filepath.Join(dir, "none-config"), "AWS_EC2_METADATA_DISABLED": "true"}
 
 	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
 
 	assert.Equal(t, awsUnresolvedKey, scoped.Env[envAccessKeyID])
-	entries, err := filepath.Glob(filepath.Join(os.TempDir(), "atmos-aws-snapshot-*"))
+	entries, err := filepath.Glob(pattern)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "the snapshot directory is removed after resolution")
+}
+
+// Positive control for the cleanup assertion above: a resolving profile creates its snapshot directory inside the
+// isolated temporary root, so an empty root afterwards proves the cleanup ran rather than that the root went unused.
+func TestAWSSnapshotDirectoryLivesInTheIsolatedRootUntilResolved(t *testing.T) {
+	tempRoot := t.TempDir()
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, tempRoot)
+	}
+	pattern := filepath.Join(tempRoot, "atmos-aws-snapshot-*")
+	credentials, configFile := writeProfile(t, "resolves", "AKIARESOLVES")
+	env := map[string]string{"AWS_PROFILE": "resolves", "AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile, "AWS_EC2_METADATA_DISABLED": "true"}
+	var during []string
+	previous := afterProfileValidated
+	t.Cleanup(func() { afterProfileValidated = previous })
+	afterProfileValidated = func() {
+		during, _ = filepath.Glob(pattern)
+	}
+
+	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+
+	assert.Equal(t, "AKIARESOLVES", scoped.Env[envAccessKeyID])
+	require.Len(t, during, 1, "the snapshot directory exists in the isolated root while the profile resolves")
+	after, err := filepath.Glob(pattern)
+	require.NoError(t, err)
+	assert.Empty(t, after, "the snapshot directory is removed after resolution")
 }

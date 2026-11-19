@@ -209,6 +209,8 @@ func (s *sensitivityScanner) transformsRaw(expression hclsyntax.Expression, dept
 			transformed = s.indexDiscardsSensitive(typed, depth)
 		case *hclsyntax.RelativeTraversalExpr:
 			transformed = s.relativeDiscardsSensitive(typed, depth)
+		case *hclsyntax.SplatExpr:
+			transformed = s.splatDiscardsSensitive(typed, depth)
 		}
 		return nil
 	})

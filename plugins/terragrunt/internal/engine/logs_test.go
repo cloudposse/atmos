@@ -753,6 +753,37 @@ func TestSensitiveInputsFollowExposedParentInputs(t *testing.T) {
 	}
 }
 
+// A copy of an exposed include's whole locals object carries every sensitive local with it, at the path of
+// that local, while selecting one local keeps the precise result.
+func TestSensitiveInputsFollowACopyOfExposedIncludeLocals(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "repo")
+	unit := filepath.Join(root, "app", unitFile)
+	parent := filepath.Join(root, "parent.hcl")
+	child := "include \"root\" {\n  path = find_in_parent_folders(\"parent.hcl\")\n  expose = true\n}\n"
+	for _, test := range []struct {
+		name, parent, inputs string
+		files                []string
+		value                any
+		want                 [][]string
+	}{
+		{"sensitive local", "locals {\n token = sensitive(\"s\")\n open = \"o\"\n}", "copy = include.root.locals", []string{unit, parent}, map[string]any{"token": "s", "open": "o"}, [][]string{{"copy", "token"}}},
+		{"nested sensitive member", `locals { a = { x = sensitive("s"), y = "o" } }`, "copy = include.root.locals", []string{unit, parent}, map[string]any{"a": map[string]any{"x": "s", "y": "o"}}, [][]string{{"copy", "a", "x"}}},
+		{"sensitive through another local", "locals {\n t = sensitive(\"s\")\n copy = local.t\n}", "copy = include.root.locals", []string{unit, parent}, map[string]any{"t": "s", "copy": "s"}, [][]string{{"copy", "copy"}, {"copy", "t"}}},
+		{"no sensitive local", "locals {\n a = \"o\"\n b = \"p\"\n}", "copy = include.root.locals", []string{unit, parent}, map[string]any{"a": "o", "b": "p"}, nil},
+		{"exposed parent that cannot be read", `locals { token = sensitive("s") }`, "copy = include.root.locals", []string{unit}, "s", [][]string{{"copy"}}},
+		{"one local selected", "locals {\n token = sensitive(\"s\")\n open = \"o\"\n}", "copy = include.root.locals.open", []string{unit, parent}, "o", nil},
+		{"sensitive local selected", "locals {\n token = sensitive(\"s\")\n open = \"o\"\n}", "copy = include.root.locals.token", []string{unit, parent}, "s", [][]string{{"copy"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			require.NoError(t, fsys.MkdirAll(filepath.Dir(unit), 0o755))
+			writeFiles(t, fsys, map[string]string{parent: test.parent, unit: child + "inputs = {\n " + test.inputs + "\n}\n"})
+
+			assert.Equal(t, test.want, SensitiveInputs(fsys, test.files, map[string]any{"copy": test.value}))
+		})
+	}
+}
+
 // A later computed key may name the requested member, so an earlier static member cannot be selected
 // without scanning the whole object, unless the later key is provably different.
 func TestSensitiveInputsReverseMemberLookupAccountsForComputedKeys(t *testing.T) {
@@ -843,6 +874,25 @@ func TestTransformsSensitiveInputsWithholdsWhenASelectionDiscardsSensitiveValues
 		{"sensitive command as the key", `{ token = { a = "a" }[sensitive(` + call + `)] }`, true},
 		{"selection of a literal cannot have logged", `{ token = [sensitive("lit"), "b"][1] }`, false},
 		{"selection with no sensitive value", `{ token = ["a", "b"][1] }`, false},
+		{"numeric string selects the tuple element it names", `{ token = [sensitive(` + call + `), "b"]["0"] }`, false},
+		{"numeric string drops the other tuple element", `{ token = [sensitive(` + call + `), "b"]["1"] }`, true},
+		{"fractional number with an integral value selects an element", `{ token = [sensitive(` + call + `), "b"][1.0] }`, true},
+		{"string key beyond the tuple fails closed", `{ token = [sensitive(` + call + `), "b"]["5"] }`, true},
+		{"string key that is not a number fails closed", `{ token = [sensitive(` + call + `), "b"]["x"] }`, true},
+		{"fractional key fails closed", `{ token = [sensitive(` + call + `), "b"][0.5] }`, true},
+		{"number selects the object member it names", `{ token = { "1" = sensitive(` + call + `), "2" = "b" }[1] }`, false},
+		{"number drops the other object member", `{ token = { "1" = sensitive(` + call + `), "2" = "b" }[2] }`, true},
+		{"splat drops a sensitive member", `{ token = [{ a = sensitive(` + call + `), b = "b" }][*].b }`, true},
+		{"splat keeps the sensitive member", `{ token = [{ a = sensitive(` + call + `), b = "b" }][*].a }`, false},
+		{"splat keeps every element", `{ token = [sensitive(` + call + `), "b"][*] }`, false},
+		{"splat keeps the sensitive member of each element", `{ token = [{ a = sensitive(` + call + `), b = "b" }, { a = "x", b = "y" }][*].a }`, false},
+		{"splat drops a sensitive member of a later element", `{ token = [{ a = "x", b = "y" }, { a = sensitive(` + call + `), b = "b" }][*].b }`, true},
+		{"legacy attribute splat drops a sensitive member", `{ token = [{ a = sensitive(` + call + `), b = "b" }].*.b }`, true},
+		{"splat of a single object drops a sensitive member", `{ token = { a = sensitive(` + call + `), b = "b" }[*].b }`, true},
+		{"splat through a sensitive wrapper drops a sibling", `{ token = sensitive([{ a = ` + call + `, b = "b" }])[*].b }`, true},
+		{"splat of a literal cannot have logged", `{ token = [{ a = sensitive("lit"), b = "b" }][*].b }`, false},
+		{"splat with no sensitive value", `{ token = [{ a = "a", b = "b" }][*].b }`, false},
+		{"splat of an unfollowable source fails closed", `{ token = sensitive(` + call + `)[*].b }`, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			fsys := afero.NewMemMapFs()
@@ -862,6 +912,10 @@ func TestResolveWithholdsLogsWhenASelectionDiscardsSensitiveCommandOutput(t *tes
 		{"index keeps the sensitive element", `[sensitive(%s), "b"][0]`, false},
 		{"key drops the sensitive member", `{ a = sensitive(%s), b = "b" }["b"]`, true},
 		{"key keeps the sensitive member", `{ a = sensitive(%s), b = "b" }["a"]`, false},
+		{"numeric string keeps the sensitive element", `[sensitive(%s), "b"]["0"]`, false},
+		{"numeric string drops the sensitive element", `[sensitive(%s), "b"]["1"]`, true},
+		{"splat drops the sensitive member", `[{ a = sensitive(%s), b = "b" }][*].b`, true},
+		{"splat keeps the sensitive member", `[{ a = sensitive(%s), b = "b" }][*].a`, false},
 		{"sensitive predicate", `sensitive(%s) == "raw-secret-91cd" ? "a" : "b"`, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {

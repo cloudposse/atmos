@@ -82,7 +82,23 @@ func (s workdirScope) skipFile(path, planPath, name string, ignore func(string) 
 // insideCacheOutsideModules reports whether path holds mutable Terraform data: below a `.terraform`
 // directory or the effective data directory, outside the downloaded modules.
 func (s workdirScope) insideCacheOutsideModules(path string) bool {
+	if s.placement == dataDirBelowWorkdir && insideDataDirModules(s.dataDir, path) {
+		// The modules of a data directory below `.terraform` (TF_DATA_DIR=.terraform/custom) are reachable;
+		// the default exclusions still apply to cache directories nested inside them.
+		return insideTerraformCacheOutsideModules(s.dataDir, path)
+	}
 	return insideTerraformCacheOutsideModules(s.root, path) || s.insideDataDirOutsideModules(path)
+}
+
+// leadsToDataDir reports whether path is the data directory below the workdir or one of its ancestors, so
+// the walk can reach its modules even when the default `.terraform` exclusions would prune the directory.
+// Files beside the way stay excluded: only directories are exempted from pruning.
+func (s workdirScope) leadsToDataDir(path string) bool {
+	if s.placement != dataDirBelowWorkdir {
+		return false
+	}
+	_, ok := relativeInside(path, s.dataDir)
+	return ok
 }
 
 // insideModules reports whether path is part of downloaded modules.
@@ -134,7 +150,7 @@ func (s workdirScope) skipDirectory(path, name string) bool {
 	if path == s.root {
 		return false
 	}
-	if s.insideCacheOutsideModules(path) {
+	if s.insideCacheOutsideModules(path) && !s.leadsToDataDir(path) {
 		return true
 	}
 	return !s.insideModules(path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || name == stateWorkspaceDir || strings.HasPrefix(name, ".atmos-policy-plan-"))

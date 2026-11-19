@@ -1522,6 +1522,42 @@ func TestWorkdirDigestBindsModulesOfADataDirOutsideTheWorkdir(t *testing.T) {
 	assert.NotEqual(t, baseRebuild, rebuild, "a downloaded module outside the workdir stays bound")
 }
 
+// A data directory below the default `.terraform` directory (TF_DATA_DIR=.terraform/custom) must keep its
+// downloaded modules reachable, while the runtime paths beside them and the default layout stay as before.
+func TestWorkdirDigestBindsModulesOfADataDirBelowTheDefaultCache(t *testing.T) {
+	tests := []struct {
+		name    string
+		dataDir string
+		prefix  string
+	}{
+		{name: "one level below .terraform", dataDir: filepath.Join(defaultDataDir, "custom"), prefix: ".terraform/custom"},
+		{name: "two levels below .terraform", dataDir: filepath.Join(defaultDataDir, "a", "b"), prefix: ".terraform/a/b"},
+		{name: "default data directory", dataDir: "", prefix: ".terraform"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			plan := filepath.Join(root, "reviewed.planfile")
+			writeDigestFile(t, root, "main.tf", "module")
+			writeDigestFile(t, root, test.prefix+"/modules/vpc/script.sh", "reviewed script")
+			baseWorkdir, baseRebuild := bothDigests(t, root, plan, test.dataDir)
+
+			writeDigestFile(t, root, test.prefix+"/environment", "other-workspace")
+			writeDigestFile(t, root, test.prefix+"/terraform.tfstate", "state")
+			writeDigestFile(t, root, test.prefix+"/providers/registry/lock.json", "provider")
+			writeDigestFile(t, root, ".terraform/sibling/cache.json", "sibling cache")
+			workdir, rebuild := bothDigests(t, root, plan, test.dataDir)
+			assert.Equal(t, baseWorkdir, workdir, "runtime paths and sibling cache stay excluded")
+			assert.Equal(t, baseRebuild, rebuild, "runtime paths and sibling cache stay excluded")
+
+			writeDigestFile(t, root, test.prefix+"/modules/vpc/script.sh", "tampered script")
+			workdir, rebuild = bothDigests(t, root, plan, test.dataDir)
+			assert.NotEqual(t, baseWorkdir, workdir, "a downloaded module stays bound")
+			assert.NotEqual(t, baseRebuild, rebuild, "a downloaded module stays bound")
+		})
+	}
+}
+
 // A data directory outside the workdir that holds no downloaded modules adds nothing to the digests.
 func TestWorkdirDigestIgnoresAnExternalDataDirWithoutModules(t *testing.T) {
 	root := t.TempDir()
