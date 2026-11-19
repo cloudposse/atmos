@@ -1,0 +1,7 @@
+.workdir/
+state/
+.terraform/
+*.tfvars.json
+*.planfile
+backend.tf.json
+generated.txt

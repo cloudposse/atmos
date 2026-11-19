@@ -1,0 +1,9 @@
+.terraform/
+*.tfstate*
+*.tfplan
+*.planfile
+*.terraform.tfvars.json
+backend.tf.json
+.workdir/
+
+__pycache__/

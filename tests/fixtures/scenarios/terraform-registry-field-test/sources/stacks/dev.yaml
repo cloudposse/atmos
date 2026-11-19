@@ -1,0 +1,37 @@
+vars:
+  stage: dev
+terraform:
+  provision:
+    workdir:
+      enabled: true
+components:
+  terraform:
+    source-local:
+      source:
+        uri: ./modules/marker
+      backend_type: local
+      backend:
+        local:
+          path: ../../../state/source-local.tfstate
+      vars:
+        name: source-local
+      generate:
+        generated.txt: "generated for {{ .atmos_component }}"
+    local-alias:
+      metadata:
+        component: marker
+      backend_type: local
+      backend:
+        local:
+          path: ../../../state/local-alias.tfstate
+      vars:
+        name: local-alias
+    vendor-alias:
+      metadata:
+        component: vendor-marker
+      backend_type: local
+      backend:
+        local:
+          path: ../../../state/vendor-alias.tfstate
+      vars:
+        name: vendor-alias

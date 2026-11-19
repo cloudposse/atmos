@@ -6,13 +6,18 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/gcp"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -143,4 +148,160 @@ func TestGetCachedAzureBlobClient_ConnectionStringIsolatesCache(t *testing.T) {
 	assert.True(t, ok, "identity-keyed cache entry must exist at key %q", connKey)
 	assert.Same(t, got2, cachedVal.(AzureBlobAPI),
 		"value stored in cache must be the same object returned by getCachedAzureBlobClient")
+}
+
+// TestGCSAuthOptions verifies the GCS reader authenticates with the target identity's
+// credentials, and never silently falls back to ambient credentials in their place.
+func TestGCSAuthOptions(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	identity := func(g *schema.GCPAuthContext) *schema.AuthContext { return &schema.AuthContext{GCP: g} }
+	credsFile := filepath.Join(t.TempDir(), "target-credentials.json")
+	refreshableFile := writeGCSCredsFile(t, `{"type":"service_account"}`)
+
+	tests := []struct {
+		name        string
+		credentials string
+		authContext *schema.AuthContext
+		want        gcp.AuthOptions
+	}{
+		{name: "no identity uses ambient", want: gcp.AuthOptions{}},
+		{name: "nil gcp identity uses ambient", authContext: &schema.AuthContext{}, want: gcp.AuthOptions{}},
+		{
+			name:        "explicit backend credentials take precedence over the identity",
+			credentials: "/backend/creds.json",
+			authContext: identity(&schema.GCPAuthContext{AccessToken: "target-token", CredentialsFile: credsFile}),
+			want:        gcp.AuthOptions{Credentials: "/backend/creds.json"},
+		},
+		{
+			name:        "identity access token is used",
+			authContext: identity(&schema.GCPAuthContext{AccessToken: "target-token", TokenExpiry: now.Add(time.Hour), CredentialsFile: credsFile}),
+			want:        gcp.AuthOptions{AccessToken: "target-token", TokenExpiry: now.Add(time.Hour)},
+		},
+		{
+			name:        "identity token without expiry is used",
+			authContext: identity(&schema.GCPAuthContext{AccessToken: "target-token"}),
+			want:        gcp.AuthOptions{AccessToken: "target-token"},
+		},
+		{
+			name:        "expired identity token falls back to a refreshable credentials file",
+			authContext: identity(&schema.GCPAuthContext{AccessToken: "stale", TokenExpiry: now.Add(-time.Minute), CredentialsFile: refreshableFile}),
+			want:        gcp.AuthOptions{Credentials: refreshableFile},
+		},
+		{
+			name:        "identity credentials file is used without a token",
+			authContext: identity(&schema.GCPAuthContext{CredentialsFile: credsFile}),
+			want:        gcp.AuthOptions{Credentials: credsFile},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := gcsAuthOptions(tt.credentials, tt.authContext, now)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// writeGCSCredsFile writes a credentials file with the given JSON content and returns its path.
+func writeGCSCredsFile(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "creds.json")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	return path
+}
+
+// TestGCSAuthOptions_ExpiredTokenWithUnrefreshableCredentialsFileFails verifies an expired token
+// is an error when the credentials file only replays that token, and that refreshable files are kept.
+func TestGCSAuthOptions_ExpiredTokenWithUnrefreshableCredentialsFileFails(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	expired := func(file string) *schema.AuthContext {
+		return &schema.AuthContext{GCP: &schema.GCPAuthContext{AccessToken: "stale", TokenExpiry: now.Add(-time.Minute), CredentialsFile: file}}
+	}
+
+	tests := []struct {
+		name    string
+		file    string
+		wantErr bool
+	}{
+		{name: "authorized_user with only an access token", file: writeGCSCredsFile(t, `{"type":"authorized_user","access_token":"stale","client_id":"c","client_secret":"s"}`), wantErr: true},
+		{name: "missing file", file: filepath.Join(t.TempDir(), "missing.json"), wantErr: true},
+		{name: "malformed file", file: writeGCSCredsFile(t, `not json`), wantErr: true},
+		{name: "authorized_user with a refresh token", file: writeGCSCredsFile(t, `{"type":"authorized_user","refresh_token":"r"}`)},
+		{name: "service account key", file: writeGCSCredsFile(t, `{"type":"service_account"}`)},
+		{name: "external account", file: writeGCSCredsFile(t, `{"type":"external_account"}`)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, err := gcsAuthOptions("", expired(tt.file), now)
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrGCSIdentityTokenExpired)
+				assert.Equal(t, gcp.AuthOptions{}, opts)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, gcp.AuthOptions{Credentials: tt.file}, opts)
+		})
+	}
+
+	t.Run("valid token is unaffected by an unrefreshable file", func(t *testing.T) {
+		file := writeGCSCredsFile(t, `{"type":"authorized_user","access_token":"t"}`)
+		ac := &schema.AuthContext{GCP: &schema.GCPAuthContext{AccessToken: "t", TokenExpiry: now.Add(time.Hour), CredentialsFile: file}}
+		opts, err := gcsAuthOptions("", ac, now)
+		require.NoError(t, err)
+		assert.Equal(t, gcp.AuthOptions{AccessToken: "t", TokenExpiry: now.Add(time.Hour)}, opts)
+	})
+}
+
+// TestGCSAuthOptions_ExpiredTokenWithoutCredentialsFileFails verifies an expired identity token
+// with no credentials file is an error rather than empty options that would use ambient credentials.
+func TestGCSAuthOptions_ExpiredTokenWithoutCredentialsFileFails(t *testing.T) {
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	ac := &schema.AuthContext{GCP: &schema.GCPAuthContext{AccessToken: "stale", TokenExpiry: now.Add(-time.Minute)}}
+
+	opts, err := gcsAuthOptions("", ac, now)
+	require.ErrorIs(t, err, errUtils.ErrGCSIdentityTokenExpired)
+	assert.Equal(t, gcp.AuthOptions{}, opts)
+
+	t.Run("explicit backend credentials still win", func(t *testing.T) {
+		opts, err := gcsAuthOptions("/backend/creds.json", ac, now)
+		require.NoError(t, err)
+		assert.Equal(t, gcp.AuthOptions{Credentials: "/backend/creds.json"}, opts)
+	})
+
+	t.Run("client creation fails instead of using ambient credentials", func(t *testing.T) {
+		client, err := createGCSClient(context.Background(), &map[string]any{}, ac)
+		require.ErrorIs(t, err, errUtils.ErrGCSIdentityTokenExpired)
+		assert.Nil(t, client)
+
+		client, err = getCachedGCSClient(&map[string]any{}, ac)
+		require.ErrorIs(t, err, errUtils.ErrGCSIdentityTokenExpired)
+		assert.Nil(t, client)
+	})
+
+	t.Run("emulator identity is not affected", func(t *testing.T) {
+		emu := &schema.AuthContext{GCP: &schema.GCPAuthContext{
+			AccessToken: "stale", TokenExpiry: now.Add(-time.Minute), StorageEmulatorHost: "localhost:9000", WithoutAuthentication: true,
+		}}
+		client, err := createGCSClient(context.Background(), &map[string]any{}, emu)
+		require.NoError(t, err)
+		assert.NotNil(t, client)
+	})
+}
+
+// TestGCSClientCacheKey_IsolatesTargetCredentials verifies two identities never share a client.
+func TestGCSClientCacheKey_IsolatesTargetCredentials(t *testing.T) {
+	now := time.Now()
+	key := func(ac *schema.AuthContext) string {
+		opts, err := gcsAuthOptions("", ac, now)
+		require.NoError(t, err)
+		return gcsClientCacheKey(&opts, "", "")
+	}
+	ambient := key(nil)
+	a := key(&schema.AuthContext{GCP: &schema.GCPAuthContext{AccessToken: "token-a"}})
+	b := key(&schema.AuthContext{GCP: &schema.GCPAuthContext{AccessToken: "token-b"}})
+	file := key(&schema.AuthContext{GCP: &schema.GCPAuthContext{CredentialsFile: filepath.Join(t.TempDir(), "c.json")}})
+
+	assert.Len(t, map[string]struct{}{ambient: {}, a: {}, b: {}, file: {}}, 4, "ambient and every target identity need distinct keys")
+	assert.NotContains(t, a, "token-a", "the token must not appear in the cache key")
+	assert.Equal(t, a, key(&schema.AuthContext{GCP: &schema.GCPAuthContext{AccessToken: "token-a"}}), "the same identity reuses its client")
 }
