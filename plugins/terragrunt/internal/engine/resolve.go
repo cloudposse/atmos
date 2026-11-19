@@ -51,6 +51,14 @@ func resolveRequest(ctx context.Context, request *model.Request, filesystem afer
 	if request.Phase == "inventory" {
 		return discoverProject(ctx, request)
 	}
+	// Setup can fail before the evaluator installs its sensitivity guard. In that
+	// case no buffered path or event can be vouched for, so withhold them all.
+	evaluationStarted := false
+	defer func() {
+		if sink := logSinkFrom(ctx); !evaluationStarted && sink.collecting() {
+			sink.Withhold()
+		}
+	}()
 	filesystem, err := backendGenerationOverlay(ctx, request, filesystem)
 	if err != nil {
 		return nil, err
@@ -75,6 +83,7 @@ func resolveRequest(ctx context.Context, request *model.Request, filesystem afer
 		return nil, err
 	}
 	evaluator := unitEvaluator{logger: logger, environment: environment, pctx: requestParsingContext(request, path), request: request, path: path}
+	evaluationStarted = true // The evaluator now owns the sensitivity check.
 	return evaluator.resolve(ctx, &sensitivityScan{})
 }
 

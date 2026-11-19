@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -224,6 +225,44 @@ func TestLiveDeliveryProtectsSensitiveUnitPaths(t *testing.T) {
 				assert.Empty(t, units)
 			} else {
 				assert.Contains(t, units, "live/<MASKED>/app")
+			}
+		})
+	}
+}
+
+func TestEarlyEvaluationFailureWithholdsUnitPaths(t *testing.T) {
+	for _, live := range []bool{false, true} {
+		t.Run(fmt.Sprint("live=", live), func(t *testing.T) {
+			request := brokenUnit(t)
+			const secret = "private-missing-unit-2718"
+			unit := filepath.Join(request.RootDirectory, secret, "app")
+			require.NoError(t, os.MkdirAll(unit, 0o755))
+			request.Source = filepath.Join(secret, "app", "terragrunt.hcl")
+			// The directory exists, but stat of its config fails before sensitivity scanning.
+			require.NoFileExists(t, filepath.Join(unit, "terragrunt.hcl"))
+			receiver := &logReceiver{}
+			provider := New(nil)
+			if live {
+				provider = New(nil, WithAPI(apiClient(t, receiver)))
+			}
+
+			_, err := provider.Prepare(t.Context(), request)
+			require.Error(t, err)
+			detail, ok := component.FailureDetail(err)
+			require.True(t, ok)
+			delivered, _, _ := receiver.snapshot()
+			entries := slices.Concat(delivered, detail.Logs)
+			require.NotEmpty(t, entries)
+			var withheld bool
+			for _, entry := range entries {
+				assert.NotContains(t, entry.String(), secret)
+				assert.NotEqual(t, "Evaluating unit", entry.GetMessage())
+				withheld = withheld || strings.Contains(entry.GetMessage(), "withheld")
+			}
+			assert.True(t, withheld, "failed sensitivity setup must withhold buffered events")
+			if live {
+				assert.Contains(t, messagesOf(delivered), "Starting unit evaluation")
+				assert.Empty(t, detail.Logs, "live events must not be repeated in the failure")
 			}
 		})
 	}
