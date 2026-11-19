@@ -581,8 +581,75 @@ func (s workdirScope) recordExternalModules(files map[string]string) error {
 		if err != nil {
 			return err
 		}
+		if filepath.ToSlash(relative) == moduleManifestName {
+			return s.recordModuleManifest(path, files)
+		}
 		return recordWorkdirFileAs(externalModulesKeyPrefix+filepath.ToSlash(relative), path, entry, files)
 	})
+}
+
+// moduleManifestName is the file Terraform keeps in the modules directory of its data directory.
+const moduleManifestName = "modules.json"
+
+// recordModuleManifest digests the module manifest of an external data directory with its runner-local
+// paths made relative to that directory. Terraform records each module's Dir as a path below the data
+// directory, which is absolute when TF_DATA_DIR is, so the raw bytes differ between runners that mount an
+// otherwise identical layout at different roots and would fail verification of a reviewed plan.
+// Design choice: normalize the manifest before hashing (rather than require one absolute data directory on
+// every runner), because the module content is still hashed file by file and the only runner-specific
+// information is the prefix. A manifest that cannot be parsed, or a Dir outside the data directory, is
+// hashed as it is, so nothing is ever dropped from the digest.
+func (s workdirScope) recordModuleManifest(path string, files map[string]string) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return planIOError(err)
+	}
+	sum := sha256.Sum256(s.normalizeModuleManifest(raw))
+	files[externalModulesKeyPrefix+moduleManifestName] = hex.EncodeToString(sum[:])
+	return nil
+}
+
+// normalizeModuleManifest rewrites every module Dir below the data directory to a slash-separated path
+// relative to it, and returns the original bytes when the manifest is not the expected JSON shape.
+func (s workdirScope) normalizeModuleManifest(raw []byte) []byte {
+	var manifest map[string]any
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return raw
+	}
+	entries, ok := manifest["Modules"].([]any)
+	if !ok {
+		return raw
+	}
+	for _, entry := range entries {
+		module, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if dir, ok := module["Dir"].(string); ok {
+			module["Dir"] = s.relativeModuleDir(dir)
+		}
+	}
+	normalized, err := json.Marshal(manifest)
+	if err != nil {
+		return raw
+	}
+	return normalized
+}
+
+// relativeModuleDir returns dir relative to the data directory, or dir unchanged when it lies elsewhere.
+func (s workdirScope) relativeModuleDir(dir string) string {
+	native := filepath.FromSlash(dir)
+	if !filepath.IsAbs(native) {
+		native = filepath.Join(s.root, native)
+	}
+	resolved, err := resolvedPath(native)
+	if err != nil {
+		return dir
+	}
+	if relative, ok := relativeInside(s.dataDir, resolved); ok {
+		return filepath.ToSlash(relative)
+	}
+	return dir
 }
 
 // rejectExtraArgumentsDataDir fails a reviewed plan whose provider extra arguments set TF_DATA_DIR. They

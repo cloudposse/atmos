@@ -1,8 +1,10 @@
 package atmosbridge
 
 import (
+	"crypto/sha1" //nolint:gosec // The SDK names its SSO token cache file after a SHA-1.
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -899,4 +901,110 @@ func TestAWSSnapshotDirectoryLivesInTheIsolatedRootUntilResolved(t *testing.T) {
 	after, err := filepath.Glob(pattern)
 	require.NoError(t, err)
 	assert.Empty(t, after, "the snapshot directory is removed after resolution")
+}
+
+// ssoProfile writes a profile that resolves its credentials through SSO and the access token cache that
+// profile reads. A session profile gets an expired token so refreshing it reaches the SSO OIDC endpoint, and
+// a legacy profile gets a valid one so the call goes straight to the SSO portal.
+func ssoProfile(t *testing.T, session bool) (credentialsFile, configFile string) {
+	t.Helper()
+	home, dir := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	credentialsFile, configFile = filepath.Join(dir, "credentials"), filepath.Join(dir, "config")
+	require.NoError(t, os.WriteFile(credentialsFile, nil, 0o600))
+	const startURL = "https://example.awsapps.com/start"
+	cacheKey, expires, config := startURL, time.Now().Add(time.Hour), "[profile sso]\nsso_account_id = 123456789012\nsso_role_name = Admin\nsso_region = eu-west-1\nsso_start_url = "+startURL+"\n"
+	token := map[string]string{"accessToken": "cached-token", "startUrl": startURL, "region": "eu-west-1"}
+	if session {
+		cacheKey, expires = "team", time.Now().Add(-time.Hour)
+		config = "[profile sso]\nsso_account_id = 123456789012\nsso_role_name = Admin\nsso_session = team\n[sso-session team]\nsso_region = eu-west-1\nsso_start_url = " + startURL + "\n"
+		token["refreshToken"], token["clientId"], token["clientSecret"] = "refresh", "client", "client-secret"
+		token["registrationExpiresAt"] = time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	}
+	token["expiresAt"] = expires.UTC().Format(time.RFC3339)
+	digest := sha1.Sum([]byte(cacheKey))
+	cache := filepath.Join(home, ".aws", "sso", "cache")
+	require.NoError(t, os.MkdirAll(cache, 0o700))
+	payload, err := json.Marshal(token)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(cache, hex.EncodeToString(digest[:])+".json"), payload, 0o600))
+	require.NoError(t, os.WriteFile(configFile, []byte(config), 0o600))
+	return credentialsFile, configFile
+}
+
+// recordingServer answers every request with a forbidden status and counts the requests.
+func recordingServer(t *testing.T) (server *httptest.Server, hosts func() []string) {
+	t.Helper()
+	var mu sync.Mutex
+	var seen []string
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen = append(seen, r.Host+r.URL.Path)
+		mu.Unlock()
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(server.Close)
+	return server, func() []string { mu.Lock(); defer mu.Unlock(); return slices.Clone(seen) }
+}
+
+func TestAWSSSORequestsIgnoreProcessEndpointsAndUseInvocationOverrides(t *testing.T) {
+	for _, session := range []bool{false, true} {
+		name, service := "legacy sso", "SSO"
+		if session {
+			name, service = "sso session", "SSO_OIDC"
+		}
+		t.Run(name, func(t *testing.T) {
+			rogue, rogueHits := recordingServer(t)
+			approved, approvedHits := recordingServer(t)
+			for _, variable := range []string{"AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_SSO", "AWS_ENDPOINT_URL_SSO_OIDC"} {
+				t.Setenv(variable, rogue.URL)
+			}
+			credentials, configFile := ssoProfile(t, session)
+			env := map[string]string{
+				"AWS_PROFILE": "sso", "AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile,
+				"AWS_ENDPOINT_URL_" + service: approved.URL, "AWS_EC2_METADATA_DISABLED": "true",
+			}
+
+			_, err := resolveAWSCredentials(t.Context(), env, &awsTransport{endpoints: awsEndpoints(env)})
+
+			require.Error(t, err, "the approved endpoint refuses the request")
+			assert.Empty(t, rogueHits(), "a process endpoint never receives the bearer token request")
+			assert.NotEmpty(t, approvedHits(), "the invocation's own endpoint is used")
+		})
+	}
+}
+
+func TestAWSSSORequestsDefaultToAWSHostsWithoutOverrides(t *testing.T) {
+	for _, session := range []bool{false, true} {
+		name, host := "legacy sso", "portal.sso.eu-west-1.amazonaws.com"
+		if session {
+			name, host = "sso session", "oidc.eu-west-1.amazonaws.com"
+		}
+		t.Run(name, func(t *testing.T) {
+			rogue, rogueHits := recordingServer(t)
+			for _, variable := range []string{"AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_SSO", "AWS_ENDPOINT_URL_SSO_OIDC"} {
+				t.Setenv(variable, rogue.URL)
+			}
+			credentials, configFile := ssoProfile(t, session)
+			env := map[string]string{"AWS_PROFILE": "sso", "AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile, "AWS_EC2_METADATA_DISABLED": "true"}
+			var sent []string
+			var mu sync.Mutex
+			next := NewMockRoundTripper(gomock.NewController(t))
+			next.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(req *http.Request) (*http.Response, error) {
+				mu.Lock()
+				sent = append(sent, req.URL.Hostname())
+				mu.Unlock()
+				return &http.Response{StatusCode: http.StatusForbidden, Body: http.NoBody, Header: http.Header{}, Request: req}, nil
+			}).MinTimes(1)
+
+			_, err := resolveAWSCredentials(t.Context(), env, &awsTransport{next: next})
+
+			require.Error(t, err)
+			assert.Empty(t, rogueHits(), "a process endpoint never receives the request")
+			mu.Lock()
+			defer mu.Unlock()
+			assert.Equal(t, host, sent[0], "the request reaches the default AWS host")
+		})
+	}
 }

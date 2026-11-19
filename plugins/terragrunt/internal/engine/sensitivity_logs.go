@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
@@ -408,17 +409,38 @@ func (u *unitEvaluator) buildResolution(ctx context.Context, cfg *config.Terragr
 
 // mergeOverwritesSensitive detects values evaluated before a later merge argument replaces them.
 func (s *sensitivityScanner) mergeOverwritesSensitive(call *hclsyntax.FunctionCallExpr, depth int) bool {
-	for i, argument := range call.Args {
+	operands, known := s.mergeOperands(call, depth)
+	if !known {
+		return true
+	}
+	for i, argument := range operands {
 		scan := *s
 		scan.paths = nil
 		scan.walk(argument, nil, depth)
-		for _, later := range call.Args[i+1:] {
+		for _, later := range operands[i+1:] {
 			if s.overwritesSensitivePaths(later, scan.paths, depth) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// mergeOperands lists the objects a merge call combines. An expanded final argument supplies several
+// operands: the members of a literal tuple are separate operands, while any other expression has members the
+// scan cannot enumerate, which is reported as unknown when the call may hold a sensitive value.
+func (s *sensitivityScanner) mergeOperands(call *hclsyntax.FunctionCallExpr, depth int) ([]hclsyntax.Expression, bool) {
+	if !call.ExpandFinal || len(call.Args) == 0 {
+		return call.Args, true
+	}
+	last := len(call.Args) - 1
+	if tuple, ok := unwrapParentheses(call.Args[last]).(*hclsyntax.TupleConsExpr); ok {
+		return append(slices.Clone(call.Args[:last]), tuple.Exprs...), true
+	}
+	if slices.ContainsFunc(call.Args, func(argument hclsyntax.Expression) bool { return s.containsSensitive(argument, depth) }) {
+		return nil, false
+	}
+	return call.Args[:last], true
 }
 
 func (s *sensitivityScanner) overwritesSensitivePaths(expression hclsyntax.Expression, paths [][]string, depth int) bool {

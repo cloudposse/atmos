@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
@@ -312,6 +313,8 @@ func loadOptions(env map[string]string, transport *awsTransport) []func(*config.
 		config.WithRegion(awsRegion(env)),
 		// Clear process/shared endpoint selections before STS resolves or signs its request.
 		// The invocation transport applies its own endpoint and prefix to the default AWS host.
+		// SSO and SSO OIDC clients are built before the SDK applies service options, so their endpoint is
+		// pinned by the pinSSOEndpoint API option instead.
 		config.WithServiceOptions(func(_ string, options any) {
 			if stsOptions, ok := options.(*sts.Options); ok {
 				stsOptions.BaseEndpoint = nil
@@ -416,7 +419,13 @@ type prefixedKey struct{}
 // and the transport only changes the host.
 func (t *awsTransport) prefixBeforeSigning(stack *middleware.Stack) error {
 	step := middleware.FinalizeMiddlewareFunc("AtmosEndpointPathPrefix", func(ctx context.Context, in middleware.FinalizeInput, next middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
-		if req, ok := in.Request.(*smithyhttp.Request); ok && isAWSHost(req.URL.Hostname()) {
+		req, ok := in.Request.(*smithyhttp.Request)
+		if ok {
+			if err := pinSSOEndpoint(ctx, req); err != nil {
+				return middleware.FinalizeOutput{}, middleware.Metadata{}, err
+			}
+		}
+		if ok && isAWSHost(req.URL.Hostname()) {
 			if target := t.endpointFor(req.URL.Hostname()); hasPathPrefix(target) {
 				req.URL.Path, req.URL.RawPath = prefixedPath(target, req.URL.Path), ""
 				ctx = context.WithValue(ctx, prefixedKey{}, true)
@@ -425,6 +434,39 @@ func (t *awsTransport) prefixBeforeSigning(stack *middleware.Stack) error {
 		return next.HandleFinalize(ctx, in)
 	})
 	return stack.Finalize.Insert(step, "Signing", middleware.Before)
+}
+
+// ssoOperationPaths are the request paths of the SSO calls that resolve credentials: GetRoleCredentials and the
+// SSO OIDC CreateToken that refreshes a session token. Their service hosts are named after the endpoint, not
+// the service.
+var ssoOperationPaths = map[string]string{"SSO/GetRoleCredentials": "/federation/credentials", "SSO OIDC/CreateToken": "/token"}
+
+// pinSSOEndpoint keeps the bearer-token requests of SSO and SSO OIDC clients on AWS hosts. The SDK builds the
+// clients of an SSO profile before it applies service options and reads AWS_ENDPOINT_URL[_SSO[_OIDC]] from the
+// plugin process itself, so a process endpoint would otherwise receive the token. A request resolved to any
+// other host goes to the default AWS host of the client's region instead, where the invocation transport
+// applies the endpoint the invocation approved, if any. A call without a known default fails closed.
+func pinSSOEndpoint(ctx context.Context, req *smithyhttp.Request) error {
+	service := awsmiddleware.GetServiceID(ctx)
+	if service != "SSO" && service != "SSO OIDC" || isAWSHost(req.URL.Hostname()) {
+		return nil
+	}
+	path, known := ssoOperationPaths[service+"/"+awsmiddleware.GetOperationName(ctx)]
+	region := awsmiddleware.GetRegion(ctx)
+	if !known || region == "" {
+		return fmt.Errorf("%w: a %s request resolved to %q, which the invocation did not approve", ErrAWSCredentials, service, req.URL.Host)
+	}
+	domain := "amazonaws.com"
+	if strings.HasPrefix(region, "cn-") {
+		domain = "amazonaws.com.cn"
+	}
+	host := "oidc." + region + "." + domain
+	if service == "SSO" {
+		host = "portal.sso." + region + "." + domain
+	}
+	req.URL.Scheme, req.URL.Host, req.URL.Path, req.URL.RawPath = "https", host, path, ""
+	req.Host = ""
+	return nil
 }
 
 func hasPathPrefix(target *url.URL) bool {
@@ -491,6 +533,13 @@ func isAWSHost(host string) bool {
 func (t *awsTransport) endpointFor(host string) *url.URL {
 	labels := strings.Split(host, ".")
 	candidates := []string{labels[0]}
+	// The SSO portal and OIDC hosts are named after their endpoints, not after the services' override names.
+	switch {
+	case labels[0] == "portal" && len(labels) > 1 && labels[1] == "sso":
+		candidates = []string{"sso"}
+	case labels[0] == "oidc":
+		candidates = []string{"ssooidc"}
+	}
 	if slices.ContainsFunc(labels, func(label string) bool { return label == "s3" || strings.HasPrefix(label, "s3-") }) {
 		candidates = []string{"s3"}
 	}

@@ -1712,3 +1712,80 @@ func rewriteRecordExecution(t *testing.T, path string, execution *schema.Compone
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path+configurationPlanSuffix, data, 0o600))
 }
+
+// writeModuleManifest writes a Terraform module manifest into a data directory whose module records use
+// the absolute directory of that data directory, as Terraform does for an absolute TF_DATA_DIR.
+func writeModuleManifest(t *testing.T, dataDir, source, script string) {
+	t.Helper()
+	writeDigestFile(t, dataDir, "modules/vpc/script.sh", script)
+	manifest := map[string]any{"Modules": []map[string]string{
+		{"Key": "", "Source": "", "Dir": "."},
+		{"Key": "vpc", "Source": source, "Dir": filepath.ToSlash(filepath.Join(dataDir, "modules", "vpc"))},
+	}}
+	data, err := json.Marshal(manifest)
+	require.NoError(t, err)
+	writeDigestFile(t, dataDir, "modules/modules.json", string(data))
+}
+
+// The module manifest records runner-local absolute directories, so the same layout mounted at another
+// root must still verify, while a changed module or a changed manifest source must not.
+func TestWorkdirDigestIgnoresTheRunnerRootOfTheModuleManifest(t *testing.T) {
+	root := t.TempDir()
+	plan := filepath.Join(root, "reviewed.planfile")
+	writeDigestFile(t, root, "main.tf", "module")
+	reviewed := t.TempDir()
+	writeModuleManifest(t, reviewed, "registry/vpc", "reviewed script")
+	baseWorkdir, baseRebuild := bothDigests(t, root, plan, reviewed)
+
+	tests := []struct {
+		name   string
+		source string
+		script string
+		same   bool
+	}{
+		{name: "identical layout on a differently rooted runner", source: "registry/vpc", script: "reviewed script", same: true},
+		{name: "changed module content", source: "registry/vpc", script: "tampered script"},
+		{name: "changed manifest source", source: "registry/other", script: "reviewed script"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			other := t.TempDir()
+			writeModuleManifest(t, other, test.source, test.script)
+			workdir, rebuild := bothDigests(t, root, plan, other)
+			if test.same {
+				assert.Equal(t, baseWorkdir, workdir)
+				assert.Equal(t, baseRebuild, rebuild)
+				return
+			}
+			assert.NotEqual(t, baseWorkdir, workdir)
+			assert.NotEqual(t, baseRebuild, rebuild)
+		})
+	}
+}
+
+// A manifest that is not the expected shape is hashed as it is, so it can never be dropped from the digest.
+func TestWorkdirDigestHashesAnUnparseableModuleManifest(t *testing.T) {
+	root := t.TempDir()
+	plan := filepath.Join(root, "reviewed.planfile")
+	writeDigestFile(t, root, "main.tf", "module")
+	dataDir := t.TempDir()
+	writeDigestFile(t, dataDir, "modules/modules.json", "not json")
+	base, _ := bothDigests(t, root, plan, dataDir)
+	writeDigestFile(t, dataDir, "modules/modules.json", "other bytes")
+	changed, _ := bothDigests(t, root, plan, dataDir)
+	assert.NotEqual(t, base, changed)
+}
+
+// The failure to resolve the retained base path keeps its cause and is classified as a workdir failure.
+func TestUseRetainedWorkdirWrapsABasePathFailure(t *testing.T) {
+	cause := errors.New("working directory unreadable")
+	original := absolutePath
+	absolutePath = func(string) (string, error) { return "", cause }
+	t.Cleanup(func() { absolutePath = original })
+
+	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"metadata": map[string]any{"working_directory": filepath.Join("components", "network")}}}
+	err := useRetainedWorkdir(config, info)
+	require.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
+	require.ErrorIs(t, err, cause)
+}

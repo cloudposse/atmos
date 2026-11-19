@@ -278,6 +278,10 @@ func invocationExecution(info *schema.ConfigAndStacksInfo, prepared *schema.Prep
 	return prepared.Execution
 }
 
+// absolutePath resolves a path to an absolute one. It is a variable so a test can provoke the failure,
+// which filepath.Abs only reports when the process working directory is unreadable.
+var absolutePath = filepath.Abs
+
 // useRetainedWorkdir points the invocation at the directory the reviewed plan was created in.
 // A new process has not provisioned anything, so the path is derived the way provisioning does.
 func useRetainedWorkdir(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
@@ -287,9 +291,9 @@ func useRetainedWorkdir(config *schema.AtmosConfiguration, info *schema.ConfigAn
 	if override := workingDirectoryOverride(info); override != "" && !filepath.IsAbs(override) {
 		clean := filepath.Clean(override)
 		if clean != "." && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-			base, err := filepath.Abs(config.BasePath)
+			base, err := absolutePath(config.BasePath)
 			if err != nil {
-				return err
+				return fmt.Errorf("%w: resolve the base path of the retained workdir: %w", errUtils.ErrWorkdirProvision, err)
 			}
 			info.ComponentSection[provWorkdir.WorkdirPathKey] = filepath.Join(base, clean)
 			return selectRetainedSourceSubdir(info)

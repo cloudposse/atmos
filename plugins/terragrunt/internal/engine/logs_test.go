@@ -994,3 +994,93 @@ func TestEvaluatedFSKeepsChangedFilesUnverifiableAfterDeletion(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist, "a path that was never read stays missing")
 	assert.False(t, unverifiable(view, "/repo/never-read.hcl"))
 }
+
+// Copying the whole local object carries every sensitive local with it, at the path of that local, while
+// naming one local keeps the precise result so unrelated siblings gain no mark.
+func TestSensitiveInputsFollowACopyOfTheWholeLocalObject(t *testing.T) {
+	for _, test := range []struct {
+		name, locals, inputs string
+		value                any
+		want                 [][]string
+	}{
+		{"sensitive local", "token = sensitive(\"s\")\n open = \"o\"", "copy = local", map[string]any{"token": "s", "open": "o"}, [][]string{{"copy", "token"}}},
+		{"nested sensitive member", `a = { x = sensitive("s"), y = "o" }`, "copy = local", map[string]any{"a": map[string]any{"x": "s", "y": "o"}}, [][]string{{"copy", "a", "x"}}},
+		{"no sensitive local", "a = \"o\"\n b = \"p\"", "copy = local", map[string]any{"a": "o", "b": "p"}, nil},
+		{"named local keeps siblings clean", "token = sensitive(\"s\")\n open = \"o\"", "copy = local.open", "o", nil},
+		{"named sensitive local", "token = sensitive(\"s\")\n open = \"o\"", "copy = local.token", "s", [][]string{{"copy"}}},
+		{"copy through merge", "token = sensitive(\"s\")", "copy = merge(local, { extra = \"e\" })", map[string]any{"token": "s", "extra": "e"}, [][]string{{"copy", "token"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			writeFiles(t, fsys, map[string]string{"/unit.hcl": "locals {\n " + test.locals + "\n}\ninputs = {\n " + test.inputs + "\n}\n"})
+
+			assert.Equal(t, test.want, SensitiveInputs(fsys, []string{"/unit.hcl"}, map[string]any{"copy": test.value}))
+		})
+	}
+}
+
+// A value read from another configuration file is sensitive when that file's inputs or locals can hold a
+// sensitive value, and fails closed when the file cannot be inspected.
+func TestSensitiveInputsFollowReadTerragruntConfig(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "repo")
+	unit := filepath.Join(root, "app", unitFile)
+	settings := filepath.Join(root, "app", "settings.hcl")
+	other := filepath.Join(root, "app", "other.hcl")
+	for _, test := range []struct {
+		name, unit string
+		files      map[string]string
+		read       []string
+		want       [][]string
+	}{
+		{"sensitive input", `copy = read_terragrunt_config("settings.hcl").inputs.token`, map[string]string{settings: `inputs = { token = sensitive("s") }`}, []string{settings}, [][]string{{"copy"}}},
+		{"whole result", `copy = read_terragrunt_config("settings.hcl")`, map[string]string{settings: `inputs = { token = sensitive("s") }`}, []string{settings}, [][]string{{"copy"}}},
+		{"indexed result", `copy = read_terragrunt_config("settings.hcl")["inputs"]["token"]`, map[string]string{settings: `inputs = { token = sensitive("s") }`}, []string{settings}, [][]string{{"copy"}}},
+		{"sensitive local", `copy = read_terragrunt_config("settings.hcl").locals.token`, map[string]string{settings: "locals { token = sensitive(\"s\") }"}, []string{settings}, [][]string{{"copy"}}},
+		{"through a local of the unit", "copy = local.cfg.inputs.token", map[string]string{settings: `inputs = { token = sensitive("s") }`}, []string{settings}, [][]string{{"copy"}}},
+		{"through another read", `copy = read_terragrunt_config("other.hcl").inputs.token`, map[string]string{other: `inputs = { token = read_terragrunt_config("settings.hcl").inputs.token }`, settings: `inputs = { token = sensitive("s") }`}, []string{other, settings}, [][]string{{"copy"}}},
+		{"found in a parent folder", `copy = read_terragrunt_config(find_in_parent_folders("settings.hcl")).inputs.token`, map[string]string{filepath.Join(root, "settings.hcl"): `inputs = { token = sensitive("s") }`}, []string{filepath.Join(root, "settings.hcl")}, [][]string{{"copy"}}},
+		{"file that cannot be inspected", `copy = read_terragrunt_config("missing.hcl").inputs.token`, nil, nil, [][]string{{"copy"}}},
+		{"argument that is not static", `copy = read_terragrunt_config(get_env("FILE")).inputs.token`, nil, nil, [][]string{{"copy"}}},
+		{"nothing sensitive", `copy = read_terragrunt_config("settings.hcl").inputs.token`, map[string]string{settings: `inputs = { token = "t" }`}, []string{settings}, nil},
+		{"sensitive only outside inputs and locals", `copy = read_terragrunt_config("settings.hcl").inputs.token`, map[string]string{settings: "inputs = { token = \"t\" }\nterraform { source = sensitive(\"x\") }"}, []string{settings}, nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			require.NoError(t, fsys.MkdirAll(filepath.Dir(unit), 0o755))
+			files := map[string]string{unit: "locals {\n cfg = read_terragrunt_config(\"settings.hcl\")\n}\ninputs = {\n " + test.unit + "\n}\n"}
+			for name, content := range test.files {
+				files[name] = content
+			}
+			writeFiles(t, fsys, files)
+
+			assert.Equal(t, test.want, SensitiveInputs(fsys, append([]string{unit}, test.read...), map[string]any{"copy": "s"}))
+		})
+	}
+}
+
+// An expanded final argument is a list of merge operands, so its members replace earlier ones like any other
+// argument; a final argument that is not a literal tuple fails closed.
+func TestTransformsSensitiveInputsWhenAnExpandedMergeArgumentReplacesTheKey(t *testing.T) {
+	const call = `sensitive(run_cmd("echo", "x"))`
+	for _, test := range []struct {
+		name, inputs string
+		want         bool
+	}{
+		{"tuple member replaces the key", `merge({ token = ` + call + ` }, [{ token = "other" }]...)`, true},
+		{"later tuple member replaces the key", `merge({ token = ` + call + ` }, [{ name = "n" }, { token = "other" }]...)`, true},
+		{"tuple members keep different keys", `merge({ token = ` + call + ` }, [{ name = "n" }, { other = "o" }]...)`, false},
+		{"tuple member with an unknown key", `merge({ token = ` + call + ` }, [{ (local.name) = "n" }]...)`, true},
+		{"sensitive member of the tuple replaced by a later one", `merge([{ token = ` + call + ` }, { token = "other" }]...)`, true},
+		{"tuple of sensitive members with distinct keys", `merge([{ token = ` + call + ` }, { name = "n" }]...)`, false},
+		{"final argument that is not a tuple fails closed", `merge({ token = ` + call + ` }, local.list...)`, true},
+		{"expanded final argument holding no sensitive value", `merge({ token = "t" }, local.list...)`, false},
+		{"unexpanded tuple is one operand", `merge({ token = ` + call + ` }, { name = "n" })`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			writeFiles(t, fsys, map[string]string{"/unit.hcl": "locals {\n name = \"n\"\n list = [{ name = \"n\" }]\n}\ninputs = " + test.inputs + "\n"})
+
+			assert.Equal(t, test.want, transformsSensitiveInputs(fsys, "/unit.hcl"))
+		})
+	}
+}

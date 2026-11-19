@@ -89,7 +89,7 @@ func scanFile(body *hclsyntax.Body, file string, bodies map[string]*hclsyntax.Bo
 	if attribute == nil {
 		return nil
 	}
-	scanner := &sensitivityScanner{locals: localExpressions(body), includes: exposedIncludes(body, file, bodies, includes)}
+	scanner := &sensitivityScanner{locals: localExpressions(body), includes: exposedIncludes(body, file, bodies, includes), file: file, bodies: bodies}
 	scanner.walk(attribute.Expr, nil, 0)
 	return scanner.paths
 }
@@ -112,6 +112,9 @@ type sensitivityScanner struct {
 	locals   map[string]hclsyntax.Expression
 	includes map[string]exposedInclude
 	paths    [][]string
+	// file and bodies locate the configuration files that read_terragrunt_config reads.
+	file   string
+	bodies map[string]*hclsyntax.Body
 }
 
 // exposedInclude is what an exposed include contributes to the include.<alias> references of the file.
@@ -167,7 +170,7 @@ func (s *sensitivityScanner) containsSensitive(expression hclsyntax.Expression, 
 		}
 		switch typed := node.(type) {
 		case *hclsyntax.FunctionCallExpr:
-			found = typed.Name == "sensitive"
+			found = typed.Name == "sensitive" || s.readsSensitiveConfig(typed, depth)
 		case *hclsyntax.ScopeTraversalExpr:
 			found = s.referenceContainsSensitive(typed, depth)
 		}
@@ -218,6 +221,11 @@ func (s *sensitivityScanner) walkCall(call *hclsyntax.FunctionCallExpr, prefix [
 			s.walk(argument, prefix, depth)
 		}
 	default:
+		// A configuration read from another file carries that file's sensitive values.
+		if s.readsSensitiveConfig(call, depth) {
+			s.paths = append(s.paths, slices.Clone(prefix))
+			return
+		}
 		// Any other function, such as jsonencode(`sensitive`), can carry a sensitive argument into its
 		// result; its paths are unknown, so the whole result is sensitive.
 		for _, argument := range call.Args {
@@ -279,6 +287,10 @@ type sensitivityReference struct {
 // reference selects a local in this file, or a local or input of an exposed include. Names are read with
 // traversalKey, so local.name and local["name"] select the same value.
 func (s *sensitivityScanner) reference(traversal hcl.Traversal) (sensitivityReference, bool) {
+	if len(traversal) == 1 && traversal.RootName() == localName {
+		// A bare local copies every local of the file, as include.<alias>.locals copies the included file's.
+		return wholeLocals(exposedInclude{locals: s.locals, known: true}), true
+	}
 	if len(traversal) < 2 {
 		return sensitivityReference{}, false
 	}
@@ -339,6 +351,38 @@ func wholeLocals(exposed exposedInclude) sensitivityReference {
 		})
 	}
 	return sensitivityReference{object, exposed.locals, nil}
+}
+
+// readsSensitiveConfig reports whether call is a read_terragrunt_config of a file whose inputs or locals can
+// hold a sensitive value. The result of the call exposes both, and the scan does not follow which of them is
+// selected, so the whole result reads as sensitive. A file that cannot be inspected, a path that is not
+// static, and a file that includes another (whose inputs it may inherit) fail closed.
+func (s *sensitivityScanner) readsSensitiveConfig(call *hclsyntax.FunctionCallExpr, depth int) bool {
+	if call.Name != readConfigFunction {
+		return false
+	}
+	if depth >= maxLocalDepth || len(call.Args) == 0 {
+		return true
+	}
+	path, ok := includePath(&hclsyntax.Attribute{Expr: call.Args[0]})
+	if !ok {
+		return true
+	}
+	target := includedBody(path, s.file, s.bodies)
+	if target == nil || slices.ContainsFunc(target.Blocks, func(block *hclsyntax.Block) bool { return block.Type == "include" }) {
+		return true
+	}
+	reader := &sensitivityScanner{locals: localExpressions(target), file: s.file, bodies: s.bodies}
+	expressions := make([]hclsyntax.Expression, 0, len(reader.locals)+1)
+	if attribute := target.Attributes[inputsName]; attribute != nil {
+		expressions = append(expressions, attribute.Expr)
+	}
+	for _, expression := range reader.locals {
+		expressions = append(expressions, expression)
+	}
+	return slices.ContainsFunc(expressions, func(expression hclsyntax.Expression) bool {
+		return reader.containsSensitive(expression, depth+1)
+	})
 }
 
 // exposedIncludes associates an include alias with the parsed file's locals and inputs.
