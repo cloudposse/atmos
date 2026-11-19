@@ -368,11 +368,17 @@ func checkConfigurationWorkspaceForPlatform(info *schema.ConfigAndStacksInfo, pl
 // even with an overwrite policy.
 func rejectRuntimeArtifacts(files []schema.ComponentConfigurationFile) error {
 	for _, file := range files {
-		if isRuntimeArtifact(file.Path) {
+		if isRuntimeArtifact(file.Path) && !isAdjacentLockFileCopy(file) {
 			return fmt.Errorf("%w: generated file %s overlaps Terraform state or workdir runtime files", errUtils.ErrPluginInvalidConfig, file.Path)
 		}
 	}
 	return nil
+}
+
+// isAdjacentLockFileCopy reports the provider's literal copy of the lock file beside the unit,
+// which carries the unit's provider pins. Generated lock files at any path stay rejected.
+func isAdjacentLockFileCopy(file schema.ComponentConfigurationFile) bool {
+	return file.UnitFileCopy && file.IfExists == "overwrite" && filepath.ToSlash(filepath.Clean(file.Path)) == ".terraform.lock.hcl"
 }
 
 func isRuntimeArtifact(path string) bool {
