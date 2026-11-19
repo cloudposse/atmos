@@ -99,6 +99,9 @@ func TestPreventDestroyUsesCommandAndBooleanArguments(t *testing.T) {
 		{"apply", []string{"--destroy=true"}, true},
 		{"apply", []string{"-destroy", "-destroy=false"}, false},
 		{"apply", []string{"-destroy=false", "-destroy=1"}, true},
+		{"plan", []string{"-var", "-destroy"}, false},
+		{"plan", []string{"--var-file", "-destroy", "--destroy"}, true},
+		{"plan", []string{"-var=-destroy", "-destroy=false"}, false},
 	} {
 		t.Run(test.command+strings.Join(test.args, " "), func(t *testing.T) {
 			request := nativeUnit(t, "prevent_destroy = true")

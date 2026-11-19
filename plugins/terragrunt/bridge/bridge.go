@@ -151,9 +151,35 @@ func (e scopedExec) Command(ctx context.Context, name string, args ...string) ve
 	return e.Exec.Command(ctx, path, args...)
 }
 
-// IsDestroyOperation uses upstream boolean flag parsing, including last-value precedence.
+// IsDestroyOperation skips values of Terraform's string flags before applying upstream
+// boolean flag parsing, including last-value precedence.
 func IsDestroyOperation(command string, arguments []string) bool {
-	return command == "destroy" || iacargs.HasDestroyFlag(arguments)
+	if command == "destroy" {
+		return true
+	}
+	flags := make([]string, 0, len(arguments))
+	for i := 0; i < len(arguments); i++ {
+		argument := arguments[i]
+		if argument == "--" {
+			break
+		}
+		name, _, inline := strings.Cut(argument, "=")
+		if !inline && strings.HasPrefix(name, "-") && destroyValueOption(strings.TrimLeft(name, "-")) {
+			i++
+			continue
+		}
+		flags = append(flags, argument)
+	}
+	return iacargs.HasDestroyFlag(flags)
+}
+
+func destroyValueOption(name string) bool {
+	switch name {
+	case "backend-config", "backup", "chdir", "config", "from-module", "fs-mirror", "generate-config-out", "lock-timeout", "net-mirror", "out", "parallelism", "platform", "plugin-dir", "replace", "state", "state-out", "target", "var", "var-file":
+		return true
+	default:
+		return false
+	}
 }
 
 // deniedTransport retains the upstream no-network error shape while recording its use.

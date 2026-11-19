@@ -577,13 +577,29 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() er
 			if s.execCtx.planPolicy != nil {
 				writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
 			}
-			if digest, digestErr := fileDigest(writtenPath); digestErr == nil {
-				after.planDigest = digest
+			if s.planCommandFailed(phaseArgs, runErr) {
+				return runErr
 			}
+			digest, digestErr := fileDigest(writtenPath)
+			if digestErr != nil {
+				s.err = digestErr
+				return digestErr
+			}
+			after.planDigest = digest
 			s.result = after
 		}
 		return runErr
 	}
+}
+
+// planCommandFailed leaves Terraform's detailed plan status available for binding: only a real
+// failure skips the plan digest, never the "changes present" status of -detailed-exitcode.
+func (s *planSnapshotter) planCommandFailed(args []string, err error) bool {
+	if err == nil {
+		return false
+	}
+	env := slices.Concat(envpkg.ConvertMapToSlice(s.config.Env), s.info.ComponentEnvList)
+	return !isDetailedExitCodeChanges(subcommandPlan, args, env, err)
 }
 
 // reviewedSnapshot returns the configuration Terraform read, or takes a fresh snapshot when no
