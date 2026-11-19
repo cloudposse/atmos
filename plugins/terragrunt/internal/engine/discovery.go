@@ -76,6 +76,9 @@ type projectDiscovery struct {
 	// generated records units and stacks reached through parent traversal so an
 	// independent pass cannot discover materialized children again.
 	generated map[string]bool
+	// ownedTrees holds directories of stacks that failed before their outputs could be listed, so
+	// stale materialized children under them are not discovered as standalone units.
+	ownedTrees []string
 	// childFailures holds generated children that failed, with their generation root, so the
 	// failures of stacks that turn out to be templates can be dropped.
 	childFailures []childFailure
@@ -177,6 +180,8 @@ func (d *projectDiscovery) discoverStacks(stacks []string) error {
 				return err
 			}
 			failures[path] = err
+			// Outputs of an earlier generation may remain on disk and still belong to this stack.
+			d.claimDeclaredOutputs(path)
 		}
 	}
 	for _, path := range stacks {
@@ -205,7 +210,7 @@ func (d *projectDiscovery) independentStack(path string) bool {
 // disk by an earlier generate) belongs to that stack and is not added twice.
 func (d *projectDiscovery) discoverStandaloneUnits(units []string) error {
 	for _, path := range units {
-		if d.skipped(path) || d.generated[path] {
+		if d.skipped(path) || d.generated[path] || d.ownedByFailedStack(path) {
 			continue
 		}
 		dir := filepath.Dir(path)
