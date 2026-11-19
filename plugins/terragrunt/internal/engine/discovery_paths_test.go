@@ -11,11 +11,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
+	"github.com/zclconf/go-cty/cty"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
+
+func TestOutputDependenciesRejectsNonStringConfigPath(t *testing.T) {
+	cfg := &config.TerragruntConfig{TerragruntDependencies: config.Dependencies{{Name: "network", ConfigPath: cty.NumberIntVal(42)}}}
+	_, err := outputDependencies(nil, cfg, "unit/terragrunt.hcl")
+	require.ErrorIs(t, err, errDependencyConfigPath)
+	require.ErrorContains(t, err, "unit/terragrunt.hcl")
+	require.ErrorContains(t, err, "network")
+}
 
 func TestDiscoveryScopeAndPruning(t *testing.T) {
 	root, err := filepath.EvalSymlinks(t.TempDir())

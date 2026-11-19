@@ -65,6 +65,22 @@ func TestResolveConfigurationStateUsesTargetEnvironment(t *testing.T) {
 	require.Nil(t, state)
 }
 
+func TestResolveConfigurationStateKeepsEvaluationVariables(t *testing.T) {
+	t.Setenv("ATMOS_STATE_AMBIENT_SECRET", "must-not-leak")
+	manager := types.NewMockAuthManager(gomock.NewController(t))
+	manager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{SanitizedEnv: []string{"TF_VAR_region=base", "TF_WORKSPACE=production", "TF_CLI_ARGS_plan=-lock=false"}})
+	sections := validSections()
+	sections["settings"] = map[string]any{"configuration": true}
+	sections["env"] = map[string]any{"TF_VAR_region": "component"}
+	config := validAtmosConfig(t)
+	config.ComponentConfigurations = stateRuntime(t, func(_ context.Context, info *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
+		require.ElementsMatch(t, []string{"TF_VAR_region=component", "TF_WORKSPACE=production", "TF_CLI_ARGS_plan=-lock=false"}, info.SanitizedEnv)
+		return &schema.ComponentConfigurationState{BackendType: "local"}, nil
+	})
+	_, err := ResolveConfigurationState(t.Context(), config, &ConfigurationStateRequest{Sections: sections, Component: "network", Stack: "live", AuthManagers: []any{manager}})
+	require.NoError(t, err)
+}
+
 func TestConfigurationStateSectionsSelectsNamedWorkspace(t *testing.T) {
 	root := t.TempDir()
 	sections := map[string]any{"source": map[string]any{"uri": "never-fetch"}, "provision": map[string]any{}, "remote_state_backend_type": "static"}

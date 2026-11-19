@@ -2,11 +2,11 @@ package configuration
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"maps"
 	"os"
@@ -129,9 +129,13 @@ func manifestExists(directory string) bool {
 	return !errors.Is(err, os.ErrNotExist)
 }
 
+// contentDigest identifies the bytes of a generated file. It only detects change against the
+// manifest, never authenticates, so it uses a non-cryptographic 128-bit FNV-1a digest. Generated
+// files can hold credentials, which a password-hashing scanner would flag under a cryptographic hash.
 func contentDigest(content []byte) string {
-	sum := sha256.Sum256(content)
-	return hex.EncodeToString(sum[:])
+	hash := fnv.New128a()
+	_, _ = hash.Write(content)
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 // fileDigest returns the digest of an existing regular file, or false when there is none or it

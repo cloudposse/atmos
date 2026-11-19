@@ -158,8 +158,14 @@ func TestAffectedConfigurationWatchRootSpelling(t *testing.T) {
 
 // Native discovery starts during configuration initialization, so the command's cancellation must reach it.
 func TestParseDescribeAffectedCliArgsPassesCommandContext(t *testing.T) {
-	root := t.TempDir()
-	config := `base_path: "."
+	for _, yamlInventory := range []bool{false, true} {
+		name := "discovery only"
+		if yamlInventory {
+			name = "YAML and discovery"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			config := `base_path: "."
 components:
   terraform:
     base_path: components/terraform
@@ -168,25 +174,33 @@ components:
       discovery:
         enabled: true
         included_paths: ["live/**"]
-stacks:
+`
+			if yamlInventory {
+				config += `stacks:
   base_path: stacks
   included_paths: ["**/*"]
   name_template: "{{ .vars.stage }}"
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(config), 0o600))
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
-	t.Setenv("ATMOS_BASE_PATH", root)
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	cmd := &cobra.Command{Use: "affected"}
-	cmd.Flags().AddFlagSet(newDescribeAffectedFlagSet())
-	cmd.Flags().StringSlice("profile", nil, "")
-	cmd.Flags().StringSlice("config-path", nil, "")
-	cmd.Flags().StringSlice("config", nil, "")
-	cmd.Flags().String("base-path", "", "")
-	cmd.SetContext(ctx)
-	_, err := ParseDescribeAffectedCliArgs(cmd, nil)
-	require.ErrorIs(t, err, context.Canceled)
+				// Configured YAML inventory must exist before discovery can start.
+				require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte("vars:\n  stage: dev\n"), 0o600))
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(root, "atmos.yaml"), []byte(config), 0o600))
+			t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+			t.Setenv("ATMOS_BASE_PATH", root)
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			cmd := &cobra.Command{Use: "affected"}
+			cmd.Flags().AddFlagSet(newDescribeAffectedFlagSet())
+			cmd.Flags().StringSlice("profile", nil, "")
+			cmd.Flags().StringSlice("config-path", nil, "")
+			cmd.Flags().StringSlice("config", nil, "")
+			cmd.Flags().String("base-path", "", "")
+			cmd.SetContext(ctx)
+			_, err := ParseDescribeAffectedCliArgs(cmd, nil)
+			require.ErrorIs(t, err, context.Canceled)
+		})
+	}
 }
 
 func TestResolvedChangedFilesPerIndex(t *testing.T) {
