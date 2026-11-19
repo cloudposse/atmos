@@ -702,6 +702,7 @@ func (p *reviewedPlanProject) reviewWithModules(t *testing.T, module string) str
 	writeModule(t, p.workdir, module)
 	planPath := filepath.Join(p.workdir, "reviewed.planfile")
 	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	observeFixturePlan(t, p.config, info, execution, planPath)
 	require.NoError(t, recordConfigurationPlan(t.Context(), p.config, info, execution, []string{"-out=" + planPath}))
 	return planPath
 }

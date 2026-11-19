@@ -11,6 +11,11 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 
+	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/spf13/afero"
+	"github.com/zclconf/go-cty/cty"
+
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
@@ -167,6 +172,11 @@ func (w *discoveryWalker) walk(pattern string) error {
 		w.scan.Warnings = append(w.scan.Warnings, symlinkWarning(link))
 		return nil
 	}
+	// A scoped walk starts below the project root, so it never visits the directories above its
+	// start; they get the same pruning a root-wide scan applies, such as .terragrunt-cache.
+	if prunedAncestor(w.root, start) {
+		return nil
+	}
 	return filepath.WalkDir(start, func(path string, entry fs.DirEntry, walkErr error) error {
 		if os.IsNotExist(walkErr) && path == start {
 			return nil
@@ -176,6 +186,26 @@ func (w *discoveryWalker) walk(pattern string) error {
 		}
 		return w.visit(path, entry)
 	})
+}
+
+// prunedDirectory reports a directory discovery never descends into: hidden directories, such as
+// .terragrunt-cache and .terragrunt-stack, and node_modules.
+func prunedDirectory(name string) bool {
+	return strings.HasPrefix(name, ".") || name == "node_modules"
+}
+
+// prunedAncestor reports whether a directory between root and start, inclusive of start, is pruned.
+func prunedAncestor(root, start string) bool {
+	rel, err := filepath.Rel(root, start)
+	if err != nil || rel == "." {
+		return false
+	}
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if prunedDirectory(part) {
+			return true
+		}
+	}
+	return false
 }
 
 // symlinkedAncestor reports the first directory symlink between root and start, inclusive of start,
@@ -219,7 +249,7 @@ func (w *discoveryWalker) visit(path string, entry fs.DirEntry) error {
 		}
 	}
 	if entry.IsDir() {
-		if path != w.root && (strings.HasPrefix(entry.Name(), ".") || entry.Name() == "node_modules") {
+		if path != w.root && prunedDirectory(entry.Name()) {
 			return filepath.SkipDir
 		}
 		return nil
@@ -284,4 +314,89 @@ func checkIdentityCollisions(root string, inventory []model.DiscoveredUnit) erro
 		paths[unit.Config.Path] = unit.Stack + "/" + unit.Name
 	}
 	return nil
+}
+
+// claimDeclaredOutputs records the directories a stack file materializes without generating or
+// evaluating anything. Generation can fail after an earlier run left its outputs on disk, and
+// those outputs still belong to the stack, so the standalone pass must not list them without a
+// generation root. A declaration whose location cannot be read statically claims the whole stack
+// directory: failing closed hides a sibling of a stack that is already reported as failed, while
+// listing a stale child would run it outside its stack.
+func (d *projectDiscovery) claimDeclaredOutputs(stackPath string) {
+	dir := filepath.Dir(stackPath)
+	data, err := afero.ReadFile(d.overlay, stackPath)
+	if err != nil {
+		d.ownedTrees = append(d.ownedTrees, dir)
+		return
+	}
+	file, diags := hclsyntax.ParseConfig(data, stackPath, hcl.InitialPos)
+	body, isBody := file.Body.(*hclsyntax.Body)
+	if diags.HasErrors() || !isBody {
+		d.ownedTrees = append(d.ownedTrees, dir)
+		return
+	}
+	for _, block := range body.Blocks {
+		if block.Type != "unit" && block.Type != "stack" {
+			continue
+		}
+		output, ok := declaredOutput(dir, block)
+		if !ok {
+			d.ownedTrees = append(d.ownedTrees, dir)
+			continue
+		}
+		for _, name := range []string{unitFile, stackFile} {
+			if logical, err := logicalPath(filepath.Join(output, name)); err == nil {
+				d.generated[logical] = true
+			}
+		}
+	}
+}
+
+// declaredOutput returns where a unit or stack block generates, or false when that depends on
+// anything but literals. An expansion yields one output per element, so it is never static.
+func declaredOutput(stackDir string, block *hclsyntax.Block) (string, bool) {
+	for _, nested := range block.Body.Blocks {
+		if nested.Type == "expansion" {
+			return "", false
+		}
+	}
+	attr, ok := block.Body.Attributes["path"]
+	if !ok {
+		return "", false
+	}
+	path, ok := literal(attr.Expr, cty.String)
+	if !ok {
+		return "", false
+	}
+	noStack := false
+	if flag, present := block.Body.Attributes["no_dot_terragrunt_stack"]; present {
+		value, literalFlag := literal(flag.Expr, cty.Bool)
+		if !literalFlag {
+			return "", false
+		}
+		noStack = value.True()
+	}
+	if noStack {
+		return filepath.Join(stackDir, path.AsString()), true
+	}
+	return filepath.Join(stackDir, ".terragrunt-stack", path.AsString()), true
+}
+
+// literal evaluates expr without variables or functions and requires a known, non-null value of want.
+func literal(expr hclsyntax.Expression, want cty.Type) (cty.Value, bool) {
+	value, diags := expr.Value(nil)
+	if diags.HasErrors() || !value.IsKnown() || value.IsNull() || !value.Type().Equals(want) {
+		return cty.NilVal, false
+	}
+	return value, true
+}
+
+// ownedByFailedStack reports whether path lies under a stack directory claimed without a static output list.
+func (d *projectDiscovery) ownedByFailedStack(path string) bool {
+	for _, tree := range d.ownedTrees {
+		if within(path, tree) {
+			return true
+		}
+	}
+	return false
 }

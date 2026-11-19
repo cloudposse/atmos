@@ -185,6 +185,11 @@ func (e *Executor) beginPreparedConfiguration(
 		}
 		return endIgnoredRun(info, prepared.IgnoredRun)
 	}
+	// An ordinary component has no provider preparation, so it has no Terragrunt signals to clear and a
+	// file named like the signals file in its directory belongs to the user.
+	if prepared == nil {
+		return nil
+	}
 	warnOverlappingRetry(info, prepared)
 	if err := clearStaleSignals(atmosConfig, info); err != nil {
 		return err

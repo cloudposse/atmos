@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/zclconf/go-cty/cty"
@@ -41,6 +43,18 @@ func (p *Provider) withLogs(ctx context.Context, invocation *pluginv1.Invocation
 		sink.Forward(func(entry *model.LogEntry) { logs.stream.Send(logEntry(entry)) })
 	}
 	return engine.WithLogSink(ctx, sink), logs
+}
+
+// requestValues lists the values of a request whose sensitive parts must be redacted from its events: the
+// unit's configuration, the provider's configuration, and the operation's options, which are registered
+// before anything is evaluated.
+func requestValues(request *pluginv1.ComponentRequest) []*pluginv1.ComponentValue {
+	options := request.GetOperation().GetOptions()
+	values := []*pluginv1.ComponentValue{request.GetConfiguration(), request.GetProviderConfiguration()}
+	for _, name := range slices.Sorted(maps.Keys(options)) {
+		values = append(values, options[name])
+	}
+	return values
 }
 
 // redactSensitive registers the sensitive parts of a request value with the sink. A value that does not

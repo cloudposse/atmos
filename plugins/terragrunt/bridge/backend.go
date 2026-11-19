@@ -12,7 +12,7 @@ import (
 // BackendConfig strips upstream bootstrap-only settings without creating cloud
 // resources. Values remain native so the host can generate JSON backend blocks.
 //
-//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func BackendConfig(remote *remotestate.Config) map[string]any {
 	var values map[string]any
 	switch remote.BackendName {

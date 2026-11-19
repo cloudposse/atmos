@@ -23,7 +23,7 @@ var ErrUnsupportedOverlay = errors.New("unit file cannot be exported through the
 // private. The host ignores modes on Windows, so the exported modes only take
 // effect on platforms with POSIX permission bits.
 //
-//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.TerraformConfig) (map[string][]byte, map[string]uint32, error) {
 	memory := afero.NewMemMapFs()
 	// Upstream joins the copy source with each include and exclude pattern and expands the result as
@@ -33,16 +33,7 @@ func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.Te
 	view := newUnitView(unit)
 	fsys := afero.NewCopyOnWriteFs(afero.NewReadOnlyFs(view.mount(env.FS)), memory)
 	unit, destination := view.source, view.destination
-	include := []string{".tflint.hcl"}
-	var exclude []string
-	if terraform.IncludeInCopy != nil {
-		include = append(include, (*terraform.IncludeInCopy)...)
-	}
-	if terraform.ExcludeFromCopy != nil {
-		exclude = append(exclude, (*terraform.ExcludeFromCopy)...)
-	}
-	if err := util.CopyFolderContents(logger, fsys, unit, destination, ".terragrunt-module-manifest",
-		util.WithIncludeInCopy(include...), util.WithExcludeFromCopy(exclude...)); err != nil {
+	if err := copyOverlayContents(logger, fsys, unit, destination, terraform); err != nil {
 		return nil, nil, err
 	}
 	return collectOverlayFiles(memory, fsys, unit, destination)
@@ -193,6 +184,20 @@ func (r rebaseFs) ReadlinkIfPossible(name string) (string, error) {
 	return "", &os.PathError{Op: "readlink", Path: target, Err: afero.ErrNoReadlink}
 }
 
+// copyOverlayContents applies Terragrunt's configured copy filters to the temporary overlay.
+func copyOverlayContents(logger log.Logger, fsys afero.Fs, unit, destination string, terraform *config.TerraformConfig) error {
+	include := []string{".tflint.hcl"}
+	var exclude []string
+	if terraform.IncludeInCopy != nil {
+		include = append(include, (*terraform.IncludeInCopy)...)
+	}
+	if terraform.ExcludeFromCopy != nil {
+		exclude = append(exclude, (*terraform.ExcludeFromCopy)...)
+	}
+	return util.CopyFolderContents(logger, fsys, unit, destination, ".terragrunt-module-manifest",
+		util.WithIncludeInCopy(include...), util.WithExcludeFromCopy(exclude...))
+}
+
 // restrictByDirectories conservatively narrows a file's permission bits by the
 // subdirectories that contain it. The overlay carries file modes only, so a
 // readable file inside a private directory (for example 0644 under 0700) would
@@ -201,20 +206,16 @@ func (r rebaseFs) ReadlinkIfPossible(name string) (string, error) {
 // access to the file. The unit directory itself is not considered because the
 // host owns the working directory's mode.
 func restrictByDirectories(fsys afero.Fs, unit, dir string, perm os.FileMode) os.FileMode {
-	const (
-		groupExecute = 0o010
-		groupAccess  = 0o070
-		otherExecute = 0o001
-		otherAccess  = 0o007
-	)
+	const groupExecute, groupPermissions = 0o010, 0o070
+	const otherExecute, otherPermissions = 0o001, 0o007
 	for dir != "." && dir != string(filepath.Separator) && dir != "" {
 		if info, err := fsys.Stat(filepath.Join(unit, dir)); err == nil {
 			mode := info.Mode().Perm()
 			if mode&groupExecute == 0 {
-				perm &^= groupAccess
+				perm &^= groupPermissions
 			}
 			if mode&otherExecute == 0 {
-				perm &^= otherAccess
+				perm &^= otherPermissions
 			}
 		}
 		dir = filepath.Dir(dir)
@@ -226,10 +227,8 @@ func restrictByDirectories(fsys afero.Fs, unit, dir string, perm os.FileMode) os
 // default the host applies to files without a mode (0644): it is executable, or
 // group or other lacks read access.
 func exportsMode(perm os.FileMode) bool {
-	const (
-		groupAndOtherRead = 0o044
-		executeBits       = 0o111
-	)
+	const groupAndOtherRead = 0o044
+	const executeBits = 0o111
 	return perm&executeBits != 0 || perm&groupAndOtherRead != groupAndOtherRead
 }
 

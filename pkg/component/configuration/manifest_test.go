@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -471,7 +472,81 @@ func TestManifestDirectoryBlockerFailsClosed(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, ".atmos"), []byte("blocker\n"), 0o600))
 	err := WriteFiles(root, []schema.ComponentConfigurationFile{generated("main.tf", "locals {}\n", "overwrite")})
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
-	require.Contains(t, err.Error(), manifestName)
+	// The batch lock lives in the same metadata directory and is taken first, so the error names
+	// that directory rather than the manifest itself.
+	require.Contains(t, err.Error(), filepath.Dir(manifestName))
 	require.NoFileExists(t, filepath.Join(root, "main.tf"))
 	require.Equal(t, "blocker\n", read(t, root, ".atmos"))
+}
+
+// A manifest that exists but cannot be read stops the run before any file or record changes, so
+// an empty batch cannot unlink it and lose the ownership of files still in the working directory.
+func TestUnreadableManifestStopsTheRunUnchanged(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permissions do not prevent reading on Windows")
+	}
+	root := t.TempDir()
+	content := "variable \"kept\" {}\n"
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{generated("kept.tf", content, "overwrite")}))
+	metadata := filepath.Join(root, filepath.FromSlash(manifestName))
+	require.NoError(t, os.Chmod(metadata, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(metadata, 0o600) })
+	if _, err := os.ReadFile(metadata); err == nil {
+		t.Skip("running with privileges that bypass file permissions")
+	}
+	err := WriteFiles(root, nil)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, err, os.ErrPermission)
+	require.FileExists(t, metadata)
+	require.FileExists(t, filepath.Join(root, "kept.tf"))
+	// Once it is readable again, the recorded file is cleaned up as usual.
+	require.NoError(t, os.Chmod(metadata, 0o600))
+	require.NoError(t, WriteFiles(root, nil))
+	require.NoFileExists(t, filepath.Join(root, "kept.tf"))
+}
+
+// Rollback restores a file whose name is at the common 255-byte limit: the temporary name has a
+// fixed length instead of embedding the destination's name.
+func TestRollbackRestoresAMaximumLengthName(t *testing.T) {
+	directory := t.TempDir()
+	name := strings.Repeat("n", 252) + ".tf"
+	path := filepath.Join(directory, name)
+	if err := os.WriteFile(path, []byte("before"), 0o600); err != nil {
+		t.Skipf("the filesystem rejects a 255-byte name: %v", err)
+	}
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+	undo := make(restorePoint)
+	require.NoError(t, undo.capture(root, name))
+	require.NoError(t, os.WriteFile(path, []byte("after"), 0o600))
+	require.NoError(t, undo.restore(root))
+	require.Equal(t, "before", read(t, directory, name))
+}
+
+// Rollback restores only paths the run changed: an untouched hard-linked file keeps its link.
+func TestRollbackLeavesUnchangedFilesLinked(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "versions.tf")
+	require.NoError(t, os.WriteFile(path, []byte("module file"), 0o644))
+	linked := filepath.Join(directory, "linked.tf")
+	if err := os.Link(path, linked); err != nil {
+		t.Skipf("hard link unavailable: %v", err)
+	}
+	changed := filepath.Join(directory, "changed.tf")
+	require.NoError(t, os.WriteFile(changed, []byte("before"), 0o600))
+	root, err := os.OpenRoot(directory)
+	require.NoError(t, err)
+	defer root.Close()
+	undo := make(restorePoint)
+	require.NoError(t, undo.capture(root, "versions.tf"))
+	require.NoError(t, undo.capture(root, "changed.tf"))
+	require.NoError(t, os.WriteFile(changed, []byte("after"), 0o600))
+	require.NoError(t, undo.restore(root))
+	original, err := os.Stat(path)
+	require.NoError(t, err)
+	link, err := os.Stat(linked)
+	require.NoError(t, err)
+	require.True(t, os.SameFile(original, link), "an untouched file keeps its hard link")
+	require.Equal(t, "before", read(t, directory, "changed.tf"), "a changed file is still restored")
 }

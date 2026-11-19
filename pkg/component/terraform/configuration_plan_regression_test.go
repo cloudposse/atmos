@@ -25,6 +25,7 @@ func TestReviewedPlanKeepsGeneratedErrorPolicyFile(t *testing.T) {
 	require.NoError(t, err)
 	path := filepath.Join(execution.workingDir, "reviewed.planfile")
 	require.NoError(t, os.WriteFile(path, []byte("reviewed plan"), 0o600))
+	observeFixturePlan(t, project.config, plan, execution, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, plan, execution, []string{"-out=" + path}))
 	apply := project.reviewedApply(t, path)
 	_, err = testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
@@ -66,7 +67,7 @@ func TestPolicySnapshotRejectsPlanRewrittenBeforePublication(t *testing.T) {
 			execution.planPolicy = &planfile.Guard{}
 			ctx := execution.observePlanSnapshots(t.Context(), config, info, []string{"plan", "-out=" + published})
 			snapshot := ctx.Value(planSnapshotKey{}).(*planSnapshotter)
-			run := snapshot.around([]string{"plan", "-out=" + private}, func() error { return os.WriteFile(private, []byte("engine plan"), 0o600) })
+			run := snapshot.around([]string{"plan", "-out=" + private}, func() error { return os.WriteFile(private, []byte("engine plan"), 0o600) }, failedOnError)
 			require.NoError(t, run())
 			digest, err := fileDigest(private)
 			require.NoError(t, err)

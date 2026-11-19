@@ -612,3 +612,39 @@ func TestDependencyOnAnotherProvidersUnitIsRejected(t *testing.T) {
 		})
 	}
 }
+
+// A state request on a revision window carries the explicit provider options of the invocation, as the
+// revision's discovery does, so a feature override reaches the unit the revision resolves.
+func TestRevisionStateRequestsCarryTheInvocationProviderOptions(t *testing.T) {
+	config := enabledConfig(t)
+	config.ComponentProviderOptions = map[string]map[string]schema.ComponentProviderOption{"terragrunt": {
+		"feature":      {Value: map[string]any{"alpha": "true"}, FromCLI: true},
+		"download_dir": {Value: "/job-cache", FromCLI: true, Type: "string", EnvNames: []string{"TG_DOWNLOAD_DIR"}},
+	}}
+	head, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) { return nil, nil })
+	require.NoError(t, err)
+	require.NoError(t, head.configErr)
+	_, headOptions, err := head.providerOperation("terragrunt", map[string]string{})
+	require.NoError(t, err)
+	require.Contains(t, headOptions, "feature")
+
+	runtime, err := head.ForRevision(t.TempDir())
+	require.NoError(t, err)
+	revision := runtime.(*Session)
+	_, options, err := revision.providerOperation("terragrunt", map[string]string{})
+	require.NoError(t, err)
+
+	require.Len(t, options, len(headOptions))
+	feature, err := adapter.DecodeValue(options["feature"])
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"alpha": "true"}, feature)
+	downloadDir, err := adapter.DecodeValue(options["download_dir"])
+	require.NoError(t, err)
+	require.Equal(t, "/job-cache", downloadDir)
+
+	// Neither session aliases the other's encoded options.
+	options["download_dir"].SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	_, again, err := head.providerOperation("terragrunt", map[string]string{})
+	require.NoError(t, err)
+	require.Empty(t, again["download_dir"].SensitivePaths)
+}

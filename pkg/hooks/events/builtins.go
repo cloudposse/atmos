@@ -43,6 +43,7 @@ func builtins() []HookEvent {
 		BeforeHelmfileDeploy, AfterHelmfileDeploy,
 		BeforeHelmfileDestroy, AfterHelmfileDestroy,
 		BeforeScaffoldGenerate, AfterScaffoldGenerate,
+		BeforeDocsGenerate, AfterDocsGenerate,
 		"before.helmfile.version", "after.helmfile.version",
 	}
 }

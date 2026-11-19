@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -41,7 +42,7 @@ func TestMissingPlanDigestStopsBeforeAfterHooks(t *testing.T) {
 	phase := &executionPhase{command: "plan", args: []string{"plan", "-out=" + planPath}, insertAt: 1, componentPath: execution.workingDir}
 	shell := newShellFixture(t, nil)
 	err = hookExecutor(shell).runExecutionPhase(project.config, info, phase, nil, func(_ *schema.ConfigAndStacksInfo, args []string, _ []component.ExecutionOption) error {
-		return snapshotter.around(args, func() error { return nil })()
+		return snapshotter.around(args, func() error { return nil }, failedOnError)()
 	})
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.ErrorIs(t, snapshotter.err, errUtils.ErrPlanVerificationFailed)
@@ -49,14 +50,56 @@ func TestMissingPlanDigestStopsBeforeAfterHooks(t *testing.T) {
 	require.Empty(t, shell.calls, "after hooks must not run when the plan cannot be fingerprinted")
 
 	commandErr := errors.New("terraform failed")
-	err = snapshotter.around(phase.args, func() error { return commandErr })()
+	err = snapshotter.around(phase.args, func() error { return commandErr }, failedOnError)()
 	require.ErrorIs(t, err, commandErr, "an ordinary command failure must not be masked by a missing plan")
+	// Even if an exit-code policy treats the failure as successful, a stale artifact
+	// cannot become a reviewed plan without an observation from this invocation.
+	require.NoError(t, os.WriteFile(planPath, []byte("stale plan"), 0o600))
+	execution.planSnapshots = snapshotter
+	err = recordConfigurationPlan(t.Context(), project.config, info, execution, phase.args)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.NoFileExists(t, planPath+configurationPlanSuffix)
 
 	err = hookExecutor(shell).runExecutionPhase(project.config, info, phase, nil, func(_ *schema.ConfigAndStacksInfo, args []string, _ []component.ExecutionOption) error {
-		return snapshotter.around(args, func() error { return os.WriteFile(planPath, []byte("valid plan"), 0o600) })()
+		return snapshotter.around(args, func() error { return os.WriteFile(planPath, []byte("valid plan"), 0o600) }, failedOnError)()
 	})
 	require.NoError(t, err)
 	require.Len(t, shell.calls, 1, "a successful fingerprint permits the after hook")
+}
+
+// failedOnError classifies every error as a failed command.
+func failedOnError(err error) bool { return err != nil }
+
+// The snapshotter uses the phase's classification of the result: a "changes present" status the
+// phase accepts (for example -detailed-exitcode from extra_arguments' TF_CLI_ARGS_plan) still binds
+// the plan, and a run that kept no snapshot is never replaced by a later observation.
+func TestPlanSnapshotUsesThePhaseClassification(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	info := project.info(t, "plan")
+	project.provider.EXPECT().Prepare(gomock.Any(), info).Return(project.prepared(), nil)
+	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, info, false)
+	require.NoError(t, err)
+	planPath := filepath.Join(execution.workingDir, "reviewed.plan")
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: project.config, info: info, execCtx: execution, pathFrom: func([]string) string { return planPath }}
+	execution.planSnapshots = snapshotter
+	changes := errUtils.ExitCodeError{Code: 2}
+	acceptsChanges := func(err error) bool { return err != nil && !errors.Is(err, changes) }
+	write := func() error {
+		require.NoError(t, os.WriteFile(planPath, []byte("plan with changes"), 0o600))
+		return changes
+	}
+	err = snapshotter.around([]string{"plan"}, write, acceptsChanges)()
+	require.ErrorIs(t, err, changes, "the status still reaches the caller")
+	require.NoError(t, snapshotter.err)
+	require.NotNil(t, snapshotter.result, "a status the phase accepts binds the plan")
+	require.NotEmpty(t, snapshotter.result.planDigest)
+
+	// A genuine failure keeps no snapshot, and the binding does not fall back to a later observation.
+	err = snapshotter.around([]string{"plan"}, write, failedOnError)()
+	require.ErrorIs(t, err, changes)
+	require.Nil(t, snapshotter.result)
+	_, err = execution.reviewedSnapshot(t.Context(), project.config, info, planPath)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 }
 
 func newReviewedPlanProject(t *testing.T) *reviewedPlanProject {
@@ -109,6 +152,7 @@ func (p *reviewedPlanProject) review(t *testing.T) string {
 	require.Equal(t, p.workdir, execution.workingDir)
 	planPath := filepath.Join(execution.workingDir, "reviewed.planfile")
 	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	observeFixturePlan(t, p.config, info, execution, planPath)
 	require.NoError(t, recordConfigurationPlan(t.Context(), p.config, info, execution, []string{"-out=" + planPath}))
 	return planPath
 }
@@ -126,6 +170,7 @@ func (p *reviewedPlanProject) reviewInDefaultWorkdir(t *testing.T, below ...stri
 	planPath := filepath.Join(append(append([]string{execution.workingDir}, below...), "reviewed.planfile")...)
 	require.NoError(t, os.MkdirAll(filepath.Dir(planPath), 0o755))
 	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	observeFixturePlan(t, p.config, info, execution, planPath)
 	require.NoError(t, recordConfigurationPlan(t.Context(), p.config, info, execution, []string{"-out=" + planPath}))
 	return planPath
 }
@@ -223,6 +268,7 @@ func TestApplyOfReviewedPlanRunsApplyTimeHooks(t *testing.T) {
 	require.NoError(t, err)
 	planPath := filepath.Join(planned.workingDir, "reviewed.planfile")
 	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	observeFixturePlan(t, project.config, info, planned, planPath)
 	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, info, planned, []string{"-out=" + planPath}))
 
 	apply := project.reviewedApply(t, planPath)
@@ -256,6 +302,7 @@ func TestApplyOfReviewedPlanFindsRetainedWorkdirWithoutDiscoveredSource(t *testi
 	require.Equal(t, project.workdir, planned.workingDir)
 	planPath := filepath.Join(planned.workingDir, "reviewed.planfile")
 	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	observeFixturePlan(t, project.config, plan, planned, planPath)
 	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, plan, planned, []string{"-out=" + planPath}))
 
 	apply := project.reviewedApply(t, planPath)
@@ -455,6 +502,7 @@ func TestApplyOfRestoredPlanKeepsTheReviewedExecutionMetadata(t *testing.T) {
 	project.workdir = execution.workingDir
 	planPath := filepath.Join(execution.workingDir, "reviewed.planfile")
 	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	observeFixturePlan(t, project.config, info, execution, planPath)
 	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, info, execution, []string{"-out=" + planPath}))
 	project.freshRunner(t, planPath)
 
@@ -538,6 +586,7 @@ func TestApplyOfRestoredPlanVerifiesTheRestoredLockFile(t *testing.T) {
 	// The record is made after init has written the lock file, so re-record with it present.
 	info := project.info(t, "plan")
 	execution := &componentExecContext{preparedConfiguration: project.prepared(), componentPath: project.workdir, workingDir: project.workdir}
+	observeFixturePlan(t, project.config, info, execution, planPath)
 	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, info, execution, []string{"-out=" + planPath}))
 	project.freshRunner(t, planPath, lock)
 
@@ -626,7 +675,7 @@ func TestReviewedRebuildRejectsASymlinkedWorkdir(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, only, "files behind a symlinked workdir were not reviewed")
 
-	_, err = newReviewedRebuild(&schema.ConfigAndStacksInfo{}, rebuild.plan, rebuild.planPath)
+	_, err = newReviewedRebuild(&schema.ConfigAndStacksInfo{}, rebuild.plan, rebuild.planPath, "")
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 
 	// A link whose target is gone is just as unverifiable.
@@ -748,7 +797,7 @@ func TestReviewedRebuildRestoreRetriesAfterPartialMove(t *testing.T) {
 
 func TestNewReviewedRebuildRequiresAnOldEnoughRecord(t *testing.T) {
 	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", ComponentSettingsSection: map[string]any{"configuration": true}}
-	_, err := newReviewedRebuild(info, &configurationPlan{WorkingDirectory: t.TempDir()}, "plan")
+	_, err := newReviewedRebuild(info, &configurationPlan{WorkingDirectory: t.TempDir()}, "plan", "")
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed, "a record without a rebuild digest cannot prove a rebuilt workdir")
 }
 
@@ -776,7 +825,7 @@ func TestPlanSnapshotterFingerprintsThePlanBeforeAfterHooksRun(t *testing.T) {
 			execution.planSnapshots = snapshotter
 
 			// Terraform writes the plan.
-			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) })
+			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) }, failedOnError)
 			require.NoError(t, terraform())
 			written, err := fileDigest(planPath)
 			require.NoError(t, err)
@@ -826,7 +875,7 @@ func TestPlanSnapshotterBindsTheEngineThatRanTerraform(t *testing.T) {
 			snapshotter := &planSnapshotter{ctx: t.Context(), config: project.config, info: info, execCtx: execution, pathFrom: func([]string) string { return planPath }}
 			execution.planSnapshots = snapshotter
 
-			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) })
+			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) }, failedOnError)
 			require.NoError(t, terraform())
 			require.NotNil(t, snapshotter.result)
 			require.Equal(t, ran, snapshotter.result.engineDigest, "the engine digest is taken around the subprocess")
@@ -870,6 +919,7 @@ func stateFailureRuntime(t *testing.T, fixture *planRuntimeFixture, stateErr err
 func recordedPlan(t *testing.T) (*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, *componentExecContext, *planRuntimeFixture, string) {
 	t.Helper()
 	config, info, execCtx, runtime, path := planFixture(t)
+	observeFixturePlan(t, config, info, execCtx, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out=" + path}))
 	info.SubCommand = "apply"
 	info.UseTerraformPlan = true
@@ -953,10 +1003,12 @@ func TestRecordConfigurationPlanFailsWhenWorkdirCannotBeDigested(t *testing.T) {
 func TestRecordConfigurationPlanReplacesBindingAtomically(t *testing.T) {
 	config, info, execCtx, runtime, path := planFixture(t)
 	args := []string{"plan", "-out=" + path}
+	observeFixturePlan(t, config, info, execCtx, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, args))
 	first, err := os.ReadFile(path + configurationPlanSuffix)
 	require.NoError(t, err)
 	runtime.identity = "changed provider"
+	observeFixturePlan(t, config, info, execCtx, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, args))
 	second, err := os.ReadFile(path + configurationPlanSuffix)
 	require.NoError(t, err)
@@ -979,19 +1031,19 @@ func TestConfigurationWorkdirDigestSkipsOnlyNestedMutableDirectories(t *testing.
 		require.NoError(t, os.WriteFile(path, []byte(name), 0o600))
 	}
 	write("main.tf")
-	baseline, err := configurationWorkdirDigest(root, plan)
+	baseline, err := configurationWorkdirDigest(root, plan, "")
 	require.NoError(t, err)
 
 	for _, ignored := range []string{".git/HEAD", ".terragrunt-cache/x/main.tf", ".terraform/modules.json", "sub/.terraform/x", ".atmos/metadata.json", ".atmos/metadata.json.lock", "sub/.atmos/source-files.json", ".atmos-plan-temp", "terraform.tfstate.backup", "other.planfile.atmos.json"} {
 		write(ignored)
 	}
-	same, err := configurationWorkdirDigest(root, plan)
+	same, err := configurationWorkdirDigest(root, plan, "")
 	require.NoError(t, err)
 	require.Equal(t, baseline, same, "mutable data does not alter the retained-bytes digest")
 
 	for _, retained := range []string{"modules/child/main.tf", "terragrunt.hcl", ".terraform.lock.hcl", "settings.atmos.json", ".terraform/modules/vpc/.atmos/hook.sh", ".terraform/modules/vpc/.terragrunt-cache/main.tf", ".terraform/modules/vpc/.git/hooks/post-checkout"} {
 		write(retained)
-		changed, err := configurationWorkdirDigest(root, plan)
+		changed, err := configurationWorkdirDigest(root, plan, "")
 		require.NoError(t, err)
 		require.NotEqual(t, baseline, changed, retained)
 		baseline = changed
@@ -1011,7 +1063,7 @@ func TestConfigurationWorkdirDigestFailsForUnreadableFile(t *testing.T) {
 		_ = file.Close()
 		t.Skip("permissions are not enforced for this user")
 	}
-	_, err := configurationWorkdirDigest(root, filepath.Join(root, "reviewed.plan"))
+	_, err := configurationWorkdirDigest(root, filepath.Join(root, "reviewed.plan"), "")
 	require.ErrorIs(t, err, os.ErrPermission)
 }
 
@@ -1024,4 +1076,61 @@ func TestApplyOfRestoredPlanRejectsANewRoleBeforeAssumingIt(t *testing.T) {
 	_, _, err := project.freshApply(t, planPath, project.prepared())
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.Zero(t, recorded.calls, "a role absent from the reviewed preparation must never be assumed")
+}
+
+func TestPersistablePlanArguments(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{name: "none", in: nil, want: nil},
+		{name: "plain arguments are kept", in: []string{"-target=a.b", "-refresh=false"}, want: []string{"-target=a.b", "-refresh=false"}},
+		{name: "joined variable loses its value", in: []string{"-var=token=hunter2", "-destroy"}, want: []string{"-var=token=", "-destroy"}},
+		{name: "separate variable loses its value", in: []string{"-var", "token=hunter2", "-destroy"}, want: []string{"-var=token=", "-destroy"}},
+		{name: "double dash variable", in: []string{"--var=token=a=b"}, want: []string{"--var=token="}},
+		{name: "trailing flag without value is kept", in: []string{"-var"}, want: []string{"-var"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, persistablePlanArguments(test.in))
+		})
+	}
+}
+
+// A rebuild evaluates the unit with the arguments of the reviewed plan, not those of the apply, and the
+// record never holds a variable value.
+func TestRebuildReplaysTheReviewedPlanArguments(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	project.explicitWorkdir = false
+	plan := project.info(t, "plan")
+	plan.AdditionalArgsAndFlags = []string{"-target=aws_s3_bucket.logs", "-var", "token=hunter2"}
+	project.provider.EXPECT().Prepare(gomock.Any(), plan).Return(project.prepared(), nil)
+	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, plan, false)
+	require.NoError(t, err)
+	project.workdir = execution.workingDir
+	planPath := filepath.Join(execution.workingDir, "reviewed.planfile")
+	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	observeFixturePlan(t, project.config, plan, execution, planPath)
+	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, plan, execution, []string{"-out=" + planPath}))
+
+	record, err := os.ReadFile(planPath + configurationPlanSuffix)
+	require.NoError(t, err)
+	require.NotContains(t, string(record), "hunter2")
+	project.freshRunner(t, planPath)
+
+	apply := project.reviewedApply(t, planPath)
+	apply.AdditionalArgsAndFlags = []string{"-auto-approve"}
+	var evaluated []string
+	project.provider.EXPECT().Prepare(gomock.Any(), gomock.Cond(func(info *schema.ConfigAndStacksInfo) bool {
+		return info.SubCommand == "plan" && !info.UseTerraformPlan
+	})).DoAndReturn(func(_ any, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
+		evaluated = append([]string(nil), info.AdditionalArgsAndFlags...)
+		return project.prepared(), nil
+	})
+	_, err = testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"-target=aws_s3_bucket.logs", "-var=token="}, evaluated)
+	assert.Equal(t, []string{"-auto-approve"}, apply.AdditionalArgsAndFlags, "the apply keeps its own arguments")
 }

@@ -64,7 +64,7 @@ func (p *Provider) componentRequest(ctx context.Context, request *pluginv1.Compo
 //
 //nolint:lintroller // Plugin code cannot import the host performance tracker.
 func (p *Provider) Prepare(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
-	ctx, logs := p.withLogs(ctx, request.GetInvocation(), request.GetRootDirectory(), request.GetConfiguration(), request.GetProviderConfiguration())
+	ctx, logs := p.withLogs(ctx, request.GetInvocation(), request.GetRootDirectory(), requestValues(request)...)
 	response, err := p.prepare(ctx, request)
 	err = scoped(err, "prepare", request.GetRootDirectory(), request.GetAddress())
 	if response != nil {
@@ -292,7 +292,7 @@ func stateIdentity(req *model.Request, result *model.Resolution) (*pluginv1.Comp
 //
 //nolint:lintroller // Plugin code cannot import the host performance tracker.
 func (p *Provider) Resolve(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
-	ctx, logs := p.withLogs(ctx, request.GetInvocation(), request.GetRootDirectory(), request.GetConfiguration(), request.GetProviderConfiguration())
+	ctx, logs := p.withLogs(ctx, request.GetInvocation(), request.GetRootDirectory(), requestValues(request)...)
 	response, err := p.resolveState(ctx, request)
 	err = scoped(err, "resolve state", request.GetRootDirectory(), request.GetAddress())
 	if response != nil {

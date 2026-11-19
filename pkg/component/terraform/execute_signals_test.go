@@ -110,3 +110,23 @@ func TestIgnoredPreparationRefreshesRetainedSignals(t *testing.T) {
 		})
 	}
 }
+
+// An ordinary Terraform component has no provider preparation, so a file named like the signals
+// file in its directory belongs to the user.
+func TestOrdinaryComponentKeepsAFileNamedLikeTheSignalsFile(t *testing.T) {
+	root := t.TempDir()
+	cfg := &schema.AtmosConfiguration{TerraformDirAbsolutePath: root}
+	info := &schema.ConfigAndStacksInfo{FinalComponent: "app"}
+	dir := ConstructTerraformComponentWorkingDir(cfg, info)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	owned := filepath.Join(dir, execution.SignalsFileName)
+	require.NoError(t, os.WriteFile(owned, []byte(`{"owner":"user"}`), 0o600))
+
+	require.NoError(t, (&Executor{}).beginPreparedConfiguration(t.Context(), cfg, info, nil))
+	require.FileExists(t, owned)
+
+	// A prepared unit still starts from a clean signals file.
+	prepared := &schema.PreparedComponentConfiguration{}
+	require.NoError(t, (&Executor{}).beginPreparedConfiguration(t.Context(), cfg, info, prepared))
+	require.NoFileExists(t, owned)
+}

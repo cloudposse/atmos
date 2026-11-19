@@ -225,13 +225,94 @@ func TestAWSNamesTheCauseWhenCredentialsCannotBeResolved(t *testing.T) {
 	assert.Empty(t, signers, "no request leaves with substitute credentials")
 }
 
-func TestAWSLeavesEnvironmentWithoutSelectorsAlone(t *testing.T) {
-	base := Environment(map[string]string{"PATH": "/bin"}, io.Discard, io.Discard)
+// An invocation that supplies no credentials stays authoritative: the plugin process's keys, container
+// credentials and instance role are never used in its place.
+func TestAWSDoesNotFallBackToProcessCredentialsWithoutInvocationCredentials(t *testing.T) {
+	var ambientCalls atomic.Int32
+	ambient := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ambientCalls.Add(1)
+		_, _ = io.WriteString(w, `{"AccessKeyId":"AKIAAMBIENT","SecretAccessKey":"secret","Token":"ambient-token","Expiration":"2099-01-01T00:00:00Z"}`)
+	}))
+	defer ambient.Close()
+	t.Setenv("AWS_CONTAINER_CREDENTIALS_FULL_URI", ambient.URL)
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAAMBIENT")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "ambient")
+	server := newSTSServer(t)
+	env := map[string]string{"PATH": "/bin", "AWS_ENDPOINT_URL_STS": server.URL, "AWS_EC2_METADATA_DISABLED": "true"}
 
-	scoped := AWS(t.Context(), base)
+	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+	_, err := accountID(t, scoped)
 
-	assert.Equal(t, base.Env, scoped.Env)
-	assert.Same(t, base.HTTP, scoped.HTTP, "the HTTP client is replaced only when an override or failure needs it")
+	require.ErrorIs(t, err, ErrAWSCredentials)
+	require.ErrorContains(t, err, "supplies no AWS credentials")
+	signers, _ := server.seen()
+	assert.Empty(t, signers, "no request leaves with process credentials")
+	assert.Zero(t, ambientCalls.Load(), "the process credential endpoint is never called")
+	assert.Equal(t, "/bin", scoped.Env["PATH"])
+}
+
+// A profile that holds only a region has no credential source in the invocation's files, so the SDK would
+// reach the plugin process's container credentials. It is rejected; file-backed sources still resolve.
+func TestAWSRejectsRegionOnlyProfileInsteadOfProcessCredentials(t *testing.T) {
+	var calls atomic.Int32
+	ambient := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		_, _ = io.WriteString(w, `{"AccessKeyId":"AKIAAMBIENT","SecretAccessKey":"secret","Token":"ambient-token","Expiration":"2099-01-01T00:00:00Z"}`)
+	}))
+	defer ambient.Close()
+	t.Setenv("AWS_CONTAINER_CREDENTIALS_FULL_URI", ambient.URL)
+	t.Setenv("AWS_CONTAINER_AUTHORIZATION_TOKEN", "ambient-authorization")
+	server := newSTSServer(t)
+	credentials, configFile := writeProfile(t, "source", "AKIAFILES")
+	require.NoError(t, os.WriteFile(configFile, []byte("[profile regional]\nregion = eu-west-1\n[profile chained]\nrole_arn = arn:aws:iam::1:role/test\nsource_profile = regional\n[profile viasource]\nrole_arn = arn:aws:iam::1:role/test\nsource_profile = source\n"), 0o600))
+	base := map[string]string{"AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile, "AWS_ENDPOINT_URL_STS": server.URL, "AWS_EC2_METADATA_DISABLED": "true"}
+
+	// A role whose source profile has no credentials is refused by the SDK's own profile loading.
+	for _, profile := range []string{"regional", "chained"} {
+		t.Run(profile, func(t *testing.T) {
+			env := maps.Clone(base)
+			env["AWS_PROFILE"] = profile
+			scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+			require.Equal(t, awsUnresolvedKey, scoped.Env[envAccessKeyID])
+			_, err := accountID(t, scoped)
+			require.ErrorIs(t, err, ErrAWSCredentials)
+		})
+	}
+	assert.Zero(t, calls.Load(), "the process credential endpoint must never receive a request")
+
+	t.Run("file-backed source profile still resolves", func(t *testing.T) {
+		env := maps.Clone(base)
+		env["AWS_PROFILE"] = "viasource"
+		scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+		assert.Equal(t, "ASIAASSUMED", scoped.Env[envAccessKeyID])
+	})
+}
+
+// The web identity role is assumed from the invocation's values alone: a process profile or shared file
+// that cannot be loaded neither fails nor changes the resolution.
+func TestAWSWebIdentityDoesNotLoadTheProcessCredentialChain(t *testing.T) {
+	broken := filepath.Join(t.TempDir(), "broken-config")
+	require.NoError(t, os.WriteFile(broken, []byte("[profile broken\n"), 0o600))
+	t.Setenv("AWS_CONFIG_FILE", broken)
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", broken)
+	t.Setenv("AWS_PROFILE", "absent-process-profile")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/xml")
+		fmt.Fprintf(w, `<AssumeRoleWithWebIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><AssumeRoleWithWebIdentityResult><Credentials><AccessKeyId>ASIAWEB</AccessKeyId><SecretAccessKey>web</SecretAccessKey><SessionToken>web-token</SessionToken><Expiration>%s</Expiration></Credentials></AssumeRoleWithWebIdentityResult></AssumeRoleWithWebIdentityResponse>`, time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+	}))
+	t.Cleanup(server.Close)
+	token := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(token, []byte("jwt"), 0o600))
+	env := map[string]string{
+		"AWS_WEB_IDENTITY_TOKEN_FILE": token, "AWS_ROLE_ARN": "arn:aws:iam::123456789012:role/web",
+		"AWS_REGION": "eu-central-1", "AWS_ENDPOINT_URL_STS": server.URL,
+	}
+
+	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+
+	assert.Equal(t, "ASIAWEB", scoped.Env["AWS_ACCESS_KEY_ID"])
+	assert.Equal(t, "eu-central-1", awsRegion(env))
+	assert.Equal(t, "us-east-1", awsRegion(map[string]string{}))
 }
 
 func TestAWSTransportRoutesByService(t *testing.T) {

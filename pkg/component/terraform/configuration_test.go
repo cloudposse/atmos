@@ -397,6 +397,15 @@ func emptyTokenFile(t *testing.T) string {
 
 func TestRejectRuntimeArtifacts(t *testing.T) {
 	require.NoError(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{{Path: "backend.tf", IfExists: "overwrite"}}))
+	// The unit's own lock file copy carries its provider pins; only that exact copy is allowed.
+	require.NoError(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{{Path: ".terraform.lock.hcl", IfExists: "overwrite", UnitFileCopy: true}}))
+	for _, file := range []schema.ComponentConfigurationFile{
+		{Path: "nested/.terraform.lock.hcl", IfExists: "overwrite", UnitFileCopy: true},
+		{Path: ".terraform.lock.hcl", IfExists: "overwrite_terragrunt", UnitFileCopy: true},
+		{Path: "terraform.tfstate", IfExists: "overwrite", UnitFileCopy: true},
+	} {
+		require.ErrorIs(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{file}), errUtils.ErrPluginInvalidConfig, file.Path)
+	}
 	for _, path := range []string{"examples/terraform.tfstate", "nested/provider.tf", "Nested/PROVIDER.tf", "terraform.tfstate.example"} {
 		require.NoError(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{{Path: path}}), path)
 	}

@@ -104,7 +104,11 @@ func expandTflint(hook *model.Hook, execution *model.Execution, path string) []m
 		runHook := initHook
 		runHook.Execute = append(append([]string{tflintExecutable, "--config", configFile, "--chdir", "."}, variables...), passthrough...)
 		// The module directory is where tflint runs; a working_dir would only change the lock key upstream.
+		// read-config runs before provisioning, when the host has no module directory, so it keeps the unit directory.
 		initHook.WorkingDirectory, runHook.WorkingDirectory = "", ""
+		if isLifecycleCommand(command) {
+			initHook.WorkingDirectory, runHook.WorkingDirectory = filepath.Dir(path), filepath.Dir(path)
+		}
 		result = append(result, initHook, runHook)
 	}
 	return result

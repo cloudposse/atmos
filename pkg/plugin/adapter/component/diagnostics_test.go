@@ -354,3 +354,24 @@ func TestIAMProbeRegistersTokenBeforeDiagnostics(t *testing.T) {
 		})
 	}
 }
+
+// The module source authorization is registered for masking before any diagnostic of the response is
+// checked, and one that cannot be decoded takes precedence over the diagnostics.
+func TestPreparationCheckRegistersTheSourceAuthorizationBeforeDiagnostics(t *testing.T) {
+	root := t.TempDir()
+	authorization := wireValue(t, cty.StringVal("Bearer registry-secret-5c1d"))
+	authorization.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	failure := &pluginv1.Diagnostic{Detail: &pluginv1.ErrorDetail{Code: "evaluation_error", Summary: "Evaluation failed", Detail: "registry rejected Bearer registry-secret-5c1d", UserSafe: true, Severity: pluginv1.Severity_SEVERITY_ERROR}}
+	result := &pluginv1.PrepareComponentResponse{
+		Engine: "terraform", WorkingDirectory: root, ModuleSource: "https://registry.example/archive.tgz", State: fixtureState(root),
+		ModuleSourceAuthorization: authorization, ModuleSourceAuthOrigin: "https://registry.example", Diagnostics: []*pluginv1.Diagnostic{failure},
+	}
+
+	require.ErrorIs(t, checkPreparationResponse(result, ""), errUtils.ErrPluginInvalidConfig)
+	assert.NotContains(t, mask(failure.Detail.Detail), "registry-secret-5c1d", "the authorization was registered even though the preparation failed")
+
+	unknown := wireValue(t, cty.UnknownVal(cty.String))
+	unknown.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	result.ModuleSourceAuthorization = unknown
+	require.ErrorIs(t, checkPreparationResponse(result, ""), errUtils.ErrPluginUnsupportedExtension, "the undecodable authorization outranks the diagnostic error")
+}

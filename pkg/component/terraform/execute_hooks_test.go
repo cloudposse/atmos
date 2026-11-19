@@ -980,19 +980,20 @@ func TestReadConfigHooksRunOncePerPrepareInTheUnitDirectory(t *testing.T) {
 		BeforeHooks: []schema.ComponentHook{hook("before", "terragrunt-read-config")},
 	}}
 	shell := newShellFixture(t, nil)
-	info := hookInfo("plan", nil)
+	info := hookInfo("plan", prepared.Execution)
 	require.NoError(t, hookExecutor(shell).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, info, prepared))
 	require.Equal(t, []string{"hook-alias", "hook-canonical"}, shell.names(), "only after hooks run, and only those listing the lifecycle")
 	require.Equal(t, unit, shell.calls[0].dir)
 	require.Contains(t, shell.calls[0].env, "TG_CTX_COMMAND=terragrunt-read-config")
 
 	// A dry run, a unit without hooks, and a failing hook.
-	dry := hookInfo("plan", nil)
+	dry := hookInfo("plan", prepared.Execution)
 	dry.DryRun = true
 	quiet := newShellFixture(t, nil)
 	require.NoError(t, hookExecutor(quiet).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, dry, prepared))
 	require.NoError(t, hookExecutor(quiet).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, info, nil))
-	require.NoError(t, hookExecutor(quiet).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, info, &schema.PreparedComponentConfiguration{Execution: &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{hook("plain", "plan")}}}))
+	plain := &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{hook("plain", "plan")}}
+	require.NoError(t, hookExecutor(quiet).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, hookInfo("plan", plain), &schema.PreparedComponentConfiguration{Execution: plain}))
 	require.Empty(t, quiet.calls)
 
 	failing := newShellFixture(t, func(*shellCall) error { return errors.New("boom") })
@@ -1370,4 +1371,90 @@ func TestInitFromModuleMissingDirectoryFailsBeforeHookButAllowsFetchBeforeAfterH
 			}
 		})
 	}
+}
+
+// A retry after the command completed must not run it again: an apply changed state, and the
+// retry does not re-plan. Only the work that did not complete runs again.
+func TestErrorsPolicyDoesNotReplayACompletedCommandWhenAnAfterHookFails(t *testing.T) {
+	afterAttempts := 0
+	shell := newShellFixture(t, func(call *shellCall) error {
+		if call.command != "hook-notify" {
+			return nil
+		}
+		afterAttempts++
+		if afterAttempts == 1 {
+			_, _ = io.WriteString(call.options.StderrCapture, "connection timeout")
+			return errors.New("hook failed")
+		}
+		return nil
+	})
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3}}}
+	info := hookInfo("apply", &schema.ComponentExecution{
+		Errors:      policy,
+		BeforeHooks: []schema.ComponentHook{execHook("lint", "apply")},
+		AfterHooks:  []schema.ComponentHook{execHook("notify", "apply")},
+	})
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"apply"}, t.TempDir())
+	require.NoError(t, err)
+	require.Equal(t, []string{"hook-lint arg", "terraform apply", "hook-notify arg", "hook-notify arg"}, shell.names(),
+		"the retry runs the after hooks again and never replays the completed apply")
+}
+
+// A completed plan that reported changes keeps that result when only a hook is retried.
+func TestErrorsPolicyKeepsTheChangesResultOfACompletedPlanWhenAnAfterHookIsRetried(t *testing.T) {
+	afterAttempts := 0
+	shell := newShellFixture(t, func(call *shellCall) error {
+		if call.command == "terraform" {
+			return errUtils.ExitCodeError{Code: 2}
+		}
+		afterAttempts++
+		if afterAttempts == 1 {
+			_, _ = io.WriteString(call.options.StderrCapture, "connection timeout")
+			return errors.New("hook failed")
+		}
+		return nil
+	})
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3}}}
+	info := hookInfo("plan", &schema.ComponentExecution{Errors: policy, AfterHooks: []schema.ComponentHook{execHook("notify", "plan")}})
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"plan", "-detailed-exitcode"}, t.TempDir())
+	require.Equal(t, 2, resolveExitCode(err), "the plan result survives the hook retry")
+	require.Equal(t, []string{"terraform plan", "hook-notify arg", "hook-notify arg"}, shell.names())
+}
+
+// Output of a step that succeeded must not decide how a different step's failure is handled.
+func TestErrorsPolicyMatchesOnlyOutputOfFailingSteps(t *testing.T) {
+	shell := newShellFixture(t, func(call *shellCall) error {
+		switch call.command {
+		case "terraform":
+			_, _ = io.WriteString(call.options.StderrCapture, "Warning: connection timeout, continuing")
+		case "hook-notify":
+			_, _ = io.WriteString(call.options.StderrCapture, "Error: invalid configuration")
+			return errors.New("hook failed")
+		}
+		return nil
+	})
+	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "net", Patterns: []string{"timeout"}}}}
+	info := hookInfo("apply", &schema.ComponentExecution{Errors: policy, AfterHooks: []schema.ComponentHook{execHook("notify", "apply")}})
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"apply"}, t.TempDir())
+	require.ErrorIs(t, err, errUtils.ErrComponentHookFailed, "a warning from the successful apply must not ignore the hook failure")
+	require.Equal(t, []string{"terraform apply", "hook-notify arg"}, shell.names())
+
+	// The failing command's own output still matches.
+	failing := newShellFixture(t, scriptedFailures([]string{"Error: connection timeout"}, errUtils.ExitCodeError{Code: 1}))
+	require.NoError(t, hookExecutor(failing).runMainTerraformCommand(&schema.AtmosConfiguration{},
+		hookInfo("apply", &schema.ComponentExecution{Errors: policy}), []string{"apply"}, t.TempDir()))
+}
+
+// The execution that applies is the one the invocation selected, which for a saved plan is the
+// apply-time metadata and not the plan-time metadata of the prepared configuration.
+func TestReadConfigHooksComeFromTheInvocationExecution(t *testing.T) {
+	unit := t.TempDir()
+	hook := func(name string) schema.ComponentHook {
+		return schema.ComponentHook{Name: name, Commands: []string{"read-config"}, Execute: []string{"hook-" + name}, WorkingDirectory: unit}
+	}
+	prepared := &schema.PreparedComponentConfiguration{Execution: &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{hook("plan-time")}}}
+	info := hookInfo("apply", &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{hook("apply-time")}})
+	shell := newShellFixture(t, nil)
+	require.NoError(t, hookExecutor(shell).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, info, prepared))
+	require.Equal(t, []string{"hook-apply-time"}, shell.names())
 }

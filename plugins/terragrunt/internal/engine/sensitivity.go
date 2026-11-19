@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -39,17 +40,18 @@ func sensitiveInputs(fsys afero.Fs, files []string, inputs map[string]any, unit 
 	var found [][]string
 	bodies := make(map[string]*hclsyntax.Body)
 	for _, file := range files {
-		extension := filepath.Ext(file)
-		if extension != ".hcl" && extension != ".json" {
+		content, err := afero.ReadFile(fsys, file)
+		if errors.Is(err, errNotEvaluated) {
+			// The contents Terragrunt evaluated are unknown, so any input may be sensitive.
+			found = append(found, nil)
 			continue
 		}
-		content, err := afero.ReadFile(fsys, file)
 		if err != nil {
 			continue
 		}
 		// JSON expressions are opaque to this HCL syntax scan. Protect every input
 		// until precise JSON sensitivity analysis is available.
-		if extension == ".json" {
+		if isJSONConfiguration(file) {
 			found = append(found, nil)
 			continue
 		}
@@ -71,6 +73,12 @@ func sensitiveInputs(fsys afero.Fs, files []string, inputs map[string]any, unit 
 		found = append(found, scanFile(body, file, bodies, evaluated)...)
 	}
 	return existingPaths(uniquePaths(found), inputs)
+}
+
+// isJSONConfiguration reports whether Terragrunt reads the file as JSON. Every other configuration file is
+// HCL, whatever its suffix: an included file does not need to end in `.hcl`.
+func isJSONConfiguration(file string) bool {
+	return strings.EqualFold(filepath.Ext(file), ".json")
 }
 
 // scanFile finds the sensitive paths declared by one file's inputs attribute.
@@ -367,9 +375,10 @@ func descend(expression hclsyntax.Expression, key string) (child hclsyntax.Expre
 	case *hclsyntax.FunctionCallExpr:
 		return nil, node.Name == "sensitive"
 	case *hclsyntax.ObjectConsExpr:
-		for _, item := range node.Items {
-			if name, ok := staticKey(item.KeyExpr); ok && name == key {
-				return item.ValueExpr, false
+		// A later member replaces an earlier one with the same key, as HCL evaluates the literal.
+		for i := len(node.Items) - 1; i >= 0; i-- {
+			if name, ok := staticKey(node.Items[i].KeyExpr); ok && name == key {
+				return node.Items[i].ValueExpr, false
 			}
 		}
 	}

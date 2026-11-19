@@ -86,6 +86,11 @@ func (p *Provider) Prepare(ctx context.Context, input *pluginv1.ComponentRequest
 		var err error
 		result, err = handle.Preparation.Prepare(call, request)
 		if err != nil {
+			// A failing call can still return the response it produced. Whatever it carries is registered
+			// for masking before the failure is rendered; the call's own error is the one reported.
+			if result != nil {
+				_ = registerResponseSecrets(result)
+			}
 			return err
 		}
 		return checkPreparationResponse(result, request.GetOperation().GetMode())
@@ -146,6 +151,18 @@ func registerResponseInputs(result *pluginv1.PrepareComponentResponse) error {
 	return err
 }
 
+// registerResponseSecrets registers everything a preparation response carries that must be masked, before any
+// diagnostic is rendered: the sensitive inputs, then the module source authorization. A value that cannot be
+// decoded is a protocol failure that takes precedence over the response's diagnostics, which could otherwise
+// print what was never registered; the inputs are checked first.
+func registerResponseSecrets(result *pluginv1.PrepareComponentResponse) error {
+	if err := registerResponseInputs(result); err != nil {
+		return err
+	}
+	_, err := DecodeString(result.GetModuleSourceAuthorization())
+	return err
+}
+
 func checkPreparationResponse(result *pluginv1.PrepareComponentResponse, mode string) error {
 	if mode != "iam-probe" {
 		// The sensitive inputs are registered for masking before anything else touches the response.
@@ -156,7 +173,7 @@ func checkPreparationResponse(result *pluginv1.PrepareComponentResponse, mode st
 		if result == nil {
 			return errUtils.ErrPluginProtocol
 		}
-		if err := registerResponseInputs(result); err != nil {
+		if err := registerResponseSecrets(result); err != nil {
 			return err
 		}
 		failures := proto.Clone(result).(*pluginv1.PrepareComponentResponse)

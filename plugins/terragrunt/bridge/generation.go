@@ -16,7 +16,7 @@ const generatedDirectoryMode = 0o700
 // RenderGenerated uses upstream signature and formatting semantics in memory.
 // The host applies ownership policies later, in the provisioned working directory.
 //
-//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func RenderGenerated(ctx context.Context, logger log.Logger, config *codegen.GenerateConfig) ([]byte, error) {
 	fs := afero.NewMemMapFs()
 	directory := filepath.Join(string(filepath.Separator), "generated")
@@ -35,7 +35,7 @@ func RenderGenerated(ctx context.Context, logger log.Logger, config *codegen.Gen
 // RenderBackend preserves upstream backend syntax and signatures without writing
 // files or provisioning remote backend resources.
 //
-//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func RenderBackend(ctx context.Context, logger log.Logger, remote *remotestate.Config, backend map[string]any) ([]byte, error) {
 	fs := afero.NewMemMapFs()
 	directory := filepath.Join(string(filepath.Separator), "generated")

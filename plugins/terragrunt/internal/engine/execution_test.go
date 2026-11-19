@@ -1325,3 +1325,25 @@ func TestArgumentCallsDistinguishJSONTemplatesFromLiterals(t *testing.T) {
 		require.Equal(t, test.called, callsFunction([]byte(test.input), "terragrunt.hcl.json", "get_terraform_cli_args"))
 	}
 }
+
+func TestTflintReadConfigHooksKeepTheUnitDirectory(t *testing.T) {
+	unit := filepath.Join(t.TempDir(), "unit")
+	path := filepath.Join(unit, "terragrunt.hcl")
+	hooks := finalizeHooks([]model.Hook{
+		{Name: "lint-config", Commands: []string{model.LifecycleReadConfig}, Execute: []string{"tflint"}},
+		{Name: "lint-plan", Commands: []string{"plan"}, Execute: []string{"tflint"}},
+		{Name: "lint-explicit", Commands: []string{model.LifecycleReadConfig}, Execute: []string{"tflint"}, WorkingDirectory: "elsewhere"},
+	}, &model.Execution{}, path)
+	require.Len(t, hooks, 6)
+	for _, hook := range hooks[:2] {
+		require.Equal(t, "lint-config", hook.Name)
+		require.Equal(t, unit, hook.WorkingDirectory, "read-config runs before provisioning, so it needs the unit directory")
+	}
+	for _, hook := range hooks[2:4] {
+		require.Equal(t, "lint-plan", hook.Name)
+		require.Empty(t, hook.WorkingDirectory, "an ordinary hook still runs in the provisioned module")
+	}
+	for _, hook := range hooks[4:] {
+		require.Equal(t, unit, hook.WorkingDirectory, "an explicit working_dir does not move read-config off the unit")
+	}
+}

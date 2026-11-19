@@ -27,7 +27,7 @@ const freshPlanName = "new.plan"
 const configurationPlanSuffix = ".atmos.json"
 
 // configurationPlanVersion is bumped whenever the stored binding changes shape.
-const configurationPlanVersion = 4
+const configurationPlanVersion = 5
 
 // subcommandPlan names the Terraform plan command.
 const subcommandPlan = "plan"
@@ -144,7 +144,7 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 	if err := verifyReviewedArtifacts(ctx, config, info, plan, path); err != nil {
 		return nil, nil, err
 	}
-	rebuild, err := restoreReviewedWorkdir(info, plan, path)
+	rebuild, err := restoreReviewedWorkdir(info, plan, path, effectiveDataDir(config, info))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -161,13 +161,13 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 
 // restoreReviewedWorkdir settles the reviewed plan's working directory. A retained workdir gets the
 // reviewed bytes of its sensitive files back and needs no rebuild; any other workdir must be rebuilt.
-func restoreReviewedWorkdir(info *schema.ConfigAndStacksInfo, plan *configurationPlan, path string) (*reviewedRebuild, error) {
-	retained, err := reviewedWorkdirRetained(info, plan, path)
+func restoreReviewedWorkdir(info *schema.ConfigAndStacksInfo, plan *configurationPlan, path, dataDir string) (*reviewedRebuild, error) {
+	retained, err := reviewedWorkdirRetained(info, plan, path, dataDir)
 	if err != nil {
 		return nil, err
 	}
 	if !retained {
-		return newReviewedRebuild(info, plan, path)
+		return newReviewedRebuild(info, plan, path, dataDir)
 	}
 	// The retained workdir is verified, so it holds the reviewed bytes of sensitive files. A rebuild
 	// instead writes them again from a fresh preparation.
@@ -179,14 +179,14 @@ func restoreReviewedWorkdir(info *schema.ConfigAndStacksInfo, plan *configuratio
 
 // reviewedWorkdirRetained reports whether the working directory still equals the reviewed one, either
 // as the workdir the plan ran in or as a verified rebuild of it.
-func reviewedWorkdirRetained(info *schema.ConfigAndStacksInfo, plan *configurationPlan, path string) (bool, error) {
-	retained, err := workdirMatches(plan, path)
+func reviewedWorkdirRetained(info *schema.ConfigAndStacksInfo, plan *configurationPlan, path, dataDir string) (bool, error) {
+	retained, err := workdirMatches(plan, path, dataDir)
 	if err != nil || retained {
 		return retained, err
 	}
 	// A rebuild that was verified and then failed in init or apply leaves a workdir that no longer
 	// holds only the restored artifacts. It still equals the reviewed rebuild, so a retry may use it.
-	return rebuiltWorkdirMatches(info, plan, path)
+	return rebuiltWorkdirMatches(info, plan, path, dataDir)
 }
 
 // restoresConfigurationPlan reports whether the invocation applies a reviewed artifact. The downloaded
@@ -287,8 +287,8 @@ func verifyReviewedArtifacts(ctx context.Context, config *schema.AtmosConfigurat
 
 // workdirMatches reports whether the retained working directory still holds exactly the reviewed
 // bytes. A directory that no longer exists simply does not match.
-func workdirMatches(plan *configurationPlan, path string) (bool, error) {
-	workingDigest, err := configurationWorkdirDigest(plan.WorkingDirectory, path)
+func workdirMatches(plan *configurationPlan, path, dataDir string) (bool, error) {
+	workingDigest, err := configurationWorkdirDigest(plan.WorkingDirectory, path, dataDir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
 	}
@@ -335,11 +335,14 @@ func bindsPlan(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext) 
 
 // newConfigurationPlan binds the snapshot to the digests of the plan, engine, and working directory.
 func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, snapshot *planSnapshot, path string) (*configurationPlan, error) {
+	if snapshot.planDigest == "" {
+		return nil, fmt.Errorf("%w: plan was not observed as written by this run", errUtils.ErrPlanVerificationFailed)
+	}
 	planDigest, err := fileDigest(path)
 	if err != nil {
 		return nil, err
 	}
-	if snapshot.planDigest != "" && snapshot.planDigest != planDigest {
+	if snapshot.planDigest != planDigest {
 		return nil, fmt.Errorf("%w: plan file changed after Terraform wrote it", errUtils.ErrPlanVerificationFailed)
 	}
 	engineDigest, err := fileDigest(info.Command)

@@ -80,6 +80,11 @@ type PostCommentOptions struct {
 	// Behavior controls create/update/upsert semantics. Empty defaults to
 	// CommentBehaviorUpsert.
 	Behavior CommentBehavior
+
+	// RunURL optionally links to the CI run (job summary) that produced the
+	// comment. Providers that truncate oversized bodies include it in the
+	// truncation notice so readers can reach the full output. Empty omits it.
+	RunURL string
 }
 
 // Comment represents a PR/MR comment returned by PostComment.

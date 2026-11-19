@@ -32,7 +32,7 @@ type Venv = venv.Venv
 
 // Environment isolates invocation environments and output writers.
 //
-//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func Environment(env map[string]string, stdout, stderr io.Writer) *venv.Venv {
 	// Invocation environments must not replace the plugin's process-wide environment.
 	return venv.OSVenv().WithExec(scopedExec{Exec: vexec.NewOSExec(), environment: env}).WithEnv(env).WithReplaceEnviron(func(map[string]string) error { return nil }).WithWriter(stdout).WithErrWriter(stderr)
@@ -41,7 +41,7 @@ func Environment(env map[string]string, stdout, stderr io.Writer) *venv.Venv {
 // Discovery denies process execution, network access, and decryption. Only an
 // explicit stack generation phase may write its generated files.
 //
-//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func Discovery(v *venv.Venv, generate bool) *venv.Venv {
 	return DiscoveryObserved(v, generate, func() {})
 }
@@ -73,7 +73,7 @@ func DiscoveryObserved(v *venv.Venv, generate bool, denied func()) *venv.Venv {
 
 // WorkingDir uses upstream cache identity without downloading or changing state.
 //
-//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func WorkingDir(logger log.Logger, env *venv.Venv, source, download, directory string) (string, error) {
 	resolved, err := tf.NewSource(logger, env.FS, source, download, directory, false)
 	if err != nil {
@@ -88,7 +88,7 @@ func WorkingDir(logger log.Logger, env *venv.Venv, source, download, directory s
 // directory; callers recurse into the nested stacks the file declares. It does
 // not execute the Terragrunt CLI or apply infrastructure.
 //
-//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func GenerateStack(ctx context.Context, logger log.Logger, env *venv.Venv, path, tofu string) error {
 	opts := options.NewTerragruntOptions(env.Exec)
 	opts.WorkingDir = filepath.Dir(path)
@@ -110,7 +110,7 @@ func GenerateStack(ctx context.Context, logger log.Logger, env *venv.Venv, path,
 // IsDestroyOperation skips values of Terraform's string flags before applying upstream
 // boolean flag parsing, including last-value precedence.
 //
-//nolint:lintroller // The bridge is a separate module and cannot import the host performance tracker.
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func IsDestroyOperation(command string, arguments []string) bool {
 	if command == "destroy" {
 		return true

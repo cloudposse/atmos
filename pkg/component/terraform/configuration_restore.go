@@ -38,6 +38,8 @@ type reviewedRebuild struct {
 	planPath  string
 	workdir   string
 	transient []string
+	// dataDir is the Terraform data directory of the reviewed run; empty means the default.
+	dataDir string
 	// prepared is the fresh preparation the workdir is regenerated from.
 	prepared *schema.PreparedComponentConfiguration
 	// appliedIAM is the reviewed role applied before the unit was evaluated for the rebuild.
@@ -46,8 +48,8 @@ type reviewedRebuild struct {
 
 // newReviewedRebuild accepts a workdir that is absent or holds only the restored artifacts, and
 // rejects anything else: files that are not part of the transport cannot be verified.
-func newReviewedRebuild(info *schema.ConfigAndStacksInfo, plan *configurationPlan, planPath string) (*reviewedRebuild, error) {
-	rebuild := &reviewedRebuild{plan: plan, planPath: planPath, workdir: plan.WorkingDirectory, transient: transientWorkdirFiles(info)}
+func newReviewedRebuild(info *schema.ConfigAndStacksInfo, plan *configurationPlan, planPath, dataDir string) (*reviewedRebuild, error) {
+	rebuild := &reviewedRebuild{plan: plan, planPath: planPath, workdir: plan.WorkingDirectory, transient: transientWorkdirFiles(info), dataDir: dataDir}
 	if plan.RebuildDigest == "" {
 		return nil, fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
 	}
@@ -67,11 +69,11 @@ func newReviewedRebuild(info *schema.ConfigAndStacksInfo, plan *configurationPla
 // rebuiltWorkdirMatches reports whether the workdir already equals the reviewed rebuild: the files a
 // rebuild regenerates match RebuildDigest and the lock file matches LockDigest. An absent workdir or
 // one that differs does not match; only an unreadable one is an error.
-func rebuiltWorkdirMatches(info *schema.ConfigAndStacksInfo, plan *configurationPlan, planPath string) (bool, error) {
+func rebuiltWorkdirMatches(info *schema.ConfigAndStacksInfo, plan *configurationPlan, planPath, dataDir string) (bool, error) {
 	if plan.RebuildDigest == "" {
 		return false, nil
 	}
-	rebuild := &reviewedRebuild{plan: plan, planPath: planPath, workdir: plan.WorkingDirectory, transient: transientWorkdirFiles(info)}
+	rebuild := &reviewedRebuild{plan: plan, planPath: planPath, workdir: plan.WorkingDirectory, transient: transientWorkdirFiles(info), dataDir: dataDir}
 	if only, err := rebuild.holdsOnlyTransport(); err != nil || only {
 		// Nothing was rebuilt yet: the normal rebuild path applies.
 		return false, err
@@ -100,8 +102,8 @@ func transientWorkdirFiles(info *schema.ConfigAndStacksInfo) []string {
 
 // configurationRebuildDigest hashes the files a rebuild regenerates: the retained directory without
 // the plan, its record, state, variable files, and the lock file (which has its own digest).
-func configurationRebuildDigest(root, planPath string, transient []string) (string, error) {
-	return workdirDigest(root, planPath, func(relative string) bool {
+func configurationRebuildDigest(root, planPath, dataDir string, transient []string) (string, error) {
+	return workdirDigest(root, planPath, dataDir, func(relative string) bool {
 		if relative == terraformLockFile {
 			return true
 		}
@@ -294,7 +296,7 @@ func restoreArtifact(staged, destination string) error {
 
 // verify compares the re-provisioned directory to the reviewed one.
 func (r *reviewedRebuild) verify(workdir string) error {
-	digest, err := configurationRebuildDigest(workdir, r.planPath, r.transient)
+	digest, err := configurationRebuildDigest(workdir, r.planPath, r.dataDir, r.transient)
 	if err != nil {
 		return err
 	}
@@ -330,11 +332,12 @@ func (r *reviewedRebuild) verifySensitiveFiles(workdir string) error {
 }
 
 // downloadedModulesDir is where `init` and `get` install child modules.
-var downloadedModulesDir = filepath.Join(".terraform", "modules")
+var downloadedModulesDir = filepath.Join(defaultDataDir, modulesDirName)
 
-// hasDownloadedModules reports whether a workdir holds downloaded child modules.
-func hasDownloadedModules(workdir string) bool {
-	info, err := os.Stat(filepath.Join(workdir, downloadedModulesDir))
+// hasDownloadedModules reports whether a workdir holds downloaded child modules below the Terraform
+// data directory the subprocesses use (empty means the default `.terraform`).
+func hasDownloadedModules(workdir, dataDir string) bool {
+	info, err := os.Stat(filepath.Join(resolveDataDir(workdir, dataDir), modulesDirName))
 	return err == nil && info.IsDir()
 }
 
@@ -423,4 +426,55 @@ func (r *reviewedRebuild) isolateFailedRebuild(cause error) error {
 		}
 	}
 	return errUtils.Build(cause).WithHintf("The failed rebuild is preserved at `%s`; the restored plan artifacts are ready for a retry.", failed).Err()
+}
+
+// varFlagNames are the Terraform options that carry a variable assignment, whose value may be secret.
+var varFlagNames = []string{"-var", "--var"}
+
+// persistablePlanArguments returns the plan arguments that may be stored with the reviewed plan.
+// A variable assignment keeps its name and loses its value, so a saved record never holds a secret;
+// a rebuild that needs the value fails its digest check instead of using a different one.
+func persistablePlanArguments(arguments []string) []string {
+	if len(arguments) == 0 {
+		return nil
+	}
+	kept := make([]string, 0, len(arguments))
+	for i := 0; i < len(arguments); i++ {
+		argument := arguments[i]
+		switch {
+		case isVarFlag(argument) && i+1 < len(arguments):
+			kept = append(kept, argument+"="+assignmentName(arguments[i+1])+"=")
+			i++
+		case isVarAssignment(argument):
+			flag, assignment, _ := strings.Cut(argument, "=")
+			kept = append(kept, flag+"="+assignmentName(assignment)+"=")
+		default:
+			kept = append(kept, argument)
+		}
+	}
+	return kept
+}
+
+func isVarFlag(argument string) bool {
+	for _, name := range varFlagNames {
+		if argument == name {
+			return true
+		}
+	}
+	return false
+}
+
+func isVarAssignment(argument string) bool {
+	for _, name := range varFlagNames {
+		if strings.HasPrefix(argument, name+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+// assignmentName returns the variable name of a NAME=VALUE assignment.
+func assignmentName(assignment string) string {
+	name, _, _ := strings.Cut(assignment, "=")
+	return name
 }
