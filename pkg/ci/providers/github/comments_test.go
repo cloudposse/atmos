@@ -182,6 +182,34 @@ func TestProvider_PostComment_MasksRegisteredSecrets(t *testing.T) {
 	assert.Contains(t, writes[0].Body, atmosio.MaskReplacement)
 }
 
+func TestProvider_PostComment_MasksRunURLInTruncationNotice(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+
+	const secret = "runurl-secret-ABCD1234"
+	atmosio.RegisterSecret(secret)
+
+	s := ghtest.NewServer(t)
+	p := newTestProvider(t, s)
+
+	marker := "<!-- atmos:ci:plan:service:test -->"
+	_, err := p.PostComment(context.Background(), &provider.PostCommentOptions{
+		Owner:    "owner",
+		Repo:     "repo",
+		PRNumber: 42,
+		Marker:   marker,
+		Body:     marker + "\n" + strings.Repeat("x", issueCommentMaxBytes+10),
+		RunURL:   "https://github.com/owner/repo/actions/runs/1?token=" + secret,
+		Behavior: provider.CommentBehaviorCreate,
+	})
+	require.NoError(t, err)
+
+	writes := s.Comments()
+	require.Len(t, writes, 1)
+	assert.NotContains(t, writes[0].Body, secret)
+	assert.Contains(t, writes[0].Body, atmosio.MaskReplacement)
+}
+
 func TestProvider_PostComment_UpdateReturnsNotFoundWhenAbsent(t *testing.T) {
 	s := ghtest.NewServer(t)
 	p := newTestProvider(t, s)

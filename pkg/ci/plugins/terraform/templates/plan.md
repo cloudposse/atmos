@@ -144,3 +144,8 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{- if and .CI .CI.RunURL }}
+
+[View full run]({{ .CI.RunURL }}) for the complete plan output, job summary, and logs.
+{{- end }}

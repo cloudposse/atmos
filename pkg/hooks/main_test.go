@@ -3,6 +3,7 @@ package hooks
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/data"
@@ -38,6 +39,23 @@ func TestMain(m *testing.M) {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
+		}
+		os.Exit(0)
+	}
+	if code := os.Getenv("_ATMOS_TEST_EXIT_CODE"); code != "" {
+		// Exits with the requested status before m.Run, so no test-runner output is produced.
+		n, err := strconv.Atoi(code)
+		if err != nil {
+			os.Exit(2)
+		}
+		os.Exit(n)
+	}
+	if dump := os.Getenv("_ATMOS_TEST_DUMP_DOCS_ENV"); dump != "" {
+		// Records the docs operation variables a hook subprocess receives, then exits before m.Run.
+		body := os.Getenv("ATMOS_DOCS_TYPE") + "\n" + os.Getenv("ATMOS_DOCS_OUTPUT_PATH") + "\n" + os.Getenv("ATMOS_DOCS_BASE_DIR")
+		if err := os.WriteFile(dump, []byte(body), 0o600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 		os.Exit(0)
 	}
