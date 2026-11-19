@@ -170,10 +170,7 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 
 	// Get the base component name (the actual component, not the stack component name).
 	// This handles derived components correctly.
-	baseComponent := ""
-	if comp, ok := sections[cfg.ComponentSectionName].(string); ok && comp != "" {
-		baseComponent = comp
-	}
+	baseComponent, _ := sections[cfg.ComponentSectionName].(string)
 	if baseComponent == "" {
 		return "", errUtils.Build(errUtils.ErrMissingComponentPath).
 			WithExplanationf("Component '%s' in stack '%s' has no base component defined.", component, stack).
@@ -203,34 +200,28 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 	// (built from basePath + componentType + stack + instance name) so we can
 	// reconstruct it here even when _workdir_path is absent from freshly-described
 	// sections (e.g. during hook execution where DescribeComponent is called fresh).
-	if provWorkdir.IsWorkdirEnabled(sections) {
-		if provSource.HasSource(sections) {
-			target, targetErr := provSource.ResolveTarget(atmosConfig, componentType, component, sections)
-			if targetErr != nil {
-				return "", targetErr
-			}
-			return target.Dir, nil
-		}
-		basePath := atmosConfig.BasePath
-		if basePath == "" {
-			basePath = "."
-		}
-		// BuildPath itself rejects a derived path that escapes basePath (component and
-		// stack names both come from user-controlled YAML; a value containing ../ sequences
-		// could otherwise escape BasePath via filepath.Join's implicit Clean()). Surface that
-		// error rather than silently falling back to componentPath: componentPath is the
-		// *source* component directory, and redirecting terraform there on a rejected path
-		// risks mixing up stacks or reusing the wrong local state -- exactly the collision
-		// BuildPath's validation exists to prevent. Fail closed instead (see
-		// provWorkdir.BuildPath's doc comment for the exact conditions that trigger this).
-		workdirPath, err := provWorkdir.BuildPath(basePath, componentType, component, stack, sections)
+	if !provWorkdir.IsWorkdirEnabled(sections) {
+		return componentPath, nil
+	}
+	return outputWorkdirPath(atmosConfig, componentType, component, stack, sections)
+}
+
+// outputWorkdirPath resolves a provisioned output directory without falling back to its source.
+func outputWorkdirPath(atmosConfig *schema.AtmosConfiguration, componentType, component, stack string, sections map[string]any) (string, error) {
+	if provSource.HasSource(sections) {
+		target, err := provSource.ResolveTarget(atmosConfig, componentType, component, sections)
 		if err != nil {
 			return "", err
 		}
-		return workdirPath, nil
+		return target.Dir, nil
 	}
-
-	return componentPath, nil
+	basePath := atmosConfig.BasePath
+	if basePath == "" {
+		basePath = "."
+	}
+	// Propagate path validation errors rather than redirecting Terraform to the source
+	// directory, which could mix stacks or reuse the wrong local state.
+	return provWorkdir.BuildPath(basePath, componentType, component, stack, sections)
 }
 
 // extractOptionalFields extracts optional fields from sections into config.

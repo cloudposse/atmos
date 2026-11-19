@@ -383,20 +383,24 @@ func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *
 }
 
 // writePreparedConfiguration verifies retained files before relinquishing the host backend
-// and applying provider file policies.
+// and applying provider file policies. The retained-file check runs under the same workdir lock as
+// the write batch, so another invocation cannot change a retained file between the check and the write.
 func writePreparedConfiguration(directory string, prepared *schema.PreparedComponentConfiguration) error {
-	if err := validateRetainedConfiguration(directory, prepared.Files, prepared.BackendGenerated); err != nil {
-		return err
-	}
-	if !prepared.BackendGenerated {
+	if len(prepared.Files) == 0 && !prepared.BackendGenerated {
 		return configuration.WriteFiles(directory, prepared.Files)
 	}
-	// The removal runs inside the batch's lock, after every destination validates, and is put back
-	// when the batch fails, so a rejected batch keeps the existing host backend and its receipt.
-	return configuration.WriteFilesWithHandoff(directory, prepared.Files, &configuration.Handoff{
-		Paths: backend.HostBackendPaths(),
-		Run:   func() error { return backend.RemoveHostBackend(directory) },
-	})
+	handoff := &configuration.Handoff{
+		Validate: func() error {
+			return validateRetainedConfiguration(directory, prepared.Files, prepared.BackendGenerated)
+		},
+	}
+	if prepared.BackendGenerated {
+		// The removal runs inside the batch's lock, after every destination validates, and is put back
+		// when the batch fails, so a rejected batch keeps the existing host backend and its receipt.
+		handoff.Paths = backend.HostBackendPaths()
+		handoff.Run = func() error { return backend.RemoveHostBackend(directory) }
+	}
+	return configuration.WriteFilesWithHandoff(directory, prepared.Files, handoff)
 }
 
 // validateRetainedConfiguration runs before any backend cleanup or file writes.

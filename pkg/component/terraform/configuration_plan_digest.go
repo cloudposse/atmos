@@ -153,7 +153,7 @@ func (s workdirScope) skipDirectory(path, name string) bool {
 	if s.insideCacheOutsideModules(path) && !s.leadsToDataDir(path) {
 		return true
 	}
-	return !s.insideModules(path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || name == stateWorkspaceDir || strings.HasPrefix(name, ".atmos-policy-plan-"))
+	return !s.insideModules(path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || name == stateWorkspaceDir || strings.HasPrefix(name, ".atmos-policy-plan-") || strings.HasPrefix(name, stalePlanDirPrefix))
 }
 
 // Terraform's downloaded modules can contain scripts executed during apply. Other cache
@@ -328,45 +328,79 @@ func takePlanSnapshot(ctx context.Context, config *schema.AtmosConfiguration, in
 // same classification the hooks use, so the "changes present" status of -detailed-exitcode
 // (from the command line or TF_CLI_ARGS, including extra_arguments) still binds the plan.
 func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed func(error) bool) func() error {
-	return func() error {
+	return func() (runResult error) {
 		s.result, s.err, s.observed = nil, nil, ""
 		path := s.pathFrom(phaseArgs)
 		if path == "" {
 			return run()
 		}
 		s.observed = path
-		before, beforeErr := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
-		runErr := run()
-		if beforeErr != nil {
-			// The command still completes and its outcome is reported; the binding is what fails.
-			s.err = beforeErr
-			return runErr
+		writtenPath := s.writtenPlanPath(path, phaseArgs)
+		// A plan already at the output path was not written by this run. It is moved aside so that only a
+		// file this subprocess creates can be fingerprinted, and it is restored if none is created, which
+		// also covers help-only runs that exit successfully without writing a plan.
+		settleStale, stashErr := stashStalePlan(s.execCtx.componentPath, writtenPath)
+		defer s.settleStaleStash(settleStale, &runResult)
+		if stashErr != nil {
+			s.err = stashErr
+			return run()
 		}
-		after, err := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
-		switch {
-		case err != nil:
-			s.err = err
-		case *after != *before:
-			s.err = fmt.Errorf("%w: configuration changed while Terraform ran", errUtils.ErrPlanVerificationFailed)
-		default:
-			// Fingerprint the actual engine output before after hooks, including private policy plans.
-			writtenPath := path
-			if s.execCtx.planPolicy != nil {
-				writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
-			}
-			if failed(runErr) {
-				return runErr
-			}
-			digest, digestErr := fileDigest(writtenPath)
-			if digestErr != nil {
-				s.err = digestErr
-				return digestErr
-			}
-			after.planDigest = digest
-			s.result = after
+		return s.observeRun(path, writtenPath, run, failed)
+	}
+}
+
+// writtenPlanPath returns where the engine writes the plan. It differs from the bound path when a
+// policy publishes the artifact.
+func (s *planSnapshotter) writtenPlanPath(path string, phaseArgs []string) string {
+	if s.execCtx.planPolicy != nil {
+		return plannedOutputPath(s.execCtx.componentPath, phaseArgs)
+	}
+	return path
+}
+
+// settleStaleStash settles the stashed earlier plan once the observation is complete. A plan that could
+// not be restored stays in its stash, and the binding fails naming it. When Terraform also failed, the
+// stash location joins its error: the pipeline returns that error before the binding is read, and the
+// exit code the hooks classify is unchanged.
+func (s *planSnapshotter) settleStaleStash(settle func() error, runResult *error) {
+	if err := settle(); err != nil {
+		s.result, s.err = nil, err
+		if *runResult != nil {
+			*runResult = errors.Join(*runResult, err)
 		}
+	}
+}
+
+// observeRun fingerprints the configuration before and after one subprocess run and keeps the unchanged
+// snapshot for the binding.
+func (s *planSnapshotter) observeRun(path, writtenPath string, run func() error, failed func(error) bool) error {
+	before, beforeErr := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
+	runErr := run()
+	if beforeErr != nil {
+		// The command still completes and its outcome is reported; the binding is what fails.
+		s.err = beforeErr
 		return runErr
 	}
+	after, err := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
+	switch {
+	case err != nil:
+		s.err = err
+	case *after != *before:
+		s.err = fmt.Errorf("%w: configuration changed while Terraform ran", errUtils.ErrPlanVerificationFailed)
+	default:
+		// Fingerprint the actual engine output before after hooks, including private policy plans.
+		if failed(runErr) {
+			return runErr
+		}
+		digest, digestErr := writtenPlanDigest(writtenPath)
+		if digestErr != nil {
+			s.err = digestErr
+			return digestErr
+		}
+		after.planDigest = digest
+		s.result = after
+	}
+	return runErr
 }
 
 // reviewedSnapshot returns the configuration Terraform read, or takes a fresh snapshot when no
@@ -401,26 +435,6 @@ func (c *componentExecContext) observePlanSnapshots(ctx context.Context, config 
 		return plannedOutputPath(c.componentPath, phaseArgs)
 	}}
 	return context.WithValue(ctx, planSnapshotKey{}, c.planSnapshots)
-}
-
-// restorePublicFiles restores observed non-sensitive bytes into a plan's copied file list.
-func (s *planSnapshot) restorePublicFiles(files []schema.ComponentConfigurationFile) error {
-	if s.publicFiles == "" {
-		return nil
-	}
-	var observed map[string][]byte
-	if err := json.Unmarshal([]byte(s.publicFiles), &observed); err != nil {
-		return err
-	}
-	for i := range files {
-		if content, ok := observed[files[i].Path]; ok && !files[i].Sensitive {
-			files[i].Content = content
-			if content == nil {
-				files[i].IfExists = "remove"
-			}
-		}
-	}
-	return nil
 }
 
 // modulesDirName is the directory of downloaded child modules below a Terraform data directory.
@@ -557,99 +571,6 @@ func establishedRuntimePath(relative string) bool {
 
 func inModulesSubtree(relative string) bool {
 	return relative == modulesDirName || strings.HasPrefix(relative, modulesDirName+string(filepath.Separator))
-}
-
-// recordExternalModules adds the downloaded modules of a data directory outside the workdir to the
-// digest files. They are executed during apply like the ones below the workdir, so a change to them
-// must not look retained. An absent modules directory adds nothing.
-func (s workdirScope) recordExternalModules(files map[string]string) error {
-	if s.placement != dataDirOutsideWorkdir {
-		return nil
-	}
-	modules := filepath.Join(s.dataDir, modulesDirName)
-	if _, err := os.Stat(modules); errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	return filepath.WalkDir(modules, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		relative, err := filepath.Rel(modules, path)
-		if err != nil {
-			return err
-		}
-		if filepath.ToSlash(relative) == moduleManifestName {
-			return s.recordModuleManifest(path, files)
-		}
-		return recordWorkdirFileAs(externalModulesKeyPrefix+filepath.ToSlash(relative), path, entry, files)
-	})
-}
-
-// moduleManifestName is the file Terraform keeps in the modules directory of its data directory.
-const moduleManifestName = "modules.json"
-
-// recordModuleManifest digests the module manifest of an external data directory with its runner-local
-// paths made relative to that directory. Terraform records each module's Dir as a path below the data
-// directory, which is absolute when TF_DATA_DIR is, so the raw bytes differ between runners that mount an
-// otherwise identical layout at different roots and would fail verification of a reviewed plan.
-// Design choice: normalize the manifest before hashing (rather than require one absolute data directory on
-// every runner), because the module content is still hashed file by file and the only runner-specific
-// information is the prefix. A manifest that cannot be parsed, or a Dir outside the data directory, is
-// hashed as it is, so nothing is ever dropped from the digest.
-func (s workdirScope) recordModuleManifest(path string, files map[string]string) error {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return planIOError(err)
-	}
-	sum := sha256.Sum256(s.normalizeModuleManifest(raw))
-	files[externalModulesKeyPrefix+moduleManifestName] = hex.EncodeToString(sum[:])
-	return nil
-}
-
-// normalizeModuleManifest rewrites every module Dir below the data directory to a slash-separated path
-// relative to it, and returns the original bytes when the manifest is not the expected JSON shape.
-func (s workdirScope) normalizeModuleManifest(raw []byte) []byte {
-	var manifest map[string]any
-	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return raw
-	}
-	entries, ok := manifest["Modules"].([]any)
-	if !ok {
-		return raw
-	}
-	for _, entry := range entries {
-		module, ok := entry.(map[string]any)
-		if !ok {
-			continue
-		}
-		if dir, ok := module["Dir"].(string); ok {
-			module["Dir"] = s.relativeModuleDir(dir)
-		}
-	}
-	normalized, err := json.Marshal(manifest)
-	if err != nil {
-		return raw
-	}
-	return normalized
-}
-
-// relativeModuleDir returns dir relative to the data directory, or dir unchanged when it lies elsewhere.
-func (s workdirScope) relativeModuleDir(dir string) string {
-	native := filepath.FromSlash(dir)
-	if !filepath.IsAbs(native) {
-		native = filepath.Join(s.root, native)
-	}
-	resolved, err := resolvedPath(native)
-	if err != nil {
-		return dir
-	}
-	if relative, ok := relativeInside(s.dataDir, resolved); ok {
-		return filepath.ToSlash(relative)
-	}
-	return dir
 }
 
 // rejectExtraArgumentsDataDir fails a reviewed plan whose provider extra arguments set TF_DATA_DIR. They

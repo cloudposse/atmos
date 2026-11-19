@@ -60,6 +60,9 @@ type configurationPlan struct {
 	SensitiveDigest string
 	// StackEnvironmentDigest binds stack overrides when apply reuses filtered plan execution.
 	StackEnvironmentDigest string
+	// PublicFiles binds each non-sensitive generated file by presence and digest. Bytes are never
+	// stored, because a before-hook can write private values into a file the provider marked public.
+	PublicFiles map[string]publicFileRecord
 }
 
 // ownsConfigurationPlan reports whether a provider manages this component's saved plans.
@@ -185,6 +188,9 @@ func restoreReviewedWorkdir(info *schema.ConfigAndStacksInfo, plan *configuratio
 	// The retained workdir is verified, so it holds the reviewed bytes of sensitive files. A rebuild
 	// instead writes them again from a fresh preparation.
 	if err := restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files, plan.SensitiveDigest); err != nil {
+		return nil, err
+	}
+	if err := restorePublicContent(plan.WorkingDirectory, plan.Prepared.Files, plan.PublicFiles); err != nil {
 		return nil, err
 	}
 	return nil, nil
@@ -373,7 +379,7 @@ func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Config
 	if err != nil {
 		return nil, err
 	}
-	stored, err := reviewedPlanConfiguration(execCtx.preparedConfiguration, snapshot)
+	stored, public, err := reviewedPlanConfiguration(execCtx.preparedConfiguration, snapshot.publicFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -381,22 +387,30 @@ func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Config
 	if err != nil {
 		return nil, err
 	}
-	return &configurationPlan{StackEnvironmentDigest: environmentDigest, WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: snapshot.rebuildDigest, LockDigest: snapshot.lockDigest, Modules: snapshot.modules, SensitiveDigest: snapshot.sensitiveDigest, Prepared: stored}, nil
+	return &configurationPlan{StackEnvironmentDigest: environmentDigest, WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: snapshot.rebuildDigest, LockDigest: snapshot.lockDigest, Modules: snapshot.modules, SensitiveDigest: snapshot.sensitiveDigest, PublicFiles: public, Prepared: stored}, nil
 }
 
-// reviewedPlanConfiguration keeps reviewed public bytes while omitting inputs and secrets.
-func reviewedPlanConfiguration(prepared *schema.PreparedComponentConfiguration, snapshot *planSnapshot) (*schema.PreparedComponentConfiguration, error) {
-	// Inputs and backend values stay out of the record; see configurationPlan. Sensitive generated
-	// files, such as a backend file with credentials, keep only their place: apply reads their bytes
-	// back from the retained workdir, whose digest proves they are the reviewed ones, and a rebuild
-	// writes them again from a fresh preparation that must match RebuildDigest.
+// reviewedPlanConfiguration omits inputs and every generated file's bytes, and returns the digests of public files.
+func reviewedPlanConfiguration(prepared *schema.PreparedComponentConfiguration, publicFiles string) (*schema.PreparedComponentConfiguration, map[string]publicFileRecord, error) {
+	// Inputs and backend values stay out of the record; see configurationPlan. Generated files keep
+	// only their place: apply reads their bytes back from the retained workdir, whose digests prove
+	// they are the reviewed ones. Public bytes are dropped too, since a hook may have replaced them.
 	stored := *prepared
 	stored.Inputs, stored.Backend = nil, nil
-	stored.Files = withoutSensitiveContent(stored.Files)
-	if err := snapshot.restorePublicFiles(stored.Files); err != nil {
-		return nil, err
+	stored.Files = withoutContent(stored.Files)
+	observed := map[string]publicFileRecord{}
+	if publicFiles == "" {
+		return &stored, observed, nil
 	}
-	return &stored, nil
+	if err := json.Unmarshal([]byte(publicFiles), &observed); err != nil {
+		return nil, nil, err
+	}
+	for i := range stored.Files {
+		if record, ok := observed[stored.Files[i].Path]; ok && !stored.Files[i].Sensitive && !record.Present {
+			stored.Files[i].IfExists = "remove"
+		}
+	}
+	return &stored, observed, nil
 }
 
 // relativeWorkdirIdentity is set only when an explicit relative override actually resolves
