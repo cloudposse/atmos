@@ -173,13 +173,11 @@ func finalizeVerification(info *schema.ConfigAndStacksInfo, freshPlanFile, diff 
 	return nil
 }
 
-// withoutSensitiveContent copies files, dropping the bytes of every sensitive one.
-func withoutSensitiveContent(files []schema.ComponentConfigurationFile) []schema.ComponentConfigurationFile {
+// withoutContent copies files, dropping the bytes of every one.
+func withoutContent(files []schema.ComponentConfigurationFile) []schema.ComponentConfigurationFile {
 	stored := slices.Clone(files)
 	for i := range stored {
-		if stored[i].Sensitive {
-			stored[i].Content = nil
-		}
+		stored[i].Content = nil
 	}
 	return stored
 }

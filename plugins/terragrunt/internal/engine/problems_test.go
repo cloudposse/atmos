@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/gohcl"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 
@@ -259,4 +261,20 @@ func TestUnsupportedSourceDiagnosticsDoNotExposeEvaluatedText(t *testing.T) {
 		require.NotContains(t, problem.Detail, "private-credential")
 		require.Contains(t, problem.Hints[0], "tfr://", "L7 supports registry sources")
 	}
+}
+
+// A real gohcl conversion failure has no expression or evaluation context, like a parser
+// diagnostic, but its detail can quote the evaluated value, so it is never shown as safe.
+func TestConversionDiagnosticIsNeverSafe(t *testing.T) {
+	file, diagnostics := hclsyntax.ParseConfig([]byte("value = { \"hunter2-key\" = true }\n"), "terragrunt.hcl", hcl.InitialPos)
+	require.False(t, diagnostics.HasErrors())
+	attributes, diagnostics := file.Body.JustAttributes()
+	require.False(t, diagnostics.HasErrors())
+	var target string
+	diagnostics = gohcl.DecodeExpression(attributes["value"].Expr, nil, &target)
+	require.True(t, diagnostics.HasErrors())
+	require.Nil(t, diagnostics[0].Expression, "the conversion diagnostic has the parser shape")
+	problem := diagnosticProblem(diagnostics, "terragrunt.hcl", diagnostics)
+	require.False(t, problem.Safe, "%s: %s", diagnostics[0].Summary, diagnostics[0].Detail)
+	require.NotContains(t, problem.Summary, "hunter2-key")
 }

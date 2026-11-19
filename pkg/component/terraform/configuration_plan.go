@@ -23,7 +23,7 @@ import (
 const configurationPlanSuffix = ".atmos.json"
 
 // configurationPlanVersion is bumped whenever the stored binding changes shape.
-const configurationPlanVersion = 4
+const configurationPlanVersion = 5
 
 // subcommandPlan names the Terraform plan command.
 const subcommandPlan = "plan"
@@ -44,7 +44,10 @@ type configurationPlan struct {
 	SensitiveDigest string
 	// StackEnvironmentDigest binds stack overrides when apply reuses filtered plan execution.
 	StackEnvironmentDigest string
-	Prepared               *schema.PreparedComponentConfiguration
+	// PublicFiles binds each non-sensitive generated file by presence and digest. Bytes are never
+	// stored, because a before-hook can write private values into a file the provider marked public.
+	PublicFiles map[string]publicFileRecord
+	Prepared    *schema.PreparedComponentConfiguration
 }
 
 // ownsConfigurationPlan reports whether a provider manages this component's saved plans.
@@ -126,7 +129,10 @@ func verifyReviewedPlan(ctx context.Context, config *schema.AtmosConfiguration, 
 	if err := verifyReviewedBackendAndWorkdir(ctx, config, info, plan, path); err != nil {
 		return err
 	}
-	return restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files, plan.SensitiveDigest)
+	if err := restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files, plan.SensitiveDigest); err != nil {
+		return err
+	}
+	return restorePublicContent(plan.WorkingDirectory, plan.Prepared.Files, plan.PublicFiles)
 }
 
 // verifyReviewedBackendAndWorkdir rejects a changed backend identity or a changed retained working directory.
@@ -282,7 +288,7 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	if err != nil {
 		return nil, err
 	}
-	stored, err := reviewedPlanConfiguration(execCtx.preparedConfiguration, snapshot.publicFiles)
+	stored, public, err := reviewedPlanConfiguration(execCtx.preparedConfiguration, snapshot.publicFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -290,33 +296,30 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	if err != nil {
 		return nil, err
 	}
-	return &configurationPlan{StackEnvironmentDigest: environmentDigest, WorkingDigest: snapshot.workingDigest, SensitiveDigest: snapshot.sensitiveDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, Prepared: stored}, nil
+	return &configurationPlan{StackEnvironmentDigest: environmentDigest, WorkingDigest: snapshot.workingDigest, SensitiveDigest: snapshot.sensitiveDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, PublicFiles: public, Prepared: stored}, nil
 }
 
-// reviewedPlanConfiguration keeps reviewed public bytes while omitting inputs and secrets.
-func reviewedPlanConfiguration(prepared *schema.PreparedComponentConfiguration, publicFiles string) (*schema.PreparedComponentConfiguration, error) {
-	// Inputs and backend values stay out of the record; see configurationPlan. Sensitive generated
-	// files, such as a backend file with credentials, keep only their place: apply reads their bytes
-	// back from the retained workdir, whose digest proves they are the reviewed ones.
+// reviewedPlanConfiguration omits inputs and every generated file's bytes, and returns the digests of public files.
+func reviewedPlanConfiguration(prepared *schema.PreparedComponentConfiguration, publicFiles string) (*schema.PreparedComponentConfiguration, map[string]publicFileRecord, error) {
+	// Inputs and backend values stay out of the record; see configurationPlan. Generated files keep
+	// only their place: apply reads their bytes back from the retained workdir, whose digests prove
+	// they are the reviewed ones. Public bytes are dropped too, since a hook may have replaced them.
 	stored := *prepared
 	stored.Inputs, stored.Backend = nil, nil
-	stored.Files = withoutSensitiveContent(stored.Files)
+	stored.Files = withoutContent(stored.Files)
+	observed := map[string]publicFileRecord{}
 	if publicFiles == "" {
-		return &stored, nil
+		return &stored, observed, nil
 	}
-	var observed map[string][]byte
 	if err := json.Unmarshal([]byte(publicFiles), &observed); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for i := range stored.Files {
-		if content, ok := observed[stored.Files[i].Path]; ok && !stored.Files[i].Sensitive {
-			stored.Files[i].Content = content
-			if content == nil {
-				stored.Files[i].IfExists = "remove"
-			}
+		if record, ok := observed[stored.Files[i].Path]; ok && !stored.Files[i].Sensitive && !record.Present {
+			stored.Files[i].IfExists = "remove"
 		}
 	}
-	return &stored, nil
+	return &stored, observed, nil
 }
 
 // backendIdentityDigest hashes the canonical JSON form of backend settings, which only ever need equality.
@@ -478,7 +481,7 @@ func skipWorkdirDirectory(root, path, name string) bool {
 	if insideTerraformCacheOutsideModules(root, path) {
 		return true
 	}
-	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || strings.HasPrefix(name, ".atmos-policy-plan-"))
+	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || strings.HasPrefix(name, ".atmos-policy-plan-") || strings.HasPrefix(name, stalePlanDirPrefix))
 }
 
 // Terraform's downloaded modules can contain scripts executed during apply. Other cache

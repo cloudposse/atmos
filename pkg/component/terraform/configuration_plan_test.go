@@ -99,7 +99,10 @@ func planFixture(t *testing.T) (*schema.AtmosConfiguration, *schema.ConfigAndSta
 func observeFixturePlan(t *testing.T, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, path string) {
 	t.Helper()
 	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
-	require.NoError(t, snapshotter.around([]string{"plan", "-out=" + path}, func() error { return nil }, failedOnError)())
+	// The subprocess must write the plan itself: a file already at the path is not bound.
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NoError(t, snapshotter.around([]string{"plan", "-out=" + path}, func() error { return os.WriteFile(path, content, 0o600) }, failedOnError)())
 	execCtx.planSnapshots = snapshotter
 }
 
@@ -297,7 +300,8 @@ func TestConfigurationPlanRecordHoldsNoSensitiveGeneratedFiles(t *testing.T) {
 				require.NotEmpty(t, file.Content, "the caller's preparation is untouched")
 				require.Equal(t, policy, record.Prepared.Files[i].IfExists)
 			}
-			require.Equal(t, []byte("public-content"), record.Prepared.Files[2].Content)
+			require.Empty(t, record.Prepared.Files[2].Content, "public bytes are bound by digest, not stored")
+			require.True(t, record.PublicFiles["public.txt"].Present)
 			info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
 			prepared, err := restoreConfigurationPlan(t.Context(), config, info)
 			require.NoError(t, err)
@@ -368,13 +372,16 @@ func TestPlanOutputFlagsUseEffectiveArguments(t *testing.T) {
 			// A permissive CI exit mapping must not turn a preflight rejection into success.
 			config.CI.Enabled = true
 			config.Components.Terraform.CI.ExitCodes = map[int]bool{0: true, 1: true, 2: true}
-			shell := newShellFixture(t, nil)
+			// The plan subprocess writes the output; a file that was already there is not bound.
+			shell := newShellFixture(t, func(call *shellCall) error {
+				if test.output == "" || call.command == "hook-before" {
+					return nil
+				}
+				return os.WriteFile(filepath.Join(execCtx.componentPath, test.output), []byte("plan"), 0o600)
+			})
 			executor := testExecutor(t)
 			executor.services.ExecuteShellCommand = shell.mock.Execute
 			info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, Arguments: test.provider}}, BeforeHooks: []schema.ComponentHook{execHook("before", "plan")}}
-			if test.output != "" {
-				require.NoError(t, os.WriteFile(filepath.Join(execCtx.componentPath, test.output), []byte("plan"), 0o600))
-			}
 			err := executor.runMainCommandPhase(config, info, execCtx, test.args, execCtx.componentPath, false)
 			if test.conflict {
 				require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
@@ -598,7 +605,6 @@ func TestRecoveredPlanBindsEffectiveOutput(t *testing.T) {
 	config, info, execCtx, _, _ := planFixture(t)
 	config.Components.Terraform.Init.Reconfigure = schema.TerraformInitReconfigureAuto
 	plan := filepath.Join(execCtx.componentPath, "recovered.plan")
-	require.NoError(t, os.WriteFile(plan, []byte("reviewed"), 0o600))
 	info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, Arguments: []string{"--out=" + plan}}}}
 	attempts := 0
 	shell := newShellFixture(t, func(call *shellCall) error {
@@ -606,7 +612,7 @@ func TestRecoveredPlanBindsEffectiveOutput(t *testing.T) {
 		if attempts == 1 {
 			return errors.New("Backend configuration changed")
 		}
-		return nil
+		return os.WriteFile(plan, []byte("reviewed"), 0o600)
 	})
 	executor := testExecutor(t)
 	executor.services.ExecuteShellCommand = shell.mock.Execute
@@ -842,6 +848,9 @@ func TestDetailedExitCodePlanBinding(t *testing.T) {
 				if test.recoverInit && attempts == 1 {
 					return errors.New("Backend configuration changed")
 				}
+				if err := os.WriteFile(path, []byte("reviewed plan"), 0o600); err != nil {
+					return err
+				}
 				return exitCodeError(test.code)
 			})
 			executor := testExecutor(t)
@@ -921,7 +930,12 @@ func TestPlanOutputFlagsInEnvironmentAreRejected(t *testing.T) {
 			if test.provider != nil {
 				info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: test.commands, Environment: test.provider}}, BeforeHooks: []schema.ComponentHook{execHook("before", "plan")}}
 			}
-			shell := newShellFixture(t, nil)
+			shell := newShellFixture(t, func(call *shellCall) error {
+				if call.command != info.Command {
+					return nil
+				}
+				return os.WriteFile(path, []byte("reviewed plan"), 0o600)
+			})
 			executor := testExecutor(t)
 			executor.services.ExecuteShellCommand = shell.mock.Execute
 			err := executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out", filepath.Base(path)}, execCtx.componentPath, false)
@@ -958,6 +972,9 @@ func TestDetailedExitCodeBindingUsesSubprocessEnvironment(t *testing.T) {
 			info.ComponentEnvList = test.componentEnv
 			shell := newShellFixture(t, func(call *shellCall) error {
 				if call.command == info.Command {
+					if err := os.WriteFile(path, []byte("reviewed plan"), 0o600); err != nil {
+						return err
+					}
 					return exitCodeError(2)
 				}
 				return nil
@@ -1226,4 +1243,161 @@ func TestConfigurationPlanPreservesReviewedFileAbsence(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(execCtx.workingDir, "override.tf"))
 	require.NoError(t, err)
 	require.Empty(t, data)
+}
+
+func TestStashStalePlanRejectsDirectoryOutputs(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "plans")
+	require.NoError(t, os.MkdirAll(filepath.Join(output, "keep"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(output, "keep", "file"), []byte("data"), 0o600))
+
+	_, err := stashStalePlan("", output)
+
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	data, readErr := os.ReadFile(filepath.Join(output, "keep", "file"))
+	require.NoError(t, readErr, "the directory must stay where it was")
+	require.Equal(t, "data", string(data))
+}
+
+func TestStalePlanStashStaysOutOfDownloadedModules(t *testing.T) {
+	root := t.TempDir()
+	modules := filepath.Join(root, ".terraform", "modules")
+	require.NoError(t, os.MkdirAll(modules, 0o755))
+	plan := filepath.Join(modules, "reviewed.plan")
+	require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+
+	settle, err := stashStalePlan(root, plan)
+	require.NoError(t, err)
+	entries, err := os.ReadDir(modules)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "the stash must not be created inside the digested module tree")
+	require.Equal(t, "reviewed.plan", entries[0].Name())
+
+	require.NoError(t, settle())
+	data, err := os.ReadFile(plan)
+	require.NoError(t, err)
+	require.Equal(t, "earlier", string(data))
+	rootEntries, err := os.ReadDir(root)
+	require.NoError(t, err)
+	require.Len(t, rootEntries, 1, "only .terraform remains once the stash is settled")
+	require.Equal(t, ".terraform", rootEntries[0].Name())
+}
+
+func TestStalePlanStashIsKeptWhenRestoreFails(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs file write permissions to be enforced")
+	}
+	out := t.TempDir()
+	plan := filepath.Join(out, "reviewed.plan")
+	require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+
+	settle, err := stashStalePlan("", plan)
+	require.NoError(t, err)
+	stashes, err := filepath.Glob(filepath.Join(out, stalePlanDirPrefix+"*", "plan"))
+	require.NoError(t, err)
+	require.Len(t, stashes, 1)
+	// A read-only plan file makes writing the earlier contents back fail.
+	require.NoError(t, os.Chmod(plan, 0o400))
+
+	err = settle()
+
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorContains(t, err, stashes[0])
+	data, readErr := os.ReadFile(stashes[0])
+	require.NoError(t, readErr, "the stash must be kept for recovery")
+	require.Equal(t, "earlier", string(data))
+}
+
+func TestStalePlanStashEmptiesThePlanInPlace(t *testing.T) {
+	out := t.TempDir()
+	target := filepath.Join(out, "target.plan")
+	require.NoError(t, os.WriteFile(target, []byte("earlier"), 0o600))
+	before, err := os.Stat(target)
+	require.NoError(t, err)
+
+	settle, err := stashStalePlan("", target)
+	require.NoError(t, err)
+
+	after, err := os.Stat(target)
+	require.NoError(t, err)
+	require.True(t, os.SameFile(before, after), "the plan is emptied in place, not replaced")
+	require.Zero(t, after.Size())
+	if runtime.GOOS != "windows" {
+		require.Equal(t, os.FileMode(0o600), after.Mode().Perm(), "a private plan keeps its mode for Terraform's write")
+	}
+	stashes, err := filepath.Glob(filepath.Join(out, stalePlanDirPrefix+"*", "plan"))
+	require.NoError(t, err)
+	require.Len(t, stashes, 1)
+	if runtime.GOOS != "windows" {
+		stashInfo, statErr := os.Stat(stashes[0])
+		require.NoError(t, statErr)
+		require.Equal(t, os.FileMode(0o600), stashInfo.Mode().Perm(), "the stashed copy is private")
+	}
+
+	// A run that writes a plan keeps it, and the stash is discarded.
+	require.NoError(t, os.WriteFile(target, []byte("fresh"), 0o600))
+	require.NoError(t, settle())
+	data, err := os.ReadFile(target)
+	require.NoError(t, err)
+	require.Equal(t, "fresh", string(data))
+	require.NoDirExists(t, filepath.Dir(stashes[0]))
+}
+
+func TestStalePlanStashWritesThroughASymlink(t *testing.T) {
+	out := t.TempDir()
+	target := filepath.Join(out, "target.plan")
+	link := filepath.Join(out, "link.plan")
+	require.NoError(t, os.WriteFile(target, []byte("earlier"), 0o600))
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	settle, err := stashStalePlan("", link)
+	require.NoError(t, err)
+	info, err := os.Lstat(link)
+	require.NoError(t, err)
+	require.NotZero(t, info.Mode()&os.ModeSymlink, "the link itself is left in place")
+	data, err := os.ReadFile(target)
+	require.NoError(t, err)
+	require.Empty(t, data, "the target is emptied, as Terraform would rewrite it through the link")
+
+	// A run that writes nothing gets the earlier plan back in the target.
+	require.NoError(t, settle())
+	data, err = os.ReadFile(target)
+	require.NoError(t, err)
+	require.Equal(t, "earlier", string(data))
+}
+
+func TestWrittenPlanDigestRejectsAnEmptyPlan(t *testing.T) {
+	plan := filepath.Join(t.TempDir(), "reviewed.plan")
+	require.NoError(t, os.WriteFile(plan, nil, 0o600))
+
+	_, err := writtenPlanDigest(plan)
+
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.NoError(t, os.WriteFile(plan, []byte("plan"), 0o600))
+	digest, err := writtenPlanDigest(plan)
+	require.NoError(t, err)
+	require.NotEmpty(t, digest)
+}
+
+func TestFailedRunReportsTheStashLocation(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs file write permissions to be enforced")
+	}
+	config, info, execCtx, _, path := planFixture(t)
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
+	execCtx.planSnapshots = snapshotter
+	terraformFailed := errUtils.ExitCodeError{Code: 1}
+	// The run writes nothing and leaves the plan unwritable, so the earlier plan cannot be restored.
+	run := func() error {
+		require.NoError(t, os.Chmod(path, 0o400))
+		return terraformFailed
+	}
+
+	err := snapshotter.around([]string{"plan", "-out=" + path}, run, failedOnError)()
+
+	require.ErrorIs(t, err, terraformFailed, "the Terraform result still reaches the caller")
+	require.Equal(t, 1, errUtils.GetExitCode(err), "the exit code the hooks classify is unchanged")
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorContains(t, err, stalePlanDirPrefix, "the operator learns where the earlier plan is kept")
 }

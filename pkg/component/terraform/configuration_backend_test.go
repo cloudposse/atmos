@@ -331,3 +331,26 @@ func TestValidBatchReplacesHostBackend(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "# generated backend", string(content))
 }
+
+// The retained-file check runs inside the batch's lock: a backend another process writes into a
+// retained file before the batch takes the lock is seen by the check, so the batch is rejected.
+func TestRetainedFileCheckSeesWritesMadeBeforeTheLock(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "provider.tf")
+	prepared := &schema.PreparedComponentConfiguration{Files: []schema.ComponentConfigurationFile{
+		{Path: "provider.tf", Content: []byte("locals { enabled = true }"), IfExists: "skip"},
+	}}
+	require.NoError(t, os.WriteFile(path, []byte("locals { other = true }"), 0o600))
+	require.NoError(t, writePreparedConfiguration(directory, prepared), "a backend-free retained file is accepted")
+
+	result := make(chan error, 1)
+	require.NoError(t, configuration.WithWorkdirLock(directory, func() error {
+		// The second invocation blocks on the lock, then validates against the bytes written below.
+		go func() { result <- writePreparedConfiguration(directory, prepared) }()
+		return os.WriteFile(path, []byte(`terraform { backend "local" {} }`), 0o600)
+	}))
+	require.ErrorIs(t, <-result, errUtils.ErrPluginInvalidConfig)
+	retained, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(retained), "backend", "the other process's bytes are kept")
+}
