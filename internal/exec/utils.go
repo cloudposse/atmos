@@ -15,7 +15,6 @@ import (
 	"sync"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
@@ -30,6 +29,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/template/delimiters"
 	tfbackend "github.com/cloudposse/atmos/pkg/terraform/backend"
+	"github.com/cloudposse/atmos/pkg/terraform/inspect"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
@@ -39,6 +39,9 @@ import (
 const (
 	// TerraformConfigKey is the key used in componentInfo maps to store terraform configuration.
 	terraformConfigKey = "terraform_config"
+	// SensitiveVariablesKey is the key used in componentInfo maps to store the names of variables declared
+	// `sensitive = true` when terraform_config is nil because validation was skipped.
+	sensitiveVariablesKey = "sensitive_variables"
 	// SourcesSectionName is the generated component provenance section.
 	sourcesSectionName = "sources"
 )
@@ -1352,9 +1355,14 @@ func processStacks(
 	case cfg.TerraformComponentType:
 		componentPath := constructTerraformComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 		componentInfo[cfg.ComponentPathSectionName] = componentPath
-		terraformConfiguration, diags := tfconfig.LoadModule(componentPath)
+		// OpenTofu 1.9+ provider iteration (`provider = aws.by_account[each.key]`) is a terraform-config-inspect
+		// static-parser limitation, so inspect.LoadModule returns those diagnostics separately from diags.
+		// The module is still complete apart from those provider references, so keep it: consumers such as
+		// terraformSensitiveVarKeys need its variable declarations.
+		terraformConfiguration, diags, providerIteration := inspect.LoadModule(componentPath)
 		if !diags.HasErrors() {
 			componentInfo[terraformConfigKey] = terraformConfiguration
+			recordProviderIterationSkip(componentInfo, providerIteration)
 		} else {
 			diagErr := diags.Err()
 
@@ -1421,6 +1429,8 @@ func processStacks(
 					log.Debug("Skipping terraform-config-inspect validation for known module-source-interpolation diagnostic", "diagnostic", errMsg)
 					componentInfo[terraformConfigKey] = nil
 					componentInfo["validation_skipped_module_source_interpolation"] = true
+					recordSensitiveVariableNames(componentInfo, terraformConfiguration)
+					recordProviderIterationSkip(componentInfo, providerIteration)
 				} else {
 					componentInfo[terraformConfigKey] = nil
 				}

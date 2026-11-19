@@ -620,3 +620,18 @@ func BenchmarkIsKnownModuleSourceInterpolationDiagnostic(b *testing.B) {
 		isKnownModuleSourceInterpolationDiagnostic(err)
 	}
 }
+
+// TestRecordProviderIterationSkip tests that the provider iteration skip is recorded only when a provider
+// iteration diagnostic was set aside, and never as module source interpolation.
+func TestRecordProviderIterationSkip(t *testing.T) {
+	componentInfo := map[string]any{}
+	recordProviderIterationSkip(componentInfo, nil)
+	assert.Empty(t, componentInfo)
+
+	recordProviderIterationSkip(componentInfo, tfconfig.Diagnostics{{
+		Severity: tfconfig.DiagError,
+		Summary:  "Invalid provider reference",
+		Pos:      &tfconfig.SourcePos{Filename: "main.tf", Line: 3},
+	}})
+	assert.Equal(t, map[string]any{"validation_skipped_provider_iteration": true}, componentInfo)
+}
