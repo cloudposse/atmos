@@ -300,7 +300,8 @@ func TestConfigurationPlanRecordHoldsNoSensitiveGeneratedFiles(t *testing.T) {
 				require.NotEmpty(t, file.Content, "the caller's preparation is untouched")
 				require.Equal(t, policy, record.Prepared.Files[i].IfExists)
 			}
-			require.Equal(t, []byte("public-content"), record.Prepared.Files[2].Content)
+			require.Empty(t, record.Prepared.Files[2].Content, "public bytes are bound by digest, not stored")
+			require.True(t, record.PublicFiles["public.txt"].Present)
 			info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
 			prepared, err := restoreConfigurationPlan(t.Context(), config, info)
 			require.NoError(t, err)
@@ -1230,7 +1231,8 @@ func TestStalePlanStashStaysOutOfDownloadedModules(t *testing.T) {
 	require.NoError(t, err)
 	entries, err := os.ReadDir(modules)
 	require.NoError(t, err)
-	require.Empty(t, entries, "the stash must not be created inside the digested module tree")
+	require.Len(t, entries, 1, "the stash must not be created inside the digested module tree")
+	require.Equal(t, "reviewed.plan", entries[0].Name())
 
 	require.NoError(t, settle())
 	data, err := os.ReadFile(plan)
@@ -1244,10 +1246,9 @@ func TestStalePlanStashStaysOutOfDownloadedModules(t *testing.T) {
 
 func TestStalePlanStashIsKeptWhenRestoreFails(t *testing.T) {
 	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
-		t.Skip("needs directory write permissions to be enforced")
+		t.Skip("needs file write permissions to be enforced")
 	}
-	out := filepath.Join(t.TempDir(), "out")
-	require.NoError(t, os.MkdirAll(out, 0o755))
+	out := t.TempDir()
 	plan := filepath.Join(out, "reviewed.plan")
 	require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
 
@@ -1256,9 +1257,8 @@ func TestStalePlanStashIsKeptWhenRestoreFails(t *testing.T) {
 	stashes, err := filepath.Glob(filepath.Join(out, stalePlanDirPrefix+"*", "plan"))
 	require.NoError(t, err)
 	require.Len(t, stashes, 1)
-	// A read-only output directory makes moving the earlier plan back fail.
-	require.NoError(t, os.Chmod(out, 0o500))
-	t.Cleanup(func() { _ = os.Chmod(out, 0o755) })
+	// A read-only plan file makes writing the earlier contents back fail.
+	require.NoError(t, os.Chmod(plan, 0o400))
 
 	err = settle()
 
@@ -1267,4 +1267,99 @@ func TestStalePlanStashIsKeptWhenRestoreFails(t *testing.T) {
 	data, readErr := os.ReadFile(stashes[0])
 	require.NoError(t, readErr, "the stash must be kept for recovery")
 	require.Equal(t, "earlier", string(data))
+}
+
+func TestStalePlanStashEmptiesThePlanInPlace(t *testing.T) {
+	out := t.TempDir()
+	target := filepath.Join(out, "target.plan")
+	require.NoError(t, os.WriteFile(target, []byte("earlier"), 0o600))
+	before, err := os.Stat(target)
+	require.NoError(t, err)
+
+	settle, err := stashStalePlan("", target)
+	require.NoError(t, err)
+
+	after, err := os.Stat(target)
+	require.NoError(t, err)
+	require.True(t, os.SameFile(before, after), "the plan is emptied in place, not replaced")
+	require.Zero(t, after.Size())
+	if runtime.GOOS != "windows" {
+		require.Equal(t, os.FileMode(0o600), after.Mode().Perm(), "a private plan keeps its mode for Terraform's write")
+	}
+	stashes, err := filepath.Glob(filepath.Join(out, stalePlanDirPrefix+"*", "plan"))
+	require.NoError(t, err)
+	require.Len(t, stashes, 1)
+	if runtime.GOOS != "windows" {
+		stashInfo, statErr := os.Stat(stashes[0])
+		require.NoError(t, statErr)
+		require.Equal(t, os.FileMode(0o600), stashInfo.Mode().Perm(), "the stashed copy is private")
+	}
+
+	// A run that writes a plan keeps it, and the stash is discarded.
+	require.NoError(t, os.WriteFile(target, []byte("fresh"), 0o600))
+	require.NoError(t, settle())
+	data, err := os.ReadFile(target)
+	require.NoError(t, err)
+	require.Equal(t, "fresh", string(data))
+	require.NoDirExists(t, filepath.Dir(stashes[0]))
+}
+
+func TestStalePlanStashWritesThroughASymlink(t *testing.T) {
+	out := t.TempDir()
+	target := filepath.Join(out, "target.plan")
+	link := filepath.Join(out, "link.plan")
+	require.NoError(t, os.WriteFile(target, []byte("earlier"), 0o600))
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	settle, err := stashStalePlan("", link)
+	require.NoError(t, err)
+	info, err := os.Lstat(link)
+	require.NoError(t, err)
+	require.NotZero(t, info.Mode()&os.ModeSymlink, "the link itself is left in place")
+	data, err := os.ReadFile(target)
+	require.NoError(t, err)
+	require.Empty(t, data, "the target is emptied, as Terraform would rewrite it through the link")
+
+	// A run that writes nothing gets the earlier plan back in the target.
+	require.NoError(t, settle())
+	data, err = os.ReadFile(target)
+	require.NoError(t, err)
+	require.Equal(t, "earlier", string(data))
+}
+
+func TestWrittenPlanDigestRejectsAnEmptyPlan(t *testing.T) {
+	plan := filepath.Join(t.TempDir(), "reviewed.plan")
+	require.NoError(t, os.WriteFile(plan, nil, 0o600))
+
+	_, err := writtenPlanDigest(plan)
+
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.NoError(t, os.WriteFile(plan, []byte("plan"), 0o600))
+	digest, err := writtenPlanDigest(plan)
+	require.NoError(t, err)
+	require.NotEmpty(t, digest)
+}
+
+func TestFailedRunReportsTheStashLocation(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs file write permissions to be enforced")
+	}
+	config, info, execCtx, _, path := planFixture(t)
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
+	execCtx.planSnapshots = snapshotter
+	terraformFailed := errUtils.ExitCodeError{Code: 1}
+	// The run writes nothing and leaves the plan unwritable, so the earlier plan cannot be restored.
+	run := func() error {
+		require.NoError(t, os.Chmod(path, 0o400))
+		return terraformFailed
+	}
+
+	err := snapshotter.around([]string{"plan", "-out=" + path}, run, failedOnError)()
+
+	require.ErrorIs(t, err, terraformFailed, "the Terraform result still reaches the caller")
+	require.Equal(t, 1, errUtils.GetExitCode(err), "the exit code the hooks classify is unchanged")
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorContains(t, err, stalePlanDirPrefix, "the operator learns where the earlier plan is kept")
 }

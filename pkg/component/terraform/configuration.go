@@ -571,7 +571,7 @@ func takePlanSnapshot(ctx context.Context, config *schema.AtmosConfiguration, in
 // same classification the hooks use, so the "changes present" status of -detailed-exitcode
 // (from the command line or TF_CLI_ARGS, including extra_arguments) still binds the plan.
 func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed func(error) bool) func() error {
-	return func() error {
+	return func() (runResult error) {
 		s.result, s.err, s.observed = nil, nil, ""
 		path := s.pathFrom(phaseArgs)
 		if path == "" {
@@ -588,9 +588,14 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed fu
 		// also covers help-only runs that exit successfully without writing a plan.
 		settleStale, stashErr := stashStalePlan(s.execCtx.componentPath, writtenPath)
 		defer func() {
-			// A plan that could not be restored stays in its stash, and the binding fails naming it.
+			// A plan that could not be restored stays in its stash, and the binding fails naming it. When
+			// Terraform also failed, the stash location joins its error: the pipeline returns that error
+			// before the binding is read, and the exit code the hooks classify is unchanged.
 			if err := settleStale(); err != nil {
 				s.result, s.err = nil, err
+				if runResult != nil {
+					runResult = errors.Join(runResult, err)
+				}
 			}
 		}()
 		if stashErr != nil {
@@ -615,7 +620,7 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed fu
 			if failed(runErr) {
 				return runErr
 			}
-			digest, digestErr := fileDigest(writtenPath)
+			digest, digestErr := writtenPlanDigest(writtenPath)
 			if digestErr != nil {
 				s.err = digestErr
 				return digestErr
@@ -627,55 +632,85 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed fu
 	}
 }
 
-// stashStalePlan moves a file that already exists at the plan output path aside, so any file found
-// there after the subprocess was written by that run. The returned settle function must run once the
-// observation is complete: it discards the stashed file when the run wrote a new one and otherwise
-// restores it, so a run that wrote nothing leaves the earlier file as it was. A directory at the
-// output path is rejected without being moved.
+// stashStalePlan keeps a private copy of a plan that already exists at the plan output path and
+// empties the file in place, so a non-empty file found there after the subprocess was written by that
+// run. Emptying in place keeps the file's mode and follows a symlink, so Terraform writes the new plan
+// exactly where it would have without the stash, and a private plan is never recreated with broader
+// permissions. The returned settle function must run once the observation is complete: it discards
+// the copy when the run wrote a new plan and otherwise restores the earlier contents. A directory or
+// other non-regular output is rejected without being touched.
 func stashStalePlan(root, path string) (func() error, error) {
 	noop := func() error { return nil }
-	info, err := os.Lstat(path)
+	info, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return noop, nil
 		}
 		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
 	}
-	if info.IsDir() {
-		return noop, fmt.Errorf("%w: plan output %s is a directory", errUtils.ErrPlanVerificationFailed, path)
+	if !info.Mode().IsRegular() {
+		return noop, fmt.Errorf("%w: plan output %s is not a regular file", errUtils.ErrPlanVerificationFailed, path)
 	}
-	// The stash directory is skipped by the working directory digest, so it cannot alter a snapshot.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
+	}
+	// The stash directory is private and skipped by the working directory digest.
 	dir, err := os.MkdirTemp(stalePlanStashParent(root, path), stalePlanDirPrefix)
 	if err != nil {
 		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
 	}
 	stashed := filepath.Join(dir, "plan")
-	if err := os.Rename(path, stashed); err != nil {
-		_ = os.Remove(dir)
+	if err := os.WriteFile(stashed, data, planFileMode); err != nil { //nolint:gosec // G703: stashed is inside a directory from os.MkdirTemp.
+		_ = os.RemoveAll(dir)
 		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
 	}
-	return func() error { return settleStalePlan(path, stashed, dir) }, nil
+	if err := os.Truncate(path, 0); err != nil {
+		_ = os.RemoveAll(dir)
+		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
+	}
+	return func() error { return settleStalePlan(path, stashed, dir, info.Mode().Perm()) }, nil
 }
 
-// settleStalePlan discards the stash when the run wrote a new plan and otherwise restores the earlier
-// plan. The stash is removed only after the restore succeeds or a replacement is confirmed; otherwise
-// it is kept for recovery and the error names it.
-func settleStalePlan(path, stashed, dir string) error {
-	_, err := os.Lstat(path)
-	switch {
-	case err == nil:
-		// The run wrote a replacement.
-	case os.IsNotExist(err):
-		if err := os.Rename(stashed, path); err != nil {
+// settleStalePlan discards the copy when the run wrote a new plan and otherwise writes the earlier
+// contents back through the same path. The copy is removed only after the restore succeeds or a
+// replacement is confirmed; otherwise it is kept for recovery and the error names it.
+func settleStalePlan(path, stashed, dir string, mode os.FileMode) error {
+	info, err := os.Stat(path)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("%w: earlier plan kept at %s: %w", errUtils.ErrPlanVerificationFailed, stashed, err)
+	}
+	if err != nil || info.Size() == 0 {
+		if err := restoreStalePlan(path, stashed, mode); err != nil {
 			return fmt.Errorf("%w: restore the earlier plan from %s: %w", errUtils.ErrPlanVerificationFailed, stashed, err)
 		}
-	default:
-		return fmt.Errorf("%w: earlier plan kept at %s: %w", errUtils.ErrPlanVerificationFailed, stashed, err)
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
 	}
 	return nil
+}
+
+// restoreStalePlan writes the stashed contents back to the plan path with its original mode.
+func restoreStalePlan(path, stashed string, mode os.FileMode) error {
+	data, err := os.ReadFile(stashed)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, mode) //nolint:gosec // G703: path is the plan output Terraform was told to write.
+}
+
+// writtenPlanDigest fingerprints the plan the run wrote. A stale plan is emptied before the run and
+// Terraform never writes an empty plan, so an empty file means this run wrote nothing.
+func writtenPlanDigest(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", planIOError(err)
+	}
+	if info.Size() == 0 {
+		return "", fmt.Errorf("%w: Terraform did not write the plan %s", errUtils.ErrPlanVerificationFailed, path)
+	}
+	return fileDigest(path)
 }
 
 // stalePlanStashParent returns where the stash directory is created: beside the plan, except inside

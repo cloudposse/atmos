@@ -70,7 +70,7 @@ func TestStalePlanIsNotBoundByARunThatWroteNothing(t *testing.T) {
 	args := []string{"plan", "-out=" + path, "-help"}
 
 	err := snapshotter.around(args, func() error { return nil }, failedOnError)()
-	require.ErrorIs(t, err, os.ErrNotExist, "the run succeeded, so its own outcome is reported")
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed, "the run wrote no plan, so the digest step fails")
 	require.Nil(t, snapshotter.result, "no reviewed snapshot is recorded for a plan this run did not write")
 	require.Error(t, snapshotter.err)
 	stale, readErr := os.ReadFile(path)
