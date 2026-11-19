@@ -1058,6 +1058,45 @@ func TestSensitiveInputsFollowReadTerragruntConfig(t *testing.T) {
 	}
 }
 
+// find_in_parent_folders starts its search in the parent of the unit directory, so a public file of the same
+// name next to the unit cannot stand in for the one it finds, while a literal relative read stays in the
+// directory of the file that reads it.
+func TestSensitiveInputsStartParentFolderSearchesAboveTheUnitDirectory(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "repo")
+	unit := filepath.Join(root, "app", unitFile)
+	local := filepath.Join(root, "app", "secrets.hcl")
+	parent := filepath.Join(root, "secrets.hcl")
+	const sensitive = `inputs = { token = sensitive("s") }`
+	const public = `inputs = { token = "t" }`
+	for _, test := range []struct {
+		name, read string
+		files      map[string]string
+		want       [][]string
+	}{
+		{"parent search skips the public file beside the unit", `read_terragrunt_config(find_in_parent_folders("secrets.hcl")).inputs.token`, map[string]string{local: public, parent: sensitive}, [][]string{{"password"}}},
+		{"parent search ignores a sensitive file beside the unit", `read_terragrunt_config(find_in_parent_folders("secrets.hcl")).inputs.token`, map[string]string{local: sensitive, parent: public}, nil},
+		{"literal read stays in the unit directory", `read_terragrunt_config("secrets.hcl").inputs.token`, map[string]string{local: public, parent: sensitive}, nil},
+		{"literal read finds a sensitive file beside the unit", `read_terragrunt_config("secrets.hcl").inputs.token`, map[string]string{local: sensitive, parent: public}, [][]string{{"password"}}},
+		{"parent search with no file above fails closed", `read_terragrunt_config(find_in_parent_folders("secrets.hcl")).inputs.token`, map[string]string{local: public}, [][]string{{"password"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			require.NoError(t, fsys.MkdirAll(filepath.Dir(unit), 0o755))
+			files := map[string]string{unit: "inputs = {\n password = " + test.read + "\n}\n"}
+			for name, content := range test.files {
+				files[name] = content
+			}
+			writeFiles(t, fsys, files)
+			read := []string{unit}
+			for name := range test.files {
+				read = append(read, name)
+			}
+
+			assert.Equal(t, test.want, SensitiveInputs(fsys, read, map[string]any{"password": "s"}))
+		})
+	}
+}
+
 // An expanded final argument is a list of merge operands, so its members replace earlier ones like any other
 // argument; a final argument that is not a literal tuple fails closed.
 func TestTransformsSensitiveInputsWhenAnExpandedMergeArgumentReplacesTheKey(t *testing.T) {

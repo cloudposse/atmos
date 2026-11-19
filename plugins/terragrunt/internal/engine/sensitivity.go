@@ -364,11 +364,11 @@ func (s *sensitivityScanner) readsSensitiveConfig(call *hclsyntax.FunctionCallEx
 	if depth >= maxLocalDepth || len(call.Args) == 0 {
 		return true
 	}
-	path, ok := includePath(&hclsyntax.Attribute{Expr: call.Args[0]})
+	path, parentSearch, ok := includePath(&hclsyntax.Attribute{Expr: call.Args[0]})
 	if !ok {
 		return true
 	}
-	target, targetFile := includedFile(path, s.file, s.bodies)
+	target, targetFile := includedFile(path, parentSearch, s.file, s.bodies)
 	if target == nil || slices.ContainsFunc(target.Blocks, func(block *hclsyntax.Block) bool { return block.Type == "include" }) {
 		return true
 	}
@@ -392,11 +392,11 @@ func exposedIncludes(body *hclsyntax.Body, file string, bodies map[string]*hclsy
 		if block.Type != "include" || len(block.Labels) == 0 {
 			continue
 		}
-		path, ok := exposedIncludePath(block, evaluated)
+		path, parentSearch, ok := exposedIncludePath(block, evaluated)
 		if !ok {
 			continue
 		}
-		included := includedBody(path, file, bodies)
+		included, _ := includedFile(path, parentSearch, file, bodies)
 		if included == nil {
 			result[block.Labels[0]] = exposedInclude{}
 			continue
@@ -410,33 +410,34 @@ func exposedIncludes(body *hclsyntax.Body, file string, bodies map[string]*hclsy
 	return result
 }
 
-// exposedIncludePath reads a statically exposed include's path.
-func exposedIncludePath(block *hclsyntax.Block, evaluated config.IncludeConfigsMap) (string, bool) {
+// exposedIncludePath reads a statically exposed include's path and whether it comes from a parent-folder
+// search. An evaluated path is already resolved, so it never needs the search.
+func exposedIncludePath(block *hclsyntax.Block, evaluated config.IncludeConfigsMap) (path string, parentSearch, ok bool) {
 	if evaluated != nil {
 		include, found := evaluated[block.Labels[0]]
-		return include.Path, found && include.Expose != nil && *include.Expose
+		return include.Path, false, found && include.Expose != nil && *include.Expose
 	}
 	expose, ok := block.Body.Attributes["expose"]
 	if !ok {
-		return "", false
+		return "", false, false
 	}
 	value, diagnostics := expose.Expr.Value(nil)
 	if diagnostics.HasErrors() || !value.IsKnown() || value.IsNull() || !value.Type().Equals(cty.Bool) || !value.True() {
-		return "", false
+		return "", false, false
 	}
 	return includePath(block.Body.Attributes["path"])
 }
 
-// includedBody finds the parsed include at the unit directory or an ancestor.
-func includedBody(path, file string, bodies map[string]*hclsyntax.Body) *hclsyntax.Body {
-	body, _ := includedFile(path, file, bodies)
-	return body
-}
-
-// includedFile resolves path like includedBody and also returns the filename the body was found under, which
-// is the base for any configuration that file reads in turn.
-func includedFile(path, file string, bodies map[string]*hclsyntax.Body) (*hclsyntax.Body, string) {
-	for dir := filepath.Dir(file); ; dir = filepath.Dir(dir) {
+// includedFile finds the parsed file at path, searching the directory of file and its ancestors, and returns
+// the filename the body was found under, which is the base for any configuration that file reads in turn. A
+// parent-folder search (find_in_parent_folders) starts in the parent of that directory, as Terragrunt does,
+// so a file of the same name beside the caller is never selected for it.
+func includedFile(path string, parentSearch bool, file string, bodies map[string]*hclsyntax.Body) (*hclsyntax.Body, string) {
+	start := filepath.Dir(file)
+	if parentSearch {
+		start = filepath.Dir(start)
+	}
+	for dir := start; ; dir = filepath.Dir(dir) {
 		candidate := filepath.Clean(path)
 		if !filepath.IsAbs(path) {
 			candidate = filepath.Join(dir, path)
@@ -450,19 +451,23 @@ func includedFile(path, file string, bodies map[string]*hclsyntax.Body) (*hclsyn
 	}
 }
 
-func includePath(attribute *hclsyntax.Attribute) (string, bool) {
+// includePath reads the static file name of a path attribute. parentSearch reports that the name is the
+// argument of find_in_parent_folders, which looks above the current directory, rather than a literal path
+// relative to the file that names it.
+func includePath(attribute *hclsyntax.Attribute) (path string, parentSearch, ok bool) {
 	if attribute == nil {
-		return "", false
+		return "", false, false
 	}
 	expression := attribute.Expr
-	if call, ok := expression.(*hclsyntax.FunctionCallExpr); ok && call.Name == "find_in_parent_folders" && len(call.Args) > 0 {
+	if call, isCall := expression.(*hclsyntax.FunctionCallExpr); isCall && call.Name == "find_in_parent_folders" && len(call.Args) > 0 {
 		expression = call.Args[0]
+		parentSearch = true
 	}
 	value, diagnostics := expression.Value(nil)
 	if diagnostics.HasErrors() || !value.IsKnown() || value.IsNull() || !value.Type().Equals(cty.String) {
-		return "", false
+		return "", false, false
 	}
-	return value.AsString(), true
+	return value.AsString(), parentSearch, true
 }
 
 // traversalKey returns the object key of local.name.key and local.name["key"].
