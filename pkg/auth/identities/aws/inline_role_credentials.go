@@ -251,13 +251,18 @@ func profileSourceCredentials(env map[string]string, chain []*config.SharedConfi
 	case root.WebIdentityTokenFile != "":
 		return stscreds.NewWebIdentityRoleProvider(invocationSTSClient(env, region, nil), root.RoleARN,
 			stscreds.IdentityTokenFile(root.WebIdentityTokenFile), func(o *stscreds.WebIdentityRoleOptions) { o.RoleSessionName = root.RoleSessionName }), nil
-	case root.SSOSessionName != "" || root.SSOStartURL != "" || root.SSORegion != "" || root.SSOAccountID != "" || root.SSORoleName != "":
+	case usesSSO(root):
 		return ssoCredentials(env, root)
 	case root.LoginSession != "":
 		return loginSessionCredentials(env, root, region)
 	default:
 		return unnamedSourceCredentials(env, root, selected)
 	}
+}
+
+// usesSSO reports whether the profile names any SSO setting, in the session or the legacy form.
+func usesSSO(root *config.SharedConfig) bool {
+	return cmp.Or(root.SSOSessionName, root.SSOStartURL, root.SSORegion, root.SSOAccountID, root.SSORoleName) != ""
 }
 
 // ssoCredentials resolves an SSO profile from the cached login of the invocation home, in the session form
