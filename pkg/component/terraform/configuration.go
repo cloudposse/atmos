@@ -225,20 +225,24 @@ func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *
 }
 
 // writePreparedConfiguration verifies retained files before relinquishing the host backend
-// and applying provider file policies.
+// and applying provider file policies. The retained-file check runs under the same workdir lock as
+// the write batch, so another invocation cannot change a retained file between the check and the write.
 func writePreparedConfiguration(directory string, prepared *schema.PreparedComponentConfiguration) error {
-	if err := validateRetainedConfiguration(directory, prepared.Files, prepared.BackendGenerated); err != nil {
-		return err
-	}
-	if !prepared.BackendGenerated {
+	if len(prepared.Files) == 0 && !prepared.BackendGenerated {
 		return configuration.WriteFiles(directory, prepared.Files)
 	}
-	// The removal runs inside the batch's lock, after every destination validates, and is put back
-	// when the batch fails, so a rejected batch keeps the existing host backend and its receipt.
-	return configuration.WriteFilesWithHandoff(directory, prepared.Files, &configuration.Handoff{
-		Paths: backend.HostBackendPaths(),
-		Run:   func() error { return backend.RemoveHostBackend(directory) },
-	})
+	handoff := &configuration.Handoff{
+		Validate: func() error {
+			return validateRetainedConfiguration(directory, prepared.Files, prepared.BackendGenerated)
+		},
+	}
+	if prepared.BackendGenerated {
+		// The removal runs inside the batch's lock, after every destination validates, and is put back
+		// when the batch fails, so a rejected batch keeps the existing host backend and its receipt.
+		handoff.Paths = backend.HostBackendPaths()
+		handoff.Run = func() error { return backend.RemoveHostBackend(directory) }
+	}
+	return configuration.WriteFilesWithHandoff(directory, prepared.Files, handoff)
 }
 
 // validateRetainedConfiguration runs before any backend cleanup or file writes.
@@ -574,6 +578,20 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed fu
 			return run()
 		}
 		s.observed = path
+		// The engine output path differs from the bound path when a policy publishes the artifact.
+		writtenPath := path
+		if s.execCtx.planPolicy != nil {
+			writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
+		}
+		// A plan already at the output path was not written by this run. It is moved aside so that only a
+		// file this subprocess creates can be fingerprinted, and it is restored if none is created, which
+		// also covers help-only runs that exit successfully without writing a plan.
+		settleStale, stashErr := stashStalePlan(writtenPath)
+		defer settleStale()
+		if stashErr != nil {
+			s.err = stashErr
+			return run()
+		}
 		before, beforeErr := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
 		runErr := run()
 		if beforeErr != nil {
@@ -589,10 +607,6 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed fu
 			s.err = fmt.Errorf("%w: configuration changed while Terraform ran", errUtils.ErrPlanVerificationFailed)
 		default:
 			// Fingerprint the actual engine output before after hooks, including private policy plans.
-			writtenPath := path
-			if s.execCtx.planPolicy != nil {
-				writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
-			}
 			if failed(runErr) {
 				return runErr
 			}
@@ -607,6 +621,39 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed fu
 		return runErr
 	}
 }
+
+// stashStalePlan moves a file that already exists at the plan output path aside, so any file found
+// there after the subprocess was written by that run. The returned settle function must run once the
+// observation is complete: it discards the stashed file when the run wrote a new one and otherwise
+// restores it, so a run that wrote nothing leaves the earlier file as it was.
+func stashStalePlan(path string) (func(), error) {
+	noop := func() {}
+	if _, err := os.Lstat(path); err != nil {
+		if os.IsNotExist(err) {
+			return noop, nil
+		}
+		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
+	}
+	// The directory is skipped by the working directory digest, so the stash cannot alter a snapshot.
+	dir, err := os.MkdirTemp(filepath.Dir(path), stalePlanDirPrefix)
+	if err != nil {
+		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
+	}
+	stashed := filepath.Join(dir, "plan")
+	if err := os.Rename(path, stashed); err != nil {
+		_ = os.Remove(dir)
+		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
+	}
+	return func() {
+		if _, err := os.Lstat(path); err != nil {
+			_ = os.Rename(stashed, path)
+		}
+		_ = os.RemoveAll(dir)
+	}, nil
+}
+
+// stalePlanDirPrefix names the directory that holds a plan found at the output path before a run.
+const stalePlanDirPrefix = ".atmos-stale-plan-"
 
 // reviewedSnapshot returns the configuration Terraform read, or takes a fresh snapshot when no
 // observed run recorded one for this plan.

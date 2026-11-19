@@ -99,7 +99,10 @@ func planFixture(t *testing.T) (*schema.AtmosConfiguration, *schema.ConfigAndSta
 func observeFixturePlan(t *testing.T, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, path string) {
 	t.Helper()
 	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
-	require.NoError(t, snapshotter.around([]string{"plan", "-out=" + path}, func() error { return nil }, failedOnError)())
+	// The subprocess must write the plan itself: a file already at the path is not bound.
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NoError(t, snapshotter.around([]string{"plan", "-out=" + path}, func() error { return os.WriteFile(path, content, 0o600) }, failedOnError)())
 	execCtx.planSnapshots = snapshotter
 }
 
@@ -368,13 +371,16 @@ func TestPlanOutputFlagsUseEffectiveArguments(t *testing.T) {
 			// A permissive CI exit mapping must not turn a preflight rejection into success.
 			config.CI.Enabled = true
 			config.Components.Terraform.CI.ExitCodes = map[int]bool{0: true, 1: true, 2: true}
-			shell := newShellFixture(t, nil)
+			// The plan subprocess writes the output; a file that was already there is not bound.
+			shell := newShellFixture(t, func(call *shellCall) error {
+				if test.output == "" || call.command == "hook-before" {
+					return nil
+				}
+				return os.WriteFile(filepath.Join(execCtx.componentPath, test.output), []byte("plan"), 0o600)
+			})
 			executor := testExecutor(t)
 			executor.services.ExecuteShellCommand = shell.mock.Execute
 			info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, Arguments: test.provider}}, BeforeHooks: []schema.ComponentHook{execHook("before", "plan")}}
-			if test.output != "" {
-				require.NoError(t, os.WriteFile(filepath.Join(execCtx.componentPath, test.output), []byte("plan"), 0o600))
-			}
 			err := executor.runMainCommandPhase(config, info, execCtx, test.args, execCtx.componentPath, false)
 			if test.conflict {
 				require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
@@ -598,7 +604,6 @@ func TestRecoveredPlanBindsEffectiveOutput(t *testing.T) {
 	config, info, execCtx, _, _ := planFixture(t)
 	config.Components.Terraform.Init.Reconfigure = schema.TerraformInitReconfigureAuto
 	plan := filepath.Join(execCtx.componentPath, "recovered.plan")
-	require.NoError(t, os.WriteFile(plan, []byte("reviewed"), 0o600))
 	info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"plan"}, Arguments: []string{"--out=" + plan}}}}
 	attempts := 0
 	shell := newShellFixture(t, func(call *shellCall) error {
@@ -606,7 +611,7 @@ func TestRecoveredPlanBindsEffectiveOutput(t *testing.T) {
 		if attempts == 1 {
 			return errors.New("Backend configuration changed")
 		}
-		return nil
+		return os.WriteFile(plan, []byte("reviewed"), 0o600)
 	})
 	executor := testExecutor(t)
 	executor.services.ExecuteShellCommand = shell.mock.Execute
@@ -804,6 +809,9 @@ func TestDetailedExitCodePlanBinding(t *testing.T) {
 				if test.recoverInit && attempts == 1 {
 					return errors.New("Backend configuration changed")
 				}
+				if err := os.WriteFile(path, []byte("reviewed plan"), 0o600); err != nil {
+					return err
+				}
 				return exitCodeError(test.code)
 			})
 			executor := testExecutor(t)
@@ -883,7 +891,12 @@ func TestPlanOutputFlagsInEnvironmentAreRejected(t *testing.T) {
 			if test.provider != nil {
 				info.ComponentExecution = &schema.ComponentExecution{ExtraArguments: []schema.ComponentExtraArguments{{Commands: test.commands, Environment: test.provider}}, BeforeHooks: []schema.ComponentHook{execHook("before", "plan")}}
 			}
-			shell := newShellFixture(t, nil)
+			shell := newShellFixture(t, func(call *shellCall) error {
+				if call.command != info.Command {
+					return nil
+				}
+				return os.WriteFile(path, []byte("reviewed plan"), 0o600)
+			})
 			executor := testExecutor(t)
 			executor.services.ExecuteShellCommand = shell.mock.Execute
 			err := executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out", filepath.Base(path)}, execCtx.componentPath, false)
@@ -920,6 +933,9 @@ func TestDetailedExitCodeBindingUsesSubprocessEnvironment(t *testing.T) {
 			info.ComponentEnvList = test.componentEnv
 			shell := newShellFixture(t, func(call *shellCall) error {
 				if call.command == info.Command {
+					if err := os.WriteFile(path, []byte("reviewed plan"), 0o600); err != nil {
+						return err
+					}
 					return exitCodeError(2)
 				}
 				return nil

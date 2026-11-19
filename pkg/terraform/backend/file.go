@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -30,13 +31,19 @@ func GenerateFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAnd
 	if err != nil {
 		return err
 	}
-	if err := u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode); err != nil {
-		return err
+	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
+		return u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode)
 	}
-	if _, owned := info.ComponentSettingsSection["configuration"]; owned {
-		if err := recordHostBackend(workingDir); err != nil {
-			return fmt.Errorf("%w: record ownership of %s: %w", errUtils.ErrBackendFileGeneration, backendFileName, err)
+	// The write and its receipt share the workdir lock with RemoveHostBackend, so a handoff never
+	// removes a backend written after it verified the receipt.
+	err = configuration.WithWorkdirLock(workingDir, func() error {
+		if err := u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode); err != nil {
+			return err
 		}
+		return recordHostBackend(workingDir)
+	})
+	if err != nil {
+		return fmt.Errorf("%w: write %s and record ownership: %w", errUtils.ErrBackendFileGeneration, backendFileName, err)
 	}
 	return nil
 }

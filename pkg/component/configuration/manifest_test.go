@@ -515,3 +515,37 @@ func TestRollbackLeavesUnchangedFilesLinked(t *testing.T) {
 	require.True(t, os.SameFile(original, link), "an untouched file keeps its hard link")
 	require.Equal(t, "before", read(t, directory, "changed.tf"), "a changed file is still restored")
 }
+
+// Respelling an output must not delete the file the run just accepted. Whether two spellings are one
+// file is the working directory's decision, so the case-insensitive assertion only runs where it applies.
+func TestRespelledOutputKeepsTheAcceptedFile(t *testing.T) {
+	root := t.TempDir()
+	content := "variable \"respelled\" {}\n"
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{generated("generated.tf", content, "overwrite")}))
+	_, probeErr := os.Lstat(filepath.Join(root, "Generated.tf"))
+	caseInsensitive := probeErr == nil
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{generated("Generated.tf", content, "overwrite")}))
+	if caseInsensitive {
+		require.FileExists(t, filepath.Join(root, "Generated.tf"))
+		return
+	}
+	// Case-sensitive: the names are distinct files, so the old spelling is stale and removed.
+	require.NoFileExists(t, filepath.Join(root, "generated.tf"))
+	require.FileExists(t, filepath.Join(root, "Generated.tf"))
+}
+
+// Stale cleanup judges ownership on the snapshot it would restore, so a file edited after it was
+// recorded stays in place, while an untouched one is still removed.
+func TestStaleCleanupJudgesOwnershipOnTheCapturedSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	root := mustRoot(t, dir)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "edited.tf"), []byte("user edit\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "owned.tf"), []byte("generated\n"), 0o600))
+	recorded := contentDigest([]byte("generated\n"))
+
+	require.NoError(t, removeStaleFile(root, "edited.tf", recorded, make(restorePoint)))
+	require.FileExists(t, filepath.Join(dir, "edited.tf"), "an edited file is not the recorded one")
+
+	require.NoError(t, removeStaleFile(root, "owned.tf", recorded, make(restorePoint)))
+	require.NoFileExists(t, filepath.Join(dir, "owned.tf"))
+}

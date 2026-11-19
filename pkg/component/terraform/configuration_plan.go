@@ -478,7 +478,7 @@ func skipWorkdirDirectory(root, path, name string) bool {
 	if insideTerraformCacheOutsideModules(root, path) {
 		return true
 	}
-	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || strings.HasPrefix(name, ".atmos-policy-plan-"))
+	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || strings.HasPrefix(name, ".atmos-policy-plan-") || strings.HasPrefix(name, stalePlanDirPrefix))
 }
 
 // Terraform's downloaded modules can contain scripts executed during apply. Other cache

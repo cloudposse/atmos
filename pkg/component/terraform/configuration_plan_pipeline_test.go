@@ -61,6 +61,44 @@ func TestMissingPlanDigestStopsBeforeAfterHooks(t *testing.T) {
 	require.Len(t, shell.calls, 1, "a successful fingerprint permits the after hook")
 }
 
+// A plan left at the output path by an earlier run is not bound by a run that wrote nothing, such as
+// a help-only invocation that exits successfully. The earlier file is left as it was.
+func TestStalePlanIsNotBoundByARunThatWroteNothing(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
+	execCtx.planSnapshots = snapshotter
+	args := []string{"plan", "-out=" + path, "-help"}
+
+	err := snapshotter.around(args, func() error { return nil }, failedOnError)()
+	require.ErrorIs(t, err, os.ErrNotExist, "the run succeeded, so its own outcome is reported")
+	require.Nil(t, snapshotter.result, "no reviewed snapshot is recorded for a plan this run did not write")
+	require.Error(t, snapshotter.err)
+	stale, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.Equal(t, "reviewed plan", string(stale), "the earlier plan is restored untouched")
+	entries, readErr := os.ReadDir(filepath.Dir(path))
+	require.NoError(t, readErr)
+	for _, entry := range entries {
+		require.NotContains(t, entry.Name(), stalePlanDirPrefix, "no stash is left behind")
+	}
+	require.Error(t, recordConfigurationPlan(t.Context(), config, info, execCtx, args))
+	require.NoFileExists(t, path+configurationPlanSuffix)
+
+	// Negative path: a run that writes the plan, even with identical bytes, is bound.
+	err = snapshotter.around(args[:2], func() error { return os.WriteFile(path, []byte("reviewed plan"), 0o600) }, failedOnError)()
+	require.NoError(t, err)
+	require.NoError(t, snapshotter.err)
+	require.NotNil(t, snapshotter.result)
+	require.NotEmpty(t, snapshotter.result.planDigest)
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, args[:2]))
+	require.FileExists(t, path+configurationPlanSuffix)
+	entries, readErr = os.ReadDir(filepath.Dir(path))
+	require.NoError(t, readErr)
+	for _, entry := range entries {
+		require.NotContains(t, entry.Name(), stalePlanDirPrefix, "the stash is discarded after a fresh write")
+	}
+}
+
 // failedOnError classifies every error as a failed command.
 func failedOnError(err error) bool { return err != nil }
 
