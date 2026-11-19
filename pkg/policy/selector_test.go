@@ -162,3 +162,26 @@ func TestSelectorRejectsValuesInTheConfiguredDelimiter(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, matched)
 }
+
+func TestSelectorStacklessSubject(t *testing.T) {
+	identity := ObjectIdentity{Name: "readme", ComponentType: "docs"}
+
+	t.Run("stackless operation subject evaluates selectors", func(t *testing.T) {
+		subject, err := NewSubject(identity, nil)
+		require.NoError(t, err)
+		subject.Stackless = true
+		matched, err := (&Selector{Components: []string{"readme"}, ComponentTypes: []string{"docs"}}).Matches(subject)
+		require.NoError(t, err)
+		require.True(t, matched)
+		matched, err = (&Selector{Stacks: []string{"prod"}}).Matches(subject)
+		require.NoError(t, err)
+		require.False(t, matched)
+	})
+
+	t.Run("an empty stack is still rejected for ordinary subjects", func(t *testing.T) {
+		subject, err := NewSubject(identity, nil)
+		require.NoError(t, err)
+		_, err = (&Selector{Components: []string{"readme"}}).Matches(subject)
+		require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+	})
+}

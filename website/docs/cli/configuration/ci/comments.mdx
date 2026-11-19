@@ -60,6 +60,14 @@ The [`ci.comment`](/functions/automation/ci.comment) function in a script takes 
 example) comments on the commit. Commit comments need the `contents: write` permission instead of
 `pull-requests: write`. Both kinds are gated by `ci.comments.enabled`.
 
+## Link to the full run
+
+When the CI provider reports a run URL (GitHub Actions, Gitea Actions, or `ATMOS_CI_RUN_URL`, `CI_JOB_URL`, or
+`BUILD_URL` for other systems), each Terraform plan comment ends with a "View full run" link to the run, whose job
+summary and logs hold the complete output. GitHub limits a comment to 65,536 bytes; when a plan comment exceeds it, Atmos
+truncates the body and the truncation notice at the top of the comment links to the run as well. Without a run URL, the
+comment is unchanged.
+
 ## Container image comments
 
 The `atmos container build` and `atmos container push` commands post one image summary comment per

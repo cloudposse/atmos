@@ -1,6 +1,6 @@
 ---
 name: atmos-hooks
-description: "Atmos hooks: lifecycle events, hook kinds, command/store/git/security hooks, step/steps hooks, when: conditions, scoping and overrides, toolchain integration, --skip-hooks, and Atmos Pro/local output"
+description: "Atmos hooks: lifecycle events, hook kinds, command/store/git/security hooks, step/steps hooks, when: conditions, scoping and overrides, toolchain integration, --skip-hooks, docs generate hooks, and Atmos Pro/local output"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -10,7 +10,8 @@ metadata:
 # Atmos Hooks
 
 Use this skill for lifecycle hooks that run before or after component operations,
-or for generation hooks declared in a scaffold template.
+for generation hooks declared in a scaffold template, or for repo-level hooks declared under
+`docs.generate` in `atmos.yaml`.
 
 Hooks can run scanners, policy checks, store writes, Git actions, custom commands, or other
 toolchain-aware automation around Terraform, Helm, Kubernetes, and other component commands.
@@ -76,6 +77,9 @@ event (`deploy` to `apply`, Kubernetes `plan` to `diff`, and Helmfile `sync` to 
 Scaffold templates use the separate `before.scaffold.generate` and
 `after.scaffold.generate` events. They reuse the condition vocabulary but can run only
 `kind: step` and `kind: steps`; do not configure stack-only kinds in `spec.hooks`.
+
+Documentation generation uses `before.docs.generate` and `after.docs.generate`; see
+[Repo-Level Hooks: docs generate](#repo-level-hooks-docs-generate).
 
 Multi-component DAG runs (e.g. `--affected`, `--query`, or workflows that fan out across several
 components) also fire aggregate events once for the whole run, in addition to the per-component
@@ -210,14 +214,62 @@ to opt back into running the hook in the directory Atmos was launched from. This
 against the directory Atmos was launched from, so it keeps the ambient cwd unless
 `working_directory:` is set explicitly.
 
+## Repo-Level Hooks: docs generate
+
+`atmos docs generate <type>` has no stack or component, so its hooks are declared in `atmos.yaml`
+as a **map** of named hooks (not a list) under `docs.generate.<type>.hooks`. They use the same
+kinds and fields as component hooks (`kind: command`/`step`/`steps`, `type`, `events`, `when`,
+`on_failure`, `retry`, `with`, `env`). Hooks belong to one generator: hooks under `readme` do not
+run for another type.
+
+```yaml
+docs:
+  generate:
+    readme:
+      input: ["./README.yaml"]
+      template: "./README.md.gotmpl"
+      output: "./README.md"
+      hooks:
+        publish-wiki:
+          kind: step
+          type: http
+          events: [after.docs.generate]
+          when: success
+          on_failure: fail
+          with:
+            url: "https://wiki.example.com/rest/api/content/123456"
+            method: PUT
+            headers:
+              Authorization: "Bearer {{ .env.WIKI_TOKEN }}"
+            expect:
+              status: [200]
+```
+
+- Publishing to a wiki or portal is a generic `http` step, or a `kind: command` hook that reads
+  `ATMOS_DOCS_OUTPUT_PATH`. Atmos has no wiki-specific integration.
+- `events:` omitted means the hook fires on both events. Hooks run in name order, in the process working directory where `atmos docs generate` starts (or the `--chdir` target), not `base-dir`.
+- A `before.docs.generate` hook with `on_failure: fail`, or a policy denial, aborts before any file
+  is written. With the default `on_failure: warn`, or with `ignore`, generation continues, so set
+  `on_failure: fail` on any hook that must block generation. `after.docs.generate` hooks run on
+  success and on failure, filtered by `when:` (default is success only; use `failure` or `always`
+  to react to failures). A failing after-hook fails the command only with `on_failure: fail`.
+- Hook context: env vars `ATMOS_DOCS_TYPE`, `ATMOS_DOCS_OUTPUT_PATH`, `ATMOS_DOCS_BASE_DIR`, and
+  template values `{{ .docs.type }}`, `{{ .docs.output_path }}`, `{{ .docs.base_dir }}`. There is
+  no infrastructure component or stack: the stack is empty, and `ATMOS_COMPONENT` holds the
+  generator name (for example `readme`).
+- `atmos docs generate --skip-hooks` skips all hooks, `--skip-hooks=name1,name2` skips named
+  hooks, and `ATMOS_SKIP_HOOKS` is honored.
+- Governing policies with `on: operation` and `action: hooks` also apply; see
+  [atmos-policy](../atmos-policy/SKILL.md).
+
 ## Operational Guidance
 
 - Use hooks for repeatable lifecycle behavior, not one-off local scripts.
 - Scope hooks as narrowly as possible: component hooks for component-specific behavior, shared
   mixins/defaults for organization-wide checks.
 - Use `--skip-hooks` to bypass all hooks for a diagnostic run, or `--skip-hooks=name1,name2` to skip
-  specific hooks by name. This flag is registered on the `terraform` command only today; there is no
-  helmfile or packer equivalent yet.
+  specific hooks by name. This flag is registered on the `terraform` and `docs generate` commands
+  today; there is no helmfile or packer equivalent yet. `ATMOS_SKIP_HOOKS` sets it from the environment.
 - Treat hook output as part of CI evidence. When Atmos Pro is connected and the hook kind supports
   upload, prefer structured upload; otherwise rely on local/CI summaries.
 - Keep destructive hooks opt-in and visible in stack config.

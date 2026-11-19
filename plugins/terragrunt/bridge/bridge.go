@@ -34,6 +34,8 @@ import (
 type Venv = venv.Venv
 
 // Environment isolates invocation environments and output writers.
+//
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func Environment(env map[string]string, stdout, stderr io.Writer) *venv.Venv {
 	// Invocation environments must not replace the plugin's process-wide environment.
 	return venv.OSVenv().WithExec(scopedExec{Exec: vexec.NewOSExec(), environment: env}).WithEnv(env).WithReplaceEnviron(func(map[string]string) error { return nil }).WithWriter(stdout).WithErrWriter(stderr)
@@ -41,6 +43,8 @@ func Environment(env map[string]string, stdout, stderr io.Writer) *venv.Venv {
 
 // Discovery denies process execution, network access, and decryption. Only an
 // explicit stack generation phase may write its generated files.
+//
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func Discovery(v *venv.Venv, generate bool) *venv.Venv {
 	return DiscoveryObserved(v, generate, func() {})
 }
@@ -68,6 +72,8 @@ func DiscoveryObserved(v *venv.Venv, generate bool, denied func()) *venv.Venv {
 }
 
 // WorkingDir uses upstream cache identity without downloading or changing state.
+//
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func WorkingDir(logger log.Logger, env *venv.Venv, source, download, directory string) (string, error) {
 	resolved, err := tf.NewSource(logger, env.FS, source, download, directory, false)
 	if err != nil {
@@ -81,6 +87,8 @@ func WorkingDir(logger log.Logger, env *venv.Venv, source, download, directory s
 // generation, it never lists or generates other stack files under the same
 // directory; callers recurse into the nested stacks the file declares. It does
 // not execute the Terragrunt CLI or apply infrastructure.
+//
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func GenerateStack(ctx context.Context, logger log.Logger, env *venv.Venv, path, tofu string) error {
 	opts := options.NewTerragruntOptions(env.Exec)
 	opts.WorkingDir = filepath.Dir(path)
@@ -106,6 +114,7 @@ type scopedExec struct {
 	environment map[string]string
 }
 
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func (e scopedExec) LookPath(file string) (string, error) {
 	return e.lookPath(file, runtime.GOOS)
 }
@@ -137,6 +146,7 @@ func (e scopedExec) lookPath(file, platform string) (string, error) {
 	return "", &exec.Error{Name: file, Err: exec.ErrNotFound}
 }
 
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func (e scopedExec) Command(ctx context.Context, name string, args ...string) vexec.Cmd {
 	// Explicit relative commands belong to the unit's directory, which upstream
 	// assigns with SetDir after constructing the command. Let os/exec resolve
@@ -153,6 +163,8 @@ func (e scopedExec) Command(ctx context.Context, name string, args ...string) ve
 
 // IsDestroyOperation skips values of Terraform's string flags before applying upstream
 // boolean flag parsing, including last-value precedence.
+//
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func IsDestroyOperation(command string, arguments []string) bool {
 	if command == "destroy" {
 		return true

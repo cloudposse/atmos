@@ -24,6 +24,9 @@ const (
 	// DropBeforeCommit closes the connection without applying the request.
 	DropBeforeCommit
 
+	// Gate holds a fully received request until released, even if its client disconnects.
+	Gate
+
 	// Delay sleeps before handling the request normally.
 	Delay
 )
@@ -50,6 +53,13 @@ type Fault struct {
 	// Status and Code describe the S3 error for [FailStatus]; they default to 500 InternalError.
 	Status int32
 	Code   string
+
+	// Entered and Release synchronize a [Gate]; Done closes after the handler finishes.
+	// A Gate applies to exactly one request: [Server.Inject] ignores Times for it, so the channels
+	// are closed at most once.
+	Entered chan<- struct{}
+	Release <-chan struct{}
+	Done    chan<- struct{}
 
 	// Delay is the pause for [Delay].
 	Delay time.Duration
@@ -127,6 +137,9 @@ func (f *Fault) status() (int, string) {
 func (s *Server) Inject(fault Fault) {
 	defer perf.Track(nil, "s3test.Server.Inject")()
 
+	if fault.Action == Gate {
+		fault.Times = 1
+	}
 	s.faults.add(&fault)
 }
 
