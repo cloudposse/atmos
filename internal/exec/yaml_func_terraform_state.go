@@ -8,6 +8,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -108,11 +109,11 @@ func processTagTerraformStateWithContext(
 		defer resolutionCtx.Pop(atmosConfig)
 	}
 
-	if value, mocked, mockErr := resolveTerraformMockOutput(atmosConfig, stackInfo, stack, component, output); mocked {
+	if value, mocked, mockErr := terraformExecutor.ResolveTerraformMockOutput(atmosConfig, stackInfo, stack, component, output); mocked {
 		return value, mockErr
 	}
 
-	return lookupTerraformState(atmosConfig, stackInfo, &terraformStateLookup{yamlFunc: input, stack: stack, component: component, output: output})
+	return lookupTerraformState(atmosConfig, stackInfo, &terraformcomponent.TerraformStateLookup{YamlFunc: input, Stack: stack, Component: component, Output: output})
 }
 
 // terraformLookupAuth extracts the auth context and auth manager a Terraform state/output lookup
@@ -126,7 +127,7 @@ func terraformLookupAuth(atmosConfig *schema.AtmosConfiguration, stackInfo *sche
 	authContext := stackInfo.AuthContext
 	authManager := stackInfo.AuthManager
 	if authdeferred.IsDeferred(atmosConfig.AuthManager) || (authManager == nil && stackInfo.AuthDisabled) {
-		authManager = &authContextWrapper{stackInfo: stackInfo}
+		authManager = &terraformcomponent.AuthContextWrapper{StackInfo: stackInfo}
 	}
 	return authContext, authManager
 }
@@ -138,9 +139,9 @@ func terraformLookupAuth(atmosConfig *schema.AtmosConfiguration, stackInfo *sche
 func lookupTerraformState(
 	atmosConfig *schema.AtmosConfiguration,
 	stackInfo *schema.ConfigAndStacksInfo,
-	lookup *terraformStateLookup,
+	lookup *terraformcomponent.TerraformStateLookup,
 ) (any, error) {
-	mocks, err := declaredFallbackMocks(atmosConfig, stackInfo, lookup)
+	mocks, err := terraformExecutor.DeclaredFallbackMocks(atmosConfig, stackInfo, lookup)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +151,7 @@ func lookupTerraformState(
 
 	authContext, authManager := terraformLookupAuth(atmosConfig, stackInfo)
 
-	value, err := stateGetter.GetState(atmosConfig, lookup.yamlFunc, lookup.stack, lookup.component, lookup.output, false, authContext, authManager, terraform.LookupOptionsFromInfo(stackInfo)...)
+	value, err := stateGetter.GetState(atmosConfig, lookup.YamlFunc, lookup.Stack, lookup.Component, lookup.Output, false, authContext, authManager, terraform.LookupOptionsFromInfo(stackInfo)...)
 	if err != nil {
 		return handleTerraformStateError(atmosConfig, lookup, err)
 	}
@@ -165,44 +166,44 @@ func lookupTerraformState(
 func lookupTerraformStateWithMocks(
 	atmosConfig *schema.AtmosConfiguration,
 	stackInfo *schema.ConfigAndStacksInfo,
-	lookup *terraformStateLookup,
+	lookup *terraformcomponent.TerraformStateLookup,
 	mocks map[string]any,
 ) (any, error) {
 	authContext, authManager := terraformLookupAuth(atmosConfig, stackInfo)
 
-	whole, err := stateGetter.GetState(atmosConfig, lookup.yamlFunc, lookup.stack, lookup.component, terraformAllOutputsExpression, false, authContext, authManager, terraform.LookupOptionsFromInfo(stackInfo)...)
+	whole, err := stateGetter.GetState(atmosConfig, lookup.YamlFunc, lookup.Stack, lookup.Component, terraformcomponent.TerraformAllOutputsExpression, false, authContext, authManager, terraform.LookupOptionsFromInfo(stackInfo)...)
 	if err != nil && !isRecoverableTerraformError(err) {
-		return nil, withFallbackModeHint(err)
+		return nil, terraformcomponent.WithFallbackModeHint(err)
 	}
 
 	var realOutputs map[string]any
 	if err == nil {
 		realOutputs, _ = whole.(map[string]any)
 	}
-	return resolveTerraformOutputWithMocks(atmosConfig, lookup, mocks, realOutputs, err)
+	return terraformExecutor.ResolveTerraformOutputWithMocks(atmosConfig, lookup, mocks, realOutputs, err)
 }
 
 // handleTerraformStateError resolves a failed state lookup: a recoverable error may be rescued by
 // a YQ default; anything else fails unchanged.
 func handleTerraformStateError(
 	atmosConfig *schema.AtmosConfiguration,
-	lookup *terraformStateLookup,
+	lookup *terraformcomponent.TerraformStateLookup,
 	err error,
 ) (any, error) {
 	if !isRecoverableTerraformError(err) {
 		// Non-recoverable error: auth, network, or backend failures are never masked.
 		return nil, err
 	}
-	if !hasYqDefault(lookup.output) {
+	if !hasYqDefault(lookup.Output) {
 		return nil, err
 	}
 	log.Debug(
 		"Evaluating YQ default for recoverable error",
-		"function", lookup.yamlFunc,
+		"function", lookup.YamlFunc,
 		"error", err.Error(),
 	)
 	// Evaluate YQ against an empty map to get the default value.
-	defaultValue, yqErr := evaluateYqDefault(atmosConfig, lookup.output)
+	defaultValue, yqErr := evaluateYqDefault(atmosConfig, lookup.Output)
 	if yqErr != nil {
 		// If YQ evaluation fails, return the original error.
 		return nil, fmt.Errorf("%w: failed to evaluate YQ default: %w", err, yqErr)

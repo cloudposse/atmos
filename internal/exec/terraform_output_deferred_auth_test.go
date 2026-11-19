@@ -49,7 +49,7 @@ func TestDeferredOutputDoesNotReuseCallerAuthContext(t *testing.T) {
 				tfoutput.SetDefaultExecutor(tfoutput.NewExecutor(&componentDescriberAdapter{}, tfoutput.WithBackendGenerator(backend)))
 				t.Cleanup(func() { tfoutput.SetDefaultExecutor(executor) })
 
-				getter := &defaultOutputGetter{}
+				getter := terraformExecutor.OutputGetter()
 				_, _, err := getter.GetOutput(ac, "dev", "target", "id", true, callerContext, nil,
 					TerraformLookupOptions{SecretsMaskOnly: maskOnly})
 				require.ErrorIs(t, err, errUtils.ErrTerraformOutputFailed)

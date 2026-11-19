@@ -137,7 +137,7 @@ func TestResolveAuthManagerForNestedComponent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolvedAuthMgr, err := resolveAuthManagerForNestedComponent(
+			resolvedAuthMgr, err := terraformExecutor.ResolveAuthManagerForNestedComponent(
 				&atmosConfig,
 				tt.component,
 				"test",
@@ -252,7 +252,7 @@ func TestAuthOverrideErrorHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := resolveAuthManagerForNestedComponent(
+			_, err := terraformExecutor.ResolveAuthManagerForNestedComponent(
 				&atmosConfig,
 				tt.component,
 				tt.stack,
