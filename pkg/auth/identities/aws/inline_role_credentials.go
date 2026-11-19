@@ -448,7 +448,7 @@ func containerCredentials(env map[string]string) (aws.CredentialsProvider, bool,
 		o.AuthorizationToken = token
 		if tokenFile != "" {
 			o.AuthorizationTokenProvider = endpointcreds.TokenProviderFunc(func() (string, error) {
-				contents, err := os.ReadFile(tokenFile)
+				contents, err := os.ReadFile(tokenFile) //nolint:gosec // G703: the path is AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE of the invocation, read as the SDK reads it.
 				if err != nil {
 					return "", fmt.Errorf("read the container authorization token file %s: %w", tokenFile, err)
 				}

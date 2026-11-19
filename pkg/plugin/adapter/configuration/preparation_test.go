@@ -324,6 +324,37 @@ func TestResolveDeferredSourceTellsTheProviderThatHooksHaveRun(t *testing.T) {
 	require.True(t, sent.Effects.Network, "resolving the registry source needs the same effects as a preparation")
 }
 
+// The host executes against the backend of the first preparation, so the state identity cached for
+// dependency checks stays that one when a read-config hook makes the second preparation report another.
+func TestResolveDeferredSourceKeepsTheFirstStateIdentity(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	states := []*pluginv1.ComponentStateIdentity{{BackendType: "s3", Workspace: "first"}, {BackendType: "local", Workspace: "second"}}
+	sources := []string{"tfr://registry.example/acme/vpc/aws?version=1.0.0", "git::https://github.com/acme/terraform-aws-vpc.git?ref=v1.0.0"}
+	calls := 0
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+		calls++
+		return &pluginv1.PrepareComponentResponse{Engine: "opentofu", State: states[calls-1], ModuleSource: sources[calls-1]}, nil
+	}).Times(2)
+	cached := func() *pluginv1.ComponentStateIdentity {
+		var found *pluginv1.ComponentStateIdentity
+		session.prepared.Range(func(_, value any) bool {
+			found = value.(*pluginv1.ComponentStateIdentity)
+			return false
+		})
+		return found
+	}
+	prepared, err := session.Prepare(t.Context(), info)
+	require.NoError(t, err)
+	require.True(t, prepared.SourceDeferred)
+	require.Equal(t, "first", cached().GetWorkspace())
+
+	resolved, err := session.ResolveDeferredSource(t.Context(), info)
+	require.NoError(t, err)
+	require.Equal(t, sources[1], resolved.Source)
+	require.Equal(t, "first", cached().GetWorkspace(), "the deferred-source call must not replace the cached state identity")
+	require.Equal(t, "s3", cached().GetBackendType())
+}
+
 // The second preparation keeps what a single one returns for a run that ends, and rejects a provider
 // that leaves the source unresolved again, because the host could neither fetch it nor ask a third time.
 func TestResolveDeferredSourceKeepsRunEndingResultsAndRejectsAnUnresolvedSource(t *testing.T) {

@@ -169,7 +169,16 @@ func (s *Session) ResolveDeferredSource(ctx context.Context, info *schema.Config
 		return nil, err
 	}
 	selected.request.Operation.Options = map[string]*pluginv1.ComponentValue{optionSourceHooksCompleted: completed}
+	// The host executes against the backend of the first preparation, so the state identity cached
+	// for dependency checks stays that one, whatever the second preparation reports.
+	key := addressKey(selected.instance.Address)
+	first, cached := s.prepared.Load(key)
 	result, err := s.runProviderPrepare(ctx, info, selected)
+	if cached {
+		s.prepared.Store(key, first)
+	} else {
+		s.prepared.Delete(key)
+	}
 	if err != nil {
 		return nil, err
 	}
