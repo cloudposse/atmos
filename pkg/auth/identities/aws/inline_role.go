@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"time"
 
@@ -16,6 +17,9 @@ import (
 
 // inlineRoleIdentityName names the transient identity behind a role that a component asks for.
 const inlineRoleIdentityName = "component-iam-role"
+
+// awsEnvPrefix starts the name of every AWS SDK environment variable.
+const awsEnvPrefix = "AWS_"
 
 // InlineRole is an IAM role that a component, rather than the Atmos configuration, asks to assume. It
 // reuses the aws/assume-role identity, so STS calls, endpoints, and error reporting behave the same way.
@@ -94,9 +98,18 @@ func inlineRoleConfig(role InlineRole, env map[string]string) *schema.Identity {
 }
 
 func environMap(environ []string) map[string]string {
+	return environMapForGOOS(environ, runtime.GOOS)
+}
+
+// environMapForGOOS maps an environment slice. Later duplicates win. On Windows a variable name is
+// case-insensitive, so the AWS names are folded to upper case and any spelling selects the same variable.
+func environMapForGOOS(environ []string, goos string) map[string]string {
 	env := make(map[string]string, len(environ))
 	for _, entry := range environ {
 		if key, value, ok := strings.Cut(entry, "="); ok {
+			if goos == "windows" && len(key) >= len(awsEnvPrefix) && strings.EqualFold(key[:len(awsEnvPrefix)], awsEnvPrefix) {
+				key = strings.ToUpper(key)
+			}
 			env[key] = value
 		}
 	}

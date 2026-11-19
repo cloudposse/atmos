@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -75,8 +76,9 @@ func invocationHome(home string) []string {
 	return []string{"HOME=" + home, "USERPROFILE=" + home}
 }
 
-// credentialServer serves container credentials, recording the authorization header of each request.
-func credentialServer(t *testing.T, key string) (*httptest.Server, *[]string) {
+// credentialServer serves container credentials, recording the authorization header of each request. The
+// returned function copies the recorded headers under the recorder's lock.
+func credentialServer(t *testing.T, key string) (*httptest.Server, func() []string) {
 	t.Helper()
 	var mu sync.Mutex
 	var authorizations []string
@@ -89,7 +91,11 @@ func credentialServer(t *testing.T, key string) (*httptest.Server, *[]string) {
 		}))
 	}))
 	t.Cleanup(server.Close)
-	return server, &authorizations
+	return server, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(authorizations)
+	}
 }
 
 // metadataServer emulates the instance metadata role credentials API.
@@ -173,7 +179,7 @@ func TestBaseCredentialsFromTheInvocationContainer(t *testing.T) {
 	_, _, err = resolveBase(t, "HOME="+empty, "AWS_CONTAINER_CREDENTIALS_FULL_URI="+server.URL+"/creds",
 		"AWS_CONTAINER_AUTHORIZATION_TOKEN=inline-token", "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE="+tokenFile)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"inline-token", "file-token"}, *authorizations, "the token file named by the invocation overrides the inline token")
+	assert.Equal(t, []string{"inline-token", "file-token"}, authorizations(), "the token file named by the invocation overrides the inline token")
 	assertProcessEnvironmentUnchanged(t, poisoned)
 
 	_, _, err = resolveBase(t, "HOME="+empty, "AWS_CONTAINER_CREDENTIALS_FULL_URI=http://192.0.2.10/creds")
@@ -380,8 +386,9 @@ func ssoTokenCache(t *testing.T, home, key, token string) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, hex.EncodeToString(sum[:])+".json"), contents, 0o600))
 }
 
-// ssoPortal serves the SSO role credentials API and records the bearer token of each request.
-func ssoPortal(t *testing.T) (*[]string, string) {
+// ssoPortal serves the SSO role credentials API and records the bearer token of each request. The returned
+// function copies the recorded tokens under the recorder's lock.
+func ssoPortal(t *testing.T) (func() []string, string) {
 	t.Helper()
 	var mu sync.Mutex
 	var tokens []string
@@ -394,7 +401,11 @@ func ssoPortal(t *testing.T) (*[]string, string) {
 		}}))
 	}))
 	t.Cleanup(server.Close)
-	return &tokens, server.URL
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(tokens)
+	}, server.URL
 }
 
 // An SSO profile reads its cached login from the invocation home, in both profile forms, and never from the
@@ -424,17 +435,17 @@ func TestBaseCredentialsFromAnSSOProfileReadTheInvocationTokenCache(t *testing.T
 
 			_, _, err := resolveBase(t, "AWS_PROFILE=sso", "AWS_ENDPOINT_URL_SSO="+portalURL, "AWS_CONFIG_FILE="+filepath.Join(home, ".aws", "config"))
 			require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig, "an explicit profile without an invocation home cannot select the process cache")
-			assert.Empty(t, *tokens, "the process login is never sent when the invocation home is absent")
+			assert.Empty(t, tokens(), "the process login is never sent when the invocation home is absent")
 
 			_, _, err = resolveBase(t, invocation...)
 			require.Error(t, err, "an invocation without a cached login fails instead of using the process login")
-			assert.Empty(t, *tokens, "the process login is never sent")
+			assert.Empty(t, tokens(), "the process login is never sent")
 
 			ssoTokenCache(t, home, form.cacheKey, "invocation-login")
 			key, _, err := resolveBase(t, invocation...)
 			require.NoError(t, err)
 			assert.Equal(t, "ASIASSOROLE", key)
-			assert.Equal(t, []string{"invocation-login"}, *tokens, "the invocation's cached login is used")
+			assert.Equal(t, []string{"invocation-login"}, tokens(), "the invocation's cached login is used")
 		})
 	}
 }

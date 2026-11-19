@@ -1458,3 +1458,166 @@ func TestReadConfigHooksComeFromTheInvocationExecution(t *testing.T) {
 	require.NoError(t, hookExecutor(shell).runReadConfigHooks(t.Context(), &schema.AtmosConfiguration{}, info, prepared))
 	require.Equal(t, []string{"hook-apply-time"}, shell.names())
 }
+
+// An after hook that is retried must not cost the run the output of the command that already completed.
+func TestErrorsPolicyKeepsCommandMetadataWhenOnlyAnAfterHookIsRetried(t *testing.T) {
+	afterAttempts := 0
+	shell := newShellFixture(t, func(call *shellCall) error {
+		if call.command == "terraform" {
+			_, _ = io.WriteString(call.options.ExecMetadataStdoutCapture, "Apply complete!")
+			return nil
+		}
+		afterAttempts++
+		if afterAttempts == 1 {
+			_, _ = io.WriteString(call.options.StderrCapture, "connection timeout")
+			return errors.New("hook failed")
+		}
+		return nil
+	})
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3}}}
+	info := hookInfo("apply", &schema.ComponentExecution{Errors: policy, AfterHooks: []schema.ComponentHook{execHook("notify", "apply")}})
+	executor := testExecutor(t)
+	executor.services.ExecuteShellCommand = shell.mock.Execute
+	execCtx := &componentExecContext{componentPath: t.TempDir()}
+	require.NoError(t, executor.runMainCommandPhase(&schema.AtmosConfiguration{}, info, execCtx, []string{"apply"}, execCtx.componentPath, false))
+	require.Equal(t, []string{"terraform apply", "hook-notify arg", "hook-notify arg"}, shell.names())
+	require.Equal(t, "Apply complete!", info.ExecMetadataRawOutput, "the retry of a hook must keep the completed apply's output")
+}
+
+// A retry of a failed command still reports only the latest attempt.
+func TestErrorsPolicyResetsCommandMetadataWhenTheCommandIsRetried(t *testing.T) {
+	attempts := 0
+	shell := newShellFixture(t, func(call *shellCall) error {
+		if call.command != "terraform" {
+			return nil
+		}
+		attempts++
+		if attempts == 1 {
+			_, _ = io.WriteString(call.options.ExecMetadataStdoutCapture, "first attempt")
+			_, _ = io.WriteString(call.options.StderrCapture, "Error: connection timeout")
+			return errUtils.ExitCodeError{Code: 1}
+		}
+		_, _ = io.WriteString(call.options.ExecMetadataStdoutCapture, "Apply complete!")
+		return nil
+	})
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3}}}
+	info := hookInfo("apply", &schema.ComponentExecution{Errors: policy, AfterHooks: []schema.ComponentHook{execHook("notify", "apply")}})
+	executor := testExecutor(t)
+	executor.services.ExecuteShellCommand = shell.mock.Execute
+	execCtx := &componentExecContext{componentPath: t.TempDir()}
+	require.NoError(t, executor.runMainCommandPhase(&schema.AtmosConfiguration{}, info, execCtx, []string{"apply"}, execCtx.componentPath, false))
+	require.Equal(t, "Apply complete!", info.ExecMetadataRawOutput)
+}
+
+// An ignore policy that matches the failed plan decides the run, so the saved-plan guard must not
+// look for a plan that was never written.
+func TestIgnoredPlanFailureEndsAGuardedPlanWithoutError(t *testing.T) {
+	config, info, execCtx, _, _ := planFixture(t)
+	var engine policy.Engine
+	require.NoError(t, engine.Register(policy.CELEngine, &policy.CEL{}))
+	execCtx.planPolicy = &planfile.Guard{Engine: &engine, Show: newPlanShowRunner(t), Rules: []policy.Rule{{ID: "allow", On: policy.TerraformPlan, Engine: policy.CELEngine, Expression: "false", Effects: policy.Effects{Deny: true}}}}
+	info.ComponentExecution = &schema.ComponentExecution{Errors: &schema.ComponentErrors{
+		Ignore: []schema.ComponentIgnorePolicy{{Name: "known", Patterns: []string{"known failure"}}},
+	}}
+	shell := newShellFixture(t, func(call *shellCall) error {
+		_, _ = io.WriteString(call.options.StderrCapture, "Error: known failure")
+		return errUtils.ExitCodeError{Code: 1}
+	})
+	executor := testExecutor(t)
+	executor.services.ExecuteShellCommand = shell.mock.Execute
+	path := filepath.Join(execCtx.componentPath, "ignored.plan")
+	require.NoError(t, executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false))
+	require.Len(t, shell.calls, 1)
+	require.NoFileExists(t, path, "an ignored plan publishes nothing")
+
+	// A failure that no ignore policy covers still fails the run.
+	unmatched := newShellFixture(t, func(call *shellCall) error {
+		_, _ = io.WriteString(call.options.StderrCapture, "Error: something else")
+		return errUtils.ExitCodeError{Code: 1}
+	})
+	executor.services.ExecuteShellCommand = unmatched.mock.Execute
+	require.Error(t, executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false))
+}
+
+// After hooks that already succeeded do not run again when a later after hook is retried.
+func TestErrorsPolicyResumesAfterHooksThatDidNotComplete(t *testing.T) {
+	secondAttempts := 0
+	shell := newShellFixture(t, func(call *shellCall) error {
+		if call.command != "hook-second" {
+			return nil
+		}
+		secondAttempts++
+		if secondAttempts == 1 {
+			_, _ = io.WriteString(call.options.StderrCapture, "connection timeout")
+			return errors.New("hook failed")
+		}
+		return nil
+	})
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3}}}
+	info := hookInfo("apply", &schema.ComponentExecution{
+		Errors: policy,
+		AfterHooks: []schema.ComponentHook{
+			execHook("first", "apply"), execHook("second", "apply"), execHook("third", "apply"),
+		},
+	})
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"apply"}, t.TempDir())
+	require.NoError(t, err)
+	require.Equal(t, []string{"terraform apply", "hook-first arg", "hook-second arg", "hook-second arg", "hook-third arg"}, shell.names(),
+		"the retry runs the hook that failed and the ones it skipped, not the ones that finished")
+}
+
+// After hooks that ran beside a failed command belong to that attempt, so the next full attempt runs them again.
+func TestErrorsPolicyRunsAllAfterHooksAgainWhenTheCommandIsRetried(t *testing.T) {
+	attempts := 0
+	shell := newShellFixture(t, func(call *shellCall) error {
+		if call.command != "terraform" {
+			return nil
+		}
+		attempts++
+		if attempts == 1 {
+			_, _ = io.WriteString(call.options.StderrCapture, "Error: connection timeout")
+			return errUtils.ExitCodeError{Code: 1}
+		}
+		return nil
+	})
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3}}}
+	always := execHook("always", "apply")
+	always.RunOnError = true
+	info := hookInfo("apply", &schema.ComponentExecution{Errors: policy, AfterHooks: []schema.ComponentHook{always}})
+	require.NoError(t, hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"apply"}, t.TempDir()))
+	require.Equal(t, []string{"terraform apply", "hook-always arg", "terraform apply", "hook-always arg"}, shell.names())
+}
+
+// A relative working directory of an after-fetch hook resolves against the selected module, which
+// only exists once the fetch has provisioned it.
+func TestAfterFetchHookResolvesRelativeDirectoryAgainstTheSelectedModule(t *testing.T) {
+	workdir := t.TempDir()
+	module := filepath.Join(workdir, "modules", "app")
+	hook := schema.ComponentHook{Name: "after", Commands: []string{"init-from-module"}, Execute: []string{"hook-after"}, WorkingDirectory: "hooks"}
+	before := schema.ComponentHook{Name: "before", Commands: []string{"init-from-module"}, Execute: []string{"hook-before"}, WorkingDirectory: "hooks"}
+	info := hookInfo("plan", &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{hook}})
+	info.ComponentSection = map[string]any{"metadata": map[string]any{"source_subdir": "modules/app"}}
+	shell := newShellFixture(t, nil)
+	wrapper := hookExecutor(shell).initFromModuleWrapper(&schema.AtmosConfiguration{}, info)
+	require.NotNil(t, wrapper)
+	require.NoError(t, wrapper(t.Context(), &source.Target{Dir: workdir, IsWorkdir: true}, func(context.Context) error {
+		return os.MkdirAll(filepath.Join(module, "hooks"), 0o755)
+	}))
+	require.Len(t, shell.calls, 1)
+	require.Equal(t, filepath.Join(module, "hooks"), shell.calls[0].dir)
+
+	// Before the fetch the module does not exist, so a before hook keeps the missing-directory check.
+	info.ComponentExecution = &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{before}}
+	wrapper = hookExecutor(newShellFixture(t, nil)).initFromModuleWrapper(&schema.AtmosConfiguration{}, info)
+	err := wrapper(t.Context(), &source.Target{Dir: t.TempDir(), IsWorkdir: true}, func(context.Context) error { return nil })
+	require.ErrorIs(t, err, errUtils.ErrComponentHookWorkingDirectory)
+
+	// An absolute directory is left alone.
+	absolute := t.TempDir()
+	hook.WorkingDirectory = absolute
+	info.ComponentExecution = &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{hook}}
+	shell = newShellFixture(t, nil)
+	wrapper = hookExecutor(shell).initFromModuleWrapper(&schema.AtmosConfiguration{}, info)
+	require.NoError(t, wrapper(t.Context(), &source.Target{Dir: t.TempDir(), IsWorkdir: true}, func(context.Context) error { return nil }))
+	require.Equal(t, absolute, shell.calls[0].dir)
+}

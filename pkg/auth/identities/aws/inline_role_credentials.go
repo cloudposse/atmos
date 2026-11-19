@@ -105,8 +105,7 @@ func baseCredentialsProvider(ctx context.Context, env map[string]string, region 
 		return staticEnvCredentials(env), "", nil
 	}
 	if tokenFile := env["AWS_WEB_IDENTITY_TOKEN_FILE"]; tokenFile != "" {
-		provider, err := envWebIdentityCredentials(env, region, tokenFile)
-		return provider, "", err
+		return webIdentityWithProfileRegion(ctx, env, region, tokenFile)
 	}
 	profile, err := loadInvocationProfile(ctx, env)
 	if err != nil {
@@ -119,6 +118,23 @@ func baseCredentialsProvider(ctx context.Context, env map[string]string, region 
 	region = cmp.Or(region, profile.Region)
 	provider, err := envProfileCredentials(env, profileChain(profile), region)
 	return provider, profile.Region, err
+}
+
+// webIdentityWithProfileRegion keeps web identity as the credential source and reads the selected profile
+// only for its region, when the environment names none. It returns the region of the profile it read.
+func webIdentityWithProfileRegion(ctx context.Context, env map[string]string, region, tokenFile string) (aws.CredentialsProvider, string, error) {
+	profileRegion := ""
+	if region == "" {
+		profile, err := loadInvocationProfile(ctx, env)
+		if err != nil {
+			return nil, "", err
+		}
+		if profile != nil {
+			profileRegion = profile.Region
+		}
+	}
+	provider, err := envWebIdentityCredentials(env, cmp.Or(region, profileRegion), tokenFile)
+	return provider, profileRegion, err
 }
 
 func staticEnvCredentials(env map[string]string) aws.CredentialsProvider {
@@ -508,16 +524,10 @@ func checkContainerEndpoint(endpoint string) (*http.Client, error) {
 	if parsed.Scheme != "http" {
 		return nil, nil
 	}
-	addresses := []string{host}
-	if net.ParseIP(host) == nil {
-		if addresses, err = net.LookupHost(host); err != nil {
-			return nil, fmt.Errorf("%w: resolve container credentials host %q: %w", errUtils.ErrInvalidAuthConfig, host, err)
-		}
-	}
-	for _, address := range addresses {
-		if ip := net.ParseIP(address); ip == nil || !containerHostAllowed(ip) {
-			return nil, fmt.Errorf("%w: container credentials host %q is not a loopback, ECS, or EKS host", errUtils.ErrInvalidAuthConfig, host)
-		}
+	// A host name is resolved and checked by the validated dialer when the connection is made, under the
+	// deadline of the request, so no resolver call without a deadline happens here.
+	if ip := net.ParseIP(host); ip != nil && !containerHostAllowed(ip) {
+		return nil, fmt.Errorf("%w: container credentials host %q is not a loopback, ECS, or EKS host", errUtils.ErrInvalidAuthConfig, host)
 	}
 	return containerEndpointClient(containerCredentialRequestTimeout), nil
 }
