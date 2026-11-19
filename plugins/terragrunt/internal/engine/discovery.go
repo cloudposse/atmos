@@ -478,6 +478,10 @@ func (e *unitEvaluator) resolveUnitInventory(ctx context.Context) (*model.Resolu
 	if err := checkExecutionSyntax(e.environment.FS, cfg, e.path); err != nil {
 		return nil, err
 	}
+	// A literal generated backend fails preparation, so it fails discovery too, before preflight.
+	if err := checkLiteralGeneratedBackends(e.environment.FS, backendConfigurationPaths(cfg, e.path)); err != nil {
+		return nil, err
+	}
 	result := &model.Resolution{Path: e.path, Files: append(e.pctx.FilesRead.Paths(), e.path)}
 	if err := inventoryWorkspaceProblem(e.request, cfg, e.path); err != nil {
 		return nil, err

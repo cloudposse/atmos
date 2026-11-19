@@ -228,3 +228,101 @@ func terraformConfigurationFile(path string) bool {
 	return strings.HasSuffix(lower, ".tf") || strings.HasSuffix(lower, ".tf.json") ||
 		strings.HasSuffix(lower, ".tofu") || strings.HasSuffix(lower, ".tofu.json")
 }
+
+// checkLiteralGeneratedBackends rejects, during discovery, a generate block whose path and contents
+// are literal and declare a backend. Full preparation rejects such a unit anyway; rejecting it here
+// records the failure before bulk preflight lets a healthy prerequisite run. Declarations that need
+// evaluation are left alone: discovery does not evaluate inputs, commands, or functions.
+func checkLiteralGeneratedBackends(filesystem afero.Fs, paths []string) error {
+	paths, err := withAutomaticIncludes(filesystem, paths)
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
+		content, err := afero.ReadFile(filesystem, path)
+		if err != nil {
+			return err
+		}
+		parser := hclparse.NewParser()
+		var file *hcl.File
+		var diagnostics hcl.Diagnostics
+		if strings.HasSuffix(path, ".json") {
+			file, diagnostics = parser.ParseJSON(content, path)
+		} else {
+			file, diagnostics = parser.ParseHCL(content, path)
+		}
+		if diagnostics.HasErrors() {
+			continue
+		}
+		if literalBackendInFile(file) {
+			return unresolvedGeneratedBackend(path)
+		}
+	}
+	return nil
+}
+
+// literalBackendInFile reports a named generate block, or an entry of a literal generate map, that
+// certainly writes a backend.
+func literalBackendInFile(file *hcl.File) bool {
+	content, _, diagnostics := file.Body.PartialContent(&hcl.BodySchema{
+		Attributes: []hcl.AttributeSchema{{Name: "generate"}},
+		Blocks:     []hcl.BlockHeaderSchema{{Type: "generate", LabelNames: []string{"name"}}},
+	})
+	if diagnostics.HasErrors() {
+		return false
+	}
+	for _, block := range content.Blocks {
+		fields, _, diagnostics := block.Body.PartialContent(&hcl.BodySchema{Attributes: []hcl.AttributeSchema{
+			{Name: "disable"}, {Name: "path"}, {Name: "contents"},
+		}})
+		if diagnostics.HasErrors() {
+			continue
+		}
+		disabled, known := literalGenerateDisabled(fields.Attributes["disable"])
+		path, pathOK := literalGenerateString(fields.Attributes["path"])
+		text, textOK := literalGenerateString(fields.Attributes["contents"])
+		if literalGeneratedBackend(disabled, known, path, pathOK, text, textOK) {
+			return true
+		}
+	}
+	attr, ok := content.Attributes["generate"]
+	if !ok {
+		return false
+	}
+	value, diagnostics := attr.Expr.Value(nil)
+	if diagnostics.HasErrors() || !value.IsWhollyKnown() || value.IsNull() || (!value.Type().IsObjectType() && !value.Type().IsMapType()) {
+		return false
+	}
+	for iterator := value.ElementIterator(); iterator.Next(); {
+		_, entry := iterator.Element()
+		if entry.IsNull() || (!entry.Type().IsObjectType() && !entry.Type().IsMapType()) {
+			continue
+		}
+		disabled, known := false, true
+		if field, ok := generateField(entry, "disable"); ok {
+			known = field.Type() == cty.Bool && !field.IsNull()
+			disabled = known && field.True()
+		}
+		path, pathOK := generateFieldString(entry, "path")
+		text, textOK := generateFieldString(entry, "contents")
+		if literalGeneratedBackend(disabled, known, path, pathOK, text, textOK) {
+			return true
+		}
+	}
+	return false
+}
+
+// literalGeneratedBackend reports an enabled declaration whose literal path names a Terraform file
+// and whose literal contents declare a backend. Anything dynamic is not certain, so it is false.
+func literalGeneratedBackend(disabled, disabledKnown bool, path string, pathOK bool, text string, textOK bool) bool {
+	if !disabledKnown || disabled || !pathOK || !textOK {
+		return false
+	}
+	for _, value := range []string{path, text} {
+		if strings.Contains(value, "${") || strings.Contains(value, "%{") {
+			return false
+		}
+	}
+	path = filepath.Clean(path)
+	return filepath.IsLocal(path) && terraformConfigurationFile(path) && declaresBackend(path, text)
+}
