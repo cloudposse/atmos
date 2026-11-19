@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"google.golang.org/protobuf/proto"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component/provideroptions"
 	"github.com/cloudposse/atmos/pkg/merge"
@@ -119,10 +121,28 @@ func (s *Session) providerOperation(provider string, environment map[string]stri
 		if request.Provider != provider || request.Operation == nil {
 			continue
 		}
-		options, err := operationOptions(s.providerOptionValues[provider], environment)
+		values, declared := s.providerOptionValues[provider]
+		if !declared {
+			// A revision session has no declarations of its own. It carries the explicit options its
+			// provider registration was sent with, so state requests match discovery.
+			return request.Operation.Mode, cloneOptions(request.Operation.Options), nil
+		}
+		options, err := operationOptions(values, environment)
 		return request.Operation.Mode, options, err
 	}
 	return provideroptions.ModeNative, nil, nil
+}
+
+// cloneOptions copies encoded operation options so a request never aliases the registration's.
+func cloneOptions(options map[string]*pluginv1.ComponentValue) map[string]*pluginv1.ComponentValue {
+	if options == nil {
+		return nil
+	}
+	cloned := make(map[string]*pluginv1.ComponentValue, len(options))
+	for name, value := range options {
+		cloned[name] = proto.Clone(value).(*pluginv1.ComponentValue)
+	}
+	return cloned
 }
 
 // sortedSections lists the configured provider sections in stable order.

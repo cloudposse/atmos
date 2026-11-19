@@ -131,3 +131,26 @@ func TestLogLevelsMapOntoTheProtocol(t *testing.T) {
 		require.Equal(t, want, logLevel(name), name)
 	}
 }
+
+// A sensitive operation option is registered before evaluation, so an event that carries it is masked
+// in preparation and in state resolution, while an option that is not marked stays readable.
+func TestLogsRedactSensitiveOperationOptions(t *testing.T) {
+	token, err := component.Encode(cty.StringVal("tok-456").Mark(component.Sensitive))
+	require.NoError(t, err)
+	plain, err := component.Encode(cty.StringVal("visible-option"))
+	require.NoError(t, err)
+	request := &pluginv1.ComponentRequest{
+		Invocation: &pluginv1.Invocation{LogLevel: "debug"},
+		Operation:  &pluginv1.ComponentOperation{Options: map[string]*pluginv1.ComponentValue{"iam_assume_role_web_identity_token": token, "download_dir": plain}},
+	}
+
+	_, sink := withLogs(t.Context(), request.GetInvocation(), "", requestValues(request)...)
+	logger := log.New(log.WithOutput(io.Discard), log.WithHooks(sink.Hook()))
+	require.NoError(t, logger.SetLevel(sink.TerragruntLevel()))
+	logger.Debug("tok-456 visible-option")
+
+	entries := logEntries(sink)
+	require.Len(t, entries, 1)
+	require.Equal(t, "<MASKED> visible-option", entries[0].GetMessage())
+	require.Len(t, requestValues(&pluginv1.ComponentRequest{}), 2, "a request without options still lists its two configurations")
+}

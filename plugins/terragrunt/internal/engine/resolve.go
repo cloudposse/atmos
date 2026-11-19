@@ -84,7 +84,7 @@ type unitEvaluator struct {
 func (e *unitEvaluator) resolve(ctx context.Context, scan *sensitivityScan) (*model.Resolution, error) {
 	defer func() {
 		files := append(append(e.pctx.FilesRead.Paths(), e.path), scan.applyFiles...)
-		if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(e.environment.FS, files, e.path, scan.registered) {
+		if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(e.checkedFS(), files, e.path, scan.registered) {
 			sink.Withhold()
 		}
 	}()
@@ -178,6 +178,8 @@ func evaluationEnvironment(ctx context.Context, request *model.Request, filesyst
 	if _, err := environment.FS.Stat(path); err != nil {
 		return nil, err
 	}
+	// The sensitivity checks scan the contents the evaluation read, not what is on disk afterwards.
+	environment = environment.WithFS(newEvaluatedFS(environment.FS))
 	if discovering(request) || request.Phase == phaseBackend || generating(request) {
 		environment = atmosbridge.Discovery(environment, generating(request))
 	} else {
@@ -309,15 +311,15 @@ func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.Terragrun
 			// The apply-time values are unknown, and the unit's own inputs and locals no longer count as
 			// registered: whatever Terragrunt logged before failing may carry them.
 			files := append(append(apply.FilesRead.Paths(), e.pctx.FilesRead.Paths()...), e.path)
-			if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(e.environment.FS, files, e.path, false) {
+			if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(e.checkedFS(), files, e.path, false) {
 				sink.Withhold()
 			}
 			return nil, err
 		}
 		// Apply-time values can differ from the ones planned, so register them before any event is returned.
 		sink := logSinkFrom(ctx)
-		redactUnitInputs(sink, e.environment.FS, append(apply.FilesRead.Paths(), e.path), e.path, parsed)
-		redactLocals(sink, e.environment.FS, e.path, parsed.Locals)
+		redactUnitInputs(sink, e.checkedFS(), append(apply.FilesRead.Paths(), e.path), e.path, parsed)
+		redactLocals(sink, e.checkedFS(), e.path, parsed.Locals)
 		return parsed, nil
 	}
 	return e.applyTimeExecution(execution, reparse)

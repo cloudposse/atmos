@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2"
@@ -142,6 +143,9 @@ func resolveConfigurationBinary(info *schema.ConfigAndStacksInfo) error {
 func obtainConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *reviewedRebuild, error) {
 	if !usesConfigurationPlan(info) {
 		prepared, err := config.ComponentConfigurations.Prepare(ctx, info)
+		if prepared != nil && info.SubCommand == subcommandPlan {
+			prepared.PlanArguments = persistablePlanArguments(info.AdditionalArgsAndFlags)
+		}
 		return prepared, nil, err
 	}
 	if err := useRetainedWorkdir(config, info); err != nil {
@@ -201,6 +205,8 @@ func prepareForRebuild(ctx context.Context, config *schema.AtmosConfiguration, i
 	fresh := *info
 	fresh.UseTerraformPlan, fresh.PlanFile, fresh.StoredPlanFile = false, "", ""
 	fresh.SubCommand, fresh.SubCommand2 = reviewedOperation, ""
+	// The unit is evaluated with the reviewed plan's arguments, not with the apply command's.
+	fresh.AdditionalArgsAndFlags = slices.Clone(rebuild.plan.Prepared.PlanArguments)
 	prepared, err := config.ComponentConfigurations.Prepare(ctx, &fresh)
 	if err != nil || prepared == nil {
 		return nil, err
@@ -218,6 +224,7 @@ func prepareForRebuild(ctx context.Context, config *schema.AtmosConfiguration, i
 	}
 	prepared.Inputs = map[string]any{}
 	prepared.Execution = rebuild.plan.Prepared.Execution
+	prepared.PlanArguments = rebuild.plan.Prepared.PlanArguments
 	return prepared, nil
 }
 

@@ -1,8 +1,13 @@
 package engine
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"io"
+	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/gruntwork-io/terragrunt/pkg/config"
@@ -35,7 +40,7 @@ type unitSensitivity struct {
 func redactUnitInputs(sink *LogSink, fsys afero.Fs, files []string, unit string, cfg *config.TerragruntConfig) [][]string {
 	paths := sensitiveInputs(fsys, files, cfg.Inputs, unit, cfg.ProcessedIncludes)
 	redactInputs(sink, cfg.Inputs, paths)
-	if sink.collecting() && transformsSensitiveInputs(fsys, unit) {
+	if sink.collecting() && (unverifiable(fsys, unit) || transformsSensitiveInputs(fsys, unit)) {
 		sink.Withhold()
 	}
 	return paths
@@ -54,8 +59,8 @@ func transformsSensitiveInputs(fsys afero.Fs, unit string) bool {
 // transformation does not cause an otherwise maskable sensitive input to withhold logs.
 func (s *sensitivityScanner) transformsSensitiveInput(expression hclsyntax.Expression) bool {
 	if object, ok := unwrapParentheses(expression).(*hclsyntax.ObjectConsExpr); ok {
-		for _, item := range object.Items {
-			if s.transformsSensitiveInput(item.KeyExpr) || s.transformsSensitiveInput(item.ValueExpr) {
+		for i, item := range object.Items {
+			if s.transformsSensitiveInput(item.KeyExpr) || s.transformsSensitiveInput(item.ValueExpr) || s.replacedSensitiveMember(object.Items, i) {
 				return true
 			}
 		}
@@ -64,6 +69,27 @@ func (s *sensitivityScanner) transformsSensitiveInput(expression hclsyntax.Expre
 	before := len(s.paths)
 	s.walk(expression, nil, 0)
 	return len(s.paths) > before && s.inputTransformsRaw(expression)
+}
+
+// replacedSensitiveMember reports whether a later member replaces a sensitive member that may have logged
+// its value. HCL keeps the last member of a repeated key, so only the replacement reaches the sink and the
+// discarded sensitive result, which Terragrunt may already have logged, cannot be registered. A key that is
+// not static cannot be compared and is treated as a possible replacement.
+func (s *sensitivityScanner) replacedSensitiveMember(items []hclsyntax.ObjectConsItem, index int) bool {
+	before := len(s.paths)
+	s.walk(items[index].ValueExpr, nil, 0)
+	sensitive := len(s.paths) > before
+	if !sensitive || !s.mayLogValue(items[index].ValueExpr, 0) {
+		return false
+	}
+	key, known := staticKey(items[index].KeyExpr)
+	for _, later := range items[index+1:] {
+		laterKey, laterKnown := staticKey(later.KeyExpr)
+		if !known || !laterKnown || laterKey == key {
+			return true
+		}
+	}
+	return false
 }
 
 // inputTransformsRaw treats selecting a branch as preserving its raw value. A sensitive
@@ -103,7 +129,7 @@ func sensitiveLocals(fsys afero.Fs, unit string, locals map[string]any) [][]stri
 // unredacted. The raw value cannot be recovered from the final one, so the events are withheld instead.
 func redactLocals(sink *LogSink, fsys afero.Fs, unit string, locals map[string]any) {
 	redactInputs(sink, locals, sensitiveLocals(fsys, unit, locals))
-	if sink.collecting() && transformsSensitiveLocal(fsys, unit) {
+	if sink.collecting() && (unverifiable(fsys, unit) || transformsSensitiveLocal(fsys, unit)) {
 		sink.Withhold()
 	}
 }
@@ -220,20 +246,25 @@ func isLiteralTemplate(template *hclsyntax.TemplateExpr) bool {
 // about it.
 func unredactedSensitivity(fsys afero.Fs, files []string, unit string, resolved bool) bool {
 	for _, file := range files {
-		extension := filepath.Ext(file)
-		if extension != ".hcl" && extension != ".json" {
-			continue
-		}
 		if _, err := fsys.Stat(file); err != nil {
+			if errors.Is(err, errNotEvaluated) {
+				// The evaluated contents are unknown, so the file may call `sensitive`.
+				return true
+			}
 			continue
 		}
 		// JSON sensitivity is not representable by the native HCL AST scanner.
-		if extension == ".json" {
+		if isJSONConfiguration(file) {
 			return true
 		}
 		body, ok := parseBody(fsys, file)
 		if !ok {
-			return true
+			// A file Terragrunt evaluated as HCL parses. One that does not, with a suffix that is not
+			// `.hcl`, is data the unit read (a YAML file, for example), not configuration.
+			if filepath.Ext(file) == ".hcl" {
+				return true
+			}
+			continue
 		}
 		if bodyHasUnredactedSensitivity(body, resolved && file == unit) {
 			return true
@@ -293,7 +324,7 @@ func callsSensitive(node hclsyntax.Node) bool {
 // policies, and assembles the resolution with its execution data, backend, overlay,
 // and generated files.
 func (u *unitEvaluator) resolveUnit(ctx context.Context, scan *sensitivityScan) (*model.Resolution, error) {
-	environment, pctx, request, path := u.environment, u.pctx, u.request, u.path
+	pctx, request, path := u.pctx, u.request, u.path
 	if err := u.checkDestroyGuard(ctx); err != nil {
 		return nil, err
 	}
@@ -303,8 +334,8 @@ func (u *unitEvaluator) resolveUnit(ctx context.Context, scan *sensitivityScan) 
 	}
 	var sensitiveInputs [][]string
 	if request.Phase != phaseBackend {
-		sensitiveInputs = redactUnitInputs(logSinkFrom(ctx), environment.FS, append(pctx.FilesRead.Paths(), path), path, cfg)
-		redactLocals(logSinkFrom(ctx), environment.FS, path, cfg.Locals)
+		sensitiveInputs = redactUnitInputs(logSinkFrom(ctx), u.checkedFS(), append(pctx.FilesRead.Paths(), path), path, cfg)
+		redactLocals(logSinkFrom(ctx), u.checkedFS(), path, cfg.Locals)
 		scan.registered = true
 	}
 	if err := checkUnitPolicies(ctx, request, cfg, path); err != nil {
@@ -449,4 +480,153 @@ func (s *sensitivityScanner) wrappedConditionalTransforms(call *hclsyntax.Functi
 	other := *call
 	other.Args = []hclsyntax.Expression{conditional.FalseResult}
 	return s.conditionalDiscardsSensitive(conditional, true, 0) || s.containsSensitive(conditional.Condition, 0) || s.inputTransformsRaw(&selected) || s.inputTransformsRaw(&other)
+}
+
+// errNotEvaluated marks a file whose evaluated contents were not captured, or changed while the request
+// was evaluated. A sensitivity check cannot vouch for it, so the values it may declare are protected.
+var errNotEvaluated = errors.New("the file contents were not captured while the unit was evaluated")
+
+// evaluatedFS records the bytes Terragrunt reads while it evaluates a request. The sensitivity checks
+// run after the evaluation, and the files may have changed on disk since: they scan what was evaluated.
+type evaluatedFS struct {
+	afero.Fs
+	mu    sync.Mutex
+	files map[string]*evaluatedFile
+}
+
+type evaluatedFile struct {
+	content []byte
+	// changed is set when a later read of the same file returned different bytes.
+	changed bool
+}
+
+func newEvaluatedFS(fsys afero.Fs) *evaluatedFS {
+	return &evaluatedFS{Fs: fsys, files: map[string]*evaluatedFile{}}
+}
+
+func (f *evaluatedFS) Open(name string) (afero.File, error) {
+	file, err := f.Fs.Open(name)
+	return f.record(file, err, name)
+}
+
+func (f *evaluatedFS) OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
+	file, err := f.Fs.OpenFile(name, flag, perm)
+	if err != nil || flag&(os.O_WRONLY|os.O_RDWR|os.O_APPEND|os.O_CREATE|os.O_TRUNC) != 0 {
+		return file, err
+	}
+	return f.record(file, err, name)
+}
+
+// record wraps a regular file so its sequentially read bytes are captured.
+func (f *evaluatedFS) record(file afero.File, err error, name string) (afero.File, error) {
+	if err != nil {
+		return file, err
+	}
+	if info, statErr := file.Stat(); statErr != nil || info.IsDir() {
+		return file, nil
+	}
+	return &recordingFile{File: file, owner: f, path: filepath.Clean(name), sequential: true}, nil
+}
+
+func (f *evaluatedFS) capture(path string, content []byte) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	existing, found := f.files[path]
+	switch {
+	case !found:
+		f.files[path] = &evaluatedFile{content: bytes.Clone(content)}
+	case !bytes.Equal(existing.content, content):
+		existing.changed = true
+	}
+}
+
+// Evaluated returns a read-only view of the captured files. Any other file reads as errNotEvaluated.
+func (f *evaluatedFS) Evaluated() afero.Fs {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	memory := afero.NewMemMapFs()
+	view := &evaluatedView{Fs: afero.NewReadOnlyFs(memory), disk: f.Fs, captured: map[string]bool{}}
+	for path, file := range f.files {
+		if file.changed {
+			continue
+		}
+		if err := afero.WriteFile(memory, path, file.content, 0o600); err == nil {
+			view.captured[path] = true
+		}
+	}
+	return view
+}
+
+// recordingFile captures the bytes read from the start of a file up to its end.
+type recordingFile struct {
+	afero.File
+	owner      *evaluatedFS
+	path       string
+	buffer     bytes.Buffer
+	sequential bool
+}
+
+func (r *recordingFile) Read(p []byte) (int, error) {
+	n, err := r.File.Read(p)
+	if r.sequential {
+		r.buffer.Write(p[:n])
+		if errors.Is(err, io.EOF) {
+			r.owner.capture(r.path, r.buffer.Bytes())
+		}
+	}
+	return n, err
+}
+
+// Seek keeps the capture only for a rewind to the start; any other position makes the bytes incomplete.
+func (r *recordingFile) Seek(offset int64, whence int) (int64, error) {
+	position, err := r.File.Seek(offset, whence)
+	if err == nil {
+		r.sequential = position == 0
+		r.buffer.Reset()
+	}
+	return position, err
+}
+
+// evaluatedView serves only the files that were captured. A file that was not captured and does not
+// exist reads as missing, as it did for Terragrunt; one that exists reads as errNotEvaluated.
+type evaluatedView struct {
+	afero.Fs
+	disk     afero.Fs
+	captured map[string]bool
+}
+
+func (v *evaluatedView) Open(name string) (afero.File, error) {
+	if !v.captured[filepath.Clean(name)] {
+		return nil, v.missing("open", name)
+	}
+	return v.Fs.Open(name)
+}
+
+func (v *evaluatedView) Stat(name string) (os.FileInfo, error) {
+	if !v.captured[filepath.Clean(name)] {
+		return nil, v.missing("stat", name)
+	}
+	return v.Fs.Stat(name)
+}
+
+func (v *evaluatedView) missing(op, name string) error {
+	if _, err := v.disk.Stat(name); err != nil {
+		return &os.PathError{Op: op, Path: name, Err: err}
+	}
+	return &os.PathError{Op: op, Path: name, Err: errNotEvaluated}
+}
+
+// checkedFS returns the filesystem the sensitivity checks read: the evaluated contents when the
+// evaluation captured them, otherwise the evaluation's own filesystem.
+func (e *unitEvaluator) checkedFS() afero.Fs {
+	if captured, ok := e.environment.FS.(*evaluatedFS); ok {
+		return captured.Evaluated()
+	}
+	return e.environment.FS
+}
+
+// unverifiable reports whether the file's evaluated contents are unavailable.
+func unverifiable(fsys afero.Fs, file string) bool {
+	_, err := fsys.Stat(file)
+	return errors.Is(err, errNotEvaluated)
 }

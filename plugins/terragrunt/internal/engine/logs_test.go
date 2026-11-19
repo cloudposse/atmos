@@ -560,3 +560,140 @@ func TestApplyValidationFailureRetainsSensitiveFileReads(t *testing.T) {
 	require.Contains(t, entries[0].Message, "withheld")
 	require.NotContains(t, entries[0].Message, "apply-validation-secret")
 }
+
+func writeFiles(t *testing.T, fsys afero.Fs, files map[string]string) {
+	t.Helper()
+	for name, content := range files {
+		require.NoError(t, afero.WriteFile(fsys, name, []byte(content), 0o644))
+	}
+}
+
+// Terragrunt reads any file as configuration when an include points at it, whatever its suffix.
+func TestSensitivityScansConfigurationWithoutAnHCLSuffix(t *testing.T) {
+	fsys := afero.NewMemMapFs()
+	root := filepath.Join(string(filepath.Separator), "repo")
+	unit, included, data := filepath.Join(root, "unit.hcl"), filepath.Join(root, "shared.config"), filepath.Join(root, "values.yaml")
+	writeFiles(t, fsys, map[string]string{
+		unit:     "inputs = { name = \"visible\" }\n",
+		included: "inputs = { token = sensitive(\"secret\") }\n",
+		data:     "token: sensitive(not-hcl\n",
+	})
+	inputs := map[string]any{"name": "visible", "token": "secret"}
+
+	paths := sensitiveInputs(fsys, []string{unit, included}, inputs, unit, nil)
+
+	assert.Equal(t, [][]string{{"token"}}, paths)
+	assert.True(t, unredactedSensitivity(fsys, []string{unit, included}, unit, true), "the included file's sensitive call is unknown to the sink")
+	assert.False(t, unredactedSensitivity(fsys, []string{unit, data}, unit, true), "a data file that is not HCL is not configuration")
+}
+
+func TestSensitivityKeepsJSONConfigurationConservative(t *testing.T) {
+	fsys := afero.NewMemMapFs()
+	unit := filepath.Join(string(filepath.Separator), "repo", "unit.hcl.json")
+	writeFiles(t, fsys, map[string]string{unit: "{}"})
+
+	assert.Equal(t, [][]string{nil}, sensitiveInputs(fsys, []string{unit}, map[string]any{"a": 1}, unit, nil))
+	assert.True(t, unredactedSensitivity(fsys, []string{unit}, unit, true))
+}
+
+// A later member with the same key replaces a sensitive command result, so only the replacement reaches
+// the sink while the discarded result may already have been logged.
+func TestTransformsSensitiveInputsWhenALaterMemberReplacesTheKey(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		inputs string
+		want   bool
+	}{
+		{"same key replaced", `{ token = sensitive(run_cmd("echo", "x")), token = "other" }`, true},
+		{"quoted spelling of the same key", `{ token = sensitive(run_cmd("echo", "x")), "token" = "other" }`, true},
+		{"computed later key may replace it", `{ token = sensitive(run_cmd("echo", "x")), (local.name) = "other" }`, true},
+		{"different keys", `{ token = sensitive(run_cmd("echo", "x")), name = "other" }`, false},
+		{"replaced literal cannot have logged", `{ token = sensitive("literal"), token = "other" }`, false},
+		{"replaced non-sensitive value", `{ token = run_cmd("echo", "x"), token = "other" }`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			unit := filepath.Join(string(filepath.Separator), "repo", "unit.hcl")
+			writeFiles(t, fsys, map[string]string{unit: "locals { name = \"n\" }\ninputs = " + test.inputs + "\n"})
+
+			assert.Equal(t, test.want, transformsSensitiveInputs(fsys, unit))
+		})
+	}
+}
+
+func readThrough(t *testing.T, fsys afero.Fs, name string) string {
+	t.Helper()
+	content, err := afero.ReadFile(fsys, name)
+	require.NoError(t, err)
+	return string(content)
+}
+
+// The checks scan the bytes that were evaluated, not whatever the disk holds afterwards.
+func TestEvaluatedFSServesTheBytesTerragruntRead(t *testing.T) {
+	disk := afero.NewMemMapFs()
+	unit, other, unread := "/repo/unit.hcl", "/repo/other.hcl", "/repo/unread.hcl"
+	writeFiles(t, disk, map[string]string{unit: "inputs = { a = 1 }\n", other: "first", unread: "never read"})
+	recording := newEvaluatedFS(disk)
+	assert.Equal(t, "inputs = { a = 1 }\n", readThrough(t, recording, unit))
+	assert.Equal(t, "first", readThrough(t, recording, other))
+	writeFiles(t, disk, map[string]string{unit: "inputs = { token = sensitive(\"x\") }\n"})
+
+	view := recording.Evaluated()
+
+	assert.Equal(t, "inputs = { a = 1 }\n", readThrough(t, view, unit), "the file changed on disk after evaluation")
+	_, err := view.Stat(unread)
+	require.ErrorIs(t, err, errNotEvaluated, "an existing file that was never read cannot be vouched for")
+	assert.True(t, unverifiable(view, unread))
+	_, err = view.Stat("/repo/absent.hcl")
+	require.ErrorIs(t, err, os.ErrNotExist, "a file that does not exist was never evaluated")
+	assert.False(t, unverifiable(view, "/repo/absent.hcl"))
+}
+
+func TestEvaluatedFSDropsFilesThatChangedBetweenReads(t *testing.T) {
+	disk := afero.NewMemMapFs()
+	writeFiles(t, disk, map[string]string{"/repo/unit.hcl": "first"})
+	recording := newEvaluatedFS(disk)
+	readThrough(t, recording, "/repo/unit.hcl")
+	writeFiles(t, disk, map[string]string{"/repo/unit.hcl": "second"})
+	readThrough(t, recording, "/repo/unit.hcl")
+
+	assert.True(t, unverifiable(recording.Evaluated(), "/repo/unit.hcl"))
+}
+
+func TestEvaluatedFSCapturesOnlyCompleteSequentialReads(t *testing.T) {
+	disk := afero.NewMemMapFs()
+	writeFiles(t, disk, map[string]string{"/repo/partial.hcl": "abcdef", "/repo/rewound.hcl": "abcdef"})
+	recording := newEvaluatedFS(disk)
+
+	partial, err := recording.Open("/repo/partial.hcl")
+	require.NoError(t, err)
+	_, err = partial.Read(make([]byte, 2))
+	require.NoError(t, err)
+	require.NoError(t, partial.Close())
+
+	rewound, err := recording.Open("/repo/rewound.hcl")
+	require.NoError(t, err)
+	_, err = rewound.Seek(3, io.SeekStart)
+	require.NoError(t, err)
+	_, err = io.ReadAll(rewound)
+	require.NoError(t, err)
+	_, err = rewound.Seek(0, io.SeekStart)
+	require.NoError(t, err)
+	_, err = io.ReadAll(rewound)
+	require.NoError(t, err)
+
+	view := recording.Evaluated()
+	assert.True(t, unverifiable(view, "/repo/partial.hcl"), "an unfinished read is incomplete")
+	assert.Equal(t, "abcdef", readThrough(t, view, "/repo/rewound.hcl"), "a rewound read that reaches the end is complete")
+}
+
+// A file that cannot be vouched for protects every input and withholds the logs.
+func TestSensitivityProtectsWhatWasNotEvaluated(t *testing.T) {
+	disk := afero.NewMemMapFs()
+	unit := "/repo/unit.hcl"
+	writeFiles(t, disk, map[string]string{unit: "inputs = { a = 1 }\n"})
+	view := newEvaluatedFS(disk).Evaluated()
+
+	assert.Equal(t, [][]string{nil}, sensitiveInputs(view, []string{unit}, map[string]any{"a": 1}, unit, nil))
+	assert.True(t, unredactedSensitivity(view, []string{unit}, unit, true))
+}

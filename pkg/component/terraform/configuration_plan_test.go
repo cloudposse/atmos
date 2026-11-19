@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/policy/planfile"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -204,7 +205,7 @@ func TestConfigurationPlanPathsAndFileErrors(t *testing.T) {
 	_, err = fileDigest(filepath.Join(t.TempDir(), "absent"))
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.ErrorIs(t, err, os.ErrNotExist)
-	_, err = configurationWorkdirDigest(filepath.Join(t.TempDir(), "absent"), path)
+	_, err = configurationWorkdirDigest(filepath.Join(t.TempDir(), "absent"), path, "")
 	require.Error(t, err)
 	require.True(t, usesConfigurationPlan(info))
 	require.False(t, usesConfigurationPlan(&schema.ConfigAndStacksInfo{}))
@@ -213,23 +214,23 @@ func TestConfigurationPlanPathsAndFileErrors(t *testing.T) {
 func TestConfigurationWorkdirDigestIgnoresMutableFiles(t *testing.T) {
 	root := t.TempDir()
 	plan := filepath.Join(root, "reviewed.plan")
-	first, err := configurationWorkdirDigest(root, plan)
+	first, err := configurationWorkdirDigest(root, plan, "")
 	require.NoError(t, err)
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".terraform"), 0o700))
 	for _, name := range []string{"terraform.tfstate", "reviewed.plan", "reviewed.plan.atmos.json"} {
 		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte("mutable"), 0o600))
 	}
-	second, err := configurationWorkdirDigest(root, plan)
+	second, err := configurationWorkdirDigest(root, plan, "")
 	require.NoError(t, err)
 	require.Equal(t, first, second)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "main.tf"), []byte("source"), 0o600))
-	third, err := configurationWorkdirDigest(root, plan)
+	third, err := configurationWorkdirDigest(root, plan, "")
 	require.NoError(t, err)
 	require.NotEqual(t, first, third)
 	if err := os.Symlink(filepath.Join(root, "main.tf"), filepath.Join(root, "linked.tf")); err != nil {
 		t.Skip("symlinks unavailable")
 	}
-	_, err = configurationWorkdirDigest(root, plan)
+	_, err = configurationWorkdirDigest(root, plan, "")
 	require.True(t, errors.Is(err, errUtils.ErrPluginUnsupportedExtension))
 }
 
@@ -329,10 +330,10 @@ func TestConfigurationWorkdirDigestIncludesDownloadedModules(t *testing.T) {
 	module := filepath.Join(root, ".terraform", "modules", "child", "script.sh")
 	require.NoError(t, os.MkdirAll(filepath.Dir(module), 0o755))
 	require.NoError(t, os.WriteFile(module, []byte("before"), 0o600))
-	before, err := configurationWorkdirDigest(root, "")
+	before, err := configurationWorkdirDigest(root, "", "")
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(module, []byte("after"), 0o600))
-	after, err := configurationWorkdirDigest(root, "")
+	after, err := configurationWorkdirDigest(root, "", "")
 	require.NoError(t, err)
 	require.NotEqual(t, before, after)
 }
@@ -592,9 +593,9 @@ func TestConfigurationWorkdirDigestIgnoresPlanReachedThroughSymlink(t *testing.T
 	if err := os.Symlink(workdir, link); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
 	}
-	direct, err := configurationWorkdirDigest(workdir, plan)
+	direct, err := configurationWorkdirDigest(workdir, plan, "")
 	require.NoError(t, err)
-	viaLink, err := configurationWorkdirDigest(workdir, filepath.Join(link, "reviewed.planfile"))
+	viaLink, err := configurationWorkdirDigest(workdir, filepath.Join(link, "reviewed.planfile"), "")
 	require.NoError(t, err)
 	require.Equal(t, direct, viaLink)
 }
@@ -602,7 +603,7 @@ func TestConfigurationWorkdirDigestIgnoresPlanReachedThroughSymlink(t *testing.T
 func TestConfigurationWorkdirDigestIgnoresPlanArtifacts(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "main.tf"), []byte("module"), 0o600))
-	baseline, err := configurationWorkdirDigest(dir, filepath.Join(dir, "reviewed.planfile"))
+	baseline, err := configurationWorkdirDigest(dir, filepath.Join(dir, "reviewed.planfile"), "")
 	require.NoError(t, err)
 
 	// Plans are reviewed artifacts, not configuration: an earlier plan, the stored plan that deploy
@@ -610,12 +611,12 @@ func TestConfigurationWorkdirDigestIgnoresPlanArtifacts(t *testing.T) {
 	for _, name := range []string{"earlier.planfile", "stored.plan.tfplan", "new.plan"} {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("plan "+name), 0o600))
 	}
-	withPlans, err := configurationWorkdirDigest(dir, filepath.Join(dir, "reviewed.planfile"))
+	withPlans, err := configurationWorkdirDigest(dir, filepath.Join(dir, "reviewed.planfile"), "")
 	require.NoError(t, err)
 	require.Equal(t, baseline, withPlans)
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "extra.tf"), []byte("added"), 0o600))
-	edited, err := configurationWorkdirDigest(dir, filepath.Join(dir, "reviewed.planfile"))
+	edited, err := configurationWorkdirDigest(dir, filepath.Join(dir, "reviewed.planfile"), "")
 	require.NoError(t, err)
 	require.NotEqual(t, baseline, edited)
 }
@@ -1181,19 +1182,19 @@ func TestConfigurationWorkdirDigestSeparatesStateFromConfigurationNamedLikeState
 		require.NoError(t, os.WriteFile(path, []byte(name), 0o600))
 	}
 	write("main.tf")
-	baseline, err := configurationWorkdirDigest(root, plan)
+	baseline, err := configurationWorkdirDigest(root, plan, "")
 	require.NoError(t, err)
 
 	for _, state := range []string{"terraform.tfstate", "terraform.tfstate.backup", "terraform.tfstate.1700000000.backup", "terraform.tfstate.d/stage/terraform.tfstate", "terraform.tfstate.d/stage/terraform.tfstate.backup", "terraform.tfstate.d/stage/notes.txt"} {
 		write(state)
-		same, err := configurationWorkdirDigest(root, plan)
+		same, err := configurationWorkdirDigest(root, plan, "")
 		require.NoError(t, err)
 		require.Equal(t, baseline, same, "%s is mutable state", state)
 	}
 
 	for _, configuration := range []string{"terraform.tfstate.tf", "terraform.tfstate.tf.json", "terraform.tfstate.tofu", "terraform.tfstate.tofu.json", "terraform.tfstate.x.backup", "terraform.tfstate..backup", "terraform.tfstate.backup.tf", "terraform.tfstated"} {
 		write(configuration)
-		changed, err := configurationWorkdirDigest(root, plan)
+		changed, err := configurationWorkdirDigest(root, plan, "")
 		require.NoError(t, err)
 		require.NotEqual(t, baseline, changed, "%s is retained configuration", configuration)
 		baseline = changed
@@ -1206,7 +1207,7 @@ func TestConfigurationWorkdirDigestResolvesRelativePaths(t *testing.T) {
 	require.NoError(t, os.Mkdir(root, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "main.tf"), []byte("source"), 0o600))
 	t.Chdir(base)
-	absolute, err := configurationWorkdirDigest(root, filepath.Join(root, "reviewed.plan"))
+	absolute, err := configurationWorkdirDigest(root, filepath.Join(root, "reviewed.plan"), "")
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "reviewed.plan"), []byte("plan"), 0o600))
 	for name, plan := range map[string]string{
@@ -1214,13 +1215,13 @@ func TestConfigurationWorkdirDigestResolvesRelativePaths(t *testing.T) {
 		"relative root relative plan": filepath.Join("work", "reviewed.plan"),
 	} {
 		t.Run(name, func(t *testing.T) {
-			digest, err := configurationWorkdirDigest("work", plan)
+			digest, err := configurationWorkdirDigest("work", plan, "")
 			require.NoError(t, err)
 			require.Equal(t, absolute, digest, "the plan file must be excluded")
 		})
 	}
 	t.Run("a different file is not excluded", func(t *testing.T) {
-		digest, err := configurationWorkdirDigest("work", filepath.Join("work", "other.plan"))
+		digest, err := configurationWorkdirDigest("work", filepath.Join("work", "other.plan"), "")
 		require.NoError(t, err)
 		require.NotEqual(t, absolute, digest)
 	})
@@ -1354,4 +1355,101 @@ func TestConfigurationPlanRejectsRecordWithoutEnvironmentBinding(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.Nil(t, prepared)
 	require.Nil(t, rebuild)
+}
+
+func TestEffectiveDataDirPrecedence(t *testing.T) {
+	tests := []struct {
+		name   string
+		base   []string
+		global map[string]string
+		comp   []string
+		want   string
+	}{
+		{name: "default", base: []string{"A=b"}, want: defaultDataDir},
+		{name: "base layer", base: []string{"TF_DATA_DIR=base"}, want: "base"},
+		{name: "global overrides base", base: []string{"TF_DATA_DIR=base"}, global: map[string]string{"TF_DATA_DIR": "global"}, want: "global"},
+		{name: "component overrides global", base: []string{"TF_DATA_DIR=base"}, global: map[string]string{"TF_DATA_DIR": "global"}, comp: []string{"TF_DATA_DIR=component"}, want: "component"},
+		{name: "empty value falls back to the default", base: []string{"TF_DATA_DIR=base"}, comp: []string{"TF_DATA_DIR="}, want: defaultDataDir},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{SanitizedEnv: test.base, ComponentEnvList: test.comp}
+			if info.SanitizedEnv == nil {
+				info.SanitizedEnv = []string{}
+			}
+			config := &schema.AtmosConfiguration{Env: test.global}
+			assert.Equal(t, test.want, effectiveDataDir(config, info))
+		})
+	}
+}
+
+func TestResolveDataDir(t *testing.T) {
+	root := t.TempDir()
+	assert.Equal(t, filepath.Join(root, defaultDataDir), resolveDataDir(root, ""))
+	assert.Equal(t, filepath.Join(root, "custom"), resolveDataDir(root, "custom"))
+	other, err := resolvedPath(t.TempDir())
+	require.NoError(t, err)
+	assert.Equal(t, other, resolveDataDir(root, other))
+}
+
+func TestHasDownloadedModulesHonorsDataDir(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "custom", "modules"), 0o700))
+	assert.False(t, hasDownloadedModules(root, ""), "the default directory holds no modules")
+	assert.True(t, hasDownloadedModules(root, "custom"))
+	assert.True(t, hasDownloadedModules(root, filepath.Join(root, "custom")))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, defaultDataDir, "modules"), 0o700))
+	assert.True(t, hasDownloadedModules(root, ""))
+}
+
+// A custom data directory holds mutable data (the workspace marker, providers) that must not move the
+// digests, while its modules subtree is executed content and stays bound.
+func TestWorkdirDigestExcludesCustomDataDirOutsideModules(t *testing.T) {
+	root := t.TempDir()
+	write := func(name string) {
+		t.Helper()
+		path := filepath.Join(root, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(name+t.Name()), 0o600))
+	}
+	rewrite := func(name, content string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(root, filepath.FromSlash(name)), []byte(content), 0o600))
+	}
+	plan := filepath.Join(root, "reviewed.planfile")
+	write("main.tf")
+	write("data/modules/vpc/main.tf")
+
+	digest := func(dataDir string) (workdir, rebuild string) {
+		t.Helper()
+		var err error
+		workdir, err = configurationWorkdirDigest(root, plan, dataDir)
+		require.NoError(t, err)
+		rebuild, err = configurationRebuildDigest(root, plan, dataDir, nil)
+		require.NoError(t, err)
+		return workdir, rebuild
+	}
+	baseWorkdir, baseRebuild := digest("data")
+
+	write("data/environment")
+	write("data/providers/registry/lock.json")
+	rewrite("data/environment", "other-workspace")
+	workdir, rebuild := digest("data")
+	assert.Equal(t, baseWorkdir, workdir, "the workspace marker is mutable execution data")
+	assert.Equal(t, baseRebuild, rebuild, "the workspace marker is mutable execution data")
+
+	rewrite("data/modules/vpc/main.tf", "changed module")
+	workdir, rebuild = digest("data")
+	assert.NotEqual(t, baseWorkdir, workdir, "downloaded modules stay bound")
+	assert.NotEqual(t, baseRebuild, rebuild, "downloaded modules stay bound")
+
+	// Without the data directory the marker is ordinary content, and the default directory is still skipped.
+	write(".terraform/environment")
+	unscoped, _ := digest("")
+	write(".terraform/environment-2")
+	again, _ := digest("")
+	assert.Equal(t, unscoped, again, "the default .terraform data stays excluded")
+	rewrite("data/environment", "third-workspace")
+	changed, _ := digest("")
+	assert.NotEqual(t, again, changed, "outside the effective data directory the file is content")
 }

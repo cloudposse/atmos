@@ -102,6 +102,9 @@ type PreparedComponentConfiguration struct {
 	IAM *ComponentIAM
 	// SourceAuthorization is invocation-only registry auth for a same-origin archive.
 	SourceAuthorization *SourceAuthorization `json:"-"`
+	// PlanArguments are the arguments the reviewed plan operation was evaluated with, kept so a rebuild
+	// can evaluate the unit again with the same inputs. Variable values are never stored.
+	PlanArguments []string `json:",omitempty"`
 }
 
 // SourceAuthorization is never serialized with a source URL or saved plan.

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -626,7 +627,7 @@ func TestReviewedRebuildRejectsASymlinkedWorkdir(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, only, "files behind a symlinked workdir were not reviewed")
 
-	_, err = newReviewedRebuild(&schema.ConfigAndStacksInfo{}, rebuild.plan, rebuild.planPath)
+	_, err = newReviewedRebuild(&schema.ConfigAndStacksInfo{}, rebuild.plan, rebuild.planPath, "")
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 
 	// A link whose target is gone is just as unverifiable.
@@ -748,7 +749,7 @@ func TestReviewedRebuildRestoreRetriesAfterPartialMove(t *testing.T) {
 
 func TestNewReviewedRebuildRequiresAnOldEnoughRecord(t *testing.T) {
 	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", ComponentSettingsSection: map[string]any{"configuration": true}}
-	_, err := newReviewedRebuild(info, &configurationPlan{WorkingDirectory: t.TempDir()}, "plan")
+	_, err := newReviewedRebuild(info, &configurationPlan{WorkingDirectory: t.TempDir()}, "plan", "")
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed, "a record without a rebuild digest cannot prove a rebuilt workdir")
 }
 
@@ -979,19 +980,19 @@ func TestConfigurationWorkdirDigestSkipsOnlyNestedMutableDirectories(t *testing.
 		require.NoError(t, os.WriteFile(path, []byte(name), 0o600))
 	}
 	write("main.tf")
-	baseline, err := configurationWorkdirDigest(root, plan)
+	baseline, err := configurationWorkdirDigest(root, plan, "")
 	require.NoError(t, err)
 
 	for _, ignored := range []string{".git/HEAD", ".terragrunt-cache/x/main.tf", ".terraform/modules.json", "sub/.terraform/x", ".atmos/metadata.json", ".atmos/metadata.json.lock", "sub/.atmos/source-files.json", ".atmos-plan-temp", "terraform.tfstate.backup", "other.planfile.atmos.json"} {
 		write(ignored)
 	}
-	same, err := configurationWorkdirDigest(root, plan)
+	same, err := configurationWorkdirDigest(root, plan, "")
 	require.NoError(t, err)
 	require.Equal(t, baseline, same, "mutable data does not alter the retained-bytes digest")
 
 	for _, retained := range []string{"modules/child/main.tf", "terragrunt.hcl", ".terraform.lock.hcl", "settings.atmos.json", ".terraform/modules/vpc/.atmos/hook.sh", ".terraform/modules/vpc/.terragrunt-cache/main.tf", ".terraform/modules/vpc/.git/hooks/post-checkout"} {
 		write(retained)
-		changed, err := configurationWorkdirDigest(root, plan)
+		changed, err := configurationWorkdirDigest(root, plan, "")
 		require.NoError(t, err)
 		require.NotEqual(t, baseline, changed, retained)
 		baseline = changed
@@ -1011,7 +1012,7 @@ func TestConfigurationWorkdirDigestFailsForUnreadableFile(t *testing.T) {
 		_ = file.Close()
 		t.Skip("permissions are not enforced for this user")
 	}
-	_, err := configurationWorkdirDigest(root, filepath.Join(root, "reviewed.plan"))
+	_, err := configurationWorkdirDigest(root, filepath.Join(root, "reviewed.plan"), "")
 	require.ErrorIs(t, err, os.ErrPermission)
 }
 
@@ -1024,4 +1025,60 @@ func TestApplyOfRestoredPlanRejectsANewRoleBeforeAssumingIt(t *testing.T) {
 	_, _, err := project.freshApply(t, planPath, project.prepared())
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.Zero(t, recorded.calls, "a role absent from the reviewed preparation must never be assumed")
+}
+
+func TestPersistablePlanArguments(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{name: "none", in: nil, want: nil},
+		{name: "plain arguments are kept", in: []string{"-target=a.b", "-refresh=false"}, want: []string{"-target=a.b", "-refresh=false"}},
+		{name: "joined variable loses its value", in: []string{"-var=token=hunter2", "-destroy"}, want: []string{"-var=token=", "-destroy"}},
+		{name: "separate variable loses its value", in: []string{"-var", "token=hunter2", "-destroy"}, want: []string{"-var=token=", "-destroy"}},
+		{name: "double dash variable", in: []string{"--var=token=a=b"}, want: []string{"--var=token="}},
+		{name: "trailing flag without value is kept", in: []string{"-var"}, want: []string{"-var"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, persistablePlanArguments(test.in))
+		})
+	}
+}
+
+// A rebuild evaluates the unit with the arguments of the reviewed plan, not those of the apply, and the
+// record never holds a variable value.
+func TestRebuildReplaysTheReviewedPlanArguments(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	project.explicitWorkdir = false
+	plan := project.info(t, "plan")
+	plan.AdditionalArgsAndFlags = []string{"-target=aws_s3_bucket.logs", "-var", "token=hunter2"}
+	project.provider.EXPECT().Prepare(gomock.Any(), plan).Return(project.prepared(), nil)
+	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, plan, false)
+	require.NoError(t, err)
+	project.workdir = execution.workingDir
+	planPath := filepath.Join(execution.workingDir, "reviewed.planfile")
+	require.NoError(t, os.WriteFile(planPath, []byte("reviewed plan"), 0o600))
+	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, plan, execution, []string{"-out=" + planPath}))
+
+	record, err := os.ReadFile(planPath + configurationPlanSuffix)
+	require.NoError(t, err)
+	require.NotContains(t, string(record), "hunter2")
+	project.freshRunner(t, planPath)
+
+	apply := project.reviewedApply(t, planPath)
+	apply.AdditionalArgsAndFlags = []string{"-auto-approve"}
+	var evaluated []string
+	project.provider.EXPECT().Prepare(gomock.Any(), gomock.Cond(func(info *schema.ConfigAndStacksInfo) bool {
+		return info.SubCommand == "plan" && !info.UseTerraformPlan
+	})).DoAndReturn(func(_ any, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
+		evaluated = append([]string(nil), info.AdditionalArgsAndFlags...)
+		return project.prepared(), nil
+	})
+	_, err = testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"-target=aws_s3_bucket.logs", "-var=token="}, evaluated)
+	assert.Equal(t, []string{"-auto-approve"}, apply.AdditionalArgsAndFlags, "the apply keeps its own arguments")
 }

@@ -87,9 +87,15 @@ func AWS(ctx context.Context, v *venv.Venv) *venv.Venv {
 	transport := &awsTransport{next: v.HTTP.Transport, endpoints: awsEndpoints(env), credentials: aws.Credentials{
 		AccessKeyID: env[envAccessKeyID], SecretAccessKey: env[envSecretKey], SessionToken: env[envSessionToken],
 	}}
-	if !hasStaticAWSKeys(env) && selectsAWSCredentials(env) {
+	switch {
+	case hasStaticAWSKeys(env):
+	case selectsAWSCredentials(env):
 		credentials, err := cachedCredentials(awsCacheKey(env), func() (aws.Credentials, error) { return resolveAWSCredentials(ctx, env, transport) })
 		transport.apply(env, &credentials, err)
+	default:
+		// The invocation is authoritative: with no keys and no selection, upstream would fall back to the
+		// SDK default chain, which reads the plugin process (its keys, container credentials, or instance role).
+		transport.apply(env, nil, errNoInvocationCredentials)
 	}
 	if role := roleOptions(env); role.RoleARN != "" && transport.failure == nil {
 		credentials, err := cachedCredentials(roleCacheKey(env, role), func() (aws.Credentials, error) { return assumeInvocationRole(ctx, v.WithEnv(env), transport, role) })
@@ -128,6 +134,9 @@ func roleOptions(env map[string]string) iam.RoleOptions {
 		AssumeRoleDuration:    duration,
 	}
 }
+
+// errNoInvocationCredentials explains the failure of an AWS call from an invocation that supplies no credentials.
+var errNoInvocationCredentials = errors.New("the invocation environment supplies no AWS credentials: set static keys, a profile, shared credential files, or a web identity token file; credentials of the plugin process are never used")
 
 // assumeInvocationRole assumes the CLI-level role with the credentials already in v.
 func assumeInvocationRole(ctx context.Context, v *venv.Venv, transport *awsTransport, role iam.RoleOptions) (aws.Credentials, error) {
@@ -222,21 +231,51 @@ func resolveAWSCredentials(ctx context.Context, env map[string]string, transport
 	if err := rejectAmbientCredentialSources(ctx, env); err != nil {
 		return aws.Credentials{}, err
 	}
-	cfg, err := config.LoadDefaultConfig(ctx, loadOptions(env, transport)...)
+	cfg, err := invocationConfig(ctx, env, transport)
 	if err != nil {
-		return aws.Credentials{}, fmt.Errorf("loading the AWS configuration selected by the invocation environment: %w", err)
-	}
-	if selectsWebIdentityRole(env) {
-		provider := stscreds.NewWebIdentityRoleProvider(sts.NewFromConfig(cfg), env["AWS_ROLE_ARN"], stscreds.IdentityTokenFile(env["AWS_WEB_IDENTITY_TOKEN_FILE"]), func(o *stscreds.WebIdentityRoleOptions) {
-			o.RoleSessionName = env["AWS_ROLE_SESSION_NAME"]
-		})
-		cfg.Credentials = aws.NewCredentialsCache(provider)
+		return aws.Credentials{}, err
 	}
 	credentials, err := cfg.Credentials.Retrieve(ctx)
 	if err != nil {
 		return aws.Credentials{}, fmt.Errorf("resolving AWS credentials from the invocation environment (profile %q): %w", profileName(env), err)
 	}
 	return credentials, nil
+}
+
+// invocationConfig builds the SDK configuration of the invocation. A web identity role calls STS from the
+// invocation's values alone, so no process credential chain is loaded for it; every other selection loads
+// the invocation's shared files with explicit options.
+func invocationConfig(ctx context.Context, env map[string]string, transport *awsTransport) (aws.Config, error) {
+	if selectsWebIdentityRole(env) {
+		return webIdentityConfig(env, transport), nil
+	}
+	cfg, err := config.LoadDefaultConfig(ctx, loadOptions(env, transport)...)
+	if err != nil {
+		return aws.Config{}, fmt.Errorf("loading the AWS configuration selected by the invocation environment: %w", err)
+	}
+	return cfg, nil
+}
+
+// webIdentityConfig assumes the invocation's web identity role. AssumeRoleWithWebIdentity is unsigned, so the
+// STS client needs no credentials; it keeps the invocation's region, the endpoint routing and path prefix of the
+// transport, and the resolution timeout.
+func webIdentityConfig(env map[string]string, transport *awsTransport) aws.Config {
+	cfg := aws.Config{
+		Region:      awsRegion(env),
+		Credentials: aws.AnonymousCredentials{},
+		HTTPClient:  &http.Client{Transport: transport, Timeout: awsResolveTimeout},
+		APIOptions:  []func(*middleware.Stack) error{transport.prefixBeforeSigning},
+	}
+	provider := stscreds.NewWebIdentityRoleProvider(sts.NewFromConfig(cfg), env["AWS_ROLE_ARN"], stscreds.IdentityTokenFile(env["AWS_WEB_IDENTITY_TOKEN_FILE"]), func(o *stscreds.WebIdentityRoleOptions) {
+		o.RoleSessionName = env["AWS_ROLE_SESSION_NAME"]
+	})
+	cfg.Credentials = aws.NewCredentialsCache(provider)
+	return cfg
+}
+
+// awsRegion is the invocation's region, or the default one.
+func awsRegion(env map[string]string) string {
+	return cmpFirst(env["AWS_REGION"], env["AWS_DEFAULT_REGION"], awsDefaultRegion)
 }
 
 func profileName(env map[string]string) string {
@@ -251,16 +290,9 @@ func profileName(env map[string]string) string {
 
 func loadOptions(env map[string]string, transport *awsTransport) []func(*config.LoadOptions) error {
 	env = resolvedSharedFiles(env)
-	region := env["AWS_REGION"]
-	if region == "" {
-		region = env["AWS_DEFAULT_REGION"]
-	}
-	if region == "" {
-		region = awsDefaultRegion
-	}
 	// The transport carries the endpoint overrides for the STS calls that role and web identity profiles make.
 	options := []func(*config.LoadOptions) error{
-		config.WithRegion(region),
+		config.WithRegion(awsRegion(env)),
 		// Clear process/shared endpoint selections before STS resolves or signs its request.
 		// The invocation transport applies its own endpoint and prefix to the default AWS host.
 		config.WithServiceOptions(func(_ string, options any) {
@@ -275,10 +307,6 @@ func loadOptions(env map[string]string, transport *awsTransport) []func(*config.
 	}
 	if strings.EqualFold(env["AWS_EC2_METADATA_DISABLED"], "true") {
 		options = append(options, config.WithEC2IMDSClientEnableState(imds.ClientDisabled))
-	}
-	// A web identity role selected by the invocation replaces the credential chain after loading.
-	if selectsWebIdentityRole(env) {
-		return options
 	}
 	// LoadDefaultConfig also reads the plugin process environment, and its static keys, web identity token
 	// file, profile, and shared file locations outrank the shared files unless a profile and the files are
@@ -502,10 +530,23 @@ func rejectAmbientCredentialSources(ctx context.Context, env map[string]string) 
 	if err != nil {
 		return err
 	}
+	var terminal *config.SharedConfig
 	for profile := &selected; profile != nil; profile = profile.Source {
 		if profile.CredentialSource != "" {
 			return fmt.Errorf("%w: profile credential_source cannot be isolated from the plugin process; use invocation static credentials or a file-backed source_profile", ErrAWSCredentials)
 		}
+		terminal = profile
+	}
+	if !hasFileBackedCredentials(terminal) {
+		return fmt.Errorf("%w: profile %q has no credential source in the invocation's shared files, and the SDK would fall back to the plugin process; add static keys, a credential_process, SSO settings, or a web identity token file to the profile", ErrAWSCredentials, profileName(env))
 	}
 	return nil
+}
+
+// hasFileBackedCredentials reports whether the last profile of a chain names a source the SDK resolves from
+// the shared files: static keys, a credential process, SSO settings, or a role from a web identity token file.
+func hasFileBackedCredentials(profile *config.SharedConfig) bool {
+	return profile != nil && (profile.Credentials.HasKeys() || profile.CredentialProcess != "" ||
+		profile.SSOSessionName != "" || profile.SSOStartURL != "" || profile.SSOAccountID != "" ||
+		(profile.WebIdentityTokenFile != "" && profile.RoleARN != ""))
 }
