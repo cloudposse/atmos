@@ -331,6 +331,7 @@ func TestReviewedPlanKeepsGeneratedErrorPolicyFile(t *testing.T) {
 	require.NoError(t, err)
 	path := filepath.Join(execution.workingDir, "reviewed.planfile")
 	require.NoError(t, os.WriteFile(path, []byte("reviewed plan"), 0o600))
+	observeFixturePlan(t, project.config, plan, execution, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), project.config, plan, execution, []string{"-out=" + path}))
 	apply := project.reviewedApply(t, path)
 	_, err = testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)

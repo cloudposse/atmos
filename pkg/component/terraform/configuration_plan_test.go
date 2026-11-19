@@ -93,8 +93,17 @@ func planFixture(t *testing.T) (*schema.AtmosConfiguration, *schema.ConfigAndSta
 	return config, info, execCtx, runtime, path
 }
 
+// observeFixturePlan simulates a successful plan subprocess for binding tests.
+func observeFixturePlan(t *testing.T, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, path string) {
+	t.Helper()
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
+	require.NoError(t, snapshotter.around([]string{"plan", "-out=" + path}, func() error { return nil })())
+	execCtx.planSnapshots = snapshotter
+}
+
 func TestConfigurationPlanRestoresReviewedInputs(t *testing.T) {
 	config, info, execCtx, _, path := planFixture(t)
+	observeFixturePlan(t, config, info, execCtx, path)
 	err := recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out", filepath.Base(path)})
 	require.NoError(t, err)
 	stat, err := os.Stat(path + configurationPlanSuffix)
@@ -123,6 +132,7 @@ func TestConfigurationPlanRejectsChangedBinding(t *testing.T) {
 				require.NoError(t, os.MkdirAll(filepath.Dir(module), 0o700))
 				require.NoError(t, os.WriteFile(module, []byte("reviewed"), 0o600))
 			}
+			observeFixturePlan(t, config, info, execCtx, path)
 			require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out=" + path}))
 			info.SubCommand = "apply"
 			info.UseTerraformPlan = true
@@ -558,6 +568,7 @@ func TestConfigurationPlanRoundTripNumericBackend(t *testing.T) {
 	config, info, execCtx, fixture, path := planFixture(t)
 	execCtx.preparedConfiguration.Backend["port"] = 1234
 	execCtx.preparedConfiguration.Backend["timeout"] = json.Number("1.0")
+	observeFixturePlan(t, config, info, execCtx, path)
 	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out", filepath.Base(path)}))
 	fixture.state.Backend["port"] = float64(1234)
 	fixture.state.Backend["timeout"] = 1
@@ -589,8 +600,8 @@ func TestNewConfigurationPlanRejectsAPlanRewrittenAfterTerraformWroteIt(t *testi
 
 	snapshot.planDigest = ""
 	plan, err = newConfigurationPlan(info, execCtx, snapshot, path)
-	require.NoError(t, err, "a snapshot without an observed digest binds the plan as it is")
-	require.NotEqual(t, captured, plan.PlanDigest)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed, "an unobserved plan must not be bound")
+	require.Nil(t, plan)
 }
 
 func TestConfigurationWorkdirDigestResolvesRelativePaths(t *testing.T) {

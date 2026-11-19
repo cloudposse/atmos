@@ -194,11 +194,14 @@ func bindsPlan(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext) 
 
 // newConfigurationPlan binds the snapshot to the digests of the plan and engine.
 func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, snapshot *planSnapshot, path string) (*configurationPlan, error) {
+	if snapshot.planDigest == "" {
+		return nil, fmt.Errorf("%w: plan was not observed as written by this run", errUtils.ErrPlanVerificationFailed)
+	}
 	planDigest, err := fileDigest(path)
 	if err != nil {
 		return nil, err
 	}
-	if snapshot.planDigest != "" && snapshot.planDigest != planDigest {
+	if snapshot.planDigest != planDigest {
 		return nil, fmt.Errorf("%w: plan file changed after Terraform wrote it", errUtils.ErrPlanVerificationFailed)
 	}
 	engineDigest, err := fileDigest(info.Command)
