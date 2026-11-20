@@ -308,11 +308,36 @@ func TransformStackConfigToSpaceliftStacks(
 					sort.Strings(spaceliftStackNameDependsOnLabels1)
 					labels = append(labels, spaceliftStackNameDependsOnLabels1...)
 
-					// Recommended `settings.depends_on`
+					// `dependencies.components` supersedes `settings.depends_on`. When it declares Terraform
+					// dependencies, `settings.depends_on` is ignored, matching `atmos describe dependents`.
+					dependenciesComponentsStackNames, dependenciesComponentsDeclared, err := e.BuildDependentStackNamesFromDependenciesComponents(
+						atmosConfig,
+						componentMap,
+						component,
+						contextPrefix,
+						allStackNames,
+					)
+					if err != nil {
+						return nil, err
+					}
+
+					var spaceliftStackNameDependsOnLabels3 []string
+					for _, spaceliftStackNameDependsOn := range dependenciesComponentsStackNames {
+						spaceliftStackNameDependsOnLabels3 = append(spaceliftStackNameDependsOnLabels3, fmt.Sprintf("depends-on:%s", spaceliftStackNameDependsOn))
+					}
+
+					sort.Strings(spaceliftStackNameDependsOnLabels3)
+					labels = append(labels, spaceliftStackNameDependsOnLabels3...)
+
+					// Deprecated `settings.depends_on`
 					var stackComponentSettingsDependsOn schema.Settings
 					err = mapstructure.Decode(componentSettings, &stackComponentSettingsDependsOn)
 					if err != nil {
 						return nil, err
+					}
+
+					if dependenciesComponentsDeclared {
+						stackComponentSettingsDependsOn.DependsOn = nil
 					}
 
 					var spaceliftStackNameDependsOnLabels2 []string
