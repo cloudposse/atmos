@@ -513,11 +513,12 @@ func TestAddHelmSectionAffected(t *testing.T) {
 		{"values_files", sectionNameValuesF, []any{"a.yaml"}, []any{"b.yaml"}, affectedReasonStackValuesFile},
 		{"chart", sectionNameChart, "bitnami/nginx", "bitnami/redis", affectedReasonStackChart},
 		{"repositories", sectionNameRepos, []any{map[string]any{"name": "a"}}, []any{map[string]any{"name": "b"}}, affectedReasonStackRepos},
-		{"version", "version", "1.24.0", "1.23.0", "stack.version"},
-		{"namespace", "namespace", "new", "old", "stack.namespace"},
-		{"name", "name", "new", "old", "stack.name"},
-		{"create_namespace", "create_namespace", true, false, "stack.create_namespace"},
-		{"release", "release", "new", "old", "stack.release"},
+		{"repository", sectionNameRepository, "https://new.example.com", "https://old.example.com", affectedReasonStackRepository},
+		{"version", sectionNameVersion, "1.24.0", "1.23.0", affectedReasonStackVersion},
+		{"namespace", sectionNameNamespace, "new", "old", affectedReasonStackNamespace},
+		{"name", sectionNameName, "new", "old", affectedReasonStackName},
+		{"create_namespace", cfg.HelmCreateNamespaceSectionName, true, false, affectedReasonStackCreateNS},
+		{"release", cfg.HelmReleaseSectionName, map[string]any{"timeout": "10m"}, map[string]any{"timeout": "5m"}, affectedReasonStackRelease},
 	}
 
 	for _, tt := range tests {

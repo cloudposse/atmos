@@ -33,6 +33,12 @@ const (
 	affectedReasonStackValuesFile = "stack.values_files"
 	affectedReasonStackChart      = "stack.chart"
 	affectedReasonStackRepos      = "stack.repositories"
+	affectedReasonStackRepository = "stack.repository"
+	affectedReasonStackVersion    = "stack.version"
+	affectedReasonStackNamespace  = "stack.namespace"
+	affectedReasonStackName       = "stack.name"
+	affectedReasonStackCreateNS   = "stack.create_namespace"
+	affectedReasonStackRelease    = "stack.release"
 	affectedReasonDeleted         = "deleted"
 	affectedReasonDeletedStack    = "deleted.stack"
 
@@ -83,19 +89,23 @@ const (
 
 // Section name constants for isEqual comparisons.
 const (
-	sectionNameMetadata  = "metadata"
-	sectionNameVars      = "vars"
-	sectionNameEnv       = "env"
-	sectionNameSource    = "source"
-	sectionNameProvision = "provision"
-	sectionNameGenerate  = "generate"
-	sectionNamePaths     = "paths"
-	sectionNameManifests = "manifests"
-	sectionNameRender    = "render"
-	sectionNameValues    = "values"
-	sectionNameValuesF   = "values_files"
-	sectionNameChart     = "chart"
-	sectionNameRepos     = "repositories"
+	sectionNameMetadata   = "metadata"
+	sectionNameVars       = "vars"
+	sectionNameEnv        = "env"
+	sectionNameSource     = "source"
+	sectionNameProvision  = "provision"
+	sectionNameGenerate   = "generate"
+	sectionNamePaths      = "paths"
+	sectionNameManifests  = "manifests"
+	sectionNameRender     = "render"
+	sectionNameValues     = "values"
+	sectionNameValuesF    = "values_files"
+	sectionNameChart      = "chart"
+	sectionNameRepos      = "repositories"
+	sectionNameRepository = "repository"
+	sectionNameVersion    = "version"
+	sectionNameNamespace  = "namespace"
+	sectionNameName       = "name"
 
 	// Section name constants for aws/cloudformation-specific isEqual comparisons.
 	sectionNameStackName             = "stack_name"
@@ -1051,11 +1061,12 @@ func addHelmSectionAffected(
 		{sectionNameValuesF, affectedReasonStackValuesFile},
 		{sectionNameChart, affectedReasonStackChart},
 		{sectionNameRepos, affectedReasonStackRepos},
-		{"version", "stack.version"},
-		{"namespace", "stack.namespace"},
-		{"name", "stack.name"},
-		{"create_namespace", "stack.create_namespace"},
-		{"release", "stack.release"},
+		{sectionNameRepository, affectedReasonStackRepository},
+		{sectionNameVersion, affectedReasonStackVersion},
+		{sectionNameNamespace, affectedReasonStackNamespace},
+		{sectionNameName, affectedReasonStackName},
+		{cfg.HelmCreateNamespaceSectionName, affectedReasonStackCreateNS},
+		{cfg.HelmReleaseSectionName, affectedReasonStackRelease},
 	}
 
 	for _, section := range sections {
