@@ -1294,6 +1294,46 @@ func TestProcessHelmComponentsIndexed_FolderChanged(t *testing.T) {
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
 }
 
+// TestProcessHelmComponentsIndexed_ChartFilePaths verifies nested chart files mark the owning component affected and sibling components do not.
+func TestProcessHelmComponentsIndexed_ChartFilePaths(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		file     []string
+		affected bool
+	}{
+		{"nested template", []string{"components", "helm", helmTestComponent, "templates", "deployment.yaml"}, true},
+		{"chart values.yaml", []string{"components", "helm", helmTestComponent, "values.yaml"}, true},
+		{"sibling component", []string{"components", "helm", helmTestComponent + "-other", "Chart.yaml"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			atmosConfig := helmAtmosConfig()
+			helmSection := map[string]any{helmTestComponent: map[string]any{sectionNameChart: "."}}
+			remoteStacks := helmRemoteStacksWith(map[string]any{sectionNameChart: "."})
+			changedFile, err := filepath.Abs(filepath.Join(tt.file...))
+			require.NoError(t, err)
+
+			affected, err := processHelmComponentsIndexed(
+				helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+				atmosConfig, newChangedFilesIndex(atmosConfig, []string{changedFile}, ""), newComponentPathPatternCache(),
+				false, false, AffectedFilter{ExcludeLocked: false},
+			)
+			require.NoError(t, err)
+			if tt.affected {
+				require.Len(t, affected, 1)
+				assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
+			} else {
+				assert.Empty(t, affected)
+			}
+		})
+	}
+}
+
 // TestProcessHelmComponentsIndexed_ValuesFilesChanged verifies that a changed values file referenced by a helm component marks it as affected.
 func TestProcessHelmComponentsIndexed_ValuesFilesChanged(t *testing.T) {
 	t.Parallel()
