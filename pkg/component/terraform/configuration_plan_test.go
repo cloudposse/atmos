@@ -2517,6 +2517,31 @@ func TestWorkdirDigestBindsModulesOfADataDirBelowAnExcludedNamedDirectory(t *tes
 	}
 }
 
+// A data directory nested in a downloaded module (TF_DATA_DIR=.terraform/modules/vpc/.atmos/data) sits below
+// excluded directory names, but the files beside it are the module's own content, executed during apply. They
+// stay bound, while the bookkeeping beside an excluded ancestor outside the modules stays excluded.
+func TestWorkdirDigestBindsModuleContentBesideAnExcludedAncestorOfTheDataDir(t *testing.T) {
+	root := t.TempDir()
+	plan := filepath.Join(root, "reviewed.planfile")
+	dataDir := filepath.Join(defaultDataDir, "modules", "vpc", ".atmos", "data")
+	writeDigestFile(t, root, "main.tf", "module")
+	writeDigestFile(t, root, ".terraform/modules/vpc/.atmos/script.sh", "reviewed script")
+	baseWorkdir, baseRebuild := bothDigests(t, root, plan, dataDir)
+
+	writeDigestFile(t, root, ".terraform/modules/vpc/.atmos/script.sh", "tampered script")
+	workdir, rebuild := bothDigests(t, root, plan, dataDir)
+	assert.NotEqual(t, baseWorkdir, workdir, "module content beside the data directory stays bound")
+	assert.NotEqual(t, baseRebuild, rebuild, "module content beside the data directory stays bound")
+
+	outside := filepath.Join(".atmos", "custom")
+	writeDigestFile(t, root, ".atmos/lock.json", "bookkeeping")
+	baseWorkdir, baseRebuild = bothDigests(t, root, plan, outside)
+	writeDigestFile(t, root, ".atmos/lock.json", "newer bookkeeping")
+	workdir, rebuild = bothDigests(t, root, plan, outside)
+	assert.Equal(t, baseWorkdir, workdir, "bookkeeping beside an excluded ancestor stays excluded")
+	assert.Equal(t, baseRebuild, rebuild, "bookkeeping beside an excluded ancestor stays excluded")
+}
+
 // A local module whose source sits beside the downloaded modules of a data directory below `.terraform`
 // (TF_DATA_DIR=.terraform/custom with source = "./.terraform/custom/child") is executed during apply, so it
 // stays bound. The runtime paths, the siblings, and the default layout keep their exclusions.

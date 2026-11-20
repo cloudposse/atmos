@@ -105,7 +105,8 @@ func (s workdirScope) insideCustomDataDir(path string) (string, bool) {
 // files stay excluded as the name-based exclusion intends.
 func (s workdirScope) besideExcludedAncestor(path string) bool {
 	dir := filepath.Dir(path)
-	if !s.leadsToDataDir(dir) {
+	if !s.leadsToDataDir(dir) || s.insideModules(path) {
+		// Files of a downloaded module are executed during apply, whatever directory names lead to them.
 		return false
 	}
 	if _, inside := relativeInside(s.dataDir, path); inside {
