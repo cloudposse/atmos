@@ -494,17 +494,28 @@ func assignmentName(assignment string) string {
 // configuration, so they stay out of the digest even when -out points inside this directory.
 func (s workdirScope) recordExternalModules(planPath string, files map[string]string) error {
 	modules := filepath.Join(s.dataDir, modulesDirName)
-	if s.placement == dataDirBelowWorkdir {
+	if !s.hasExternalModules(modules) {
 		return nil
+	}
+	return filepath.WalkDir(modules, s.externalModuleVisitor(modules, planPath, files))
+}
+
+// hasExternalModules reports whether the modules directory lies outside the workdir and may exist.
+func (s workdirScope) hasExternalModules(modules string) bool {
+	if s.placement == dataDirBelowWorkdir {
+		return false
 	}
 	if _, inside := relativeInside(s.root, modules); inside {
 		// The data directory is the workdir itself: its modules are part of the workdir walk.
-		return nil
+		return false
 	}
-	if _, err := os.Stat(modules); errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	return filepath.WalkDir(modules, func(path string, entry fs.DirEntry, err error) error {
+	_, err := os.Stat(modules)
+	return !errors.Is(err, fs.ErrNotExist)
+}
+
+// externalModuleVisitor digests each file below the external modules directory.
+func (s workdirScope) externalModuleVisitor(modules, planPath string, files map[string]string) fs.WalkDirFunc {
+	return func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -523,7 +534,7 @@ func (s workdirScope) recordExternalModules(planPath string, files map[string]st
 			return s.recordModuleManifest(path, entry, files)
 		}
 		return recordWorkdirFileAs(externalModulesKeyPrefix+filepath.ToSlash(relative), path, entry, files)
-	})
+	}
 }
 
 // moduleManifestName is the file Terraform keeps in the modules directory of its data directory.

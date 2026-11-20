@@ -161,13 +161,19 @@ func obtainConfiguration(ctx context.Context, config *schema.AtmosConfiguration,
 	if err != nil || rebuild == nil {
 		return prepared, rebuild, err
 	}
+	return finishRebuild(ctx, config, info, rebuild)
+}
+
+// finishRebuild applies the reviewed role of a rebuilt plan and evaluates the unit again.
+func finishRebuild(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rebuild *reviewedRebuild) (*schema.PreparedComponentConfiguration, *reviewedRebuild, error) {
 	// An operation the provider excludes never runs, so it must not need the unit's role.
 	if reviewed := rebuild.plan.Prepared; reviewed.IAM != nil && !excludedFromOperation(info, reviewed) {
-		if err = applyIAMRole(ctx, info, reviewed.IAM); err != nil {
+		if err := applyIAMRole(ctx, info, reviewed.IAM); err != nil {
 			return nil, nil, err
 		}
 		rebuild.appliedIAM = reviewed.IAM
 	}
+	var err error
 	rebuild.prepared, err = prepareForRebuild(ctx, config, info, rebuild)
 	return rebuild.prepared, rebuild, err
 }
