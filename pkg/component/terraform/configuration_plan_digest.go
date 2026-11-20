@@ -163,15 +163,26 @@ func absolutePaths(root, planPath string) (string, string, error) {
 	return absoluteRoot, absolutePlan, nil
 }
 
+// resolvedPath returns path absolute with symlinks resolved. A path that does not exist yet (a plan
+// Terraform has not written) resolves its nearest existing ancestor and keeps the missing tail, so it
+// compares equal to the same path once it exists.
 func resolvedPath(path string) (string, error) {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
 	}
-	if resolved, err := filepath.EvalSymlinks(absolute); err == nil {
-		return resolved, nil
+	existing, tail := absolute, ""
+	for {
+		if resolved, err := filepath.EvalSymlinks(existing); err == nil {
+			return filepath.Join(resolved, tail), nil
+		}
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			return absolute, nil
+		}
+		tail = filepath.Join(filepath.Base(existing), tail)
+		existing = parent
 	}
-	return absolute, nil
 }
 
 // skipWorkdirDirectory reports whether a nested directory holds only mutable or cached data.

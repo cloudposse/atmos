@@ -2517,6 +2517,29 @@ func TestWorkdirDigestBindsModulesOfADataDirBelowAnExcludedNamedDirectory(t *tes
 	}
 }
 
+// A plan with a custom name that does not exist yet, reached through a symlinked parent, resolves like the plan Terraform
+// creates there. The record beside it stays out of the digest before and after the plan appears, so the
+// snapshots taken around the run compare equal.
+func TestWorkdirDigestResolvesTheParentOfAPlanThatDoesNotExistYet(t *testing.T) {
+	base := t.TempDir()
+	workdir := filepath.Join(base, "real")
+	require.NoError(t, os.Mkdir(workdir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "main.tf"), []byte("module"), 0o600))
+	link := filepath.Join(base, "link")
+	if err := os.Symlink(workdir, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	plan := filepath.Join(link, "custom.tfplan")
+	require.NoError(t, os.WriteFile(plan+configurationPlanSuffix, []byte("record"), 0o600))
+
+	before, err := configurationWorkdirDigest(workdir, plan, "")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "custom.tfplan"), []byte("plan"), 0o600))
+	after, err := configurationWorkdirDigest(workdir, plan, "")
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "the record is excluded whether or not the plan exists yet")
+}
+
 // A data directory nested in a downloaded module (TF_DATA_DIR=.terraform/modules/vpc/.atmos/data) sits below
 // excluded directory names, but the files beside it are the module's own content, executed during apply. They
 // stay bound, while the bookkeeping beside an excluded ancestor outside the modules stays excluded.
