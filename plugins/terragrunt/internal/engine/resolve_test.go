@@ -754,6 +754,16 @@ func TestBackendRecognizesEscapedDownloadDirAttribute(t *testing.T) {
 	require.True(t, mentionsDownloadDir(filesystem, []string{"parent.hcl.json"}))
 }
 
+// Terragrunt merges the sibling automatic include into the unit, so a download_dir set only there
+// still moves the cache and must trigger the probe.
+func TestMentionsDownloadDirChecksAutomaticIncludes(t *testing.T) {
+	filesystem := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(filesystem, "unit.hcl", []byte(`inputs = {}`), 0o600))
+	require.False(t, mentionsDownloadDir(filesystem, []string{"unit.hcl"}))
+	require.NoError(t, afero.WriteFile(filesystem, automaticIncludeName, []byte(`download_dir = "cache"`), 0o600))
+	require.True(t, mentionsDownloadDir(filesystem, []string{"unit.hcl"}))
+}
+
 func TestDownloadDirDetectionUsesAttributeSyntax(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	for _, test := range []struct {

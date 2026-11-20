@@ -56,12 +56,6 @@ func (r *recoveryReporter) SignalsWritten(path string) {
 	ui.Warningf("Wrote error signals to `%s`.", path)
 }
 
-// attemptFunc runs the hooks and the command once. It returns the exit status 2 of
-// `plan -detailed-exitcode` separately, because that is a result and not a failure. It records the
-// standard error of every step that failed in failed, so a policy never sees output of a step that
-// succeeded.
-type attemptFunc func(opts []component.ExecutionOption, failed *failureText) (changes, err error)
-
 // failureText collects the standard error of the steps, hooks and command, that failed during one
 // attempt. Error handling matches its policies against this text only.
 type failureText struct {
@@ -89,8 +83,9 @@ func (f *failureText) recorded() string {
 
 // recoverPhase runs an attempt under the component's errors policy. Error text for matching is
 // the standard error of the steps that failed, as it is for Terragrunt, so output on stdout, or a
-// warning from a step that succeeded, never triggers a policy.
-func (e *Executor) recoverPhase(info *schema.ConfigAndStacksInfo, phase *executionPhase, policy *schema.ComponentErrors, opts []component.ExecutionOption, attempt attemptFunc) error {
+// warning from a step that succeeded, never triggers a policy. The attempts also report whether the
+// command itself finished, so an ignored failure of a later hook leaves its result in place.
+func (e *Executor) recoverPhase(info *schema.ConfigAndStacksInfo, phase *executionPhase, policy *schema.ComponentErrors, opts []component.ExecutionOption, attempts *phaseAttempts) error {
 	defer perf.Track(nil, "terraform.Executor.recoverPhase")()
 
 	var changes error
@@ -102,7 +97,7 @@ func (e *Executor) recoverPhase(info *schema.ConfigAndStacksInfo, phase *executi
 	ignored, err := recoverer.Run(component.ContextFromOptions(opts...), func(context.Context) (string, error) {
 		var failed failureText
 		var runErr error
-		changes, runErr = attempt(opts, &failed)
+		changes, runErr = attempts.run(opts, &failed)
 		return failed.recorded(), runErr
 	})
 	switch {
@@ -112,6 +107,10 @@ func (e *Executor) recoverPhase(info *schema.ConfigAndStacksInfo, phase *executi
 		// A preparatory step such as the implicit init failed with an ignorable error. Terragrunt ends
 		// the whole unit run there, so the command that follows must not run against a missing init.
 		return errUtils.ErrComponentRunIgnored
+	case ignored && attempts.commandCompleted():
+		// A hook failed after the command finished. The command's result stands, including a plan
+		// with changes, so the plan is still recorded.
+		return changes
 	case ignored:
 		markMainCommandIgnored(component.ContextFromOptions(opts...))
 		return nil
@@ -156,6 +155,9 @@ type phaseAttempts struct {
 	// run them again, so a notification is never published twice.
 	afterDone map[*schema.ComponentHook]bool
 }
+
+// commandCompleted reports that the command finished in this or an earlier attempt.
+func (a *phaseAttempts) commandCompleted() bool { return a.completed }
 
 // run makes one attempt. With -detailed-exitcode, exit status 2 reports a plan with changes: hooks
 // must not see that as a failure, but the status still has to reach the caller once the hooks are done.

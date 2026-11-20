@@ -258,8 +258,12 @@ func terraformConfigurationFile(path string) bool {
 
 // mentionsDownloadDir reports whether any parsed configuration file names download_dir. The probe
 // in downloadDir parses the whole unit, so a unit that never sets it skips the probe and its
-// inputs stay unevaluated during backend reads.
+// inputs stay unevaluated during backend reads. Automatic includes merge into the unit, so they
+// are scanned too; one that cannot be inspected is skipped, which at worst skips an optional probe.
 func mentionsDownloadDir(filesystem afero.Fs, paths []string) bool {
+	if expanded, err := withAutomaticIncludes(filesystem, paths); err == nil {
+		paths = expanded
+	}
 	for _, path := range paths {
 		data, err := afero.ReadFile(filesystem, path)
 		if err != nil {

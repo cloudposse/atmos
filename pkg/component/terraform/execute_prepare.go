@@ -327,11 +327,11 @@ func ComputeTerraformSecretVarKeys(info *schema.ConfigAndStacksInfo) {
 		}
 	}
 
-	if len(keys) == 0 {
-		info.TerraformSecretVarKeys = nil
-		return
+	// An empty classification is stored as nil, so the flag is what tells it from an unknown one.
+	info.TerraformSecretVarKeys, info.TerraformSecretVarKeysComputed = nil, true
+	if len(keys) > 0 {
+		info.TerraformSecretVarKeys = keys
 	}
-	info.TerraformSecretVarKeys = keys
 }
 
 // RejectComputedTerraformVars ensures display-only degraded values cannot cross

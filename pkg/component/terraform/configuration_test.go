@@ -46,7 +46,7 @@ func TestPrepareConfiguration(t *testing.T) {
 	require.Equal(t, expected.Backend, info.ComponentBackendSection)
 	require.Equal(t, "default", info.TerraformWorkspace)
 	require.False(t, config.Components.Terraform.AutoGenerateBackendFile, "preparation leaves the shared project default unchanged")
-	require.True(t, schema.GenerateBackendFile(config, info))
+	require.False(t, schema.GenerateBackendFile(config, info), "a provider that does not own the backend leaves the project setting in charge")
 }
 
 func TestPreparedBackendChoiceDoesNotLeakBetweenInvocations(t *testing.T) {
@@ -509,6 +509,7 @@ func TestConfigurationWorkdirOwnsArtifactsNotState(t *testing.T) {
 			require.NoError(t, os.WriteFile(state, []byte("existing state"), 0o600))
 			config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, TerraformDirAbsolutePath: filepath.Join(root, "components")}
 			config.Components.Terraform.BasePath = "components"
+			config.Components.Terraform.AutoGenerateBackendFile = true
 			provider := NewMockComponentConfigurationRuntime(gomock.NewController(t))
 			config.ComponentConfigurations = provider
 			binary, err := os.Executable()

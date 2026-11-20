@@ -182,7 +182,11 @@ func finishRebuild(ctx context.Context, config *schema.AtmosConfiguration, info 
 func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
 	info.ComponentVarsSection = prepared.Inputs
 	info.PreparedSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
+	// The inputs were replaced, so any earlier classification of them no longer describes them.
+	info.TerraformSecretVarKeysComputed = false
 	info.ConfigurationSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
+	// The stack's env section wins over provider environment in the metadata this invocation runs,
+	// including the apply-time metadata of a restored saved plan.
 	info.ComponentExecution = withoutStackEnvironment(invocationExecution(info, prepared), info.ComponentEnvSection)
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
 	info.TerraformWorkspace = prepared.Workspace
@@ -190,7 +194,10 @@ func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.Confi
 	applyPreparedSource(info, prepared)
 	info.ComponentSection["backend_type"] = prepared.BackendType
 	info.ComponentSection["backend"] = prepared.Backend
-	info.SetBackendFileGeneration(!prepared.BackendGenerated)
+	// Only a provider that owns the backend overrides generation. Otherwise the project setting decides.
+	if prepared.BackendGenerated {
+		info.SetBackendFileGeneration(false)
+	}
 	warnOnCacheLocalState(info, prepared)
 }
 
@@ -582,6 +589,6 @@ func recheckReviewedApply(ctx context.Context, config *schema.AtmosConfiguration
 	if info.DryRun || !schema.ConfigurationOwned(info.ComponentSettingsSection) || !usesConfigurationPlan(info) || !restoresConfigurationPlan(info) {
 		return nil
 	}
-	_, err := restoreConfigurationPlan(ctx, config, info)
+	_, err := restoreSettledConfigurationPlan(ctx, config, info)
 	return err
 }

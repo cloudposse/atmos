@@ -107,9 +107,28 @@ func configurationPlanPath(config *schema.AtmosConfiguration, info *schema.Confi
 }
 
 // restoreConfigurationPlan verifies the reviewed artifact before returning its original preparation.
-// It requires the retained working directory; a runner that holds only the restored artifacts goes
-// through restoreOrRebuildConfigurationPlan instead, which re-provisions the directory.
+// It requires the working directory the plan ran in, byte for byte, including its variable file; a
+// runner that holds only the restored artifacts goes through restoreOrRebuildConfigurationPlan instead,
+// which re-provisions the directory.
 func restoreConfigurationPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
+	// The mark on the invocation is sticky, so this call's own result is read from a cleared mark.
+	marked := info.ConfigurationPlanWorkdirExact
+	info.ConfigurationPlanWorkdirExact = false
+	prepared, err := restoreSettledConfigurationPlan(ctx, config, info)
+	exact := info.ConfigurationPlanWorkdirExact
+	info.ConfigurationPlanWorkdirExact = marked || exact
+	if err != nil {
+		return nil, err
+	}
+	if !exact {
+		return nil, fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
+	}
+	return prepared, nil
+}
+
+// restoreSettledConfigurationPlan verifies the reviewed artifact against a working directory that needs
+// no rebuild: the one the plan ran in, or a rebuild of it that was already verified.
+func restoreSettledConfigurationPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
 	prepared, rebuild, err := restoreOrRebuildConfigurationPlan(ctx, config, info)
 	if err != nil {
 		return nil, err
@@ -200,6 +219,10 @@ func restoreReviewedWorkdir(info *schema.ConfigAndStacksInfo, plan *configuratio
 // as the workdir the plan ran in or as a verified rebuild of it.
 func reviewedWorkdirRetained(info *schema.ConfigAndStacksInfo, plan *configurationPlan, path, dataDir string) (bool, error) {
 	retained, err := workdirMatches(plan, path, dataDir)
+	// Only the full digest covers the variable file, so only then are its inputs the reviewed ones.
+	if err == nil && retained {
+		info.ConfigurationPlanWorkdirExact = true
+	}
 	if err != nil || retained {
 		return retained, err
 	}

@@ -260,8 +260,8 @@ func binaryOverrideWarning(request *model.Request, binary, path string) (model.W
 	}
 	return model.Warning{
 		Code: WarningTerraformBinaryOverridden, Path: path,
-		Message: fmt.Sprintf("The stack `command` %s overrides this unit's `terraform_binary` %s; the unit's binary is not used. "+
-			"Remove `terraform_binary` from the unit or the `command` override from the stack to make them agree.", effective, binary),
+		Message: fmt.Sprintf("The stack `command` or the command line `--command` selects %s, which overrides this unit's `terraform_binary` %s; the unit's binary is not used. "+
+			"Remove `terraform_binary` from the unit, or drop the `command` override (stack setting or `--command`), to make them agree.", effective, binary),
 	}, true
 }
 

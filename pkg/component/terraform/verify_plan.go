@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -172,6 +173,33 @@ func finalizeVerification(info *schema.ConfigAndStacksInfo, freshPlanFile, diff 
 	return nil
 }
 
+// appliesReviewedPlan reports whether the invocation applies a saved plan of a provider-owned component
+// in the working directory the plan was reviewed in. A working directory that was accepted as a verified
+// rebuild does not count: its variable file is outside the rebuild digest, so its inputs are not reviewed.
+func appliesReviewedPlan(info *schema.ConfigAndStacksInfo) bool {
+	return !info.DryRun && info.ConfigurationPlanWorkdirExact && schema.ConfigurationOwned(info.ComponentSettingsSection) &&
+		usesConfigurationPlan(info) && restoresConfigurationPlan(info)
+}
+
+// reviewedPlanInputs returns the inputs of the variable file that the plan run wrote into the retained
+// working directory. That file is part of the working directory digest recorded with the plan, so it
+// is read only when that digest matched (see appliesReviewedPlan). Secret inputs are never
+// written to it, so they are absent here. Numbers keep their exact text.
+func reviewedPlanInputs(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	path := ConstructTerraformComponentVarfilePath(config, info)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: the reviewed variable file of the saved plan cannot be read: %w", errUtils.ErrComponentHookFailed, err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var inputs map[string]any
+	if err := decoder.Decode(&inputs); err != nil {
+		return nil, fmt.Errorf("%w: the reviewed variable file %s of the saved plan is not a JSON object: %w", errUtils.ErrComponentHookFailed, path, err)
+	}
+	return inputs, nil
+}
+
 // withoutContent copies files, dropping the bytes of every one.
 func withoutContent(files []schema.ComponentConfigurationFile) []schema.ComponentConfigurationFile {
 	stored := slices.Clone(files)
@@ -195,11 +223,8 @@ func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurati
 	// The digest binds absence as well as bytes: a file that was already absent when the plan was
 	// reviewed and is still absent matches, while one that disappeared or appeared since does not.
 	if digestSensitiveContents(contents) != reviewed {
-		for i := range files {
-			// A file the entry removes is absent by design, so only other policies report it as missing.
-			if files[i].Sensitive && contents[files[i].Path] == nil && !slices.Contains([]string{"remove", "remove_terragrunt"}, files[i].IfExists) {
-				return fmt.Errorf("%w: reviewed generated file %s is missing: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, fs.ErrNotExist)
-			}
+		if missing, ok := soleMissingSensitiveFile(files, contents); ok {
+			return fmt.Errorf("%w: reviewed generated file %s is missing: %w", errUtils.ErrPlanVerificationFailed, missing, fs.ErrNotExist)
 		}
 		return fmt.Errorf("%w: reviewed generated file changed", errUtils.ErrPlanVerificationFailed)
 	}
@@ -209,6 +234,28 @@ func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurati
 		}
 	}
 	return nil
+}
+
+// soleMissingSensitiveFile names the file whose disappearance explains a digest mismatch. The digest is
+// one aggregate, so an absent file can be blamed only when it is the single possible cause: no other
+// sensitive file exists whose bytes could have changed, and no other absent file could be the one that
+// went missing. A file its entry removes is absent by design and is never reported.
+func soleMissingSensitiveFile(files []schema.ComponentConfigurationFile, contents map[string][]byte) (string, bool) {
+	var missing []string
+	for i := range files {
+		path := files[i].Path
+		switch {
+		case !files[i].Sensitive:
+		case contents[path] != nil:
+			return "", false
+		case !slices.Contains([]string{"remove", "remove_terragrunt"}, files[i].IfExists):
+			missing = append(missing, path)
+		}
+	}
+	if len(missing) != 1 {
+		return "", false
+	}
+	return missing[0], true
 }
 
 // sensitiveDigest fingerprints the sensitive generated files as they are in the working directory.

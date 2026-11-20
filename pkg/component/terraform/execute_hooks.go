@@ -240,7 +240,7 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 	env := slices.Concat(envpkg.ConvertMapToSlice(atmosConfig.Env), phaseInfo.ComponentEnvList)
 	attempts := &phaseAttempts{config: config, info: &phaseInfo, phase: phase, args: applied.Args, env: env, runner: runner, capture: capture, action: action}
 	if config.Errors != nil {
-		return e.recoverPhase(&phaseInfo, phase, config.Errors, opts, attempts.run)
+		return e.recoverPhase(&phaseInfo, phase, config.Errors, opts, attempts)
 	}
 	changesPresent, err := attempts.run(opts, nil)
 	if err != nil {
@@ -406,10 +406,11 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 	if err != nil {
 		return nil, err
 	}
-	arguments, err := r.hookArguments(hook, directory)
+	arguments, secretEnv, err := r.hookArguments(hook, directory)
 	if err != nil {
 		return nil, err
 	}
+	env = append(env, secretEnv...)
 	err = r.executor.services.ExecuteShellCommand(*r.atmosConfig, hook.Execute[0], arguments, directory, env, false, "", opts...)
 	finishStderr(err)
 	if file == nil {
@@ -433,18 +434,21 @@ func (r *hookRunner) failureCapture(captured io.Writer) (io.Writer, func(error))
 	}
 }
 
-// hookArguments returns the arguments a hook runs with. A tflint hook gets the stack's final inputs
-// bound to its variables.
-func (r *hookRunner) hookArguments(hook *schema.ComponentHook, directory string) ([]string, error) {
+// hookArguments returns the arguments and any extra environment a hook runs with. A tflint hook gets
+// the stack's final inputs bound to its variables, secret ones through the environment.
+func (r *hookRunner) hookArguments(hook *schema.ComponentHook, directory string) ([]string, []string, error) {
 	arguments := hook.Execute[1:]
 	if hook.Execute[0] != "tflint" {
-		return arguments, nil
+		return arguments, nil, nil
 	}
-	arguments, err := resolveTflintHookArguments(arguments, directory, r.info.ComponentVarsSection)
+	inputs, secretEnv, err := r.tflintChannels(arguments)
+	if err == nil {
+		arguments, err = resolveTflintHookArguments(arguments, directory, inputs)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("tflint hook %q: %w", hook.Name, err)
+		return nil, nil, fmt.Errorf("tflint hook %q: %w", hook.Name, err)
 	}
-	return arguments, nil
+	return arguments, secretEnv, nil
 }
 
 // hookUnitLabel names the component and stack a hook runs for, so output of a bulk run can be attributed.
