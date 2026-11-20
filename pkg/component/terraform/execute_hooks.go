@@ -118,7 +118,10 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 			return err
 		}
 		if recovery, ok := ctx.Value(mainCommandRecoveryKey{}).(*mainCommandRecovery); ok {
-			return recovery.recover(err, run)
+			return recovery.recover(err, func() error {
+				resetCommandStderr(ctx)
+				return run()
+			})
 		}
 		return err
 	})
