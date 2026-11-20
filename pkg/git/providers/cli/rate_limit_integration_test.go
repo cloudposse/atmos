@@ -18,6 +18,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// publisherRetryBudget bounds each publisher's total retry time. Twelve publishers race for one ref,
+// so the last one may need a retry round per winner; spawning git-http-backend is slow on Windows
+// runners, so the budget is generous enough that contention cannot exhaust it.
+const publisherRetryBudget = 3 * time.Minute
+
 // Exercise twelve independent publishers against the same branch over smart HTTP.
 // Each receives a 429 before contending for the ref; no lock serializes publication.
 func TestIndependentPublishersHonorHTTPCooldown(t *testing.T) {
@@ -70,7 +75,7 @@ func TestIndependentPublishersHonorHTTPCooldown(t *testing.T) {
 	for i, dir := range workdirs {
 		go func() {
 			<-start
-			results <- New().Push(t.Context(), &atmosgit.PushOptions{RepoContext: atmosgit.RepoContext{Workdir: dir, Env: env, Remote: fmt.Sprintf("%s/client-%d/repo.git", server.URL, i), Branch: "main"}, Retry: &schema.RetryConfig{MaxAttempts: new(16), MaxElapsedTime: new(30 * time.Second), RandomJitter: new(0.5), BackoffStrategy: schema.BackoffExponential, InitialDelay: new(50 * time.Millisecond), MaxDelay: new(time.Second)}})
+			results <- New().Push(t.Context(), &atmosgit.PushOptions{RepoContext: atmosgit.RepoContext{Workdir: dir, Env: env, Remote: fmt.Sprintf("%s/client-%d/repo.git", server.URL, i), Branch: "main"}, Retry: &schema.RetryConfig{MaxAttempts: new(publishers * 2), MaxElapsedTime: new(publisherRetryBudget), RandomJitter: new(0.5), BackoffStrategy: schema.BackoffExponential, InitialDelay: new(50 * time.Millisecond), MaxDelay: new(time.Second)}})
 		}()
 	}
 	close(start)
