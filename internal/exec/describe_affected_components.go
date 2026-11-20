@@ -33,6 +33,12 @@ const (
 	affectedReasonStackValuesFile = "stack.values_files"
 	affectedReasonStackChart      = "stack.chart"
 	affectedReasonStackRepos      = "stack.repositories"
+	affectedReasonStackRepository = "stack.repository"
+	affectedReasonStackVersion    = "stack.version"
+	affectedReasonStackNamespace  = "stack.namespace"
+	affectedReasonStackName       = "stack.name"
+	affectedReasonStackCreateNS   = "stack.create_namespace"
+	affectedReasonStackRelease    = "stack.release"
 	affectedReasonDeleted         = "deleted"
 	affectedReasonDeletedStack    = "deleted.stack"
 
@@ -83,19 +89,23 @@ const (
 
 // Section name constants for isEqual comparisons.
 const (
-	sectionNameMetadata  = "metadata"
-	sectionNameVars      = "vars"
-	sectionNameEnv       = "env"
-	sectionNameSource    = "source"
-	sectionNameProvision = "provision"
-	sectionNameGenerate  = "generate"
-	sectionNamePaths     = "paths"
-	sectionNameManifests = "manifests"
-	sectionNameRender    = "render"
-	sectionNameValues    = "values"
-	sectionNameValuesF   = "values_files"
-	sectionNameChart     = "chart"
-	sectionNameRepos     = "repositories"
+	sectionNameMetadata   = "metadata"
+	sectionNameVars       = "vars"
+	sectionNameEnv        = "env"
+	sectionNameSource     = "source"
+	sectionNameProvision  = "provision"
+	sectionNameGenerate   = "generate"
+	sectionNamePaths      = "paths"
+	sectionNameManifests  = "manifests"
+	sectionNameRender     = "render"
+	sectionNameValues     = "values"
+	sectionNameValuesF    = "values_files"
+	sectionNameChart      = "chart"
+	sectionNameRepos      = "repositories"
+	sectionNameRepository = "repository"
+	sectionNameVersion    = "version"
+	sectionNameNamespace  = "namespace"
+	sectionNameName       = "name"
 
 	// Section name constants for aws/cloudformation-specific isEqual comparisons.
 	sectionNameStackName             = "stack_name"
@@ -1051,6 +1061,12 @@ func addHelmSectionAffected(
 		{sectionNameValuesF, affectedReasonStackValuesFile},
 		{sectionNameChart, affectedReasonStackChart},
 		{sectionNameRepos, affectedReasonStackRepos},
+		{sectionNameRepository, affectedReasonStackRepository},
+		{sectionNameVersion, affectedReasonStackVersion},
+		{sectionNameNamespace, affectedReasonStackNamespace},
+		{sectionNameName, affectedReasonStackName},
+		{cfg.HelmCreateNamespaceSectionName, affectedReasonStackCreateNS},
+		{cfg.HelmReleaseSectionName, affectedReasonStackRelease},
 	}
 
 	for _, section := range sections {
@@ -1085,7 +1101,7 @@ func isComponentSectionEqual(
 				if remoteComponentSection, ok := remoteComponentTypeSection[localComponentName].(map[string]any); ok {
 					remoteSection, ok := remoteComponentSection[sectionName]
 					if ok {
-						return reflect.DeepEqual(localSection, remoteSection)
+						return deepEqualValues(localSection, remoteSection)
 					}
 				}
 			}

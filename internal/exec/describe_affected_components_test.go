@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -512,6 +513,12 @@ func TestAddHelmSectionAffected(t *testing.T) {
 		{"values_files", sectionNameValuesF, []any{"a.yaml"}, []any{"b.yaml"}, affectedReasonStackValuesFile},
 		{"chart", sectionNameChart, "bitnami/nginx", "bitnami/redis", affectedReasonStackChart},
 		{"repositories", sectionNameRepos, []any{map[string]any{"name": "a"}}, []any{map[string]any{"name": "b"}}, affectedReasonStackRepos},
+		{"repository", sectionNameRepository, "https://new.example.com", "https://old.example.com", affectedReasonStackRepository},
+		{"version", sectionNameVersion, "1.24.0", "1.23.0", affectedReasonStackVersion},
+		{"namespace", sectionNameNamespace, "new", "old", affectedReasonStackNamespace},
+		{"name", sectionNameName, "new", "old", affectedReasonStackName},
+		{"create_namespace", cfg.HelmCreateNamespaceSectionName, true, false, affectedReasonStackCreateNS},
+		{"release", cfg.HelmReleaseSectionName, map[string]any{"timeout": "10m"}, map[string]any{"timeout": "5m"}, affectedReasonStackRelease},
 	}
 
 	for _, tt := range tests {
@@ -582,6 +589,37 @@ func TestAddHelmSectionAffected_NoFalsePositives(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, affected)
 	})
+}
+
+func TestHelmValuesYAMLFunctionCheckoutPaths(t *testing.T) {
+	t.Parallel()
+
+	local := yamlsource.Source{Tag: "!terraform.state", Argument: "vpc vpc_id", File: "/checkout-a/stack.yaml"}.Encode()
+	remote := yamlsource.Source{Tag: "!terraform.state", Argument: "vpc vpc_id", File: "/checkout-b/stack.yaml"}.Encode()
+	changed := yamlsource.Source{Tag: "!terraform.state", Argument: "vpc other_id", File: "/checkout-b/stack.yaml"}.Encode()
+	for _, tc := range []struct {
+		name, value string
+		affected    bool
+	}{
+		{"same function in another checkout", remote, false},
+		{"changed function argument", changed, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			component := map[string]any{sectionNameValues: map[string]any{"vpcId": local}}
+			stacks := helmRemoteStacksWith(map[string]any{sectionNameValues: map[string]any{"vpcId": tc.value}})
+			var affected []schema.Affected
+			err := addHelmSectionAffected(&affected, helmAtmosConfig(), helmTestComponent, helmTestStack, &component, &stacks, &stacks, false, false)
+			require.NoError(t, err)
+			if tc.affected {
+				require.Len(t, affected, 1)
+				assert.Equal(t, affectedReasonStackValues, affected[0].Affected)
+			} else {
+				assert.Empty(t, affected)
+			}
+		})
+	}
 }
 
 const (
@@ -1254,6 +1292,46 @@ func TestProcessHelmComponentsIndexed_FolderChanged(t *testing.T) {
 	assert.Equal(t, helmTestComponent, affected[0].Component)
 	assert.Equal(t, cfg.HelmComponentType, affected[0].ComponentType)
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
+}
+
+// TestProcessHelmComponentsIndexed_ChartFilePaths verifies nested chart files mark the owning component affected and sibling components do not.
+func TestProcessHelmComponentsIndexed_ChartFilePaths(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		file     []string
+		affected bool
+	}{
+		{"nested template", []string{"components", "helm", helmTestComponent, "templates", "deployment.yaml"}, true},
+		{"chart values.yaml", []string{"components", "helm", helmTestComponent, "values.yaml"}, true},
+		{"sibling component", []string{"components", "helm", helmTestComponent + "-other", "Chart.yaml"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			atmosConfig := helmAtmosConfig()
+			helmSection := map[string]any{helmTestComponent: map[string]any{sectionNameChart: "."}}
+			remoteStacks := helmRemoteStacksWith(map[string]any{sectionNameChart: "."})
+			changedFile, err := filepath.Abs(filepath.Join(tt.file...))
+			require.NoError(t, err)
+
+			affected, err := processHelmComponentsIndexed(
+				helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+				atmosConfig, newChangedFilesIndex(atmosConfig, []string{changedFile}, ""), newComponentPathPatternCache(),
+				false, false, AffectedFilter{ExcludeLocked: false},
+			)
+			require.NoError(t, err)
+			if tt.affected {
+				require.Len(t, affected, 1)
+				assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
+			} else {
+				assert.Empty(t, affected)
+			}
+		})
+	}
 }
 
 // TestProcessHelmComponentsIndexed_ValuesFilesChanged verifies that a changed values file referenced by a helm component marks it as affected.
