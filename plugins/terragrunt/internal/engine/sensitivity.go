@@ -368,7 +368,11 @@ func (s *sensitivityScanner) readsSensitiveConfig(call *hclsyntax.FunctionCallEx
 	if !ok {
 		return true
 	}
-	target, targetFile := includedFile(path, parentSearch, s.file, s.bodies)
+	target, targetFile := readFile(path, parentSearch, s.file, s.bodies)
+	if target == nil && !parentSearch && len(call.Args) > 1 {
+		// A missing literal file yields the default argument, which the caller scans like any other argument.
+		return false
+	}
 	if target == nil || slices.ContainsFunc(target.Blocks, func(block *hclsyntax.Block) bool { return block.Type == "include" }) {
 		return true
 	}
@@ -449,6 +453,24 @@ func includedFile(path string, parentSearch bool, file string, bodies map[string
 			return nil, ""
 		}
 	}
+}
+
+// readFile finds the file a read_terragrunt_config call reads. A parent-folder search walks up the tree, but
+// a literal path is relative to the file that names it and is not searched for in ancestors: when that file
+// is missing Terragrunt uses the call's default (or fails), so a file of the same name above must not be
+// taken for it.
+func readFile(path string, parentSearch bool, file string, bodies map[string]*hclsyntax.Body) (*hclsyntax.Body, string) {
+	if parentSearch {
+		return includedFile(path, parentSearch, file, bodies)
+	}
+	candidate := filepath.Clean(path)
+	if !filepath.IsAbs(path) {
+		candidate = filepath.Join(filepath.Dir(file), path)
+	}
+	if included := bodies[candidate]; included != nil {
+		return included, candidate
+	}
+	return nil, ""
 }
 
 // includePath reads the static file name of a path attribute. parentSearch reports that the name is the

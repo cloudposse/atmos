@@ -489,8 +489,9 @@ func assignmentName(assignment string) string {
 
 // recordExternalModules adds the downloaded modules of a data directory outside the workdir to the
 // digest files. They are executed during apply like the ones below the workdir, so a change to them
-// must not look retained. An absent modules directory adds nothing.
-func (s workdirScope) recordExternalModules(files map[string]string) error {
+// must not look retained. An absent modules directory adds nothing. The plan and its record are not
+// configuration, so they stay out of the digest even when -out points inside this directory.
+func (s workdirScope) recordExternalModules(planPath string, files map[string]string) error {
 	if s.placement != dataDirOutsideWorkdir {
 		return nil
 	}
@@ -502,7 +503,7 @@ func (s workdirScope) recordExternalModules(files map[string]string) error {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() {
+		if entry.IsDir() || path == planPath || path == planPath+configurationPlanSuffix {
 			return nil
 		}
 		relative, err := filepath.Rel(modules, path)

@@ -299,13 +299,18 @@ func writtenPlanDigest(path string) (string, error) {
 
 // stalePlanStashParent returns where the stash directory is created: beside the plan, except inside
 // downloaded modules, whose every file is digested, where it moves to the component directory. The
-// modules are those of the default location and of the effective Terraform data directory.
+// modules are those of the default location and of the effective Terraform data directory. A component
+// directory that itself lies inside those modules is digested whole, so the stash goes to the private
+// system temporary directory instead (an empty parent), outside every digested path.
 func stalePlanStashParent(root, dataDir, path string) string {
 	parent := filepath.Dir(path)
-	if root != "" && insideDigestedModules(root, dataDir, parent) {
-		return root
+	if root == "" || !insideDigestedModules(root, dataDir, parent) {
+		return parent
 	}
-	return parent
+	if insideDigestedModules(root, dataDir, root) {
+		return ""
+	}
+	return root
 }
 
 // insideDigestedModules reports whether dir is part of the downloaded modules the working directory

@@ -2172,6 +2172,77 @@ func TestStalePlanStashStaysOutOfTheEffectiveModulesDirectory(t *testing.T) {
 	})
 }
 
+// A workdir that itself lies inside the effective modules tree (TF_DATA_DIR=/project/cache, workdir
+// /project/cache/modules/app) is fully digested, so the stash must not be created below it: both snapshots
+// would hash it and settlement would delete it, which looks like a configuration change.
+func TestStalePlanStashStaysOutsideADigestedWorkdirInsideTheModulesTree(t *testing.T) {
+	cache := t.TempDir()
+	root := filepath.Join(cache, modulesDirName, "app")
+	writeDigestFile(t, root, "main.tf", "module")
+	plan := filepath.Join(root, "reviewed.plan")
+	require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+	before, err := configurationWorkdirDigest(root, plan, cache)
+	require.NoError(t, err)
+
+	settle, err := stashStalePlan(root, cache, plan)
+	require.NoError(t, err)
+	during, err := configurationWorkdirDigest(root, plan, cache)
+	require.NoError(t, err)
+	assert.Equal(t, before, during, "a stash below the workdir would change the digest")
+	stashes, err := filepath.Glob(filepath.Join(root, stalePlanDirPrefix+"*"))
+	require.NoError(t, err)
+	assert.Empty(t, stashes, "the stash must not be created inside the digested workdir")
+
+	require.NoError(t, settle(true))
+	data, err := os.ReadFile(plan)
+	require.NoError(t, err)
+	assert.Equal(t, "earlier", string(data))
+	after, err := configurationWorkdirDigest(root, plan, cache)
+	require.NoError(t, err)
+	assert.Equal(t, before, after)
+}
+
+// A workdir outside the modules tree whose plan sits in the external modules directory keeps the stash in
+// the workdir, as before.
+func TestStalePlanStashOfAWorkdirOutsideTheModulesTreeStaysInTheWorkdir(t *testing.T) {
+	root := t.TempDir()
+	cache := t.TempDir()
+	modules := filepath.Join(cache, modulesDirName)
+	require.NoError(t, os.MkdirAll(modules, 0o755))
+	plan := filepath.Join(modules, "reviewed.plan")
+	require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+
+	settle, err := stashStalePlan(root, cache, plan)
+	require.NoError(t, err)
+	stashes, err := filepath.Glob(filepath.Join(root, stalePlanDirPrefix+"*", "plan"))
+	require.NoError(t, err)
+	assert.Len(t, stashes, 1)
+	require.NoError(t, settle(true))
+}
+
+// Terraform writing the plan inside an external TF_DATA_DIR/modules directory must not look like a module
+// change: the plan and its record are excluded from the external modules walk, every other module file stays
+// bound.
+func TestWorkdirDigestIgnoresAPlanInsideExternalModules(t *testing.T) {
+	root := t.TempDir()
+	dataDir := t.TempDir()
+	plan := filepath.Join(dataDir, modulesDirName, "plans", "reviewed.plan")
+	writeDigestFile(t, root, "main.tf", "module")
+	writeDigestFile(t, dataDir, "modules/vpc/script.sh", "reviewed script")
+	baseWorkdir, baseRebuild := bothDigests(t, root, plan, dataDir)
+
+	writeDigestFile(t, dataDir, "modules/plans/reviewed.plan", "plan bytes")
+	writeDigestFile(t, dataDir, "modules/plans/reviewed.plan"+configurationPlanSuffix, "plan record")
+	workdir, rebuild := bothDigests(t, root, plan, dataDir)
+	assert.Equal(t, baseWorkdir, workdir, "the plan and its record are not configuration")
+	assert.Equal(t, baseRebuild, rebuild, "the plan and its record are not configuration")
+
+	writeDigestFile(t, dataDir, "modules/plans/other.tf", "tampered")
+	workdir, rebuild = bothDigests(t, root, plan, dataDir)
+	assert.NotEqual(t, baseWorkdir, workdir, "another file beside the plan stays bound")
+	assert.NotEqual(t, baseRebuild, rebuild, "another file beside the plan stays bound")
+}
+
 func TestStalePlanSettlementFollowsTheRunOutcome(t *testing.T) {
 	tests := []struct {
 		name        string

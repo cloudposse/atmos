@@ -1097,6 +1097,49 @@ func TestSensitiveInputsStartParentFolderSearchesAboveTheUnitDirectory(t *testin
 	}
 }
 
+// A literal read_terragrunt_config path is relative to the file that names it and never searched for in
+// ancestors: a missing file yields the default argument, so a public file of the same name above the unit
+// must not mask a sensitive default.
+func TestSensitiveInputsLiteralConfigReadDoesNotSearchAncestorsAndUsesDefault(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "repo")
+	unit := filepath.Join(root, "app", unitFile)
+	local := filepath.Join(root, "app", "secrets.hcl")
+	parent := filepath.Join(root, "secrets.hcl")
+	const public = `inputs = { token = "t" }`
+	const sensitive = `inputs = { token = sensitive("s") }`
+	const sensitiveDefault = `{ inputs = { token = sensitive("s") } }`
+	const publicDefault = `{ inputs = { token = "t" } }`
+	for _, test := range []struct {
+		name, read string
+		files      map[string]string
+		want       [][]string
+	}{
+		{"sensitive default is not masked by a public ancestor file", `read_terragrunt_config("secrets.hcl", ` + sensitiveDefault + `).inputs.token`, map[string]string{parent: public}, [][]string{{"password"}}},
+		{"public default with a public ancestor stays non-sensitive", `read_terragrunt_config("secrets.hcl", ` + publicDefault + `).inputs.token`, map[string]string{parent: public}, nil},
+		{"file beside the unit is still read instead of the default", `read_terragrunt_config("secrets.hcl", ` + publicDefault + `).inputs.token`, map[string]string{local: public, parent: sensitive}, nil},
+		{"sensitive file beside the unit is still read", `read_terragrunt_config("secrets.hcl", ` + publicDefault + `).inputs.token`, map[string]string{local: sensitive, parent: public}, [][]string{{"password"}}},
+		{"sensitive ancestor file is not read for a missing literal file", `read_terragrunt_config("secrets.hcl", ` + publicDefault + `).inputs.token`, map[string]string{parent: sensitive}, nil},
+		{"missing file with no default fails closed", `read_terragrunt_config("secrets.hcl").inputs.token`, map[string]string{parent: public}, [][]string{{"password"}}},
+		{"parent search still walks up", `read_terragrunt_config(find_in_parent_folders("secrets.hcl"), ` + publicDefault + `).inputs.token`, map[string]string{parent: sensitive}, [][]string{{"password"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			require.NoError(t, fsys.MkdirAll(filepath.Dir(unit), 0o755))
+			files := map[string]string{unit: "inputs = {\n password = " + test.read + "\n}\n"}
+			for name, content := range test.files {
+				files[name] = content
+			}
+			writeFiles(t, fsys, files)
+			read := []string{unit}
+			for name := range test.files {
+				read = append(read, name)
+			}
+
+			assert.Equal(t, test.want, SensitiveInputs(fsys, read, map[string]any{"password": "s"}))
+		})
+	}
+}
+
 // An expanded final argument is a list of merge operands, so its members replace earlier ones like any other
 // argument; a final argument that is not a literal tuple fails closed.
 func TestTransformsSensitiveInputsWhenAnExpandedMergeArgumentReplacesTheKey(t *testing.T) {

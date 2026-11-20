@@ -53,7 +53,7 @@ func workdirDigest(root, planPath, dataDir string, ignore func(relative string) 
 	if err != nil {
 		return "", err
 	}
-	if err := scope.recordExternalModules(files); err != nil {
+	if err := scope.recordExternalModules(planPath, files); err != nil {
 		return "", err
 	}
 	data, err := json.Marshal(files)
