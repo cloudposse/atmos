@@ -72,7 +72,7 @@ type workdirScope struct {
 }
 
 func (s workdirScope) skipFile(path, planPath, name string, ignore func(string) bool) bool {
-	if path == planPath || path == planPath+configurationPlanSuffix || s.insideCacheOutsideModules(path) {
+	if path == planPath || path == planPath+configurationPlanSuffix || s.insideCacheOutsideModules(path) || s.besideExcludedAncestor(path) {
 		return true
 	}
 	return (!s.insideModules(path) && ignoredWorkdirFile(path, planPath, name)) || ignoredRelative(s.root, path, ignore)
@@ -81,12 +81,46 @@ func (s workdirScope) skipFile(path, planPath, name string, ignore func(string) 
 // insideCacheOutsideModules reports whether path holds mutable Terraform data: below a `.terraform`
 // directory or the effective data directory, outside the downloaded modules.
 func (s workdirScope) insideCacheOutsideModules(path string) bool {
-	if s.placement == dataDirBelowWorkdir && insideDataDirModules(s.dataDir, path) {
-		// The modules of a data directory below `.terraform` (TF_DATA_DIR=.terraform/custom) are reachable;
-		// the default exclusions still apply to cache directories nested inside them.
-		return insideTerraformCacheOutsideModules(s.dataDir, path)
+	if relative, ok := s.insideCustomDataDir(path); ok {
+		// Below a custom data directory, even one nested in `.terraform` (TF_DATA_DIR=.terraform/custom),
+		// only the established runtime paths and cache directories nested inside it are mutable. The modules
+		// and the local sources beside them (`./.terraform/custom/child`) are executed during apply.
+		return establishedRuntimePath(relative) || insideTerraformCacheOutsideModules(s.dataDir, path)
 	}
 	return insideTerraformCacheOutsideModules(s.root, path) || s.insideDataDirOutsideModules(path)
+}
+
+// insideCustomDataDir returns path relative to a data directory below the workdir that is not the default
+// `.terraform`, when path is that directory or below it.
+func (s workdirScope) insideCustomDataDir(path string) (string, bool) {
+	if s.placement != dataDirBelowWorkdir || s.dataDir == filepath.Join(s.root, defaultDataDir) {
+		return "", false
+	}
+	return relativeInside(s.dataDir, path)
+}
+
+// besideExcludedAncestor reports whether a file sits in a directory on the way to the data directory below
+// the workdir, outside the data directory itself, and below a directory the walk excludes by name
+// (TF_DATA_DIR=.atmos/custom). The walk reaches those directories only to find the modules, so their own
+// files stay excluded as the name-based exclusion intends.
+func (s workdirScope) besideExcludedAncestor(path string) bool {
+	dir := filepath.Dir(path)
+	if !s.leadsToDataDir(dir) {
+		return false
+	}
+	if _, inside := relativeInside(s.dataDir, path); inside {
+		return false
+	}
+	relative, err := filepath.Rel(s.root, dir)
+	if err != nil {
+		return false
+	}
+	for _, part := range strings.Split(relative, string(filepath.Separator)) {
+		if excludedDirectoryName(part) {
+			return true
+		}
+	}
+	return false
 }
 
 // leadsToDataDir reports whether path is the data directory below the workdir or one of its ancestors, so
@@ -152,7 +186,14 @@ func (s workdirScope) skipDirectory(path, name string) bool {
 	if s.insideCacheOutsideModules(path) && !s.leadsToDataDir(path) {
 		return true
 	}
-	return !s.insideModules(path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || name == stateWorkspaceDir || strings.HasPrefix(name, ".atmos-policy-plan-") || strings.HasPrefix(name, stalePlanDirPrefix))
+	// A directory on the way to the data directory is walked to reach its modules, whatever it is called.
+	return !s.insideModules(path) && !s.leadsToDataDir(path) && excludedDirectoryName(name)
+}
+
+// excludedDirectoryName reports whether a directory name marks provisioner bookkeeping, a cache, or a
+// private plan directory that is never retained configuration.
+func excludedDirectoryName(name string) bool {
+	return name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || name == stateWorkspaceDir || strings.HasPrefix(name, ".atmos-policy-plan-") || strings.HasPrefix(name, stalePlanDirPrefix)
 }
 
 // Terraform's downloaded modules can contain scripts executed during apply. Other cache
@@ -417,15 +458,17 @@ func effectiveDataDir(config *schema.AtmosConfiguration, info *schema.ConfigAndS
 	return defaultDataDir
 }
 
-// resolveDataDir returns the data directory as an absolute path: a relative value is resolved
-// against root, as Terraform does against its working directory. An empty value is the default.
+// resolveDataDir returns the data directory as an absolute path with symlinks resolved: a relative value
+// is resolved against root, as Terraform does against its working directory. An empty value is the default.
 func resolveDataDir(root, dataDir string) string {
 	if dataDir == "" {
 		dataDir = defaultDataDir
 	}
 	if !filepath.IsAbs(dataDir) {
-		return filepath.Join(root, dataDir)
+		dataDir = filepath.Join(root, dataDir)
 	}
+	// Symlinks are resolved for relative values too, so a data directory reached through a link
+	// (TF_DATA_DIR=../link) is spelled like the plan path, which absolutePaths resolves.
 	resolved, err := resolvedPath(dataDir)
 	if err != nil {
 		return filepath.Clean(dataDir)

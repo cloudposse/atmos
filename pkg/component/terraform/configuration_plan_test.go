@@ -1680,7 +1680,7 @@ func TestRetainedWorkdirShortcutSelectsTheSourceSubdirectory(t *testing.T) {
 	}{
 		{name: "subdirectory present", metadata: map[string]any{"source_subdir": "modules/app"}, create: filepath.Join("components", "network", "modules", "app"), want: func(root string) string { return filepath.Join(root, "components", "network", "modules", "app") }},
 		{name: "no subdirectory keeps the override", metadata: map[string]any{}, create: filepath.Join("components", "network"), want: func(root string) string { return filepath.Join(root, "components", "network") }},
-		{name: "subdirectory absent keeps the override", metadata: map[string]any{"source_subdir": "modules/app"}, create: filepath.Join("components", "network"), want: func(root string) string { return filepath.Join(root, "components", "network") }},
+		{name: "subdirectory absent selects the module path it will have", metadata: map[string]any{"source_subdir": "modules/app"}, create: filepath.Join("components", "network"), want: func(root string) string { return filepath.Join(root, "components", "network", "modules", "app") }},
 		{name: "escaping subdirectory is rejected", metadata: map[string]any{"source_subdir": "../escape"}, create: filepath.Join("components", "network"), wantErr: errUtils.ErrWorkdirProvision},
 	}
 	for _, test := range tests {
@@ -1702,13 +1702,70 @@ func TestRetainedWorkdirShortcutSelectsTheSourceSubdirectory(t *testing.T) {
 			require.NoError(t, err)
 			want := test.want(root)
 			assert.Equal(t, want, ConstructTerraformComponentWorkingDir(config, info))
-			if test.name == "subdirectory absent keeps the override" {
+			if test.name == "subdirectory absent selects the module path it will have" {
 				return
 			}
 			// A later provisioning step resolves the subpath again and must not join it a second time.
 			again, err := component.ApplyWorkdirSubpathToSection(info)
 			require.NoError(t, err)
 			assert.Equal(t, want, again)
+		})
+	}
+}
+
+// A plan reviewed in work/units/app (working_directory work, source_subdir units/app) and applied on a fresh
+// checkout where the subdirectory is not on disk yet must reach the rebuild at the recorded module path, in
+// the same checkout and in a relocated one, instead of being rejected before the rebuild can happen.
+func TestRetainedWorkdirShortcutOfAFreshCheckoutReachesTheRebuildAtTheRecordedModulePath(t *testing.T) {
+	tests := []struct {
+		name      string
+		relocated bool
+	}{
+		{name: "same checkout"},
+		{name: "relocated checkout", relocated: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			config, info, execCtx, _, _ := planFixture(t)
+			override, subdir := "work", filepath.Join("units", "app")
+			metadata := func() map[string]any {
+				return map[string]any{"metadata": map[string]any{"working_directory": override, "source_subdir": filepath.ToSlash(subdir)}}
+			}
+			info.ComponentSection = metadata()
+			module := filepath.Join(config.BasePath, override, subdir)
+			require.NoError(t, os.MkdirAll(module, 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(module, "main.tf"), []byte("module"), 0o600))
+			require.NoError(t, useRetainedWorkdir(config, info))
+			require.Equal(t, module, ConstructTerraformComponentWorkingDir(config, info))
+			execCtx.workingDir, execCtx.componentPath = module, module
+			plan := filepath.Join(config.BasePath, override, "reviewed.planfile")
+			require.NoError(t, os.WriteFile(plan, []byte("reviewed plan"), 0o600))
+			observeFixturePlan(t, config, info, execCtx, plan)
+			require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + plan}))
+
+			// Fresh checkout: only the restored plan and record exist below the override.
+			target, targetPlan := config.BasePath, plan
+			if test.relocated {
+				target = t.TempDir()
+				require.NoError(t, os.MkdirAll(filepath.Join(target, override), 0o700))
+				targetPlan = filepath.Join(target, override, "reviewed.planfile")
+				for _, suffix := range []string{"", configurationPlanSuffix} {
+					data, err := os.ReadFile(plan + suffix)
+					require.NoError(t, err)
+					require.NoError(t, os.WriteFile(targetPlan+suffix, data, 0o600))
+				}
+			}
+			require.NoError(t, os.RemoveAll(filepath.Join(config.BasePath, override, "units")))
+			config.BasePath = target
+			fresh := *info
+			fresh.ComponentSection = metadata()
+			require.NoError(t, useRetainedWorkdir(config, &fresh))
+			fresh.SubCommand, fresh.UseTerraformPlan, fresh.PlanFile = "apply", true, targetPlan
+
+			_, rebuild, err := restoreOrRebuildConfigurationPlan(t.Context(), config, &fresh)
+			require.NoError(t, err)
+			require.NotNil(t, rebuild)
+			assert.Equal(t, filepath.Join(target, override, subdir), rebuild.workdir)
 		})
 	}
 }
@@ -2220,6 +2277,61 @@ func TestStalePlanStashOfAWorkdirOutsideTheModulesTreeStaysInTheWorkdir(t *testi
 	require.NoError(t, settle(true))
 }
 
+// A temporary directory that itself lies inside the digested workdir (TMPDIR=<workdir>/tmp) is no safe
+// stash location: both digest snapshots would hash it and settlement would delete it. The stash is refused
+// with a hint rather than created there, and the plan is left untouched.
+func TestStalePlanStashRefusesATemporaryDirectoryInsideTheDigestedWorkdir(t *testing.T) {
+	cache := t.TempDir()
+	root := filepath.Join(cache, modulesDirName, "app")
+	writeDigestFile(t, root, "main.tf", "module")
+	tmp := filepath.Join(root, "tmp")
+	require.NoError(t, os.MkdirAll(tmp, 0o755))
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("TMP", tmp)
+	t.Setenv("TEMP", tmp)
+	plan := filepath.Join(root, "reviewed.plan")
+	require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+	before, err := configurationWorkdirDigest(root, plan, cache)
+	require.NoError(t, err)
+
+	settle, err := stashStalePlan(root, cache, plan)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.NotNil(t, settle)
+	require.NoError(t, settle(true), "the returned settle function is a no-op after a refusal")
+
+	entries, err := os.ReadDir(tmp)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "no stash may be left in the temporary directory inside the workdir")
+	data, err := os.ReadFile(plan)
+	require.NoError(t, err)
+	assert.Equal(t, "earlier", string(data), "the plan is not emptied when the stash is refused")
+	after, err := configurationWorkdirDigest(root, plan, cache)
+	require.NoError(t, err)
+	assert.Equal(t, before, after)
+}
+
+// A temporary directory outside the digested workdir stays the stash location for a workdir inside the
+// modules tree, and the stash is private and settles away.
+func TestStalePlanStashUsesATemporaryDirectoryOutsideTheDigestedWorkdir(t *testing.T) {
+	cache := t.TempDir()
+	root := filepath.Join(cache, modulesDirName, "app")
+	writeDigestFile(t, root, "main.tf", "module")
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("TMP", tmp)
+	t.Setenv("TEMP", tmp)
+	plan := filepath.Join(root, "reviewed.plan")
+	require.NoError(t, os.WriteFile(plan, []byte("earlier"), 0o600))
+
+	settle, err := stashStalePlan(root, cache, plan)
+	require.NoError(t, err)
+	stashes, err := filepath.Glob(filepath.Join(tmp, stalePlanDirPrefix+"*", "plan"))
+	require.NoError(t, err)
+	require.Len(t, stashes, 1, "the stash lives in the temporary directory outside the workdir")
+	require.NoError(t, settle(true))
+	require.NoDirExists(t, filepath.Dir(stashes[0]))
+}
+
 // Terraform writing the plan inside an external TF_DATA_DIR/modules directory must not look like a module
 // change: the plan and its record are excluded from the external modules walk, every other module file stays
 // bound.
@@ -2241,6 +2353,251 @@ func TestWorkdirDigestIgnoresAPlanInsideExternalModules(t *testing.T) {
 	workdir, rebuild = bothDigests(t, root, plan, dataDir)
 	assert.NotEqual(t, baseWorkdir, workdir, "another file beside the plan stays bound")
 	assert.NotEqual(t, baseRebuild, rebuild, "another file beside the plan stays bound")
+}
+
+// A data directory that is a parent of the workdir (TF_DATA_DIR=/project for /project/unit) keeps its
+// downloaded modules outside the workdir. Both digests must bind them, while the workdir configuration, the
+// runtime paths of the data directory, and unrelated siblings keep their classification.
+func TestWorkdirDigestBindsModulesOfADataDirThatIsAParentOfTheWorkdir(t *testing.T) {
+	tests := []struct {
+		name  string
+		depth int
+	}{
+		{name: "direct parent", depth: 1},
+		{name: "grandparent", depth: 2},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dataDir := t.TempDir()
+			root := dataDir
+			for _, name := range []string{"a", "unit"}[2-test.depth:] {
+				root = filepath.Join(root, name)
+			}
+			plan := filepath.Join(root, "reviewed.planfile")
+			writeDigestFile(t, root, "main.tf", "module")
+			writeDigestFile(t, dataDir, "modules/vpc/script.sh", "reviewed script")
+			baseWorkdir, baseRebuild := bothDigests(t, root, plan, dataDir)
+
+			writeDigestFile(t, dataDir, "environment", "other-workspace")
+			writeDigestFile(t, dataDir, "terraform.tfstate", "state")
+			writeDigestFile(t, dataDir, "providers/registry/lock.json", "provider")
+			writeDigestFile(t, dataDir, "sibling/main.tf", "not part of this workdir")
+			workdir, rebuild := bothDigests(t, root, plan, dataDir)
+			assert.Equal(t, baseWorkdir, workdir, "runtime paths and siblings of the data directory stay excluded")
+			assert.Equal(t, baseRebuild, rebuild, "runtime paths and siblings of the data directory stay excluded")
+
+			writeDigestFile(t, root, "main.tf", "module v2")
+			workdir, rebuild = bothDigests(t, root, plan, dataDir)
+			assert.NotEqual(t, baseWorkdir, workdir, "the workdir configuration stays bound")
+			assert.NotEqual(t, baseRebuild, rebuild, "the workdir configuration stays bound")
+
+			writeDigestFile(t, root, "main.tf", "module")
+			writeDigestFile(t, dataDir, "modules/vpc/script.sh", "tampered script")
+			workdir, rebuild = bothDigests(t, root, plan, dataDir)
+			assert.NotEqual(t, baseWorkdir, workdir, "a downloaded module outside the workdir stays bound")
+			assert.NotEqual(t, baseRebuild, rebuild, "a downloaded module outside the workdir stays bound")
+		})
+	}
+}
+
+// A runner-local absolute TF_DATA_DIR restores a reviewed plan when it comes from the global environment: the
+// downloaded modules are bound by content, not by where they live. A stack environment override is bound
+// by value when apply has no execution of its own, so changing it between runners is rejected outright
+// instead of being accepted for some values and not others.
+func TestRestoredPlanBindsTheDataDirOnlyThroughTheStackEnvironment(t *testing.T) {
+	tests := []struct {
+		name     string
+		viaStack bool
+		wantErr  bool
+	}{
+		{name: "global environment follows the runner", viaStack: false},
+		{name: "stack environment override is bound", viaStack: true, wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			config, info, execCtx, _, path := planFixture(t)
+			execCtx.preparedConfiguration.Execution = &schema.ComponentExecution{}
+			setDataDir := func(dir string) {
+				if test.viaStack {
+					info.ComponentEnvSection = map[string]any{tfDataDirEnv: dir}
+					info.ComponentEnvList = []string{tfDataDirEnv + "=" + dir}
+					return
+				}
+				config.Env = map[string]string{tfDataDirEnv: dir}
+			}
+			reviewed := t.TempDir()
+			writeModuleManifest(t, reviewed, "registry/vpc", "reviewed script")
+			setDataDir(reviewed)
+			observeFixturePlan(t, config, info, execCtx, path)
+			require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+
+			info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+			_, err := restoreConfigurationPlan(t.Context(), config, info)
+			require.NoError(t, err, "the reviewed runner restores its own plan")
+
+			other := t.TempDir()
+			writeModuleManifest(t, other, "registry/vpc", "reviewed script")
+			setDataDir(other)
+			_, err = restoreConfigurationPlan(t.Context(), config, info)
+			if test.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+				require.ErrorContains(t, err, "reviewed stack environment overrides changed")
+				return
+			}
+			require.NoError(t, err, "identical modules at another absolute data directory still verify")
+
+			writeModuleManifest(t, other, "registry/vpc", "tampered script")
+			_, err = restoreConfigurationPlan(t.Context(), config, info)
+			require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed, "changed modules still fail")
+		})
+	}
+}
+
+// A workdir inside the modules directory of its own data directory is digested by the workdir walk, so the
+// external walk must skip it and still bind the sibling modules beside it.
+func TestWorkdirDigestBindsSiblingModulesOfAWorkdirInsideItsDataDirModules(t *testing.T) {
+	dataDir := t.TempDir()
+	root := filepath.Join(dataDir, modulesDirName, "unit")
+	plan := filepath.Join(root, "reviewed.planfile")
+	writeDigestFile(t, root, "main.tf", "module")
+	writeDigestFile(t, dataDir, "modules/sibling/script.sh", "reviewed script")
+	baseWorkdir, baseRebuild := bothDigests(t, root, plan, dataDir)
+
+	writeDigestFile(t, root, "reviewed.planfile", "plan bytes")
+	workdir, rebuild := bothDigests(t, root, plan, dataDir)
+	assert.Equal(t, baseWorkdir, workdir, "the plan is not configuration")
+	assert.Equal(t, baseRebuild, rebuild, "the plan is not configuration")
+
+	writeDigestFile(t, root, "main.tf", "module v2")
+	workdir, rebuild = bothDigests(t, root, plan, dataDir)
+	assert.NotEqual(t, baseWorkdir, workdir, "the workdir configuration stays bound")
+	assert.NotEqual(t, baseRebuild, rebuild, "the workdir configuration stays bound")
+
+	writeDigestFile(t, root, "main.tf", "module")
+	writeDigestFile(t, dataDir, "modules/sibling/script.sh", "tampered script")
+	workdir, rebuild = bothDigests(t, root, plan, dataDir)
+	assert.NotEqual(t, baseWorkdir, workdir, "a sibling module stays bound")
+	assert.NotEqual(t, baseRebuild, rebuild, "a sibling module stays bound")
+}
+
+// A data directory below a directory the digest excludes by name (`.terraform/.atmos/custom`) must keep its
+// downloaded modules reachable, while the bookkeeping beside it and the runtime paths stay excluded.
+func TestWorkdirDigestBindsModulesOfADataDirBelowAnExcludedNamedDirectory(t *testing.T) {
+	tests := []struct {
+		name    string
+		dataDir string
+		prefix  string
+		beside  string
+	}{
+		{name: "below .terraform/.atmos", dataDir: filepath.Join(defaultDataDir, ".atmos", "custom"), prefix: ".terraform/.atmos/custom", beside: ".terraform/.atmos/lock.json"},
+		{name: "below .atmos", dataDir: filepath.Join(".atmos", "custom"), prefix: ".atmos/custom", beside: ".atmos/lock.json"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			plan := filepath.Join(root, "reviewed.planfile")
+			writeDigestFile(t, root, "main.tf", "module")
+			writeDigestFile(t, root, test.prefix+"/modules/vpc/script.sh", "reviewed script")
+			writeDigestFile(t, root, test.beside, "bookkeeping")
+			baseWorkdir, baseRebuild := bothDigests(t, root, plan, test.dataDir)
+
+			writeDigestFile(t, root, test.beside, "newer bookkeeping")
+			writeDigestFile(t, root, test.prefix+"/environment", "other-workspace")
+			writeDigestFile(t, root, test.prefix+"/terraform.tfstate", "state")
+			writeDigestFile(t, root, test.prefix+"/providers/registry/lock.json", "provider")
+			workdir, rebuild := bothDigests(t, root, plan, test.dataDir)
+			assert.Equal(t, baseWorkdir, workdir, "bookkeeping and runtime paths stay excluded")
+			assert.Equal(t, baseRebuild, rebuild, "bookkeeping and runtime paths stay excluded")
+
+			writeDigestFile(t, root, test.prefix+"/modules/vpc/script.sh", "tampered script")
+			workdir, rebuild = bothDigests(t, root, plan, test.dataDir)
+			assert.NotEqual(t, baseWorkdir, workdir, "a downloaded module stays bound")
+			assert.NotEqual(t, baseRebuild, rebuild, "a downloaded module stays bound")
+		})
+	}
+}
+
+// A local module whose source sits beside the downloaded modules of a data directory below `.terraform`
+// (TF_DATA_DIR=.terraform/custom with source = "./.terraform/custom/child") is executed during apply, so it
+// stays bound. The runtime paths, the siblings, and the default layout keep their exclusions.
+func TestWorkdirDigestKeepsLocalModulesBesideADataDirBelowTheDefaultCache(t *testing.T) {
+	root := t.TempDir()
+	plan := filepath.Join(root, "reviewed.planfile")
+	writeDigestFile(t, root, "main.tf", "module")
+	writeDigestFile(t, root, ".terraform/custom/child/main.tf", "reviewed child")
+	writeDigestFile(t, root, ".terraform/custom/modules/vpc/script.sh", "reviewed script")
+	dataDir := filepath.Join(defaultDataDir, "custom")
+	baseWorkdir, baseRebuild := bothDigests(t, root, plan, dataDir)
+
+	writeDigestFile(t, root, ".terraform/custom/environment", "other-workspace")
+	writeDigestFile(t, root, ".terraform/custom/terraform.tfstate", "state")
+	writeDigestFile(t, root, ".terraform/custom/plugin_path", "path")
+	writeDigestFile(t, root, ".terraform/custom/providers/registry/lock.json", "provider")
+	writeDigestFile(t, root, ".terraform/sibling/cache.json", "sibling cache")
+	workdir, rebuild := bothDigests(t, root, plan, dataDir)
+	assert.Equal(t, baseWorkdir, workdir, "runtime paths and sibling cache stay excluded")
+	assert.Equal(t, baseRebuild, rebuild, "runtime paths and sibling cache stay excluded")
+
+	writeDigestFile(t, root, ".terraform/custom/child/main.tf", "tampered child")
+	workdir, rebuild = bothDigests(t, root, plan, dataDir)
+	assert.NotEqual(t, baseWorkdir, workdir, "a local module beside the downloaded modules stays bound")
+	assert.NotEqual(t, baseRebuild, rebuild, "a local module beside the downloaded modules stays bound")
+
+	// With the default data directory the same files are cache and stay excluded.
+	defaultWorkdir, _ := bothDigests(t, root, plan, "")
+	writeDigestFile(t, root, ".terraform/custom/child/main.tf", "tampered again")
+	again, _ := bothDigests(t, root, plan, "")
+	assert.Equal(t, defaultWorkdir, again, "the default data directory keeps excluding its cache")
+}
+
+// A relative TF_DATA_DIR that reaches an external directory through a symlink must be resolved like the
+// plan path, or the plan inside it is hashed as configuration and the same layout spelled absolutely differs.
+func TestWorkdirDigestResolvesASymlinkedRelativeDataDir(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "unit")
+	external := filepath.Join(parent, "real")
+	require.NoError(t, os.MkdirAll(external, 0o700))
+	require.NoError(t, os.MkdirAll(root, 0o700))
+	if err := os.Symlink(external, filepath.Join(parent, "link")); err != nil {
+		t.Skipf("symlinks are not available: %v", err)
+	}
+	plan := filepath.Join(parent, "link", modulesDirName, "plans", "reviewed.plan")
+	writeDigestFile(t, root, "main.tf", "module")
+	writeDigestFile(t, external, "modules/vpc/script.sh", "reviewed script")
+	baseWorkdir, baseRebuild := bothDigests(t, root, plan, filepath.Join("..", "link"))
+	absoluteWorkdir, absoluteRebuild := bothDigests(t, root, plan, external)
+	assert.Equal(t, absoluteWorkdir, baseWorkdir, "a symlinked spelling of the data directory is the same layout")
+	assert.Equal(t, absoluteRebuild, baseRebuild, "a symlinked spelling of the data directory is the same layout")
+
+	writeDigestFile(t, external, "modules/plans/reviewed.plan", "plan bytes")
+	writeDigestFile(t, external, "modules/plans/reviewed.plan"+configurationPlanSuffix, "plan record")
+	workdir, rebuild := bothDigests(t, root, plan, filepath.Join("..", "link"))
+	assert.Equal(t, baseWorkdir, workdir, "the plan and its record are not configuration")
+	assert.Equal(t, baseRebuild, rebuild, "the plan and its record are not configuration")
+
+	writeDigestFile(t, external, "modules/vpc/script.sh", "tampered script")
+	workdir, rebuild = bothDigests(t, root, plan, filepath.Join("..", "link"))
+	assert.NotEqual(t, baseWorkdir, workdir, "a module behind the symlink stays bound")
+	assert.NotEqual(t, baseRebuild, rebuild, "a module behind the symlink stays bound")
+}
+
+// Like every other retained file, the module manifest of an external data directory must not be a symlink,
+// or its target outside the data directory would be read in place of a retained file.
+func TestWorkdirDigestRejectsASymlinkedModuleManifest(t *testing.T) {
+	root := t.TempDir()
+	plan := filepath.Join(root, "reviewed.planfile")
+	writeDigestFile(t, root, "main.tf", "module")
+	dataDir := t.TempDir()
+	target := filepath.Join(t.TempDir(), "elsewhere.json")
+	require.NoError(t, os.WriteFile(target, []byte(`{"Modules":[]}`), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dataDir, modulesDirName), 0o700))
+	if err := os.Symlink(target, filepath.Join(dataDir, modulesDirName, moduleManifestName)); err != nil {
+		t.Skipf("symlinks are not available: %v", err)
+	}
+	_, err := configurationWorkdirDigest(root, plan, dataDir)
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+	_, err = configurationRebuildDigest(root, plan, dataDir, nil)
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
 }
 
 func TestStalePlanSettlementFollowsTheRunOutcome(t *testing.T) {

@@ -487,21 +487,30 @@ func assignmentName(assignment string) string {
 	return name
 }
 
-// recordExternalModules adds the downloaded modules of a data directory outside the workdir to the
+// recordExternalModules adds the downloaded modules of a data directory outside the workdir (a parent of the
+// workdir included, whose modules lie beside it) to the
 // digest files. They are executed during apply like the ones below the workdir, so a change to them
 // must not look retained. An absent modules directory adds nothing. The plan and its record are not
 // configuration, so they stay out of the digest even when -out points inside this directory.
 func (s workdirScope) recordExternalModules(planPath string, files map[string]string) error {
-	if s.placement != dataDirOutsideWorkdir {
+	modules := filepath.Join(s.dataDir, modulesDirName)
+	if s.placement == dataDirBelowWorkdir {
 		return nil
 	}
-	modules := filepath.Join(s.dataDir, modulesDirName)
+	if _, inside := relativeInside(s.root, modules); inside {
+		// The data directory is the workdir itself: its modules are part of the workdir walk.
+		return nil
+	}
 	if _, err := os.Stat(modules); errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	return filepath.WalkDir(modules, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if entry.IsDir() && path == s.root {
+			// A workdir inside the modules tree is already digested by the workdir walk, under its own keys.
+			return filepath.SkipDir
 		}
 		if entry.IsDir() || path == planPath || path == planPath+configurationPlanSuffix {
 			return nil
@@ -511,7 +520,7 @@ func (s workdirScope) recordExternalModules(planPath string, files map[string]st
 			return err
 		}
 		if filepath.ToSlash(relative) == moduleManifestName {
-			return s.recordModuleManifest(path, files)
+			return s.recordModuleManifest(path, entry, files)
 		}
 		return recordWorkdirFileAs(externalModulesKeyPrefix+filepath.ToSlash(relative), path, entry, files)
 	})
@@ -528,7 +537,10 @@ const moduleManifestName = "modules.json"
 // every runner), because the module content is still hashed file by file and the only runner-specific
 // information is the prefix. A manifest that cannot be parsed, or a Dir outside the data directory, is
 // hashed as it is, so nothing is ever dropped from the digest.
-func (s workdirScope) recordModuleManifest(path string, files map[string]string) error {
+func (s workdirScope) recordModuleManifest(path string, entry fs.DirEntry, files map[string]string) error {
+	if entry.Type()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%w: saved-plan workdir contains symlink", errUtils.ErrPluginUnsupportedExtension)
+	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return planIOError(err)

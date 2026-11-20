@@ -215,7 +215,11 @@ func stashStalePlan(root, dataDir, path string) (func(succeeded bool) error, err
 		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
 	}
 	// The stash directory is private and skipped by the working directory digest.
-	dir, err := os.MkdirTemp(stalePlanStashParent(root, dataDir, path), stalePlanDirPrefix)
+	parent := stalePlanStashParent(root, dataDir, path)
+	if err := requireStashOutsideDigest(root, dataDir, parent); err != nil {
+		return noop, err
+	}
+	dir, err := os.MkdirTemp(parent, stalePlanDirPrefix)
 	if err != nil {
 		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
 	}
@@ -311,6 +315,23 @@ func stalePlanStashParent(root, dataDir, path string) string {
 		return ""
 	}
 	return root
+}
+
+// requireStashOutsideDigest rejects a stash parent that would put the stash inside the digested
+// modules. An empty parent means the system temporary directory, which TMPDIR can point inside the
+// working directory; the stash would then be part of both digest snapshots and settlement would
+// delete it, so the unchanged plan would later be rejected. The refusal happens before the plan is touched.
+func requireStashOutsideDigest(root, dataDir, parent string) error {
+	if parent != "" || root == "" {
+		return nil
+	}
+	temp := os.TempDir()
+	if !insideDigestedModules(root, dataDir, temp) {
+		return nil
+	}
+	return errUtils.Build(fmt.Errorf("%w: the temporary directory %s lies inside the digested working directory", errUtils.ErrPlanVerificationFailed, temp)).
+		WithHint("Point `TMPDIR` (`TMP` or `TEMP` on Windows) at a directory outside the component working directory and the Terraform data directory modules.").
+		Err()
 }
 
 // insideDigestedModules reports whether dir is part of the downloaded modules the working directory

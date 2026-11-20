@@ -432,16 +432,26 @@ func relativeWorkdirIdentity(config *schema.AtmosConfiguration, info *schema.Con
 		return ""
 	}
 	relative, err := filepath.Rel(base, actual)
-	if err != nil || !matchesRelativeWorkdir(relative, override) {
+	if err != nil || !matchesRelativeWorkdir(relative, override, sourceSubdir(info)) {
 		return ""
 	}
 	return "relative:" + filepath.ToSlash(relative)
 }
 
-func matchesRelativeWorkdir(relative, override string) bool {
-	return relative != "." && relative != ".." &&
-		!strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
-		relative == filepath.Clean(override)
+// sourceSubdir returns the explicit source subdirectory of the component, which plans run inside.
+func sourceSubdir(info *schema.ConfigAndStacksInfo) string {
+	metadata, _ := info.ComponentSection["metadata"].(map[string]any)
+	subdir, _ := metadata["source_subdir"].(string)
+	return subdir
+}
+
+func matchesRelativeWorkdir(relative, override, subdir string) bool {
+	if relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return false
+	}
+	clean := filepath.Clean(override)
+	// A plan with an explicit source subdirectory runs in the module directory below the override.
+	return relative == clean || (subdir != "" && relative == filepath.Join(clean, filepath.FromSlash(subdir)))
 }
 
 func workingDirectoryOverride(info *schema.ConfigAndStacksInfo) string {
