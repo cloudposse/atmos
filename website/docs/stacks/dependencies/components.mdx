@@ -294,6 +294,15 @@ atmos describe affected --ref refs/heads/main
 
 If component A depends on component B, and component B is affected by changes, component A is also marked as affected (transitive dependency).
 
+## Integration with Spacelift
+
+When Spacelift stacks are generated from your stack manifests (for example with the `utils_spacelift_stack_config` data source), each Terraform entry in `dependencies.components` becomes a `depends-on:<spacelift-stack>` label on the dependent component's Spacelift stack, which Spacelift uses to order runs.
+
+- The target is the Spacelift stack named `<stack>-<name>`. An omitted `stack` means the declaring component's own stack. A `stack` template is rendered with the component's own `vars`, `settings`, `env`, and `metadata` when [templates are enabled](/cli/configuration/templates).
+- If the target is not a known Spacelift stack, generation fails. Set `required: false` on the entry to skip a missing target instead.
+- Entries with a `kind` other than `terraform`, and `files` / `folders`, don't produce Spacelift dependencies.
+- When `dependencies.components` declares at least one Terraform dependency, the deprecated `settings.depends_on` of the same component is ignored, matching [`atmos describe dependents`](/cli/commands/describe/dependents). `settings.spacelift.depends_on` is not affected and is always added.
+
 ## Viewing Dependencies
 
 ### List Dependents

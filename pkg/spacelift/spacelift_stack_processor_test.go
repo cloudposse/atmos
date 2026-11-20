@@ -1,11 +1,16 @@
 package spacelift
 
 import (
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -314,4 +319,236 @@ func TestTransformStackConfigToSpaceliftStacks_DependsOnNameTemplateResolvesRegi
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "tenant1-us-east-2")
 	assert.NotContains(t, err.Error(), "tenant1-us-west-2")
+}
+
+// dependsOnTestStacks builds two stacks (`tenant1-ue1-dev` and `tenant1-uw2-dev`) with a `vpc` component in each and an
+// `app` component in `tenant1-ue1-dev` whose dependency sections are supplied by the caller.
+func dependsOnTestStacks(appSettings, appDependencies map[string]any) map[string]any {
+	vars := func(environment string) map[string]any {
+		return map[string]any{"tenant": "tenant1", "environment": environment, "stage": "dev"}
+	}
+	enabled := map[string]any{"spacelift": map[string]any{"workspace_enabled": true}}
+
+	app := map[string]any{"vars": vars("ue1"), "settings": enabled}
+	for k, v := range appSettings {
+		app["settings"].(map[string]any)[k] = v
+	}
+	if appDependencies != nil {
+		app["dependencies"] = appDependencies
+	}
+
+	return map[string]any{
+		"orgs/tenant1/dev/ue1": map[string]any{"components": map[string]any{"terraform": map[string]any{
+			"vpc": map[string]any{"vars": vars("ue1"), "settings": enabled},
+			"app": app,
+		}}},
+		"orgs/tenant1/dev/uw2": map[string]any{"components": map[string]any{"terraform": map[string]any{
+			"vpc": map[string]any{"vars": vars("uw2"), "settings": enabled},
+		}}},
+	}
+}
+
+func dependsOnLabels(t *testing.T, atmosConfig *schema.AtmosConfiguration, stacks map[string]any) []string {
+	t.Helper()
+
+	res, err := TransformStackConfigToSpaceliftStacks(atmosConfig, stacks, "stacks/%s.yaml", "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}", "", false, nil)
+	require.NoError(t, err)
+
+	app, ok := res["tenant1-ue1-dev-app"].(map[string]any)
+	require.True(t, ok, "expected the Spacelift stack tenant1-ue1-dev-app, got: %v", res)
+
+	var labels []string
+	for _, label := range app["labels"].([]string) {
+		if strings.HasPrefix(label, "depends-on:") {
+			labels = append(labels, label)
+		}
+	}
+	return labels
+}
+
+func TestTransformStackConfigToSpaceliftStacks_DependenciesComponents(t *testing.T) {
+	templatesEnabled := &schema.AtmosConfiguration{Templates: schema.Templates{Settings: schema.TemplatesSettings{Enabled: true}}}
+
+	t.Run("omitted stack depends on the component in the same stack", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, map[string]any{
+			"components": []any{map[string]any{"name": "vpc"}},
+		})
+		assert.Equal(t, []string{"depends-on:tenant1-ue1-dev-vpc"}, dependsOnLabels(t, templatesEnabled, stacks))
+	})
+
+	t.Run("literal stack depends on the component in another stack", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, map[string]any{
+			"components": []any{map[string]any{"component": "vpc", "stack": "tenant1-uw2-dev"}},
+		})
+		assert.Equal(t, []string{"depends-on:tenant1-uw2-dev-vpc"}, dependsOnLabels(t, templatesEnabled, stacks))
+	})
+
+	t.Run("stack template is rendered from the component's own vars", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, map[string]any{
+			"components": []any{map[string]any{"name": "vpc", "stack": "{{ .vars.tenant }}-uw2-{{ .vars.stage }}"}},
+		})
+		assert.Equal(t, []string{"depends-on:tenant1-uw2-dev-vpc"}, dependsOnLabels(t, templatesEnabled, stacks))
+	})
+
+	t.Run("dependencies.components takes precedence over settings.depends_on", func(t *testing.T) {
+		stacks := dependsOnTestStacks(
+			map[string]any{"depends_on": map[string]any{"1": map[string]any{"component": "vpc", "environment": "uw2"}}},
+			map[string]any{"components": []any{map[string]any{"name": "vpc"}}},
+		)
+		assert.Equal(t, []string{"depends-on:tenant1-ue1-dev-vpc"}, dependsOnLabels(t, templatesEnabled, stacks))
+	})
+
+	t.Run("settings.depends_on still works when dependencies.components is not declared", func(t *testing.T) {
+		stacks := dependsOnTestStacks(
+			map[string]any{"depends_on": map[string]any{"1": map[string]any{"component": "vpc", "environment": "uw2"}}},
+			nil,
+		)
+		assert.Equal(t, []string{"depends-on:tenant1-uw2-dev-vpc"}, dependsOnLabels(t, templatesEnabled, stacks))
+	})
+
+	t.Run("settings.depends_on is used when dependencies.components has no Terraform component entries", func(t *testing.T) {
+		stacks := dependsOnTestStacks(
+			map[string]any{"depends_on": map[string]any{"1": map[string]any{"component": "vpc", "environment": "uw2"}}},
+			map[string]any{"files": []any{"configs/app.yaml"}, "components": []any{map[string]any{"name": "chart", "kind": "helmfile"}}},
+		)
+		assert.Equal(t, []string{"depends-on:tenant1-uw2-dev-vpc"}, dependsOnLabels(t, templatesEnabled, stacks))
+	})
+
+	t.Run("settings.spacelift.depends_on is additive", func(t *testing.T) {
+		stacks := dependsOnTestStacks(
+			map[string]any{"spacelift": map[string]any{"workspace_enabled": true, "depends_on": []any{"tenant1-uw2-dev-vpc"}}},
+			map[string]any{"components": []any{map[string]any{"name": "vpc"}}},
+		)
+		assert.Equal(
+			t,
+			[]string{"depends-on:tenant1-ue1-dev-vpc", "depends-on:tenant1-uw2-dev-vpc"},
+			sortedCopy(dependsOnLabels(t, templatesEnabled, stacks)),
+		)
+	})
+
+	t.Run("non-Terraform kinds are ignored", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, map[string]any{
+			"components": []any{
+				map[string]any{"name": "vpc"},
+				map[string]any{"name": "chart", "kind": "helmfile"},
+			},
+		})
+		assert.Equal(t, []string{"depends-on:tenant1-ue1-dev-vpc"}, dependsOnLabels(t, templatesEnabled, stacks))
+	})
+
+	t.Run("a missing required target is an error naming dependencies.components", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, map[string]any{
+			"components": []any{map[string]any{"name": "vpc", "stack": "tenant1-ue2-dev"}},
+		})
+		_, err := TransformStackConfigToSpaceliftStacks(templatesEnabled, stacks, "stacks/%s.yaml", "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}", "", false, nil)
+		require.ErrorIs(t, err, errUtils.ErrInvalidDependenciesComponents)
+		assert.Contains(t, err.Error(), "tenant1-ue2-dev")
+	})
+
+	t.Run("a missing target with required false is skipped", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, map[string]any{
+			"components": []any{
+				map[string]any{"name": "vpc", "stack": "tenant1-ue2-dev", "required": false},
+				map[string]any{"name": "vpc"},
+			},
+		})
+		assert.Equal(t, []string{"depends-on:tenant1-ue1-dev-vpc"}, dependsOnLabels(t, templatesEnabled, stacks))
+	})
+
+	t.Run("a non-map dependencies section is an error", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, nil)
+		stacks["orgs/tenant1/dev/ue1"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)["dependencies"] = "vpc"
+		_, err := TransformStackConfigToSpaceliftStacks(templatesEnabled, stacks, "stacks/%s.yaml", "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}", "", false, nil)
+		require.ErrorIs(t, err, errUtils.ErrInvalidDependenciesSection)
+	})
+}
+
+func sortedCopy(in []string) []string {
+	out := append([]string(nil), in...)
+	sort.Strings(out)
+	return out
+}
+
+// TestCreateSpaceliftStacks_DependenciesComponentsFromManifests runs real manifests through the whole pipeline (imports,
+// inheritance, deep merge, name template), proving `dependencies.components` survives the merge with its `stack`
+// template unrendered and still resolves to the right Spacelift stacks.
+func TestCreateSpaceliftStacks_DependenciesComponentsFromManifests(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"atmos.yaml": `
+base_path: "."
+components:
+  terraform:
+    base_path: components/terraform
+stacks:
+  base_path: stacks
+  included_paths: ["deploy/**/*"]
+  excluded_paths: ["catalog/**/*"]
+  name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
+templates:
+  settings:
+    enabled: true
+`,
+		"components/terraform/vpc/main.tf": "",
+		"components/terraform/app/main.tf": "",
+		"stacks/catalog/app.yaml": `
+components:
+  terraform:
+    app:
+      settings:
+        spacelift:
+          workspace_enabled: true
+      dependencies:
+        components:
+          - name: vpc
+          - name: vpc
+            stack: "{{ .vars.tenant }}-uw2-{{ .vars.stage }}"
+`,
+		"stacks/deploy/ue1.yaml": `
+vars:
+  tenant: tenant1
+  environment: ue1
+  stage: dev
+import:
+  - catalog/app
+components:
+  terraform:
+    vpc:
+      settings:
+        spacelift:
+          workspace_enabled: true
+`,
+		"stacks/deploy/uw2.yaml": `
+vars:
+  tenant: tenant1
+  environment: uw2
+  stage: dev
+components:
+  terraform:
+    vpc:
+      settings:
+        spacelift:
+          workspace_enabled: true
+`,
+	}
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+	t.Chdir(dir)
+
+	spaceliftStacks, err := CreateSpaceliftStacks("", "", "", "", "", nil, false, true, true, "stacks/%s.yaml")
+	require.NoError(t, err)
+
+	app, ok := spaceliftStacks["tenant1-ue1-dev-app"].(map[string]any)
+	require.True(t, ok, "expected tenant1-ue1-dev-app in %v", spaceliftStacks)
+
+	var dependsOn []string
+	for _, label := range app["labels"].([]string) {
+		if strings.HasPrefix(label, "depends-on:") {
+			dependsOn = append(dependsOn, label)
+		}
+	}
+	assert.Equal(t, []string{"depends-on:tenant1-ue1-dev-vpc", "depends-on:tenant1-uw2-dev-vpc"}, dependsOn)
 }
