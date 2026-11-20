@@ -1431,7 +1431,9 @@ func TestEffectiveDataDirPrecedence(t *testing.T) {
 }
 
 func TestResolveDataDir(t *testing.T) {
-	root := t.TempDir()
+	// The workdir root reaches resolveDataDir already resolved, as absolutePaths returns it.
+	root, err := resolvedPath(t.TempDir())
+	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(root, defaultDataDir), resolveDataDir(root, ""))
 	assert.Equal(t, filepath.Join(root, "custom"), resolveDataDir(root, "custom"))
 	other, err := resolvedPath(t.TempDir())
