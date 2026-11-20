@@ -1902,6 +1902,9 @@ var (
 	// ErrInvalidSettingsDependsOn indicates a `settings.depends_on` value does not
 	// resolve to a known component in a known stack.
 	ErrInvalidSettingsDependsOn = errors.New("invalid 'settings.depends_on' dependency")
+	// ErrInvalidDependenciesComponents indicates a `dependencies.components` entry does not
+	// resolve to a known Terraform component in a known stack.
+	ErrInvalidDependenciesComponents = errors.New("invalid 'dependencies.components' dependency")
 )
 
 // Vendor update/diff errors.
