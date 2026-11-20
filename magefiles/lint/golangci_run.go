@@ -75,7 +75,15 @@ func runGolangciLintPrecommit(root, binPath string) error {
 		return nil
 	}
 
-	args = append(args, "--new-from-patch="+patch.path)
+	// An explicit comparison base (a stack's lower layer, set by the checks) scopes findings the way
+	// CI does, against the merge base. The staged patch alone misses a complexity finding that
+	// anchors on the signature line of a function whose body, not signature, the commit changed.
+	// golangci-lint rejects both scoping flags together, so the base replaces the patch.
+	if rev := os.Getenv("GOLANGCI_NEW_FROM_REV"); rev != "" {
+		args = append(args, "--new-from-rev="+rev)
+	} else {
+		args = append(args, "--new-from-patch="+patch.path)
+	}
 	args = append(args, patch.packages...)
 	return sh.RunWithV(env, binPath, args...)
 }

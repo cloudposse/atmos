@@ -389,6 +389,26 @@ func TestRunGolangciLintPrecommit(t *testing.T) {
 		assert.Contains(t, args, ".")
 	})
 
+	t.Run("staged go changes with an explicit base scope to that base, not the patch", func(t *testing.T) {
+		root := testutil.InitGitRepoFixture(t)
+		require.NoError(t, os.WriteFile(filepath.Join(root, "main.go"), []byte("package main"), 0o644))
+		testutil.RunGit(t, root, "add", "main.go")
+
+		binPath := customGCLBinaryPath(root)
+		argsFile := testutil.SetUpFakeBin(t, binPath)
+		t.Setenv("ATMOS_LINT_SHARED_CACHE", "1")
+		t.Setenv("GOLANGCI_NEW_FROM_REV", "HEAD~1")
+
+		require.NoError(t, runGolangciLintPrecommit(root, binPath))
+
+		args := testutil.ReadFakeBinArgs(t, argsFile)
+		assert.Contains(t, args, "--new-from-rev=HEAD~1")
+		assert.Contains(t, args, ".")
+		for _, a := range args {
+			assert.NotContains(t, a, "--new-from-patch=", "golangci-lint rejects patch and rev scoping together")
+		}
+	})
+
 	t.Run("fake binary non-zero exit propagates as error", func(t *testing.T) {
 		root := testutil.InitGitRepoFixture(t)
 		binPath := customGCLBinaryPath(root)
