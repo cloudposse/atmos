@@ -88,6 +88,8 @@ func resolveSelectedExecutable(info *schema.ConfigAndStacksInfo) error {
 
 func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
 	info.ComponentVarsSection = prepared.Inputs
+	// The inputs were replaced, so any earlier classification of them no longer describes them.
+	info.TerraformSecretVarKeysComputed = false
 	// The stack's env section wins over provider environment in the metadata this invocation runs,
 	// including the apply-time metadata of a restored saved plan.
 	info.ComponentExecution = withoutStackEnvironment(invocationExecution(info, prepared), info.ComponentEnvSection)

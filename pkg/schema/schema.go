@@ -2170,6 +2170,10 @@ type ConfigAndStacksInfo struct {
 	// before auth credentials are registered) to keep the varfile-write and env-assembly
 	// steps consistent.
 	TerraformSecretVarKeys map[string]bool
+	// TerraformSecretVarKeysComputed reports that TerraformSecretVarKeys was computed for the current
+	// ComponentVarsSection. An empty TerraformSecretVarKeys alone cannot tell "no secret inputs" from
+	// "not classified yet", and consumers that expose inputs must treat the latter as secret.
+	TerraformSecretVarKeysComputed bool
 	// ConfigurationSensitiveInputKeys retains provider-declared sensitivity independently of masking.
 	ConfigurationSensitiveInputKeys map[string]bool
 	// SanitizedEnv holds the sanitized process environment from auth.

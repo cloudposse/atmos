@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -171,6 +172,30 @@ func finalizeVerification(info *schema.ConfigAndStacksInfo, freshPlanFile, diff 
 		log.Info("Plan verification passed: stored plan matches current state")
 	}
 	return nil
+}
+
+// appliesReviewedPlan reports whether the invocation applies a saved plan of a provider-owned component.
+func appliesReviewedPlan(info *schema.ConfigAndStacksInfo) bool {
+	return !info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) && usesConfigurationPlan(info) && restoresConfigurationPlan(info)
+}
+
+// reviewedPlanInputs returns the inputs of the variable file that the plan run wrote into the retained
+// working directory. That file is part of the working directory digest recorded with the plan, so a
+// saved plan whose variable file changed is rejected before it is applied. Secret inputs are never
+// written to it, so they are absent here. Numbers keep their exact text.
+func reviewedPlanInputs(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	path := ConstructTerraformComponentVarfilePath(config, info)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: the reviewed variable file of the saved plan cannot be read: %w", errUtils.ErrComponentHookFailed, err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var inputs map[string]any
+	if err := decoder.Decode(&inputs); err != nil {
+		return nil, fmt.Errorf("%w: the reviewed variable file %s of the saved plan is not a JSON object: %w", errUtils.ErrComponentHookFailed, path, err)
+	}
+	return inputs, nil
 }
 
 // withoutContent copies files, dropping the bytes of every one.

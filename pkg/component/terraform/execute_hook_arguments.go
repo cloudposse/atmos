@@ -47,17 +47,39 @@ func resolveTflintHookArguments(arguments []string, moduleDir string, inputs map
 	return result, nil
 }
 
+// tflintChannels returns the inputs a tflint hook binds, split between arguments and environment. A
+// saved-plan apply restores a preparation without inputs, so the hook then binds the inputs of the
+// reviewed variable file. They are classified on a copy of the invocation: the inputs and the secret
+// partition that Terraform itself uses do not change.
+func (r *hookRunner) tflintChannels(arguments []string) (map[string]any, []string, error) {
+	info := *r.info
+	if slices.Contains(arguments, tflintInputVariablesMarker) && appliesReviewedPlan(&info) {
+		reviewed, err := reviewedPlanInputs(r.atmosConfig, &info)
+		if err != nil {
+			return nil, nil, err
+		}
+		info.ComponentVarsSection = reviewed
+		// Before the invocation classifies its inputs, the module's declarations may not be loaded yet.
+		if info.TerraformSecretVarKeysComputed {
+			ComputeTerraformSecretVarKeys(&info)
+		}
+	}
+	return tflintInputChannels(arguments, info.ComponentVarsSection, info.TerraformSecretVarKeys, info.TerraformSecretVarKeysComputed)
+}
+
 // tflintInputChannels splits the inputs between the two ways TFLint receives them. Public inputs
 // bind through --var arguments. Inputs classified as secret go through TF_VAR_ environment variables,
-// which TFLint reads like Terraform does, because arguments are visible in the process table. Without
-// the input marker nothing binds, so nothing is split.
-func tflintInputChannels(arguments []string, inputs map[string]any, secret map[string]bool) (public map[string]any, environment []string, err error) {
-	if len(secret) == 0 || !slices.Contains(arguments, tflintInputVariablesMarker) {
+// which TFLint reads like Terraform does, because arguments are visible in the process table. Hooks
+// of the read-config and init-from-module stages run before the invocation classifies its inputs, so
+// while classified is false every input is treated as secret. Without the input marker nothing binds,
+// so nothing is split.
+func tflintInputChannels(arguments []string, inputs map[string]any, secret map[string]bool, classified bool) (public map[string]any, environment []string, err error) {
+	if !slices.Contains(arguments, tflintInputVariablesMarker) || (classified && len(secret) == 0) {
 		return inputs, nil, nil
 	}
 	public = make(map[string]any, len(inputs))
 	for _, name := range slices.Sorted(maps.Keys(inputs)) {
-		if !secret[name] {
+		if classified && !secret[name] {
 			public[name] = inputs[name]
 			continue
 		}

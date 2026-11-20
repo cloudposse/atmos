@@ -476,7 +476,7 @@ func (r *hookRunner) hookArguments(hook *schema.ComponentHook, directory string)
 	if hook.Execute[0] != "tflint" {
 		return arguments, nil, nil
 	}
-	inputs, secretEnv, err := tflintInputChannels(arguments, r.info.ComponentVarsSection, r.info.TerraformSecretVarKeys)
+	inputs, secretEnv, err := r.tflintChannels(arguments)
 	if err == nil {
 		arguments, err = resolveTflintHookArguments(arguments, directory, inputs)
 	}
