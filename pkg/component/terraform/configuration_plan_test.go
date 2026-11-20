@@ -20,6 +20,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/execution"
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/policy/planfile"
 	"github.com/cloudposse/atmos/pkg/process"
@@ -2005,6 +2006,8 @@ func TestWorkdirDigestKeepsLocalModulesBesideACustomDataDir(t *testing.T) {
 // look (below a Terragrunt cache). Files absent under a removal policy have no record and stay absent.
 func TestVerifyRebuildChecksRecordedPublicFiles(t *testing.T) {
 	const cached = ".terragrunt-cache/unit/generated.tf"
+	// The recorded-absent file sits below the cache too, outside the rebuild digest, so only the record check can reject it.
+	const absent = ".terragrunt-cache/unit/absent.tf"
 	build := func(t *testing.T) (*reviewedRebuild, string) {
 		t.Helper()
 		workdir := t.TempDir()
@@ -2018,17 +2021,18 @@ func TestVerifyRebuildChecksRecordedPublicFiles(t *testing.T) {
 			RebuildDigest: digest,
 			Prepared:      &schema.PreparedComponentConfiguration{},
 			PublicFiles: map[string]publicFileRecord{
-				cached:      {Present: true, Digest: hex.EncodeToString(sum[:])},
-				"absent.tf": {},
+				cached: {Present: true, Digest: hex.EncodeToString(sum[:])},
+				absent: {},
 			},
 		}
 		return &reviewedRebuild{plan: reviewed, planPath: plan, workdir: workdir}, workdir
 	}
 
 	tests := []struct {
-		name   string
-		mutate func(t *testing.T, workdir string)
-		fails  bool
+		name     string
+		mutate   func(t *testing.T, workdir string)
+		fails    bool
+		contains string
 	}{
 		{name: "unchanged files verify", mutate: func(*testing.T, string) {}},
 		{name: "changed public file", fails: true, mutate: func(t *testing.T, workdir string) {
@@ -2037,8 +2041,8 @@ func TestVerifyRebuildChecksRecordedPublicFiles(t *testing.T) {
 		{name: "missing public file", fails: true, mutate: func(t *testing.T, workdir string) {
 			require.NoError(t, os.Remove(filepath.Join(workdir, filepath.FromSlash(cached))))
 		}},
-		{name: "file recorded absent now present", fails: true, mutate: func(t *testing.T, workdir string) {
-			writeDigestFile(t, workdir, "absent.tf", "appeared")
+		{name: "file recorded absent now present", fails: true, contains: "reviewed generated file " + absent + " changed", mutate: func(t *testing.T, workdir string) {
+			writeDigestFile(t, workdir, absent, "appeared")
 		}},
 	}
 	for _, test := range tests {
@@ -2048,6 +2052,9 @@ func TestVerifyRebuildChecksRecordedPublicFiles(t *testing.T) {
 			err := rebuild.verify(workdir)
 			if test.fails {
 				require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+				if test.contains != "" {
+					require.ErrorContains(t, err, test.contains, "the record check, not the digest, must reject the file")
+				}
 				return
 			}
 			require.NoError(t, err)
@@ -2594,6 +2601,67 @@ func TestWorkdirDigestResolvesTheParentOfAPlanThatDoesNotExistYet(t *testing.T) 
 	after, err := configurationWorkdirDigest(workdir, plan, "")
 	require.NoError(t, err)
 	assert.Equal(t, before, after, "the record is excluded whether or not the plan exists yet")
+}
+
+// A tflint hook on a saved-plan apply binds the variable file the working directory digest verified. A file
+// that changed since, or a working directory accepted only as a rebuild whose variable file is outside the
+// digest, stops the hook instead of linting the module with changed or missing inputs.
+func TestTflintBindsOnlyTheVerifiedVariableFileOnSavedPlanApply(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	info.ComponentSection = map[string]any{}
+	varFile := ConstructTerraformComponentVarfilePath(config, info)
+	require.NoError(t, os.WriteFile(varFile, []byte(`{"region":"eu"}`), 0o600))
+	observeFixturePlan(t, config, info, execCtx, path)
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out", filepath.Base(path)}))
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+	prepared, err := restoreConfigurationPlan(t.Context(), config, info)
+	require.NoError(t, err)
+	applyPreparedConfiguration(config, info, prepared)
+	require.True(t, info.ConfigurationPlanWorkdirExact)
+	require.JSONEq(t, `{"region":"eu"}`, string(info.ConfigurationPlanVarfile), "the verified bytes are kept with the mark")
+
+	hook := &schema.ComponentHook{Name: "lint", Execute: []string{"tflint", "--chdir", ".", tflintInputVariablesMarker}}
+	run := func(t *testing.T, info *schema.ConfigAndStacksInfo) (*shellFixture, error) {
+		t.Helper()
+		shell := newShellFixture(t, nil)
+		runner := &hookRunner{executor: hookExecutor(shell), atmosConfig: config, info: info, phase: &executionPhase{command: "apply", componentPath: execCtx.workingDir}}
+		_, err := runner.RunHook(context.Background(), execution.KindBefore, hook)
+		return shell, err
+	}
+
+	t.Run("the verified inputs bind", func(t *testing.T) {
+		shell, err := run(t, info)
+		require.NoError(t, err)
+		require.Len(t, shell.calls, 1)
+		require.Contains(t, shell.calls[0].env, "TF_VAR_region=eu")
+	})
+
+	t.Run("a rebuilt working directory stops the hook instead of dropping its inputs", func(t *testing.T) {
+		rebuilt := *info
+		rebuilt.ConfigurationPlanWorkdirExact, rebuilt.ConfigurationPlanVarfile = false, nil
+		shell, err := run(t, &rebuilt)
+		require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
+		require.ErrorContains(t, err, "rebuilt working directory")
+		require.Empty(t, shell.calls, "tflint must not run without verified inputs")
+	})
+
+	t.Run("a hook without the input marker still runs on a rebuilt working directory", func(t *testing.T) {
+		rebuilt := *info
+		rebuilt.ConfigurationPlanWorkdirExact, rebuilt.ConfigurationPlanVarfile = false, nil
+		shell := newShellFixture(t, nil)
+		runner := &hookRunner{executor: hookExecutor(shell), atmosConfig: config, info: &rebuilt, phase: &executionPhase{command: "apply", componentPath: execCtx.workingDir}}
+		_, err := runner.RunHook(context.Background(), execution.KindBefore, &schema.ComponentHook{Name: "lint", Execute: []string{"tflint", "--chdir", "."}})
+		require.NoError(t, err)
+		require.Len(t, shell.calls, 1)
+	})
+
+	t.Run("a variable file changed after verification is rejected", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(varFile, []byte(`{"region":"tampered"}`), 0o600))
+		shell, err := run(t, info)
+		require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
+		require.ErrorContains(t, err, "changed after the saved plan was verified")
+		require.Empty(t, shell.calls)
+	})
 }
 
 // A data directory nested in a downloaded module (TF_DATA_DIR=.terraform/modules/vpc/.atmos/data) sits below

@@ -173,23 +173,31 @@ func finalizeVerification(info *schema.ConfigAndStacksInfo, freshPlanFile, diff 
 	return nil
 }
 
-// appliesReviewedPlan reports whether the invocation applies a saved plan of a provider-owned component
-// in the working directory the plan was reviewed in. A working directory that was accepted as a verified
-// rebuild does not count: its variable file is outside the rebuild digest, so its inputs are not reviewed.
+// appliesReviewedPlan reports whether the invocation applies a saved plan of a provider-owned component.
+// Whether its working directory is the reviewed one is checked where the inputs are read, because a
+// working directory accepted only as a verified rebuild has a variable file outside the rebuild digest.
 func appliesReviewedPlan(info *schema.ConfigAndStacksInfo) bool {
-	return !info.DryRun && info.ConfigurationPlanWorkdirExact && schema.ConfigurationOwned(info.ComponentSettingsSection) &&
+	return !info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) &&
 		usesConfigurationPlan(info) && restoresConfigurationPlan(info)
 }
 
 // reviewedPlanInputs returns the inputs of the variable file that the plan run wrote into the retained
-// working directory. That file is part of the working directory digest recorded with the plan, so it
-// is read only when that digest matched (see appliesReviewedPlan). Secret inputs are never
-// written to it, so they are absent here. Numbers keep their exact text.
+// working directory. That file is part of the working directory digest recorded with the plan, so its
+// bytes must be the ones read around that comparison: a file a hook or step changed since, or a working
+// directory that was only rebuilt, has no verified inputs, and the hook stops instead of linting the
+// module with none. Secret inputs are never written to the file, so they are absent here. Numbers keep
+// their exact text.
 func reviewedPlanInputs(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	if !info.ConfigurationPlanWorkdirExact {
+		return nil, fmt.Errorf("%w: tflint cannot bind the inputs of a saved plan applied in a rebuilt working directory, because they are not part of what was verified; apply it in the working directory the plan ran in, or drop %s from the hook", errUtils.ErrComponentHookFailed, tflintInputVariablesMarker)
+	}
 	path := ConstructTerraformComponentVarfilePath(config, info)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("%w: the reviewed variable file of the saved plan cannot be read: %w", errUtils.ErrComponentHookFailed, err)
+	}
+	if !bytes.Equal(data, info.ConfigurationPlanVarfile) {
+		return nil, fmt.Errorf("%w: the variable file %s changed after the saved plan was verified", errUtils.ErrComponentHookFailed, path)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
