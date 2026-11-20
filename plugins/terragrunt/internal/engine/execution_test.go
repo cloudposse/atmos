@@ -1240,6 +1240,8 @@ func TestUnitBinaryOverriddenByTheStackIsNotProbed(t *testing.T) {
 			require.Equal(t, WarningTerraformBinaryOverridden, warning.Code)
 			require.Contains(t, warning.Message, tt.effective)
 			require.Contains(t, warning.Message, filepath.ToSlash(tt.unitBinary))
+			// The override may come from the stack or the command line, so the hint names both.
+			require.Contains(t, warning.Message, "--command")
 		})
 	}
 }

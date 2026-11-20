@@ -47,6 +47,29 @@ func resolveTflintHookArguments(arguments []string, moduleDir string, inputs map
 	return result, nil
 }
 
+// tflintInputChannels splits the inputs between the two ways TFLint receives them. Public inputs
+// bind through --var arguments. Inputs classified as secret go through TF_VAR_ environment variables,
+// which TFLint reads like Terraform does, because arguments are visible in the process table. Without
+// the input marker nothing binds, so nothing is split.
+func tflintInputChannels(arguments []string, inputs map[string]any, secret map[string]bool) (public map[string]any, environment []string, err error) {
+	if len(secret) == 0 || !slices.Contains(arguments, tflintInputVariablesMarker) {
+		return inputs, nil, nil
+	}
+	public = make(map[string]any, len(inputs))
+	for _, name := range slices.Sorted(maps.Keys(inputs)) {
+		if !secret[name] {
+			public[name] = inputs[name]
+			continue
+		}
+		value, err := tflintVariableValue(inputs[name])
+		if err != nil {
+			return nil, nil, fmt.Errorf("%w: input %q cannot be passed to tflint: %w", errUtils.ErrComponentHookFailed, name, err)
+		}
+		environment = append(environment, "TF_VAR_"+name+"="+value)
+	}
+	return public, environment, nil
+}
+
 // resolveTflintInputVariables replaces the input marker with a --var for every input, sorted so that
 // repeated runs build the same command.
 func resolveTflintInputVariables(arguments []string, inputs map[string]any) ([]string, error) {

@@ -196,11 +196,8 @@ func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurati
 	// The digest binds absence as well as bytes: a file that was already absent when the plan was
 	// reviewed and is still absent matches, while one that disappeared or appeared since does not.
 	if digestSensitiveContents(contents) != reviewed {
-		for i := range files {
-			// A file the entry removes is absent by design, so only other policies report it as missing.
-			if files[i].Sensitive && contents[files[i].Path] == nil && !slices.Contains([]string{"remove", "remove_terragrunt"}, files[i].IfExists) {
-				return fmt.Errorf("%w: reviewed generated file %s is missing: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, fs.ErrNotExist)
-			}
+		if missing, ok := soleMissingSensitiveFile(files, contents); ok {
+			return fmt.Errorf("%w: reviewed generated file %s is missing: %w", errUtils.ErrPlanVerificationFailed, missing, fs.ErrNotExist)
 		}
 		return fmt.Errorf("%w: reviewed generated file changed", errUtils.ErrPlanVerificationFailed)
 	}
@@ -210,6 +207,28 @@ func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurati
 		}
 	}
 	return nil
+}
+
+// soleMissingSensitiveFile names the file whose disappearance explains a digest mismatch. The digest is
+// one aggregate, so an absent file can be blamed only when it is the single possible cause: no other
+// sensitive file exists whose bytes could have changed, and no other absent file could be the one that
+// went missing. A file its entry removes is absent by design and is never reported.
+func soleMissingSensitiveFile(files []schema.ComponentConfigurationFile, contents map[string][]byte) (string, bool) {
+	var missing []string
+	for i := range files {
+		path := files[i].Path
+		switch {
+		case !files[i].Sensitive:
+		case contents[path] != nil:
+			return "", false
+		case !slices.Contains([]string{"remove", "remove_terragrunt"}, files[i].IfExists):
+			missing = append(missing, path)
+		}
+	}
+	if len(missing) != 1 {
+		return "", false
+	}
+	return missing[0], true
 }
 
 // sensitiveDigest fingerprints the sensitive generated files as they are in the working directory.

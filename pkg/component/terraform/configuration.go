@@ -98,7 +98,10 @@ func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.Confi
 	applyPreparedSource(info, prepared)
 	info.ComponentSection["backend_type"] = prepared.BackendType
 	info.ComponentSection["backend"] = prepared.Backend
-	info.SetBackendFileGeneration(!prepared.BackendGenerated)
+	// Only a provider that owns the backend overrides generation. Otherwise the project setting decides.
+	if prepared.BackendGenerated {
+		info.SetBackendFileGeneration(false)
+	}
 	warnOnCacheLocalState(info, prepared)
 }
 

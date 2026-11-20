@@ -1,8 +1,10 @@
 package terraform
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/hcl/v2"
@@ -10,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/execution"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestOptionalTflintVarFilesResolveAtHookExecution(t *testing.T) {
@@ -77,4 +81,37 @@ func TestTflintVariableValueRendering(t *testing.T) {
 	require.Equal(t, "%{ if true } ${x}", value.GetAttr("literal").AsString())
 	_, err = tflintVariableValue(make(chan int))
 	require.Error(t, err)
+}
+
+// Inputs classified as secret reach TFLint through its TF_VAR_ environment, never as --var arguments,
+// which any local process could read from the process table.
+func TestTflintSecretInputsStayOutOfArguments(t *testing.T) {
+	hook := &schema.ComponentHook{Name: "lint", Execute: []string{"tflint", "--chdir", ".", tflintInputVariablesMarker}}
+	info := hookInfo("plan", &schema.ComponentExecution{})
+	info.ComponentVarsSection = map[string]any{"name": "web", "password": "tok-456", "keys": []any{"tok-789"}}
+	info.TerraformSecretVarKeys = map[string]bool{"password": true, "keys": true}
+	shell := newShellFixture(t, nil)
+	runner := &hookRunner{executor: hookExecutor(shell), atmosConfig: &schema.AtmosConfiguration{}, info: info, phase: &executionPhase{command: "plan", componentPath: t.TempDir()}}
+
+	_, err := runner.RunHook(context.Background(), execution.KindBefore, hook)
+
+	require.NoError(t, err)
+	require.Len(t, shell.calls, 1)
+	call := shell.calls[0]
+	require.Equal(t, []string{"--chdir", ".", "--var=name=web"}, call.args, "only public inputs are passed as arguments")
+	for _, argument := range call.args {
+		require.NotContains(t, argument, "tok-", "a secret value must not appear in the argument vector")
+	}
+	require.Contains(t, call.env, "TF_VAR_password=tok-456")
+	require.Contains(t, call.env, `TF_VAR_keys=["tok-789"]`)
+	require.False(t, slicesContainsPrefix(call.env, "TF_VAR_name="), "public inputs are not duplicated into the environment")
+}
+
+func slicesContainsPrefix(values []string, prefix string) bool {
+	for _, value := range values {
+		if strings.HasPrefix(value, prefix) {
+			return true
+		}
+	}
+	return false
 }
