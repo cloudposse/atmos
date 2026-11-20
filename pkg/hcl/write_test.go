@@ -65,6 +65,28 @@ func TestEncodeAttributesNestedValues(t *testing.T) {
 	assert.True(t, values["nothing"].IsNull())
 }
 
+func TestEncodeAttributesQuotesForKey(t *testing.T) {
+	// A bare `for` as the first key of an object is read as a for expression.
+	content, err := EncodeAttributes(map[string]any{
+		"config": map[string]any{
+			"for":   "x",
+			"later": "y",
+			"nested": map[string]any{
+				"for": map[string]any{"for": true},
+			},
+		},
+		"rules": []any{map[string]any{"for": "z"}},
+	})
+	require.NoError(t, err)
+	values := parseTfvars(t, content)
+
+	config := values["config"]
+	assert.Equal(t, "x", config.GetAttr("for").AsString())
+	assert.Equal(t, "y", config.GetAttr("later").AsString())
+	assert.Equal(t, cty.True, config.GetAttr("nested").GetAttr("for").GetAttr("for"))
+	assert.Equal(t, "z", values["rules"].Index(cty.NumberIntVal(0)).GetAttr("for").AsString())
+}
+
 func TestEncodeAttributesSortsKeys(t *testing.T) {
 	content, err := EncodeAttributes(map[string]any{"b": 1, "a": "x"})
 	require.NoError(t, err)
