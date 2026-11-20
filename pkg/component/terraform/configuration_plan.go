@@ -60,6 +60,9 @@ type configurationPlan struct {
 	SensitiveDigest string
 	// StackEnvironmentDigest binds stack overrides when apply reuses filtered plan execution.
 	StackEnvironmentDigest string
+	// PublicFiles binds each non-sensitive generated file by presence and digest. Bytes are never
+	// stored, because a before-hook can write private values into a file the provider marked public.
+	PublicFiles map[string]publicFileRecord
 }
 
 // ownsConfigurationPlan reports whether a provider manages this component's saved plans.
@@ -104,9 +107,28 @@ func configurationPlanPath(config *schema.AtmosConfiguration, info *schema.Confi
 }
 
 // restoreConfigurationPlan verifies the reviewed artifact before returning its original preparation.
-// It requires the retained working directory; a runner that holds only the restored artifacts goes
-// through restoreOrRebuildConfigurationPlan instead, which re-provisions the directory.
+// It requires the working directory the plan ran in, byte for byte, including its variable file; a
+// runner that holds only the restored artifacts goes through restoreOrRebuildConfigurationPlan instead,
+// which re-provisions the directory.
 func restoreConfigurationPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
+	// The mark on the invocation is sticky, so this call's own result is read from a cleared mark.
+	marked := info.ConfigurationPlanWorkdirExact
+	info.ConfigurationPlanWorkdirExact = false
+	prepared, err := restoreSettledConfigurationPlan(ctx, config, info)
+	exact := info.ConfigurationPlanWorkdirExact
+	info.ConfigurationPlanWorkdirExact = marked || exact
+	if err != nil {
+		return nil, err
+	}
+	if !exact {
+		return nil, fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
+	}
+	return prepared, nil
+}
+
+// restoreSettledConfigurationPlan verifies the reviewed artifact against a working directory that needs
+// no rebuild: the one the plan ran in, or a rebuild of it that was already verified.
+func restoreSettledConfigurationPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
 	prepared, rebuild, err := restoreOrRebuildConfigurationPlan(ctx, config, info)
 	if err != nil {
 		return nil, err
@@ -134,12 +156,11 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 	if err != nil {
 		return nil, nil, err
 	}
-	if plan.WorkingIdentity != "" {
-		workdir := filepath.Clean(ConstructTerraformComponentWorkingDir(config, info))
-		if relativeWorkdirIdentity(config, info, workdir) != plan.WorkingIdentity {
-			return nil, nil, fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
-		}
-		plan.WorkingDirectory = workdir
+	if err := bindReviewedWorkdirIdentity(config, info, plan); err != nil {
+		return nil, nil, err
+	}
+	if err := rejectExtraArgumentsDataDir(plan.Prepared.Execution); err != nil {
+		return nil, nil, err
 	}
 	if err := verifyReviewedArtifacts(ctx, config, info, plan, path); err != nil {
 		return nil, nil, err
@@ -159,6 +180,20 @@ func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.Atmos
 	return plan.Prepared, rebuild, nil
 }
 
+// bindReviewedWorkdirIdentity checks that the working directory is the one the plan ran in and records its
+// path. A plan saved without a working identity has nothing to check.
+func bindReviewedWorkdirIdentity(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, plan *configurationPlan) error {
+	if plan.WorkingIdentity == "" {
+		return nil
+	}
+	workdir := filepath.Clean(ConstructTerraformComponentWorkingDir(config, info))
+	if relativeWorkdirIdentity(config, info, workdir) != plan.WorkingIdentity {
+		return fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
+	}
+	plan.WorkingDirectory = workdir
+	return nil
+}
+
 // restoreReviewedWorkdir settles the reviewed plan's working directory. A retained workdir gets the
 // reviewed bytes of its sensitive files back and needs no rebuild; any other workdir must be rebuilt.
 func restoreReviewedWorkdir(info *schema.ConfigAndStacksInfo, plan *configurationPlan, path, dataDir string) (*reviewedRebuild, error) {
@@ -174,6 +209,9 @@ func restoreReviewedWorkdir(info *schema.ConfigAndStacksInfo, plan *configuratio
 	if err := restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files, plan.SensitiveDigest); err != nil {
 		return nil, err
 	}
+	if err := restorePublicContent(plan.WorkingDirectory, plan.Prepared.Files, plan.PublicFiles); err != nil {
+		return nil, err
+	}
 	return nil, nil
 }
 
@@ -181,6 +219,10 @@ func restoreReviewedWorkdir(info *schema.ConfigAndStacksInfo, plan *configuratio
 // as the workdir the plan ran in or as a verified rebuild of it.
 func reviewedWorkdirRetained(info *schema.ConfigAndStacksInfo, plan *configurationPlan, path, dataDir string) (bool, error) {
 	retained, err := workdirMatches(plan, path, dataDir)
+	// Only the full digest covers the variable file, so only then are its inputs the reviewed ones.
+	if err == nil && retained {
+		info.ConfigurationPlanWorkdirExact = true
+	}
 	if err != nil || retained {
 		return retained, err
 	}
@@ -360,7 +402,7 @@ func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Config
 	if err != nil {
 		return nil, err
 	}
-	stored, err := reviewedPlanConfiguration(execCtx.preparedConfiguration, snapshot)
+	stored, public, err := reviewedPlanConfiguration(execCtx.preparedConfiguration, snapshot.publicFiles)
 	if err != nil {
 		return nil, err
 	}
@@ -368,22 +410,30 @@ func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.Config
 	if err != nil {
 		return nil, err
 	}
-	return &configurationPlan{StackEnvironmentDigest: environmentDigest, WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: snapshot.rebuildDigest, LockDigest: snapshot.lockDigest, Modules: snapshot.modules, SensitiveDigest: snapshot.sensitiveDigest, Prepared: stored}, nil
+	return &configurationPlan{StackEnvironmentDigest: environmentDigest, WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: snapshot.rebuildDigest, LockDigest: snapshot.lockDigest, Modules: snapshot.modules, SensitiveDigest: snapshot.sensitiveDigest, PublicFiles: public, Prepared: stored}, nil
 }
 
-// reviewedPlanConfiguration keeps reviewed public bytes while omitting inputs and secrets.
-func reviewedPlanConfiguration(prepared *schema.PreparedComponentConfiguration, snapshot *planSnapshot) (*schema.PreparedComponentConfiguration, error) {
-	// Inputs and backend values stay out of the record; see configurationPlan. Sensitive generated
-	// files, such as a backend file with credentials, keep only their place: apply reads their bytes
-	// back from the retained workdir, whose digest proves they are the reviewed ones, and a rebuild
-	// writes them again from a fresh preparation that must match RebuildDigest.
+// reviewedPlanConfiguration omits inputs and every generated file's bytes, and returns the digests of public files.
+func reviewedPlanConfiguration(prepared *schema.PreparedComponentConfiguration, publicFiles string) (*schema.PreparedComponentConfiguration, map[string]publicFileRecord, error) {
+	// Inputs and backend values stay out of the record; see configurationPlan. Generated files keep
+	// only their place: apply reads their bytes back from the retained workdir, whose digests prove
+	// they are the reviewed ones. Public bytes are dropped too, since a hook may have replaced them.
 	stored := *prepared
 	stored.Inputs, stored.Backend = nil, nil
-	stored.Files = withoutSensitiveContent(stored.Files)
-	if err := snapshot.restorePublicFiles(stored.Files); err != nil {
-		return nil, err
+	stored.Files = withoutContent(stored.Files)
+	observed := map[string]publicFileRecord{}
+	if publicFiles == "" {
+		return &stored, observed, nil
 	}
-	return &stored, nil
+	if err := json.Unmarshal([]byte(publicFiles), &observed); err != nil {
+		return nil, nil, err
+	}
+	for i := range stored.Files {
+		if record, ok := observed[stored.Files[i].Path]; ok && !stored.Files[i].Sensitive && !record.Present {
+			stored.Files[i].IfExists = "remove"
+		}
+	}
+	return &stored, observed, nil
 }
 
 // relativeWorkdirIdentity is set only when an explicit relative override actually resolves
@@ -405,16 +455,26 @@ func relativeWorkdirIdentity(config *schema.AtmosConfiguration, info *schema.Con
 		return ""
 	}
 	relative, err := filepath.Rel(base, actual)
-	if err != nil || !matchesRelativeWorkdir(relative, override) {
+	if err != nil || !matchesRelativeWorkdir(relative, override, sourceSubdir(info)) {
 		return ""
 	}
 	return "relative:" + filepath.ToSlash(relative)
 }
 
-func matchesRelativeWorkdir(relative, override string) bool {
-	return relative != "." && relative != ".." &&
-		!strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
-		relative == filepath.Clean(override)
+// sourceSubdir returns the explicit source subdirectory of the component, which plans run inside.
+func sourceSubdir(info *schema.ConfigAndStacksInfo) string {
+	metadata, _ := info.ComponentSection["metadata"].(map[string]any)
+	subdir, _ := metadata["source_subdir"].(string)
+	return subdir
+}
+
+func matchesRelativeWorkdir(relative, override, subdir string) bool {
+	if relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return false
+	}
+	clean := filepath.Clean(override)
+	// A plan with an explicit source subdirectory runs in the module directory below the override.
+	return relative == clean || (subdir != "" && relative == filepath.Join(clean, filepath.FromSlash(subdir)))
 }
 
 func workingDirectoryOverride(info *schema.ConfigAndStacksInfo) string {

@@ -28,6 +28,7 @@ func TestConfigurationWorkdirOwnsArtifactsNotState(t *testing.T) {
 			require.NoError(t, os.WriteFile(state, []byte("existing state"), 0o600))
 			config := &schema.AtmosConfiguration{BasePath: root, BasePathAbsolute: root, TerraformDirAbsolutePath: filepath.Join(root, "components")}
 			config.Components.Terraform.BasePath = "components"
+			config.Components.Terraform.AutoGenerateBackendFile = true
 			provider := NewMockComponentConfigurationRuntime(gomock.NewController(t))
 			config.ComponentConfigurations = provider
 			binary, err := os.Executable()

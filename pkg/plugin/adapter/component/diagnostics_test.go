@@ -153,6 +153,9 @@ func TestRenderLogsHonorsAtmosLevelAndScopesEntries(t *testing.T) {
 }
 
 func TestRenderLogsMasksSecretsInMessagesAndFields(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
 	atmosio.RegisterSecret("log-secret-value-77ab")
 	output := captureLogs(t, charm.DebugLevel)
 
@@ -238,6 +241,9 @@ func TestWarnDiagnosticShowsTheSameWarningOncePerInvocation(t *testing.T) {
 // response must not print them as well. The inputs are still registered, so the session's own
 // rendering of the same response masks them.
 func TestPreparationCheckRegistersInputsAndLeavesWarningsToTheCaller(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
 	captureLogs(t, charm.WarnLevel)
 	ioCtx, err := atmosio.NewContext()
 	require.NoError(t, err)
@@ -278,6 +284,9 @@ func TestPreparationCheckRegistersInputsAndLeavesWarningsToTheCaller(t *testing.
 // Inputs that cannot be decoded register nothing, so no warning of that response is printed, while the
 // input decode error takes precedence over any diagnostics it carries.
 func TestPreparationWarningsAreNotPrintedWhenTheInputsCannotBeRegistered(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
 	captureLogs(t, charm.WarnLevel)
 	ioCtx, err := atmosio.NewContext()
 	require.NoError(t, err)
@@ -358,6 +367,9 @@ func TestIAMProbeRegistersTokenBeforeDiagnostics(t *testing.T) {
 // The module source authorization is registered for masking before any diagnostic of the response is
 // checked, and one that cannot be decoded takes precedence over the diagnostics.
 func TestPreparationCheckRegistersTheSourceAuthorizationBeforeDiagnostics(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
 	root := t.TempDir()
 	authorization := wireValue(t, cty.StringVal("Bearer registry-secret-5c1d"))
 	authorization.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
@@ -374,4 +386,48 @@ func TestPreparationCheckRegistersTheSourceAuthorizationBeforeDiagnostics(t *tes
 	unknown.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
 	result.ModuleSourceAuthorization = unknown
 	require.ErrorIs(t, checkPreparationResponse(result, ""), errUtils.ErrPluginUnsupportedExtension, "the undecodable authorization outranks the diagnostic error")
+}
+
+// A native preparation registers a marked IAM web identity token for masking before its diagnostics are
+// checked, and a token that cannot be decoded takes precedence over the diagnostics.
+func TestNativePreparationRegistersTheIAMTokenBeforeDiagnostics(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
+
+	root := t.TempDir()
+	token := objectWireValue(t, cty.StringVal("native-iam-token-4e8c"))
+	token.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	failure := &pluginv1.Diagnostic{Detail: &pluginv1.ErrorDetail{Code: "evaluation_error", Summary: "Evaluation failed", Detail: "role assumption rejected native-iam-token-4e8c", UserSafe: true, Severity: pluginv1.Severity_SEVERITY_ERROR}}
+	result := &pluginv1.PrepareComponentResponse{
+		Engine: "terraform", WorkingDirectory: root, ModuleSource: "./module", State: fixtureState(root),
+		Iam:         &pluginv1.ComponentIam{Role: "role", WebIdentityToken: token},
+		Diagnostics: []*pluginv1.Diagnostic{failure},
+	}
+
+	require.ErrorIs(t, checkPreparationResponse(result, ""), errUtils.ErrPluginInvalidConfig)
+	assert.NotContains(t, mask(failure.Detail.Detail), "native-iam-token-4e8c", "the token was registered even though the preparation failed")
+
+	unknown := objectWireValue(t, cty.UnknownVal(cty.String))
+	unknown.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	result.Iam.WebIdentityToken = unknown
+	require.ErrorIs(t, checkPreparationResponse(result, ""), errUtils.ErrPluginUnsupportedExtension, "the undecodable token outranks the diagnostic error")
+}
+
+// A preparation without an IAM payload, or with an IAM payload that has no token, stays valid.
+func TestNativePreparationAcceptsMissingIAMPayloadOrToken(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
+
+	root := t.TempDir()
+	for name, iam := range map[string]*pluginv1.ComponentIam{
+		"nil iam":      nil,
+		"no token set": {Role: "role"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			result := &pluginv1.PrepareComponentResponse{Engine: "terraform", WorkingDirectory: root, ModuleSource: "./module", State: fixtureState(root), Iam: iam}
+			require.NoError(t, checkPreparationResponse(result, ""))
+		})
+	}
 }

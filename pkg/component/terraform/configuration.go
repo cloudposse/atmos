@@ -148,20 +148,32 @@ func obtainConfiguration(ctx context.Context, config *schema.AtmosConfiguration,
 		}
 		return prepared, nil, err
 	}
-	if err := useRetainedWorkdir(config, info); err != nil {
+	pendingRoot, err := useRetainedWorkdirPending(config, info)
+	if err != nil {
 		return nil, nil, err
 	}
 	prepared, rebuild, err := restoreOrRebuildConfigurationPlan(ctx, config, info)
+	if pendingRoot != "" {
+		// The saved plan was verified against the module path it will have; provisioning resolves the
+		// source subdirectory from the override root again, so the section returns to that root.
+		info.ComponentSection[provWorkdir.WorkdirPathKey] = pendingRoot
+	}
 	if err != nil || rebuild == nil {
 		return prepared, rebuild, err
 	}
+	return finishRebuild(ctx, config, info, rebuild)
+}
+
+// finishRebuild applies the reviewed role of a rebuilt plan and evaluates the unit again.
+func finishRebuild(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rebuild *reviewedRebuild) (*schema.PreparedComponentConfiguration, *reviewedRebuild, error) {
 	// An operation the provider excludes never runs, so it must not need the unit's role.
 	if reviewed := rebuild.plan.Prepared; reviewed.IAM != nil && !excludedFromOperation(info, reviewed) {
-		if err = applyIAMRole(ctx, info, reviewed.IAM); err != nil {
+		if err := applyIAMRole(ctx, info, reviewed.IAM); err != nil {
 			return nil, nil, err
 		}
 		rebuild.appliedIAM = reviewed.IAM
 	}
+	var err error
 	rebuild.prepared, err = prepareForRebuild(ctx, config, info, rebuild)
 	return rebuild.prepared, rebuild, err
 }
@@ -170,12 +182,29 @@ func obtainConfiguration(ctx context.Context, config *schema.AtmosConfiguration,
 func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
 	info.ComponentVarsSection = prepared.Inputs
 	info.PreparedSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
+	// The inputs were replaced, so any earlier classification of them no longer describes them.
+	info.TerraformSecretVarKeysComputed = false
 	info.ConfigurationSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
+	// The stack's env section wins over provider environment in the metadata this invocation runs,
+	// including the apply-time metadata of a restored saved plan.
 	info.ComponentExecution = withoutStackEnvironment(invocationExecution(info, prepared), info.ComponentEnvSection)
-	info.SourceAuthorization = prepared.SourceAuthorization
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
 	info.TerraformWorkspace = prepared.Workspace
 	info.ComponentSection["vars"] = prepared.Inputs
+	applyPreparedSource(info, prepared)
+	info.ComponentSection["backend_type"] = prepared.BackendType
+	info.ComponentSection["backend"] = prepared.Backend
+	// Only a provider that owns the backend overrides generation. Otherwise the project setting decides.
+	if prepared.BackendGenerated {
+		info.SetBackendFileGeneration(false)
+	}
+	warnOnCacheLocalState(info, prepared)
+}
+
+// applyPreparedSource points the component at the module the provider prepared, with the
+// invocation-only authorization for fetching it.
+func applyPreparedSource(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
+	info.SourceAuthorization = prepared.SourceAuthorization
 	source, _ := info.ComponentSection["source"].(map[string]any)
 	source = maps.Clone(source)
 	if source == nil {
@@ -185,10 +214,6 @@ func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.Confi
 	// A local module changes without its location changing. The source provisioner stamps a local
 	// directory and refreshes the retained workdir only when that stamp changes, so no TTL is set.
 	info.ComponentSection["source"] = source
-	info.ComponentSection["backend_type"] = prepared.BackendType
-	info.ComponentSection["backend"] = prepared.Backend
-	info.SetBackendFileGeneration(!prepared.BackendGenerated)
-	warnOnCacheLocalState(info, prepared)
 }
 
 // prepareForRebuild evaluates the unit again for a plan restored without its working directory, the
@@ -272,29 +297,66 @@ func invocationExecution(info *schema.ConfigAndStacksInfo, prepared *schema.Prep
 	return prepared.Execution
 }
 
+// absolutePath resolves a path to an absolute one. It is a variable so a test can provoke the failure,
+// which filepath.Abs only reports when the process working directory is unreadable.
+var absolutePath = filepath.Abs
+
 // useRetainedWorkdir points the invocation at the directory the reviewed plan was created in.
 // A new process has not provisioned anything, so the path is derived the way provisioning does.
 func useRetainedWorkdir(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	_, err := useRetainedWorkdirPending(config, info)
+	return err
+}
+
+// useRetainedWorkdirPending is useRetainedWorkdir that also returns the override root when the explicit
+// source subdirectory is not on disk yet (a fresh checkout). The workdir then names the module path the
+// plan ran in, so the saved plan is verified against it and a rebuild can follow; the caller restores the
+// returned root before provisioning, which selects the subdirectory from the root.
+func useRetainedWorkdirPending(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
 	// A downloaded plan and record can be the only files in an explicit workdir.
 	// Resolve a relative override without source ownership checks here; the
 	// reviewed-plan restore verifies the exact transport set before provisioning.
 	if override := workingDirectoryOverride(info); override != "" && !filepath.IsAbs(override) {
 		clean := filepath.Clean(override)
 		if clean != "." && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-			base, err := filepath.Abs(config.BasePath)
+			base, err := absolutePath(config.BasePath)
 			if err != nil {
-				return err
+				return "", fmt.Errorf("%w: resolve the base path of the retained workdir: %w", errUtils.ErrWorkdirProvision, err)
 			}
 			info.ComponentSection[provWorkdir.WorkdirPathKey] = filepath.Join(base, clean)
-			return nil
+			return selectRetainedSourceSubdir(info)
 		}
 	}
 	fallback, err := u.GetComponentPath(config, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
-		return fmt.Errorf("failed to resolve component path: %w", err)
+		return "", fmt.Errorf("failed to resolve component path: %w", err)
 	}
 	_, err = component.ResolveRetainedWorkdir(config, info, cfg.TerraformComponentType, fallback)
-	return err
+	return "", err
+}
+
+// selectRetainedSourceSubdir applies the explicit source subdirectory to the retained workdir the shortcut
+// set, as planning does: the plan ran in the module directory below the override, so that is the directory
+// the reviewed plan is bound to. A subdirectory that is not on disk yet (a fresh checkout) still selects
+// the module path it will have, so the plan is verified against the recorded path and reaches the rebuild;
+// the override root is returned so the caller can restore it before provisioning. One that is invalid or
+// escapes its root is rejected.
+func selectRetainedSourceSubdir(info *schema.ConfigAndStacksInfo) (string, error) {
+	metadata, _ := info.ComponentSection["metadata"].(map[string]any)
+	if subdir, _ := metadata["source_subdir"].(string); subdir == "" {
+		return "", nil
+	}
+	root, _ := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	selected, present, err := component.ResolvePendingSubpath(info, root)
+	if err != nil {
+		return "", err
+	}
+	if !present {
+		info.ComponentSection[provWorkdir.WorkdirPathKey] = selected
+		return root, nil
+	}
+	_, err = component.ApplyWorkdirSubpathToSection(info)
+	return "", err
 }
 
 func configurationArtifactName(info *schema.ConfigAndStacksInfo, suffix string) (string, bool) {
@@ -355,20 +417,24 @@ func (e *Executor) prepareConfigurationEnvironment(ctx context.Context, config *
 }
 
 // writePreparedConfiguration verifies retained files before relinquishing the host backend
-// and applying provider file policies.
+// and applying provider file policies. The retained-file check runs under the same workdir lock as
+// the write batch, so another invocation cannot change a retained file between the check and the write.
 func writePreparedConfiguration(directory string, prepared *schema.PreparedComponentConfiguration) error {
-	if err := validateRetainedConfiguration(directory, prepared.Files, prepared.BackendGenerated); err != nil {
-		return err
-	}
-	if !prepared.BackendGenerated {
+	if len(prepared.Files) == 0 && !prepared.BackendGenerated {
 		return configuration.WriteFiles(directory, prepared.Files)
 	}
-	// The removal runs inside the batch's lock, after every destination validates, and is put back
-	// when the batch fails, so a rejected batch keeps the existing host backend and its receipt.
-	return configuration.WriteFilesWithHandoff(directory, prepared.Files, &configuration.Handoff{
-		Paths: backend.HostBackendPaths(),
-		Run:   func() error { return backend.RemoveHostBackend(directory) },
-	})
+	handoff := &configuration.Handoff{
+		Validate: func() error {
+			return validateRetainedConfiguration(directory, prepared.Files, prepared.BackendGenerated)
+		},
+	}
+	if prepared.BackendGenerated {
+		// The removal runs inside the batch's lock, after every destination validates, and is put back
+		// when the batch fails, so a rejected batch keeps the existing host backend and its receipt.
+		handoff.Paths = backend.HostBackendPaths()
+		handoff.Run = func() error { return backend.RemoveHostBackend(directory) }
+	}
+	return configuration.WriteFilesWithHandoff(directory, prepared.Files, handoff)
 }
 
 // validateRetainedConfiguration runs before any backend cleanup or file writes.
@@ -523,6 +589,6 @@ func recheckReviewedApply(ctx context.Context, config *schema.AtmosConfiguration
 	if info.DryRun || !schema.ConfigurationOwned(info.ComponentSettingsSection) || !usesConfigurationPlan(info) || !restoresConfigurationPlan(info) {
 		return nil
 	}
-	_, err := restoreConfigurationPlan(ctx, config, info)
+	_, err := restoreSettledConfigurationPlan(ctx, config, info)
 	return err
 }

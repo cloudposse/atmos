@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
@@ -87,7 +89,11 @@ func AWS(ctx context.Context, v *venv.Venv) *venv.Venv {
 	transport := &awsTransport{next: v.HTTP.Transport, endpoints: awsEndpoints(env), credentials: aws.Credentials{
 		AccessKeyID: env[envAccessKeyID], SecretAccessKey: env[envSecretKey], SessionToken: env[envSessionToken],
 	}}
+	role := roleOptions(env)
 	switch {
+	case role.RoleARN != "" && role.WebIdentityToken != "":
+		// A command-level web identity role is assumed with an unsigned, invocation-scoped STS call, so no base
+		// credentials are needed or resolved.
 	case hasStaticAWSKeys(env):
 	case selectsAWSCredentials(env):
 		credentials, err := cachedCredentials(awsCacheKey(env), func() (aws.Credentials, error) { return resolveAWSCredentials(ctx, env, transport) })
@@ -97,7 +103,7 @@ func AWS(ctx context.Context, v *venv.Venv) *venv.Venv {
 		// SDK default chain, which reads the plugin process (its keys, container credentials, or instance role).
 		transport.apply(env, nil, errNoInvocationCredentials)
 	}
-	if role := roleOptions(env); role.RoleARN != "" && transport.failure == nil {
+	if role.RoleARN != "" && transport.failure == nil {
 		credentials, err := cachedCredentials(roleCacheKey(env, role), func() (aws.Credentials, error) { return assumeInvocationRole(ctx, v.WithEnv(env), transport, role) })
 		transport.apply(env, &credentials, err)
 	}
@@ -142,6 +148,9 @@ var errNoInvocationCredentials = errors.New("the invocation environment supplies
 func assumeInvocationRole(ctx context.Context, v *venv.Venv, transport *awsTransport, role iam.RoleOptions) (aws.Credentials, error) {
 	ctx, cancel := context.WithTimeout(ctx, awsResolveTimeout)
 	defer cancel()
+	if role.WebIdentityToken != "" {
+		return assumeWebIdentityRole(ctx, v, transport, role)
+	}
 	// AssumeIamRole reads the HTTP client of the venv, so it must see the endpoint overrides.
 	assumed, err := awshelper.AssumeIamRole(ctx, v.WithHTTP(vhttp.WithTransport(v.HTTP, transport)), role, "")
 	if err != nil {
@@ -228,9 +237,18 @@ func roleCacheKey(env map[string]string, role iam.RoleOptions) string {
 func resolveAWSCredentials(ctx context.Context, env map[string]string, transport *awsTransport) (aws.Credentials, error) {
 	ctx, cancel := context.WithTimeout(ctx, awsResolveTimeout)
 	defer cancel()
+	// The SDK reads the shared files again when it resolves, so validation and resolution share one private
+	// copy of them: a file that changes in between cannot select a source that was never validated. The SDK
+	// has no option that accepts an already loaded profile.
+	env, cleanup, err := snapshotSharedFiles(env)
+	if err != nil {
+		return aws.Credentials{}, err
+	}
+	defer cleanup()
 	if err := rejectAmbientCredentialSources(ctx, env); err != nil {
 		return aws.Credentials{}, err
 	}
+	afterProfileValidated()
 	cfg, err := invocationConfig(ctx, env, transport)
 	if err != nil {
 		return aws.Credentials{}, err
@@ -295,6 +313,8 @@ func loadOptions(env map[string]string, transport *awsTransport) []func(*config.
 		config.WithRegion(awsRegion(env)),
 		// Clear process/shared endpoint selections before STS resolves or signs its request.
 		// The invocation transport applies its own endpoint and prefix to the default AWS host.
+		// SSO and SSO OIDC clients are built before the SDK applies service options, so their endpoint is
+		// pinned by the pinSSOEndpoint API option instead.
 		config.WithServiceOptions(func(_ string, options any) {
 			if stsOptions, ok := options.(*sts.Options); ok {
 				stsOptions.BaseEndpoint = nil
@@ -399,7 +419,13 @@ type prefixedKey struct{}
 // and the transport only changes the host.
 func (t *awsTransport) prefixBeforeSigning(stack *middleware.Stack) error {
 	step := middleware.FinalizeMiddlewareFunc("AtmosEndpointPathPrefix", func(ctx context.Context, in middleware.FinalizeInput, next middleware.FinalizeHandler) (middleware.FinalizeOutput, middleware.Metadata, error) {
-		if req, ok := in.Request.(*smithyhttp.Request); ok && isAWSHost(req.URL.Hostname()) {
+		req, ok := in.Request.(*smithyhttp.Request)
+		if ok {
+			if err := pinSSOEndpoint(ctx, req); err != nil {
+				return middleware.FinalizeOutput{}, middleware.Metadata{}, err
+			}
+		}
+		if ok && isAWSHost(req.URL.Hostname()) {
 			if target := t.endpointFor(req.URL.Hostname()); hasPathPrefix(target) {
 				req.URL.Path, req.URL.RawPath = prefixedPath(target, req.URL.Path), ""
 				ctx = context.WithValue(ctx, prefixedKey{}, true)
@@ -408,6 +434,44 @@ func (t *awsTransport) prefixBeforeSigning(stack *middleware.Stack) error {
 		return next.HandleFinalize(ctx, in)
 	})
 	return stack.Finalize.Insert(step, "Signing", middleware.Before)
+}
+
+// ssoOperationPaths are the request paths of the SSO calls that resolve credentials: GetRoleCredentials and the
+// SSO OIDC CreateToken that refreshes a session token. Their service hosts are named after the endpoint, not
+// the service.
+var ssoOperationPaths = map[string]string{"SSO/GetRoleCredentials": "/federation/credentials", "SSO OIDC/CreateToken": "/token"}
+
+// pinSSOEndpoint keeps the bearer-token requests of SSO and SSO OIDC clients on the regional service host. The
+// SDK builds the clients of an SSO profile before it applies service options and reads
+// AWS_ENDPOINT_URL[_SSO[_OIDC]] from the plugin process itself, so a process endpoint would otherwise receive
+// the token, and a host that merely ends in an AWS suffix is no safer than any other. A request resolved to
+// any host but the canonical one goes to the canonical host of the client's region instead, where the
+// invocation transport applies the endpoint the invocation approved, if any. A call without a known operation
+// or region fails closed.
+func pinSSOEndpoint(ctx context.Context, req *smithyhttp.Request) error {
+	service := awsmiddleware.GetServiceID(ctx)
+	if service != "SSO" && service != "SSO OIDC" {
+		return nil
+	}
+	path, known := ssoOperationPaths[service+"/"+awsmiddleware.GetOperationName(ctx)]
+	region := awsmiddleware.GetRegion(ctx)
+	if !known || region == "" {
+		return fmt.Errorf("%w: a %s request resolved to %q, which the invocation did not approve", ErrAWSCredentials, service, req.URL.Host)
+	}
+	domain := "amazonaws.com"
+	if strings.HasPrefix(region, "cn-") {
+		domain = "amazonaws.com.cn"
+	}
+	host := "oidc." + region + "." + domain
+	if service == "SSO" {
+		host = "portal.sso." + region + "." + domain
+	}
+	if req.URL.Scheme == "https" && req.URL.Host == host {
+		return nil
+	}
+	req.URL.Scheme, req.URL.Host, req.URL.Path, req.URL.RawPath = "https", host, path, ""
+	req.Host = ""
+	return nil
 }
 
 func hasPathPrefix(target *url.URL) bool {
@@ -474,6 +538,13 @@ func isAWSHost(host string) bool {
 func (t *awsTransport) endpointFor(host string) *url.URL {
 	labels := strings.Split(host, ".")
 	candidates := []string{labels[0]}
+	// The SSO portal and OIDC hosts are named after their endpoints, not after the services' override names.
+	switch {
+	case labels[0] == "portal" && len(labels) > 1 && labels[1] == "sso":
+		candidates = []string{"sso"}
+	case labels[0] == "oidc":
+		candidates = []string{"ssooidc"}
+	}
 	if slices.ContainsFunc(labels, func(label string) bool { return label == "s3" || strings.HasPrefix(label, "s3-") }) {
 		candidates = []string{"s3"}
 	}
@@ -535,18 +606,112 @@ func rejectAmbientCredentialSources(ctx context.Context, env map[string]string) 
 		if profile.CredentialSource != "" {
 			return fmt.Errorf("%w: profile credential_source cannot be isolated from the plugin process; use invocation static credentials or a file-backed source_profile", ErrAWSCredentials)
 		}
+		// The SDK starts the helper with the plugin process environment and offers no option for another one.
+		if profile.CredentialProcess != "" {
+			return fmt.Errorf("%w: profile credential_process runs with the plugin process environment, not the invocation's; use invocation static credentials, SSO settings, or a web identity token file instead", ErrAWSCredentials)
+		}
 		terminal = profile
 	}
 	if !hasFileBackedCredentials(terminal) {
-		return fmt.Errorf("%w: profile %q has no credential source in the invocation's shared files, and the SDK would fall back to the plugin process; add static keys, a credential_process, SSO settings, or a web identity token file to the profile", ErrAWSCredentials, profileName(env))
+		return fmt.Errorf("%w: profile %q has no credential source in the invocation's shared files, and the SDK would fall back to the plugin process; add static keys, SSO settings, or a web identity token file to the profile", ErrAWSCredentials, profileName(env))
 	}
 	return nil
 }
 
 // hasFileBackedCredentials reports whether the last profile of a chain names a source the SDK resolves from
-// the shared files: static keys, a credential process, SSO settings, or a role from a web identity token file.
+// the shared files: static keys, SSO settings, or a role from a web identity token file. A credential process
+// is not one of them: the SDK would run it with the plugin process environment.
 func hasFileBackedCredentials(profile *config.SharedConfig) bool {
-	return profile != nil && (profile.Credentials.HasKeys() || profile.CredentialProcess != "" ||
+	return profile != nil && (profile.Credentials.HasKeys() ||
 		profile.SSOSessionName != "" || profile.SSOStartURL != "" || profile.SSOAccountID != "" ||
 		(profile.WebIdentityTokenFile != "" && profile.RoleARN != ""))
 }
+
+const (
+	// minAssumeRoleDuration and maxAssumeRoleDuration are the session durations in seconds that STS accepts.
+	minAssumeRoleDuration = 900
+	maxAssumeRoleDuration = 43200
+)
+
+// webIdentityDuration returns the session duration for the web identity assumption: the default when none is
+// set, otherwise the configured seconds when STS would accept them. The range check also bounds the value
+// before it narrows to the 32 bits of the STS request.
+func webIdentityDuration(seconds int64) (int32, error) {
+	if seconds <= 0 {
+		return iam.DefaultAssumeRoleDuration, nil
+	}
+	if seconds < minAssumeRoleDuration || seconds > maxAssumeRoleDuration {
+		return 0, fmt.Errorf("%w: the session duration of %d seconds is outside the %d to %d seconds STS accepts",
+			ErrAWSCredentials, seconds, minAssumeRoleDuration, maxAssumeRoleDuration)
+	}
+	return int32(seconds), nil
+}
+
+// assumeWebIdentityRole assumes the CLI-level role with its web identity token. The token is the credential,
+// so the STS client is unsigned and built from the invocation's values alone; upstream would load the plugin
+// process environment for it.
+func assumeWebIdentityRole(ctx context.Context, v *venv.Venv, transport *awsTransport, role iam.RoleOptions) (aws.Credentials, error) {
+	token, err := awshelper.TokenFetcher{FS: v.FS, Token: role.WebIdentityToken}.FetchToken(ctx)
+	if err != nil {
+		return aws.Credentials{}, fmt.Errorf("reading the web identity token of the IAM role %s: %w", role.RoleARN, err)
+	}
+	name := cmpFirst(role.AssumeRoleSessionName, iam.GetDefaultAssumeRoleSessionName())
+	duration, err := webIdentityDuration(role.AssumeRoleDuration)
+	if err != nil {
+		return aws.Credentials{}, fmt.Errorf("assuming the IAM role %s with its web identity token: %w", role.RoleARN, err)
+	}
+	client := sts.NewFromConfig(aws.Config{
+		Region:      awsRegion(v.Env),
+		Credentials: aws.AnonymousCredentials{},
+		HTTPClient:  &http.Client{Transport: transport, Timeout: awsResolveTimeout},
+		APIOptions:  []func(*middleware.Stack) error{transport.prefixBeforeSigning},
+	})
+	result, err := client.AssumeRoleWithWebIdentity(ctx, &sts.AssumeRoleWithWebIdentityInput{
+		RoleArn: aws.String(role.RoleARN), RoleSessionName: aws.String(name), WebIdentityToken: aws.String(string(token)),
+		DurationSeconds: aws.Int32(duration),
+	})
+	if err != nil {
+		return aws.Credentials{}, fmt.Errorf("assuming the IAM role %s with its web identity token: %w", role.RoleARN, err)
+	}
+	if result.Credentials == nil {
+		return aws.Credentials{}, fmt.Errorf("assuming the IAM role %s with its web identity token: %w", role.RoleARN, ErrAWSCredentials)
+	}
+	return aws.Credentials{
+		AccessKeyID: aws.ToString(result.Credentials.AccessKeyId), SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
+		SessionToken: aws.ToString(result.Credentials.SessionToken), CanExpire: result.Credentials.Expiration != nil, Expires: aws.ToTime(result.Credentials.Expiration),
+	}, nil
+}
+
+// snapshotSharedFiles copies the shared credentials and config files into a private directory and returns env
+// pointing at the copies. A file that does not exist stays missing. Web identity roles read no shared file.
+func snapshotSharedFiles(env map[string]string) (map[string]string, func(), error) {
+	if selectsWebIdentityRole(env) {
+		return env, func() {}, nil
+	}
+	dir, err := os.MkdirTemp("", "atmos-aws-snapshot-")
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: snapshotting the shared AWS files: %w", ErrAWSCredentials, err)
+	}
+	cleanup := func() { _ = os.RemoveAll(dir) }
+	files, snapshot := resolvedSharedFiles(env), maps.Clone(env)
+	for _, name := range []string{"AWS_SHARED_CREDENTIALS_FILE", "AWS_CONFIG_FILE"} {
+		copied := filepath.Join(dir, strings.ToLower(name))
+		snapshot[name] = copied
+		content, err := os.ReadFile(files[name])
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err == nil {
+			err = os.WriteFile(copied, content, 0o600)
+		}
+		if err != nil {
+			cleanup()
+			return nil, nil, fmt.Errorf("%w: snapshotting the shared AWS file %s: %w", ErrAWSCredentials, files[name], err)
+		}
+	}
+	return snapshot, cleanup, nil
+}
+
+// afterProfileValidated runs between the validation of a profile snapshot and its resolution. Tests use it to
+// change the shared files in that window.
+var afterProfileValidated = func() {}

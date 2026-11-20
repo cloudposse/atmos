@@ -33,7 +33,7 @@ func workdirDigest(root, planPath, dataDir string, ignore func(relative string) 
 	if err != nil {
 		return "", err
 	}
-	scope := workdirScope{root: root, dataDir: resolveDataDir(root, dataDir)}
+	scope := newWorkdirScope(root, dataDir)
 	files := make(map[string]string)
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -53,6 +53,9 @@ func workdirDigest(root, planPath, dataDir string, ignore func(relative string) 
 	if err != nil {
 		return "", err
 	}
+	if err := scope.recordExternalModules(planPath, files); err != nil {
+		return "", err
+	}
 	data, err := json.Marshal(files)
 	if err != nil {
 		return "", err
@@ -65,10 +68,11 @@ func workdirDigest(root, planPath, dataDir string, ignore func(relative string) 
 // directories and the effective data directory.
 type workdirScope struct {
 	root, dataDir string
+	placement     dataDirPlacement
 }
 
 func (s workdirScope) skipFile(path, planPath, name string, ignore func(string) bool) bool {
-	if path == planPath || path == planPath+configurationPlanSuffix || s.insideCacheOutsideModules(path) {
+	if path == planPath || path == planPath+configurationPlanSuffix || s.insideCacheOutsideModules(path) || s.besideExcludedAncestor(path) {
 		return true
 	}
 	return (!s.insideModules(path) && ignoredWorkdirFile(path, planPath, name)) || ignoredRelative(s.root, path, ignore)
@@ -77,7 +81,58 @@ func (s workdirScope) skipFile(path, planPath, name string, ignore func(string) 
 // insideCacheOutsideModules reports whether path holds mutable Terraform data: below a `.terraform`
 // directory or the effective data directory, outside the downloaded modules.
 func (s workdirScope) insideCacheOutsideModules(path string) bool {
-	return insideTerraformCacheOutsideModules(s.root, path) || insideDataDirOutsideModules(s.dataDir, path)
+	if relative, ok := s.insideCustomDataDir(path); ok {
+		// Below a custom data directory, even one nested in `.terraform` (TF_DATA_DIR=.terraform/custom),
+		// only the established runtime paths and cache directories nested inside it are mutable. The modules
+		// and the local sources beside them (`./.terraform/custom/child`) are executed during apply.
+		return establishedRuntimePath(relative) || insideTerraformCacheOutsideModules(s.dataDir, path)
+	}
+	return insideTerraformCacheOutsideModules(s.root, path) || s.insideDataDirOutsideModules(path)
+}
+
+// insideCustomDataDir returns path relative to a data directory below the workdir that is not the default
+// `.terraform`, when path is that directory or below it.
+func (s workdirScope) insideCustomDataDir(path string) (string, bool) {
+	if s.placement != dataDirBelowWorkdir || s.dataDir == filepath.Join(s.root, defaultDataDir) {
+		return "", false
+	}
+	return relativeInside(s.dataDir, path)
+}
+
+// besideExcludedAncestor reports whether a file sits in a directory on the way to the data directory below
+// the workdir, outside the data directory itself, and below a directory the walk excludes by name
+// (TF_DATA_DIR=.atmos/custom). The walk reaches those directories only to find the modules, so their own
+// files stay excluded as the name-based exclusion intends.
+func (s workdirScope) besideExcludedAncestor(path string) bool {
+	dir := filepath.Dir(path)
+	if !s.leadsToDataDir(dir) || s.insideModules(path) {
+		// Files of a downloaded module are executed during apply, whatever directory names lead to them.
+		return false
+	}
+	if _, inside := relativeInside(s.dataDir, path); inside {
+		return false
+	}
+	relative, err := filepath.Rel(s.root, dir)
+	if err != nil {
+		return false
+	}
+	for _, part := range strings.Split(relative, string(filepath.Separator)) {
+		if excludedDirectoryName(part) {
+			return true
+		}
+	}
+	return false
+}
+
+// leadsToDataDir reports whether path is the data directory below the workdir or one of its ancestors, so
+// the walk can reach its modules even when the default `.terraform` exclusions would prune the directory.
+// Files beside the way stay excluded: only directories are exempted from pruning.
+func (s workdirScope) leadsToDataDir(path string) bool {
+	if s.placement != dataDirBelowWorkdir {
+		return false
+	}
+	_, ok := relativeInside(path, s.dataDir)
+	return ok
 }
 
 // insideModules reports whether path is part of downloaded modules.
@@ -108,15 +163,26 @@ func absolutePaths(root, planPath string) (string, string, error) {
 	return absoluteRoot, absolutePlan, nil
 }
 
+// resolvedPath returns path absolute with symlinks resolved. A path that does not exist yet (a plan
+// Terraform has not written) resolves its nearest existing ancestor and keeps the missing tail, so it
+// compares equal to the same path once it exists.
 func resolvedPath(path string) (string, error) {
 	absolute, err := filepath.Abs(path)
 	if err != nil {
 		return "", err
 	}
-	if resolved, err := filepath.EvalSymlinks(absolute); err == nil {
-		return resolved, nil
+	existing, tail := absolute, ""
+	for {
+		if resolved, err := filepath.EvalSymlinks(existing); err == nil {
+			return filepath.Join(resolved, tail), nil
+		}
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			return absolute, nil
+		}
+		tail = filepath.Join(filepath.Base(existing), tail)
+		existing = parent
 	}
-	return absolute, nil
 }
 
 // skipWorkdirDirectory reports whether a nested directory holds only mutable or cached data.
@@ -129,10 +195,17 @@ func (s workdirScope) skipDirectory(path, name string) bool {
 	if path == s.root {
 		return false
 	}
-	if s.insideCacheOutsideModules(path) {
+	if s.insideCacheOutsideModules(path) && !s.leadsToDataDir(path) {
 		return true
 	}
-	return !s.insideModules(path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || name == stateWorkspaceDir || strings.HasPrefix(name, ".atmos-policy-plan-"))
+	// A directory on the way to the data directory is walked to reach its modules, whatever it is called.
+	return !s.insideModules(path) && !s.leadsToDataDir(path) && excludedDirectoryName(name)
+}
+
+// excludedDirectoryName reports whether a directory name marks provisioner bookkeeping, a cache, or a
+// private plan directory that is never retained configuration.
+func excludedDirectoryName(name string) bool {
+	return name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || name == stateWorkspaceDir || strings.HasPrefix(name, ".atmos-policy-plan-") || strings.HasPrefix(name, stalePlanDirPrefix)
 }
 
 // Terraform's downloaded modules can contain scripts executed during apply. Other cache
@@ -203,6 +276,15 @@ func mutableStateFile(name string) bool {
 
 // recordWorkdirFile digests one retained file by its slash-separated path relative to the root.
 func recordWorkdirFile(root, path string, entry fs.DirEntry, files map[string]string) error {
+	relative, err := filepath.Rel(root, path)
+	if err != nil {
+		return err
+	}
+	return recordWorkdirFileAs(filepath.ToSlash(relative), path, entry, files)
+}
+
+// recordWorkdirFileAs digests one file under the given digest key.
+func recordWorkdirFileAs(key, path string, entry fs.DirEntry, files map[string]string) error {
 	if entry.Type()&os.ModeSymlink != 0 {
 		return fmt.Errorf("%w: saved-plan workdir contains symlink", errUtils.ErrPluginUnsupportedExtension)
 	}
@@ -210,11 +292,7 @@ func recordWorkdirFile(root, path string, entry fs.DirEntry, files map[string]st
 	if err != nil {
 		return err
 	}
-	relative, err := filepath.Rel(root, path)
-	if err != nil {
-		return err
-	}
-	files[filepath.ToSlash(relative)] = digest
+	files[key] = digest
 	return nil
 }
 
@@ -260,6 +338,9 @@ type planSnapshotter struct {
 
 // takePlanSnapshot fingerprints the configuration with the inputs the binding record uses.
 func takePlanSnapshot(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, path string) (*planSnapshot, error) {
+	if err := rejectExtraArgumentsDataDir(info.ComponentExecution); err != nil {
+		return nil, err
+	}
 	planProvider, err := planRuntime(config)
 	if err != nil {
 		return nil, err
@@ -299,44 +380,30 @@ func takePlanSnapshot(ctx context.Context, config *schema.AtmosConfiguration, in
 // same classification the hooks use, so the "changes present" status of -detailed-exitcode
 // (from the command line or TF_CLI_ARGS, including extra_arguments) still binds the plan.
 func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed func(error) bool) func() error {
-	return func() error {
+	return func() (runResult error) {
 		s.result, s.err, s.observed = nil, nil, ""
 		path := s.pathFrom(phaseArgs)
 		if path == "" {
 			return run()
 		}
 		s.observed = path
-		before, beforeErr := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
-		runErr := run()
-		if beforeErr != nil {
-			// The command still completes and its outcome is reported; the binding is what fails.
-			s.err = beforeErr
-			return runErr
+		// The engine output path differs from the bound path when a policy publishes the artifact.
+		writtenPath := path
+		if s.execCtx.planPolicy != nil {
+			writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
 		}
-		after, err := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
-		switch {
-		case err != nil:
-			s.err = err
-		case *after != *before:
-			s.err = fmt.Errorf("%w: configuration changed while Terraform ran", errUtils.ErrPlanVerificationFailed)
-		default:
-			// Fingerprint the actual engine output before after hooks, including private policy plans.
-			writtenPath := path
-			if s.execCtx.planPolicy != nil {
-				writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
-			}
-			if failed(runErr) {
-				return runErr
-			}
-			digest, digestErr := fileDigest(writtenPath)
-			if digestErr != nil {
-				s.err = digestErr
-				return digestErr
-			}
-			after.planDigest = digest
-			s.result = after
+		// A plan already at the output path was not written by this run. It is emptied in place, with a
+		// private copy kept, so that only a plan this subprocess writes can be fingerprinted, and it is
+		// restored if none is written, which also covers help-only runs that exit successfully.
+		settleStale, stashErr := stashStalePlan(s.execCtx.componentPath, effectiveDataDir(s.config, s.info), writtenPath)
+		defer func() { runResult = s.settle(settleStale, runResult, failed) }()
+		if stashErr != nil {
+			// No copy of the earlier plan exists, so a run that wrote partial bytes and failed could not
+			// be undone. The refusal stops the run before the subprocess starts.
+			s.err = stashErr
+			return stashErr
 		}
-		return runErr
+		return s.observe(path, writtenPath, run, failed)
 	}
 }
 
@@ -374,26 +441,6 @@ func (c *componentExecContext) observePlanSnapshots(ctx context.Context, config 
 	return context.WithValue(ctx, planSnapshotKey{}, c.planSnapshots)
 }
 
-// restorePublicFiles restores observed non-sensitive bytes into a plan's copied file list.
-func (s *planSnapshot) restorePublicFiles(files []schema.ComponentConfigurationFile) error {
-	if s.publicFiles == "" {
-		return nil
-	}
-	var observed map[string][]byte
-	if err := json.Unmarshal([]byte(s.publicFiles), &observed); err != nil {
-		return err
-	}
-	for i := range files {
-		if content, ok := observed[files[i].Path]; ok && !files[i].Sensitive {
-			files[i].Content = content
-			if content == nil {
-				files[i].IfExists = "remove"
-			}
-		}
-	}
-	return nil
-}
-
 // modulesDirName is the directory of downloaded child modules below a Terraform data directory.
 const modulesDirName = "modules"
 
@@ -425,27 +472,22 @@ func effectiveDataDir(config *schema.AtmosConfiguration, info *schema.ConfigAndS
 	return defaultDataDir
 }
 
-// resolveDataDir returns the data directory as an absolute path: a relative value is resolved
-// against root, as Terraform does against its working directory. An empty value is the default.
+// resolveDataDir returns the data directory as an absolute path with symlinks resolved: a relative value
+// is resolved against root, as Terraform does against its working directory. An empty value is the default.
 func resolveDataDir(root, dataDir string) string {
 	if dataDir == "" {
 		dataDir = defaultDataDir
 	}
 	if !filepath.IsAbs(dataDir) {
-		return filepath.Join(root, dataDir)
+		dataDir = filepath.Join(root, dataDir)
 	}
+	// Symlinks are resolved for relative values too, so a data directory reached through a link
+	// (TF_DATA_DIR=../link) is spelled like the plan path, which absolutePaths resolves.
 	resolved, err := resolvedPath(dataDir)
 	if err != nil {
 		return filepath.Clean(dataDir)
 	}
 	return resolved
-}
-
-// insideDataDirOutsideModules reports whether path is inside a data directory other than its
-// modules subtree: providers, the workspace environment marker and other mutable data.
-func insideDataDirOutsideModules(dataDir, path string) bool {
-	relative, ok := relativeInside(dataDir, path)
-	return ok && relative != "." && relative != modulesDirName && !strings.HasPrefix(relative, modulesDirName+string(filepath.Separator))
 }
 
 // insideDataDirModules reports whether path is the modules subtree of a data directory or below it.
@@ -464,4 +506,103 @@ func relativeInside(dir, path string) (string, bool) {
 		return "", false
 	}
 	return relative, true
+}
+
+// dataDirPlacement says where the effective Terraform data directory lies relative to the working directory.
+type dataDirPlacement int
+
+const (
+	// Below the workdir: a data directory inside the workdir, the default `.terraform` included.
+	dataDirBelowWorkdir dataDirPlacement = iota
+	// Overlapping the workdir: a data directory that is the workdir or one of its parents. The workdir
+	// configuration then shares its location with the data directory.
+	dataDirOverlapsWorkdir
+	// Outside the workdir: a data directory that neither contains nor lies inside the workdir.
+	dataDirOutsideWorkdir
+)
+
+// externalModulesKeyPrefix names the downloaded modules of a data directory outside the workdir in the
+// digest. A NUL byte cannot occur in a file name, so no workdir file collides with it, and the key does
+// not depend on where the data directory is.
+const externalModulesKeyPrefix = "\x00data-dir/" + modulesDirName + "/"
+
+// establishedDataDirFiles are the files Terraform writes at the top level of its data directory: the
+// workspace marker, the backend state, and the plugin path. The `providers` directory is the only
+// established directory besides `modules`.
+var establishedDataDirFiles = []string{"environment", "terraform.tfstate", "plugin_path"}
+
+// providersDirName is the directory of installed providers below a Terraform data directory.
+const providersDirName = "providers"
+
+func newWorkdirScope(root, dataDir string) workdirScope {
+	resolved := resolveDataDir(root, dataDir)
+	return workdirScope{root: root, dataDir: resolved, placement: placeDataDir(root, resolved)}
+}
+
+// placeDataDir classifies an absolute data directory against an absolute workdir.
+func placeDataDir(root, dataDir string) dataDirPlacement {
+	if _, contains := relativeInside(dataDir, root); contains {
+		return dataDirOverlapsWorkdir
+	}
+	if _, inside := relativeInside(root, dataDir); inside {
+		return dataDirBelowWorkdir
+	}
+	return dataDirOutsideWorkdir
+}
+
+// insideDataDirOutsideModules reports whether path holds mutable data of the data directory, which is
+// limited to the established runtime paths outside its modules subtree. Anything else beside them
+// is the reviewed configuration, which must stay bound: a custom data directory such as `data` can sit
+// next to local module sources (`data/child`) that Terraform executes during apply.
+func (s workdirScope) insideDataDirOutsideModules(path string) bool {
+	relative, ok := relativeInside(s.dataDir, path)
+	if !ok || relative == "." || inModulesSubtree(relative) {
+		return false
+	}
+	return establishedRuntimePath(relative)
+}
+
+// establishedRuntimePath reports whether a path relative to a data directory is data Terraform
+// writes there at run time.
+func establishedRuntimePath(relative string) bool {
+	for _, name := range establishedDataDirFiles {
+		if relative == name {
+			return true
+		}
+	}
+	return relative == providersDirName || strings.HasPrefix(relative, providersDirName+string(filepath.Separator))
+}
+
+func inModulesSubtree(relative string) bool {
+	return relative == modulesDirName || strings.HasPrefix(relative, modulesDirName+string(filepath.Separator))
+}
+
+// rejectExtraArgumentsDataDir fails a reviewed plan whose provider extra arguments set TF_DATA_DIR. They
+// apply per command, so init, get, plan and apply could each use a different data directory, and one
+// digest of the downloaded modules cannot bind them all. The data directory is set with the
+// component's `env`, which every phase shares.
+func rejectExtraArgumentsDataDir(execution *schema.ComponentExecution) error {
+	for _, candidate := range []*schema.ComponentExecution{execution, applyExecution(execution)} {
+		if candidate == nil {
+			continue
+		}
+		for _, extra := range candidate.ExtraArguments {
+			for name := range extra.Environment {
+				if strings.EqualFold(name, tfDataDirEnv) {
+					return errUtils.Build(fmt.Errorf("%w: %s is set by extra_arguments", errUtils.ErrPlanVerificationFailed, tfDataDirEnv)).
+						WithExplanation("Extra arguments apply to individual Terraform commands, so the data directory that holds downloaded modules could differ between the plan, the module download, and the apply of a reviewed plan.").
+						WithHint("Set `TF_DATA_DIR` in the component `env` instead, which every command shares.").
+						Err()
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func applyExecution(execution *schema.ComponentExecution) *schema.ComponentExecution {
+	if execution == nil {
+		return nil
+	}
+	return execution.Apply
 }

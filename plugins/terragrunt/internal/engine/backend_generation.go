@@ -32,7 +32,14 @@ func unresolvedGeneratedBackend(path string) error {
 func backendConfigurationPaths(cfg *config.TerragruntConfig, path string) []string {
 	paths := []string{path}
 	for _, name := range slices.Sorted(maps.Keys(cfg.ProcessedIncludes)) {
-		paths = append(paths, localPath(filepath.Dir(path), cfg.ProcessedIncludes[name].Path))
+		include := cfg.ProcessedIncludes[name]
+		// Terragrunt records a no_merge include but never merges its generate or remote_state
+		// settings, so a backend declared there is never generated for this unit. An invalid
+		// strategy returns an error and stays in the scan, which keeps it fail-closed.
+		if strategy, err := include.GetMergeStrategy(); err == nil && strategy == config.NoMerge {
+			continue
+		}
+		paths = append(paths, localPath(filepath.Dir(path), include.Path))
 	}
 	return paths
 }
@@ -123,13 +130,30 @@ func staticallyNonBackendGeneration(body hcl.Body) bool {
 	disabled, known := literalGenerateDisabled(content.Attributes["disable"])
 	path, pathOK := literalGenerateString(content.Attributes["path"])
 	text, textOK := literalGenerateString(content.Attributes["contents"])
+	if attr := content.Attributes["contents"]; attr != nil {
+		textOK = textOK && !unevaluatedJSONTemplate(attr.Range.Filename, text)
+	}
 	return nonBackendGeneration(disabled, known, path, pathOK, text, textOK)
+}
+
+// unevaluatedJSONTemplate reports contents read from a JSON-syntax file that still hold a template
+// sequence. JSON strings are read without an evaluation context, so ${...} and %{...} reach the
+// check literally and could generate a backend once evaluated. Escaped $${ and %%{ are static text.
+func unevaluatedJSONTemplate(filename, text string) bool {
+	return strings.HasSuffix(filename, ".json") && unevaluatedTemplate(text)
+}
+
+// unevaluatedTemplate reports text that still holds an unescaped ${...} or %{...} sequence.
+func unevaluatedTemplate(text string) bool {
+	text = strings.ReplaceAll(strings.ReplaceAll(text, "$${", ""), "%%{", "")
+	return strings.Contains(text, "${") || strings.Contains(text, "%{")
 }
 
 // staticallyNonBackendGenerateMap applies the checks of a named generate block to each entry of a
 // literal `generate = { name = { path = ..., contents = ... } }` map. A value that is not a literal
 // map of literal entries, or an entry whose target or contents cannot be determined, is rejected.
 func staticallyNonBackendGenerateMap(attr *hcl.Attribute) bool {
+	jsonSyntax := strings.HasSuffix(attr.Range.Filename, ".json")
 	value, diagnostics := attr.Expr.Value(nil)
 	if diagnostics.HasErrors() || !value.IsWhollyKnown() || value.IsNull() {
 		return false
@@ -139,14 +163,14 @@ func staticallyNonBackendGenerateMap(attr *hcl.Attribute) bool {
 	}
 	for iterator := value.ElementIterator(); iterator.Next(); {
 		_, entry := iterator.Element()
-		if !staticallyNonBackendGenerateEntry(entry) {
+		if !staticallyNonBackendGenerateEntry(entry, jsonSyntax) {
 			return false
 		}
 	}
 	return true
 }
 
-func staticallyNonBackendGenerateEntry(entry cty.Value) bool {
+func staticallyNonBackendGenerateEntry(entry cty.Value, jsonSyntax bool) bool {
 	if entry.IsNull() || (!entry.Type().IsObjectType() && !entry.Type().IsMapType()) {
 		return false
 	}
@@ -159,6 +183,9 @@ func staticallyNonBackendGenerateEntry(entry cty.Value) bool {
 	}
 	path, pathOK := generateFieldString(entry, "path")
 	text, textOK := generateFieldString(entry, "contents")
+	if jsonSyntax && textOK {
+		textOK = !unevaluatedTemplate(text)
+	}
 	return nonBackendGeneration(disabled, known, path, pathOK, text, textOK)
 }
 
@@ -231,8 +258,12 @@ func terraformConfigurationFile(path string) bool {
 
 // mentionsDownloadDir reports whether any parsed configuration file names download_dir. The probe
 // in downloadDir parses the whole unit, so a unit that never sets it skips the probe and its
-// inputs stay unevaluated during backend reads.
+// inputs stay unevaluated during backend reads. Automatic includes merge into the unit, so they
+// are scanned too; one that cannot be inspected is skipped, which at worst skips an optional probe.
 func mentionsDownloadDir(filesystem afero.Fs, paths []string) bool {
+	if expanded, err := withAutomaticIncludes(filesystem, paths); err == nil {
+		paths = expanded
+	}
 	for _, path := range paths {
 		data, err := afero.ReadFile(filesystem, path)
 		if err != nil {
@@ -317,27 +348,56 @@ func literalBackendInFile(file *hcl.File) bool {
 	if !ok {
 		return false
 	}
-	value, diagnostics := attr.Expr.Value(nil)
+	return literalBackendInGenerateMap(attr.Expr)
+}
+
+// literalBackendInGenerateMap checks each entry of a generate map independently, so one dynamic
+// entry (such as a notes.txt using get_env) is skipped without hiding a literal backend entry.
+func literalBackendInGenerateMap(expr hcl.Expression) bool {
+	if pairs, diagnostics := hcl.ExprMap(expr); !diagnostics.HasErrors() {
+		return literalBackendInPairs(pairs)
+	}
+	return literalBackendInMapValue(expr)
+}
+
+// literalBackendInPairs evaluates each generate map entry alone and skips the dynamic ones.
+func literalBackendInPairs(pairs []hcl.KeyValuePair) bool {
+	for _, pair := range pairs {
+		value, diagnostics := pair.Value.Value(nil)
+		if !diagnostics.HasErrors() && value.IsWhollyKnown() && literalBackendInEntry(value) {
+			return true
+		}
+	}
+	return false
+}
+
+// literalBackendInMapValue evaluates a generate map that is not a literal map expression as a whole.
+func literalBackendInMapValue(expr hcl.Expression) bool {
+	value, diagnostics := expr.Value(nil)
 	if diagnostics.HasErrors() || !value.IsWhollyKnown() || value.IsNull() || (!value.Type().IsObjectType() && !value.Type().IsMapType()) {
 		return false
 	}
 	for iterator := value.ElementIterator(); iterator.Next(); {
 		_, entry := iterator.Element()
-		if entry.IsNull() || (!entry.Type().IsObjectType() && !entry.Type().IsMapType()) {
-			continue
-		}
-		disabled, known := false, true
-		if field, ok := generateField(entry, "disable"); ok {
-			known = field.Type() == cty.Bool && !field.IsNull()
-			disabled = known && field.True()
-		}
-		path, pathOK := generateFieldString(entry, "path")
-		text, textOK := generateFieldString(entry, "contents")
-		if literalGeneratedBackend(disabled, known, path, pathOK, text, textOK) {
+		if literalBackendInEntry(entry) {
 			return true
 		}
 	}
 	return false
+}
+
+func literalBackendInEntry(entry cty.Value) bool {
+	if entry.IsNull() || (!entry.Type().IsObjectType() && !entry.Type().IsMapType()) {
+		return false
+	}
+	disabled, known := false, true
+	if field, ok := generateField(entry, "disable"); ok {
+		known = field.Type() == cty.Bool && !field.IsNull()
+		disabled = known && field.True()
+	}
+	path, pathOK := generateFieldString(entry, "path")
+	text, textOK := generateFieldString(entry, "contents")
+	return literalGeneratedBackend(disabled, known, path, pathOK, text, textOK)
 }
 
 // literalGeneratedBackend reports an enabled declaration whose literal path names a Terraform file

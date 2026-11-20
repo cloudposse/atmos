@@ -159,6 +159,10 @@ func TestDecodeInputsKeepsExactNumbersNullsAndShapes(t *testing.T) {
 }
 
 func TestDecodeInputsRegistersSensitivePathsForMasking(t *testing.T) {
+	// The masker is process-global: start clean so secrets registered by other tests cannot mask the visible value.
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
 	value := cty.ObjectVal(map[string]cty.Value{"password": cty.StringVal("inputs-secret-value-1f3a"), "public": cty.StringVal("visible-value")})
 	encoded := objectWireValue(t, value)
 	encoded.SensitivePaths = []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: "password"}}}}}

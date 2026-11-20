@@ -3,8 +3,10 @@ package terraform
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -54,12 +56,6 @@ func (r *recoveryReporter) SignalsWritten(path string) {
 	ui.Warningf("Wrote error signals to `%s`.", path)
 }
 
-// attemptFunc runs the hooks and the command once. It returns the exit status 2 of
-// `plan -detailed-exitcode` separately, because that is a result and not a failure. It records the
-// standard error of every step that failed in failed, so a policy never sees output of a step that
-// succeeded.
-type attemptFunc func(opts []component.ExecutionOption, failed *failureText) (changes, err error)
-
 // failureText collects the standard error of the steps, hooks and command, that failed during one
 // attempt. Error handling matches its policies against this text only.
 type failureText struct {
@@ -87,26 +83,21 @@ func (f *failureText) recorded() string {
 
 // recoverPhase runs an attempt under the component's errors policy. Error text for matching is
 // the standard error of the steps that failed, as it is for Terragrunt, so output on stdout, or a
-// warning from a step that succeeded, never triggers a policy.
-func (e *Executor) recoverPhase(info *schema.ConfigAndStacksInfo, phase *executionPhase, policy *schema.ComponentErrors, opts []component.ExecutionOption, attempt attemptFunc) error {
+// warning from a step that succeeded, never triggers a policy. The attempts also report whether the
+// command itself finished, so an ignored failure of a later hook leaves its result in place.
+func (e *Executor) recoverPhase(info *schema.ConfigAndStacksInfo, phase *executionPhase, policy *schema.ComponentErrors, opts []component.ExecutionOption, attempts *phaseAttempts) error {
 	defer perf.Track(nil, "terraform.Executor.recoverPhase")()
 
 	var changes error
-	attempts := 0
 	recoverer := execution.NewRecoverer(
 		policy,
 		execution.WithReporter(&recoveryReporter{info: info}),
 		execution.WithSignalsFile(filepath.Join(phase.componentPath, execution.SignalsFileName)),
 	)
-	stdoutMetadata, stderrMetadata := component.MetadataOutputCaptureFromOptions(opts...)
 	ignored, err := recoverer.Run(component.ContextFromOptions(opts...), func(context.Context) (string, error) {
-		attempts++
-		if attempts > 1 {
-			resetExecMetadataBufs(stdoutMetadata, stderrMetadata)
-		}
 		var failed failureText
 		var runErr error
-		changes, runErr = attempt(opts, &failed)
+		changes, runErr = attempts.run(opts, &failed)
 		return failed.recorded(), runErr
 	})
 	switch {
@@ -116,6 +107,10 @@ func (e *Executor) recoverPhase(info *schema.ConfigAndStacksInfo, phase *executi
 		// A preparatory step such as the implicit init failed with an ignorable error. Terragrunt ends
 		// the whole unit run there, so the command that follows must not run against a missing init.
 		return errUtils.ErrComponentRunIgnored
+	case ignored && attempts.commandCompleted():
+		// A hook failed after the command finished. The command's result stands, including a plan
+		// with changes, so the plan is still recorded.
+		return changes
 	case ignored:
 		markMainCommandIgnored(component.ContextFromOptions(opts...))
 		return nil
@@ -139,8 +134,8 @@ func withStderrCapture(opts []component.ExecutionOption, buffer *bytes.Buffer) [
 // phaseAttempts runs one phase's hooks and command, once per recovery attempt.
 //
 // The retry scope is the work that did not complete. A command that finished, such as a saved-plan
-// apply that changed state, is never run again because a later hook failed: the retry runs only the
-// hooks that follow it, and the before hooks that preceded it are not repeated.
+// apply that changed state, is never run again because a later hook failed: the retry runs only
+// the after hooks that did not finish, and the before hooks that preceded it are not repeated.
 type phaseAttempts struct {
 	config  *schema.ComponentExecution
 	info    *schema.ConfigAndStacksInfo
@@ -154,7 +149,15 @@ type phaseAttempts struct {
 	// status 2 result it reported, if any.
 	completed bool
 	changes   error
+	// started reports that the command ran in an earlier attempt, so its recorded output is stale.
+	started bool
+	// afterDone holds the after hooks that succeeded once the command had completed. A retry does not
+	// run them again, so a notification is never published twice.
+	afterDone map[*schema.ComponentHook]bool
 }
+
+// commandCompleted reports that the command finished in this or an earlier attempt.
+func (a *phaseAttempts) commandCompleted() bool { return a.completed }
 
 // run makes one attempt. With -detailed-exitcode, exit status 2 reports a plan with changes: hooks
 // must not see that as a failure, but the status still has to reach the caller once the hooks are done.
@@ -170,25 +173,80 @@ func (a *phaseAttempts) run(opts []component.ExecutionOption, failed *failureTex
 		opts = withStderrCapture(opts, &commandStderr)
 	}
 	a.runner.failed = failed
-	runErr = execution.Run(component.ContextFromOptions(opts...), config, a.phase.command, a.runner, func() (execution.Output, error) {
-		if a.completed {
-			return nil, nil
-		}
-		output, actionErr := runPhaseAction(a.info, a.args, opts, a.capture, a.action)
-		switch {
-		case isDetailedExitCodeChanges(a.phase.command, a.args, a.env, actionErr, opts...):
-			// Mark the completed plan here, so the recovery path reports it the same way.
-			a.changes = &successfulPlanChanges{error: actionErr}
-			a.completed = true
-			return output, nil
-		case actionErr == nil:
-			a.completed = true
-		default:
-			failed.add(commandStderr.String())
-		}
-		return output, actionErr
+	runner := &resumingRunner{inner: a.runner, done: a.afterDone}
+	runErr = execution.Run(component.ContextFromOptions(opts...), config, a.phase.command, runner, func() (execution.Output, error) {
+		return a.runCommand(opts, failed, &commandStderr)
 	})
+	// After hooks that ran beside a failed command belong to that attempt: the next one runs them again.
+	if a.completed && len(runner.succeeded) > 0 {
+		if a.afterDone == nil {
+			a.afterDone = map[*schema.ComponentHook]bool{}
+		}
+		maps.Copy(a.afterDone, runner.succeeded)
+	}
 	return a.changes, runErr
+}
+
+// runCommand runs the command unless an earlier attempt completed it.
+func (a *phaseAttempts) runCommand(opts []component.ExecutionOption, failed *failureText, commandStderr *bytes.Buffer) (execution.Output, error) {
+	if a.completed {
+		return nil, nil
+	}
+	if a.started {
+		// Only a command that runs again replaces the output the metadata parser reads.
+		resetExecMetadataBufs(component.MetadataOutputCaptureFromOptions(opts...))
+	}
+	a.started = true
+	output, actionErr := runPhaseAction(a.info, a.args, opts, a.capture, a.action)
+	switch {
+	case isDetailedExitCodeChanges(a.phase.command, a.args, a.env, actionErr, opts...):
+		// Mark the completed plan here, so the recovery path reports it the same way.
+		a.changes = &successfulPlanChanges{error: actionErr}
+		a.completed = true
+		return output, nil
+	case actionErr == nil:
+		a.completed = true
+	default:
+		failed.add(commandStderr.String())
+	}
+	return output, actionErr
+}
+
+// resumingRunner skips the after hooks that already succeeded and records those that succeed now.
+type resumingRunner struct {
+	inner     execution.Runner
+	done      map[*schema.ComponentHook]bool
+	succeeded map[*schema.ComponentHook]bool
+}
+
+// RunHook implements execution.Runner.
+func (r *resumingRunner) RunHook(ctx context.Context, kind execution.HookKind, hook *schema.ComponentHook) (execution.Output, error) {
+	defer perf.Track(nil, "terraform.resumingRunner.RunHook")()
+
+	if kind != execution.KindAfter {
+		return r.inner.RunHook(ctx, kind, hook)
+	}
+	if r.done[hook] {
+		return nil, nil
+	}
+	output, err := r.inner.RunHook(ctx, kind, hook)
+	if err == nil {
+		if r.succeeded == nil {
+			r.succeeded = map[*schema.ComponentHook]bool{}
+		}
+		r.succeeded[hook] = true
+	}
+	return output, err
+}
+
+// withoutIgnoredPolicyFailure drops the saved-plan guard's failure once the errors policy has ignored
+// the main command. An ignored plan wrote no artifact, so the guard fails reading it, and that must
+// not undo the ignore decision.
+func withoutIgnoredPolicyFailure(err error, ignored bool) error {
+	if ignored && errors.Is(err, errUtils.ErrPolicyPlan) {
+		return nil
+	}
+	return err
 }
 
 // warnOverlappingRetry tells the user that two retry mechanisms apply to the same component.
@@ -231,19 +289,72 @@ func endIgnoredRun(info *schema.ConfigAndStacksInfo, ignored *schema.ComponentIg
 // runReadConfigHooks runs the unit's read-config after hooks once its configuration is read. They
 // run on every command that prepares the unit, in the unit's configuration directory, before any
 // source is fetched. Hooks written for `read-config` and `terragrunt-read-config` both run. They come
-// from the execution the invocation runs, so a saved-plan apply runs the apply-time metadata.
+// from the execution the invocation runs, so a saved-plan apply runs the apply-time metadata. A
+// module source the provider deferred until these hooks had run is resolved when they are done.
 func (e *Executor) runReadConfigHooks(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) error {
 	defer perf.Track(atmosConfig, "terraform.Executor.runReadConfigHooks")()
 
-	if prepared == nil || info.ComponentExecution == nil || info.DryRun {
+	if prepared == nil || info.DryRun {
 		return nil
 	}
-	hooks := execution.HooksFor(info.ComponentExecution.AfterHooks, execution.CommandReadConfig, execution.CommandReadConfigAlias)
-	if len(hooks) == 0 {
+	var hooks []schema.ComponentHook
+	if info.ComponentExecution != nil {
+		hooks = execution.HooksFor(info.ComponentExecution.AfterHooks, execution.CommandReadConfig, execution.CommandReadConfigAlias)
+	}
+	if len(hooks) > 0 {
+		stage := lifecycleStage{command: execution.CommandReadConfig, config: &schema.ComponentExecution{AfterHooks: hooks}}
+		if err := e.runLifecycle(ctx, atmosConfig, info, stage, func(context.Context) error { return nil }); err != nil {
+			return err
+		}
+	}
+	return resolveDeferredSource(ctx, atmosConfig, info, prepared)
+}
+
+// resolveDeferredSource completes a preparation whose module source the provider left as written
+// until the unit's read-config hooks had run, because such a hook can create the credentials that
+// resolving the source needs. The provider prepares the unit once more and resolves the source with
+// the exclusion guard and the errors policies of a single preparation. Only the source, and whether
+// the run still goes ahead, are taken from that second preparation: the unit's configuration was read
+// once, before the hooks, as Terragrunt reads it. A dry run and a saved-plan apply never get here
+// with a deferred source: a dry run prepares nothing, and a saved plan holds the source its plan resolved.
+func resolveDeferredSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) error {
+	if !prepared.SourceDeferred {
 		return nil
 	}
-	stage := lifecycleStage{command: execution.CommandReadConfig, config: &schema.ComponentExecution{AfterHooks: hooks}}
-	return e.runLifecycle(ctx, atmosConfig, info, stage, func(context.Context) error { return nil })
+	runtime, ok := atmosConfig.ComponentConfigurations.(schema.ComponentConfigurationDeferredSource)
+	if !ok {
+		return fmt.Errorf("%w: the configuration provider of component %q in stack %q deferred its module source but cannot resolve it", errUtils.ErrPluginUnsupportedExtension, info.ComponentFromArg, info.Stack)
+	}
+	resolved, err := runtime.ResolveDeferredSource(ctx, info)
+	if err != nil {
+		return err
+	}
+	if resolved == nil || resolved.SourceDeferred {
+		return fmt.Errorf("%w: the module source of component %q in stack %q is still unresolved after its read-config hooks ran", errUtils.ErrPluginProtocol, info.ComponentFromArg, info.Stack)
+	}
+	prepared.Exclusion, prepared.IgnoredRun = resolved.Exclusion, resolved.IgnoredRun
+	if err := endUnrunnableSource(atmosConfig, info, prepared); err != nil {
+		return err
+	}
+	prepared.Source, prepared.SourceAuthorization, prepared.SourceDeferred = resolved.Source, resolved.SourceAuthorization, false
+	applyPreparedSource(info, prepared)
+	return nil
+}
+
+// endUnrunnableSource ends the run of a unit whose deferred source was not resolved: the operation is
+// excluded, or an ignore policy matched the failure. It reports both as a single preparation does.
+func endUnrunnableSource(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) error {
+	if excludedFromOperation(info, prepared) {
+		skipExcluded(info)
+		return errUtils.ErrComponentExcluded
+	}
+	if prepared.IgnoredRun == nil {
+		return nil
+	}
+	if err := refreshIgnoredSignals(atmosConfig, info, prepared); err != nil {
+		return err
+	}
+	return endIgnoredRun(info, prepared.IgnoredRun)
 }
 
 // initFromModuleWrapper runs the unit's init-from-module hooks around a source fetch. It returns
@@ -255,7 +366,10 @@ func (e *Executor) initFromModuleWrapper(atmosConfig *schema.AtmosConfiguration,
 		return nil
 	}
 	return func(ctx context.Context, target *source.Target, provision func(context.Context) error) error {
-		stage := lifecycleStage{command: execution.CommandInitFromModule, config: config, directory: target.Dir}
+		stage := lifecycleStage{
+			command: execution.CommandInitFromModule, config: config, directory: target.Dir,
+			moduleDir: func() string { return fetchedModuleDir(info, target) },
+		}
 		fetch := provision
 		if recovered {
 			fetch = recoveringFetch(info, target, config.Errors, provision)
@@ -289,17 +403,26 @@ func recoveringFetch(info *schema.ConfigAndStacksInfo, target *source.Target, po
 	}
 }
 
+// fetchedModuleDir returns the module directory of a fetched source, or "" when that directory does
+// not exist, which is the case for an ignored fetch that provisioned nothing. An explicit source
+// subdirectory exists only once the fetch has provisioned the source.
+func fetchedModuleDir(info *schema.ConfigAndStacksInfo, target *source.Target) string {
+	if !target.IsWorkdir {
+		return target.Dir
+	}
+	moduleDir, present, err := component.ResolvePendingSubpath(info, target.Dir)
+	if err != nil || !present {
+		return ""
+	}
+	return moduleDir
+}
+
 // fetchedSignalsFile returns the signals file in the module directory of a fetched source, or "" when
-// that directory does not exist, which is the case for an ignored fetch that provisioned nothing.
+// that directory does not exist.
 func fetchedSignalsFile(info *schema.ConfigAndStacksInfo, target *source.Target) string {
-	moduleDir := target.Dir
-	if target.IsWorkdir {
-		var present bool
-		var err error
-		moduleDir, present, err = component.ResolvePendingSubpath(info, target.Dir)
-		if err != nil || !present {
-			return ""
-		}
+	moduleDir := fetchedModuleDir(info, target)
+	if moduleDir == "" {
+		return ""
 	}
 	return filepath.Join(moduleDir, execution.SignalsFileName)
 }
@@ -317,6 +440,9 @@ type lifecycleStage struct {
 	command   string
 	config    *schema.ComponentExecution
 	directory string
+	// moduleDir, when set, reports the directory of the module the stage produced. Hooks that run once
+	// the stage has run resolve relative directories there, because it may not exist before then.
+	moduleDir func() string
 }
 
 // withInitFromModule makes source provisioning run the init-from-module hooks, when the unit has any.
@@ -341,6 +467,11 @@ func (e *Executor) runLifecycle(ctx context.Context, atmosConfig *schema.AtmosCo
 	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: info, phase: phase, opts: hookOpts, capture: capture}
 	return execution.Run(ctx, stage.config, stage.command, runner, func() (execution.Output, error) {
 		err := action(ctx)
+		if stage.moduleDir != nil {
+			if dir := stage.moduleDir(); dir != "" {
+				phase.componentPath = dir
+			}
+		}
 		if err == nil {
 			return nil, nil
 		}

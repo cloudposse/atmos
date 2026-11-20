@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/stretchr/testify/require"
 
@@ -174,6 +175,31 @@ func TestRemoteStateEncryptionChecksTheUnitExecutable(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			result := &model.Resolution{Path: "unit/terragrunt.hcl", TerraformBinary: test.unit}
 			err := checkEncryption(true, true, result, &model.Request{Tofu: test.host})
+			if !test.rejected {
+				require.NoError(t, err)
+				return
+			}
+			var problem *model.Problem
+			require.ErrorAs(t, err, &problem)
+			require.Equal(t, "remote_state.encryption", problem.Key)
+		})
+	}
+}
+
+// TestRemoteStateEncryptionChecksTheEffectiveExecutable checks that the executable the host resolved after a
+// stack `command` or command-line override decides whether the encryption block is supported.
+func TestRemoteStateEncryptionChecksTheEffectiveExecutable(t *testing.T) {
+	for _, test := range []struct {
+		name, unit, effective string
+		rejected              bool
+	}{
+		{name: "stack Terraform over unit OpenTofu", unit: "/opt/bin/tofu", effective: "/opt/bin/terraform", rejected: true},
+		{name: "stack OpenTofu over unit Terraform", unit: "/opt/bin/terraform", effective: "/opt/bin/tofu"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := &model.Resolution{Path: "unit/terragrunt.hcl", TerraformBinary: test.unit}
+			request := &model.Request{Tofu: test.unit, Environment: map[string]string{effectiveBinaryEnvironment: test.effective}}
+			err := checkEncryption(true, true, result, request)
 			if !test.rejected {
 				require.NoError(t, err)
 				return
@@ -470,6 +496,82 @@ func TestDiscoveryRejectsLiteralGeneratedBackends(t *testing.T) {
 			var problem *model.Problem
 			require.ErrorAs(t, err, &problem)
 			require.Equal(t, "generate", problem.Key)
+		})
+	}
+}
+
+// Terragrunt records a no_merge include but never merges its generate settings, so its backend scan
+// is skipped. Merged strategies, and an unset one, keep scanning.
+func TestBackendConfigurationPathsSkipNoMergeIncludes(t *testing.T) {
+	noMerge, deep, invalid := "no_merge", "deep", "bogus"
+	cfg := &config.TerragruntConfig{ProcessedIncludes: config.IncludeConfigsMap{
+		"a_unset":   {Path: "unset.hcl"},
+		"b_nomerge": {Path: "nomerge.hcl", MergeStrategy: &noMerge},
+		"c_deep":    {Path: "deep.hcl", MergeStrategy: &deep},
+		"d_invalid": {Path: "invalid.hcl", MergeStrategy: &invalid},
+	}}
+	root := filepath.Join(string(filepath.Separator), "unit")
+	unit := filepath.Join(root, "terragrunt.hcl")
+	require.Equal(t, []string{
+		unit,
+		filepath.Join(root, "unset.hcl"),
+		filepath.Join(root, "deep.hcl"),
+		filepath.Join(root, "invalid.hcl"),
+	}, backendConfigurationPaths(cfg, unit))
+}
+
+// Each entry of a literal generate map is judged on its own: a dynamic entry is skipped during
+// discovery, and a literal backend entry beside it is still found.
+func TestDiscoveryFindsLiteralBackendBesideDynamicGenerateEntry(t *testing.T) {
+	backend := `backend = { path = "backend.tf", if_exists = "overwrite", contents = "terraform {\n backend \"local\" {}\n}\n" }`
+	notes := `notes = { path = "notes.txt", if_exists = "overwrite", contents = get_env("NOTE", "x") }`
+	provider := `provider = { path = "provider.tf", if_exists = "overwrite", contents = "provider \"null\" {}\n" }`
+	for name, test := range map[string]struct {
+		entries  string
+		rejected bool
+	}{
+		"literal backend after dynamic":  {entries: notes + "\n" + backend, rejected: true},
+		"literal backend before dynamic": {entries: backend + "\n" + notes, rejected: true},
+		"dynamic and provider only":      {entries: notes + "\n" + provider},
+		"dynamic only":                   {entries: notes},
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := nativeUnit(t, "generate = {\n"+test.entries+"\n}\n")
+			request.Phase = "discover"
+			_, err := Resolve(t.Context(), request)
+			if !test.rejected {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, ErrUnsupportedExecution)
+		})
+	}
+}
+
+// JSON syntax is read without an evaluation context, so contents may reach the check as an
+// unevaluated template. It cannot be proven free of a backend, so it fails closed; escaped
+// template text and plain provider contents stay static.
+func TestBackendGenerationRejectsUnevaluatedJSONContents(t *testing.T) {
+	for name, test := range map[string]struct {
+		contents string
+		safe     bool
+	}{
+		"interpolation":    {contents: `${\"terraform { backend {} }\"}`},
+		"directive":        {contents: `%{if true}provider {}%{endif}`},
+		"provider only":    {contents: `provider \"null\" {}`, safe: true},
+		"escaped template": {contents: `# $${literal} and %%{literal}`, safe: true},
+		"literal backend":  {contents: `terraform {\n backend \"s3\" {}\n}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			content := `{"generate": {"extra": {"path": "extra.tf", "if_exists": "overwrite", "contents": "` + test.contents + `"}}}`
+			file, diagnostics := hclparse.NewParser().ParseJSON([]byte(content), "terragrunt.hcl.json")
+			require.False(t, diagnostics.HasErrors(), diagnostics.Error())
+			err := checkBackendGenerationFile(file)
+			if test.safe {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, ErrUnsupportedExecution)
 		})
 	}
 }

@@ -245,6 +245,55 @@ func TestRestoreSensitiveContentAcceptsRemovedFiles(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
+// The provider owns the backend only when it says so. Otherwise the project setting still decides
+// whether the host writes backend.tf.json, so a project that disabled generation stays disabled.
+func TestPreparedBackendGenerationHonorsTheProjectSetting(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		project   bool
+		generated bool
+		want      bool
+	}{
+		{name: "project disabled, provider does not own the backend", project: false, generated: false, want: false},
+		{name: "project enabled, provider does not own the backend", project: true, generated: false, want: true},
+		{name: "project enabled, provider owns the backend", project: true, generated: true, want: false},
+		{name: "project disabled, provider owns the backend", project: false, generated: true, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{}
+			config.Components.Terraform.AutoGenerateBackendFile = test.project
+			info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}
+			prepared := &schema.PreparedComponentConfiguration{BackendGenerated: test.generated}
+
+			applyPreparedConfiguration(config, info, prepared)
+
+			require.Equal(t, test.want, schema.GenerateBackendFile(config, info))
+			require.Equal(t, test.want, schema.GenerateBackendFileForSection(config, info.ComponentSection))
+		})
+	}
+}
+
+// An unchanged absence is not the failure: when another sensitive file changed, the digest alone
+// cannot say which file moved, so the error names no file as missing.
+func TestRestoreSensitiveContentDoesNotBlameAnUnchangedAbsence(t *testing.T) {
+	directory := t.TempDir()
+	files := []schema.ComponentConfigurationFile{
+		{Path: "a.auto.tfvars", Sensitive: true, IfExists: "overwrite"},
+		{Path: "b.auto.tfvars", Sensitive: true, IfExists: "overwrite"},
+	}
+	b := filepath.Join(directory, "b.auto.tfvars")
+	require.NoError(t, os.WriteFile(b, []byte("token=1"), 0o600))
+	reviewed, err := sensitiveDigest(directory, files)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(b, []byte("token=2"), 0o600))
+
+	err = restoreSensitiveContent(directory, files, reviewed)
+
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.NotErrorIs(t, err, os.ErrNotExist, "a.auto.tfvars was absent at review and still is")
+	require.NotContains(t, err.Error(), "a.auto.tfvars")
+}
+
 // The retained-file check excludes backend.tf.json only when its receipt and bytes verify that the
 // host handoff removes it; a modified file is still checked and rejected.
 func TestRetainedBackendFileExcludedOnlyWhenHandoffRemovesIt(t *testing.T) {
@@ -330,4 +379,27 @@ func TestValidBatchReplacesHostBackend(t *testing.T) {
 	content, err := os.ReadFile(filepath.Join(directory, "remote.tf"))
 	require.NoError(t, err)
 	assert.Equal(t, "# generated backend", string(content))
+}
+
+// The retained-file check runs inside the batch's lock: a backend another process writes into a
+// retained file before the batch takes the lock is seen by the check, so the batch is rejected.
+func TestRetainedFileCheckSeesWritesMadeBeforeTheLock(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "provider.tf")
+	prepared := &schema.PreparedComponentConfiguration{Files: []schema.ComponentConfigurationFile{
+		{Path: "provider.tf", Content: []byte("locals { enabled = true }"), IfExists: "skip"},
+	}}
+	require.NoError(t, os.WriteFile(path, []byte("locals { other = true }"), 0o600))
+	require.NoError(t, writePreparedConfiguration(directory, prepared), "a backend-free retained file is accepted")
+
+	result := make(chan error, 1)
+	require.NoError(t, configuration.WithWorkdirLock(directory, func() error {
+		// The second invocation blocks on the lock, then validates against the bytes written below.
+		go func() { result <- writePreparedConfiguration(directory, prepared) }()
+		return os.WriteFile(path, []byte(`terraform { backend "local" {} }`), 0o600)
+	}))
+	require.ErrorIs(t, <-result, errUtils.ErrPluginInvalidConfig)
+	retained, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(retained), "backend", "the other process's bytes are kept")
 }

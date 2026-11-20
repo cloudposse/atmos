@@ -80,10 +80,23 @@ func diagnosticProblem(diagnostics hcl.Diagnostics, file string, cause error) *m
 	return problem
 }
 
+// valueConversionSummaries are diagnostics that gohcl and hcldec raise when an evaluated value does
+// not convert to the target type. They carry no expression or evaluation context, like parser
+// diagnostics, but their detail quotes the conversion error, which can include evaluated values.
+var valueConversionSummaries = map[string]struct{}{
+	"Unsuitable value type":          {},
+	"Incorrect attribute value type": {},
+	"Invalid attribute value":        {},
+}
+
 // parserDiagnostic reports whether a diagnostic originates from parsing or schema decoding. Those
 // diagnostics always carry the source range they describe and never an expression or evaluation
-// context, which is how a diagnostic about an evaluated value is attached.
+// context, which is how a diagnostic about an evaluated value is attached. Value-conversion
+// diagnostics share that shape but describe an evaluated value, so they are never parser diagnostics.
 func parserDiagnostic(diagnostic *hcl.Diagnostic) bool {
+	if _, conversion := valueConversionSummaries[diagnostic.Summary]; conversion {
+		return false
+	}
 	return diagnostic.Expression == nil && diagnostic.EvalContext == nil && diagnostic.Subject != nil && diagnostic.Subject.Filename != ""
 }
 
@@ -247,8 +260,8 @@ func binaryOverrideWarning(request *model.Request, binary, path string) (model.W
 	}
 	return model.Warning{
 		Code: WarningTerraformBinaryOverridden, Path: path,
-		Message: fmt.Sprintf("The stack `command` %s overrides this unit's `terraform_binary` %s; the unit's binary is not used. "+
-			"Remove `terraform_binary` from the unit or the `command` override from the stack to make them agree.", effective, binary),
+		Message: fmt.Sprintf("The stack `command` or the command line `--command` selects %s, which overrides this unit's `terraform_binary` %s; the unit's binary is not used. "+
+			"Remove `terraform_binary` from the unit, or drop the `command` override (stack setting or `--command`), to make them agree.", effective, binary),
 	}, true
 }
 

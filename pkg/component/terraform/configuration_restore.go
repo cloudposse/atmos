@@ -2,11 +2,16 @@ package terraform
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -315,7 +320,10 @@ func (r *reviewedRebuild) verify(workdir string) error {
 			WithHint("Restore `.terraform.lock.hcl` together with the plan (`atmos terraform planfile download` does), or create a new plan.").
 			Err()
 	}
-	return r.verifySensitiveFiles(workdir)
+	if err := r.verifySensitiveFiles(workdir); err != nil {
+		return err
+	}
+	return verifyPublicRecords(workdir, r.plan.PublicFiles)
 }
 
 // verifySensitiveFiles checks the sensitive generated files, which the rebuild digest may exclude (for
@@ -477,4 +485,147 @@ func isVarAssignment(argument string) bool {
 func assignmentName(assignment string) string {
 	name, _, _ := strings.Cut(assignment, "=")
 	return name
+}
+
+// recordExternalModules adds the downloaded modules of a data directory outside the workdir (a parent of the
+// workdir included, whose modules lie beside it) to the
+// digest files. They are executed during apply like the ones below the workdir, so a change to them
+// must not look retained. An absent modules directory adds nothing. The plan and its record are not
+// configuration, so they stay out of the digest even when -out points inside this directory.
+func (s workdirScope) recordExternalModules(planPath string, files map[string]string) error {
+	modules := filepath.Join(s.dataDir, modulesDirName)
+	if !s.hasExternalModules(modules) {
+		return nil
+	}
+	return filepath.WalkDir(modules, s.externalModuleVisitor(modules, planPath, files))
+}
+
+// hasExternalModules reports whether the modules directory lies outside the workdir and may exist.
+func (s workdirScope) hasExternalModules(modules string) bool {
+	if s.placement == dataDirBelowWorkdir {
+		return false
+	}
+	if _, inside := relativeInside(s.root, modules); inside {
+		// The data directory is the workdir itself: its modules are part of the workdir walk.
+		return false
+	}
+	_, err := os.Stat(modules)
+	return !errors.Is(err, fs.ErrNotExist)
+}
+
+// externalModuleVisitor digests each file below the external modules directory.
+func (s workdirScope) externalModuleVisitor(modules, planPath string, files map[string]string) fs.WalkDirFunc {
+	return func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() && path == s.root {
+			// A workdir inside the modules tree is already digested by the workdir walk, under its own keys.
+			return filepath.SkipDir
+		}
+		if entry.IsDir() || path == planPath || path == planPath+configurationPlanSuffix {
+			return nil
+		}
+		relative, err := filepath.Rel(modules, path)
+		if err != nil {
+			return err
+		}
+		if filepath.ToSlash(relative) == moduleManifestName {
+			return s.recordModuleManifest(path, entry, files)
+		}
+		return recordWorkdirFileAs(externalModulesKeyPrefix+filepath.ToSlash(relative), path, entry, files)
+	}
+}
+
+// moduleManifestName is the file Terraform keeps in the modules directory of its data directory.
+const moduleManifestName = "modules.json"
+
+// recordModuleManifest digests the module manifest of an external data directory with its runner-local
+// paths made relative to that directory. Terraform records each module's Dir as a path below the data
+// directory, which is absolute when TF_DATA_DIR is, so the raw bytes differ between runners that mount an
+// otherwise identical layout at different roots and would fail verification of a reviewed plan.
+// Design choice: normalize the manifest before hashing (rather than require one absolute data directory on
+// every runner), because the module content is still hashed file by file and the only runner-specific
+// information is the prefix. A manifest that cannot be parsed, or a Dir outside the data directory, is
+// hashed as it is, so nothing is ever dropped from the digest.
+func (s workdirScope) recordModuleManifest(path string, entry fs.DirEntry, files map[string]string) error {
+	if entry.Type()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%w: saved-plan workdir contains symlink", errUtils.ErrPluginUnsupportedExtension)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return planIOError(err)
+	}
+	sum := sha256.Sum256(s.normalizeModuleManifest(raw))
+	files[externalModulesKeyPrefix+moduleManifestName] = hex.EncodeToString(sum[:])
+	return nil
+}
+
+// normalizeModuleManifest rewrites every module Dir below the data directory to a slash-separated path
+// relative to it, and returns the original bytes when the manifest is not the expected JSON shape.
+func (s workdirScope) normalizeModuleManifest(raw []byte) []byte {
+	var manifest map[string]any
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return raw
+	}
+	entries, ok := manifest["Modules"].([]any)
+	if !ok {
+		return raw
+	}
+	for _, entry := range entries {
+		module, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if dir, ok := module["Dir"].(string); ok {
+			module["Dir"] = s.relativeModuleDir(dir)
+		}
+	}
+	normalized, err := json.Marshal(manifest)
+	if err != nil {
+		return raw
+	}
+	return normalized
+}
+
+// normalizedModuleDirPrefix marks a manifest Dir that was rewritten relative to the data directory. A NUL
+// byte cannot occur in a path, so a Dir that was already relative and lies outside the data directory
+// never collides with a rewritten one, and changing the selected module directory changes the digest.
+const normalizedModuleDirPrefix = "\x00data-dir/"
+
+// relativeModuleDir returns dir as a marked path relative to the data directory, or dir unchanged when it
+// lies elsewhere.
+func (s workdirScope) relativeModuleDir(dir string) string {
+	native := filepath.FromSlash(dir)
+	if !filepath.IsAbs(native) {
+		native = filepath.Join(s.root, native)
+	}
+	resolved, err := resolvedPath(native)
+	if err != nil {
+		return dir
+	}
+	if relative, ok := relativeInside(s.dataDir, resolved); ok {
+		return normalizedModuleDirPrefix + filepath.ToSlash(relative)
+	}
+	return dir
+}
+
+// verifyPublicRecords checks every recorded public file in workdir against its record. A rebuilt workdir
+// digest can exclude generated files (for example below a Terragrunt cache), so each record is verified
+// directly. Files with a removal policy have no record and therefore stay absent without error.
+func verifyPublicRecords(workdir string, records map[string]publicFileRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+	root, err := os.OpenRoot(workdir)
+	if err != nil {
+		return planIOError(err)
+	}
+	defer root.Close()
+	for _, path := range slices.Sorted(maps.Keys(records)) {
+		if _, err := verifyPublicFile(root, path, records[path]); err != nil {
+			return err
+		}
+	}
+	return nil
 }

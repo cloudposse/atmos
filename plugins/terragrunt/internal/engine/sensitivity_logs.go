@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
@@ -60,7 +61,7 @@ func transformsSensitiveInputs(fsys afero.Fs, unit string) bool {
 func (s *sensitivityScanner) transformsSensitiveInput(expression hclsyntax.Expression) bool {
 	if object, ok := unwrapParentheses(expression).(*hclsyntax.ObjectConsExpr); ok {
 		for i, item := range object.Items {
-			if s.transformsSensitiveInput(item.KeyExpr) || s.transformsSensitiveInput(item.ValueExpr) || s.replacedSensitiveMember(object.Items, i) {
+			if s.transformsSensitiveInput(item.KeyExpr) || s.sensitiveKeyMayLog(item.KeyExpr) || s.transformsSensitiveInput(item.ValueExpr) || s.replacedSensitiveMember(object.Items, i) {
 				return true
 			}
 		}
@@ -68,7 +69,31 @@ func (s *sensitivityScanner) transformsSensitiveInput(expression hclsyntax.Expre
 	}
 	before := len(s.paths)
 	s.walk(expression, nil, 0)
-	return len(s.paths) > before && s.inputTransformsRaw(expression)
+	if len(s.paths) > before && s.inputTransformsRaw(expression) {
+		return true
+	}
+	// A sensitive predicate is unknown to the sink whether or not either branch is sensitive.
+	return s.sensitivePredicateMayLog(expression)
+}
+
+// sensitiveKeyMayLog reports whether an object key is a sensitive value that may have been logged. The sink
+// registers the values of the inputs, never their keys, so such a key can never be masked afterwards.
+func (s *sensitivityScanner) sensitiveKeyMayLog(key hclsyntax.Expression) bool {
+	return s.containsSensitive(key, 0) && s.mayLogValue(key, 0)
+}
+
+// sensitivePredicateMayLog reports whether any conditional below expression tests a sensitive value that
+// may have been logged. Only the selected branch is registered, so the tested value never is. A literal
+// predicate cannot have logged anything.
+func (s *sensitivityScanner) sensitivePredicateMayLog(expression hclsyntax.Expression) bool {
+	found := false
+	_ = hclsyntax.VisitAll(expression, func(node hclsyntax.Node) hcl.Diagnostics {
+		if conditional, ok := node.(*hclsyntax.ConditionalExpr); ok && !found {
+			found = s.containsSensitive(conditional.Condition, 0) && s.mayLogValue(conditional.Condition, 0)
+		}
+		return nil
+	})
+	return found
 }
 
 // replacedSensitiveMember reports whether a later member replaces a sensitive member that may have logged
@@ -149,6 +174,9 @@ func transformsSensitiveLocal(fsys afero.Fs, unit string) bool {
 		if len(scanner.paths) > before && scanner.transformsRaw(expression, 0) {
 			return true
 		}
+		if scanner.sensitivePredicateMayLog(expression) {
+			return true
+		}
 	}
 	return false
 }
@@ -178,6 +206,12 @@ func (s *sensitivityScanner) transformsRaw(expression hclsyntax.Expression, dept
 			transformed = true
 		case *hclsyntax.ScopeTraversalExpr:
 			transformed = s.referenceTransformsRaw(typed, depth)
+		case *hclsyntax.IndexExpr:
+			transformed = s.indexDiscardsSensitive(typed, depth)
+		case *hclsyntax.RelativeTraversalExpr:
+			transformed = s.relativeDiscardsSensitive(typed, depth)
+		case *hclsyntax.SplatExpr:
+			transformed = s.splatDiscardsSensitive(typed, depth)
 		}
 		return nil
 	})
@@ -352,11 +386,10 @@ func (u *unitEvaluator) buildResolution(ctx context.Context, cfg *config.Terragr
 	if err != nil {
 		return nil, err
 	}
-	result, err := u.unitResolution(ctx, cfg)
+	result, err := u.unitResolution(ctx, cfg, execution)
 	if err != nil {
 		return nil, err
 	}
-	result.Execution = execution
 	result.SensitiveInputs = sensitivity.inputs
 	result.Files = append(result.Files, applyFiles...)
 	if err := resolveBackend(cfg, result, request); err != nil {
@@ -376,17 +409,38 @@ func (u *unitEvaluator) buildResolution(ctx context.Context, cfg *config.Terragr
 
 // mergeOverwritesSensitive detects values evaluated before a later merge argument replaces them.
 func (s *sensitivityScanner) mergeOverwritesSensitive(call *hclsyntax.FunctionCallExpr, depth int) bool {
-	for i, argument := range call.Args {
+	operands, known := s.mergeOperands(call, depth)
+	if !known {
+		return true
+	}
+	for i, argument := range operands {
 		scan := *s
 		scan.paths = nil
 		scan.walk(argument, nil, depth)
-		for _, later := range call.Args[i+1:] {
+		for _, later := range operands[i+1:] {
 			if s.overwritesSensitivePaths(later, scan.paths, depth) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// mergeOperands lists the objects a merge call combines. An expanded final argument supplies several
+// operands: the members of a literal tuple are separate operands, while any other expression has members the
+// scan cannot enumerate, which is reported as unknown when the call may hold a sensitive value.
+func (s *sensitivityScanner) mergeOperands(call *hclsyntax.FunctionCallExpr, depth int) ([]hclsyntax.Expression, bool) {
+	if !call.ExpandFinal || len(call.Args) == 0 {
+		return call.Args, true
+	}
+	last := len(call.Args) - 1
+	if tuple, ok := unwrapParentheses(call.Args[last]).(*hclsyntax.TupleConsExpr); ok {
+		return append(slices.Clone(call.Args[:last]), tuple.Exprs...), true
+	}
+	if slices.ContainsFunc(call.Args, func(argument hclsyntax.Expression) bool { return s.containsSensitive(argument, depth) }) {
+		return nil, false
+	}
+	return call.Args[:last], true
 }
 
 func (s *sensitivityScanner) overwritesSensitivePaths(expression hclsyntax.Expression, paths [][]string, depth int) bool {
@@ -545,9 +599,11 @@ func (f *evaluatedFS) Evaluated() afero.Fs {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	memory := afero.NewMemMapFs()
-	view := &evaluatedView{Fs: afero.NewReadOnlyFs(memory), disk: f.Fs, captured: map[string]bool{}}
+	view := &evaluatedView{Fs: afero.NewReadOnlyFs(memory), disk: f.Fs, captured: map[string]bool{}, changed: map[string]bool{}}
 	for path, file := range f.files {
 		if file.changed {
+			// Remember it: a file that changed while it was evaluated stays unverifiable even after it is deleted.
+			view.changed[path] = true
 			continue
 		}
 		if err := afero.WriteFile(memory, path, file.content, 0o600); err == nil {
@@ -588,11 +644,13 @@ func (r *recordingFile) Seek(offset int64, whence int) (int64, error) {
 }
 
 // evaluatedView serves only the files that were captured. A file that was not captured and does not
-// exist reads as missing, as it did for Terragrunt; one that exists reads as errNotEvaluated.
+// exist reads as missing, as it did for Terragrunt; one that exists, or that changed while it was
+// evaluated, reads as errNotEvaluated.
 type evaluatedView struct {
 	afero.Fs
 	disk     afero.Fs
 	captured map[string]bool
+	changed  map[string]bool
 }
 
 func (v *evaluatedView) Open(name string) (afero.File, error) {
@@ -610,6 +668,9 @@ func (v *evaluatedView) Stat(name string) (os.FileInfo, error) {
 }
 
 func (v *evaluatedView) missing(op, name string) error {
+	if v.changed[filepath.Clean(name)] {
+		return &os.PathError{Op: op, Path: name, Err: errNotEvaluated}
+	}
 	if _, err := v.disk.Stat(name); err != nil {
 		return &os.PathError{Op: op, Path: name, Err: err}
 	}

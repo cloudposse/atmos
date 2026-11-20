@@ -1,12 +1,15 @@
 package atmosbridge
 
 import (
+	"crypto/sha1" //nolint:gosec // The SDK names its SSO token cache file after a SHA-1.
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -22,10 +25,12 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	awsmiddleware "github.com/aws/aws-sdk-go-v2/aws/middleware"
 	"github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/gruntwork-io/terragrunt/internal/awshelper"
 	"github.com/gruntwork-io/terragrunt/internal/iam"
 	"github.com/gruntwork-io/terragrunt/internal/venv"
@@ -575,6 +580,38 @@ func TestAWSWebIdentityRoleFromInvocationTokenFile(t *testing.T) {
 	assert.Zero(t, ambientCalls.Load(), "the process STS endpoint must never receive the invocation token")
 }
 
+// The web identity session duration is bounded before it narrows to the 32 bits of the STS request: an unset
+// value takes the default, and anything STS would refuse is rejected instead of being truncated.
+func TestWebIdentityDurationIsBoundedBeforeNarrowing(t *testing.T) {
+	tests := []struct {
+		name    string
+		seconds int64
+		want    int32
+		wantErr bool
+	}{
+		{name: "unset takes the default", seconds: 0, want: 3600},
+		{name: "negative takes the default", seconds: -5, want: 3600},
+		{name: "lowest accepted", seconds: 900, want: 900},
+		{name: "highest accepted", seconds: 43200, want: 43200},
+		{name: "below the lowest", seconds: 899, wantErr: true},
+		{name: "above the highest", seconds: 43201, wantErr: true},
+		{name: "would wrap to a small int32", seconds: 1<<32 + 3600, wantErr: true},
+		{name: "the largest int64", seconds: math.MaxInt64, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := webIdentityDuration(tt.seconds)
+
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrAWSCredentials)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // An assumed role session is reused only for the same assumption: a different or rotated web identity token,
 // duration, or base secret assumes the role again, and no raw secret enters the key.
 func TestAWSRoleCacheKeyTracksEveryAssumptionInput(t *testing.T) {
@@ -682,4 +719,335 @@ func TestAWSRejectsAmbientCredentialSourceInRoleProfiles(t *testing.T) {
 	require.Zero(t, calls.Load(), "the process credential endpoint must never receive a request")
 	signers, _ := server.seen()
 	require.Empty(t, signers, "no role may be assumed with process credentials")
+}
+
+// envCredentialProcessMarker gates the test binary into acting as an AWS credential_process helper. It is
+// only ever read by TestMain, so a helper started with the plugin process environment is observable.
+const envCredentialProcessMarker = "_ATMOS_TEST_CREDENTIAL_PROCESS_MARKER"
+
+func TestMain(m *testing.M) {
+	if marker := os.Getenv(envCredentialProcessMarker); marker != "" {
+		// Act as a credential_process helper: record that it ran, then print static credentials.
+		_ = os.WriteFile(marker, []byte("ran"), 0o600)
+		fmt.Fprint(os.Stdout, `{"Version":1,"AccessKeyId":"AKIAHELPER","SecretAccessKey":"helper-secret"}`)
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+// webIdentitySTS answers AssumeRoleWithWebIdentity and records the bodies it received.
+func webIdentitySTS(t *testing.T, bodies *atomic.Value) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		bodies.Store(string(body))
+		w.Header().Set("Content-Type", "text/xml")
+		fmt.Fprintf(w, `<AssumeRoleWithWebIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/"><AssumeRoleWithWebIdentityResult><Credentials><AccessKeyId>ASIACOMMANDWEB</AccessKeyId><SecretAccessKey>web</SecretAccessKey><SessionToken>web-token</SessionToken><Expiration>%s</Expiration></Credentials></AssumeRoleWithWebIdentityResult></AssumeRoleWithWebIdentityResponse>`, time.Now().Add(time.Hour).UTC().Format(time.RFC3339))
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+// A command-level web identity role is assumed with an invocation-scoped, unsigned STS call, so the
+// invocation does not need base credentials. The plugin process STS endpoint never sees the token.
+func TestAWSCommandLevelWebIdentityRoleNeedsNoBaseCredentials(t *testing.T) {
+	var ambientCalls atomic.Int32
+	ambient := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		ambientCalls.Add(1)
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer ambient.Close()
+	t.Setenv("AWS_ENDPOINT_URL_STS", ambient.URL)
+	var body atomic.Value
+	server := webIdentitySTS(t, &body)
+	token := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(token, []byte("command-jwt"), 0o600))
+	env := map[string]string{
+		"TG_IAM_ASSUME_ROLE": "arn:aws:iam::123456789012:role/deploy", "TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN": token,
+		"TG_IAM_ASSUME_ROLE_SESSION_NAME": "atmos-command", "AWS_ENDPOINT_URL_STS": server.URL, "AWS_EC2_METADATA_DISABLED": "true",
+	}
+
+	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+
+	assert.Equal(t, "ASIACOMMANDWEB", scoped.Env[envAccessKeyID])
+	assert.Equal(t, "web-token", scoped.Env[envSessionToken])
+	assert.Contains(t, body.Load(), "Action=AssumeRoleWithWebIdentity")
+	assert.Contains(t, body.Load(), "WebIdentityToken=command-jwt")
+	assert.Contains(t, body.Load(), "RoleSessionName=atmos-command")
+	assert.Zero(t, ambientCalls.Load(), "the process STS endpoint must never receive the invocation token")
+}
+
+// Ordinary AssumeRole still needs base credentials: without them the role is not assumed and the call
+// fails with the missing-credentials cause.
+func TestAWSOrdinaryRoleStillRequiresBaseCredentials(t *testing.T) {
+	server := newSTSServer(t)
+	env := map[string]string{
+		"TG_IAM_ASSUME_ROLE": "arn:aws:iam::123456789012:role/deploy", "AWS_ENDPOINT_URL_STS": server.URL, "AWS_EC2_METADATA_DISABLED": "true",
+	}
+
+	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+	_, err := accountID(t, scoped)
+
+	require.ErrorIs(t, err, ErrAWSCredentials)
+	require.ErrorContains(t, err, "supplies no AWS credentials")
+	assert.Equal(t, awsUnresolvedKey, scoped.Env[envAccessKeyID])
+	signers, _ := server.seen()
+	assert.Empty(t, signers)
+}
+
+// credential_process helpers run with the plugin process environment in the pinned SDK, which has no seam for
+// an invocation environment. Such a profile is rejected, at the end of a source_profile chain too, and the
+// helper never starts.
+func TestAWSRejectsCredentialProcessProfiles(t *testing.T) {
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	marker := filepath.Join(t.TempDir(), "ran")
+	t.Setenv(envCredentialProcessMarker, marker)
+	server := newSTSServer(t)
+	credentials, configFile := writeProfile(t, "static", "AKIASTATIC")
+	require.NoError(t, os.WriteFile(configFile, []byte(fmt.Sprintf("[profile helper]\ncredential_process = %q\n[profile viahelper]\nrole_arn = arn:aws:iam::1:role/test\nsource_profile = helper\n", executable)), 0o600))
+	base := map[string]string{"AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile, "AWS_ENDPOINT_URL_STS": server.URL, "AWS_EC2_METADATA_DISABLED": "true"}
+
+	for _, profile := range []string{"helper", "viahelper"} {
+		t.Run(profile, func(t *testing.T) {
+			env := map[string]string{"AWS_PROFILE": profile}
+			for name, value := range base {
+				env[name] = value
+			}
+			scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+			require.Equal(t, awsUnresolvedKey, scoped.Env[envAccessKeyID])
+			_, err := accountID(t, scoped)
+			require.ErrorIs(t, err, ErrAWSCredentials)
+			require.ErrorContains(t, err, "credential_process")
+			require.NoFileExists(t, marker, "the helper must never run with the plugin process environment")
+		})
+	}
+
+	t.Run("static profiles still resolve", func(t *testing.T) {
+		env := map[string]string{"AWS_PROFILE": "static"}
+		for name, value := range base {
+			env[name] = value
+		}
+		scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+		assert.Equal(t, "AKIASTATIC", scoped.Env[envAccessKeyID])
+	})
+}
+
+// The profile that passed validation is the one that resolves: rewriting the shared files in between must not
+// let the SDK select an ambient provider of the plugin process.
+func TestAWSResolvesTheValidatedProfileSnapshot(t *testing.T) {
+	var ambientCalls atomic.Int32
+	ambient := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		ambientCalls.Add(1)
+		_, _ = io.WriteString(w, `{"AccessKeyId":"AKIAAMBIENT","SecretAccessKey":"secret","Token":"ambient-token","Expiration":"2099-01-01T00:00:00Z"}`)
+	}))
+	defer ambient.Close()
+	t.Setenv("AWS_CONTAINER_CREDENTIALS_FULL_URI", ambient.URL)
+	t.Setenv("AWS_CONTAINER_AUTHORIZATION_TOKEN", "ambient-authorization")
+	credentials, configFile := writeProfile(t, "racy", "AKIARACY")
+	env := map[string]string{"AWS_PROFILE": "racy", "AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile, "AWS_EC2_METADATA_DISABLED": "true"}
+	previous := afterProfileValidated
+	t.Cleanup(func() { afterProfileValidated = previous })
+	afterProfileValidated = func() {
+		require.NoError(t, os.WriteFile(credentials, []byte("[unrelated]\naws_access_key_id = AKIAOTHER\naws_secret_access_key = other\n"), 0o600))
+		require.NoError(t, os.WriteFile(configFile, []byte("[profile racy]\nregion = eu-west-1\n"), 0o600))
+	}
+
+	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+
+	assert.Equal(t, "AKIARACY", scoped.Env[envAccessKeyID], "the validated snapshot resolves, not the rewritten files")
+	assert.Zero(t, ambientCalls.Load(), "the process credential endpoint must never receive a request")
+}
+
+// Without a rewrite the snapshot changes nothing, and missing shared files are still reported by the profile lookup.
+func TestAWSSnapshotKeepsMissingFilesMissing(t *testing.T) {
+	// An isolated temporary root keeps other tests and processes out of the cleanup assertion. os.TempDir reads
+	// TMPDIR on Unix and TMP/TEMP on Windows, which is where os.MkdirTemp("") creates the snapshot directory.
+	tempRoot := t.TempDir()
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, tempRoot)
+	}
+	pattern := filepath.Join(tempRoot, "atmos-aws-snapshot-*")
+	dir := t.TempDir()
+	env := map[string]string{"AWS_PROFILE": "absent", "AWS_SHARED_CREDENTIALS_FILE": filepath.Join(dir, "none"), "AWS_CONFIG_FILE": filepath.Join(dir, "none-config"), "AWS_EC2_METADATA_DISABLED": "true"}
+
+	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+
+	assert.Equal(t, awsUnresolvedKey, scoped.Env[envAccessKeyID])
+	entries, err := filepath.Glob(pattern)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "the snapshot directory is removed after resolution")
+}
+
+// Positive control for the cleanup assertion above: a resolving profile creates its snapshot directory inside the
+// isolated temporary root, so an empty root afterwards proves the cleanup ran rather than that the root went unused.
+func TestAWSSnapshotDirectoryLivesInTheIsolatedRootUntilResolved(t *testing.T) {
+	tempRoot := t.TempDir()
+	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(name, tempRoot)
+	}
+	pattern := filepath.Join(tempRoot, "atmos-aws-snapshot-*")
+	credentials, configFile := writeProfile(t, "resolves", "AKIARESOLVES")
+	env := map[string]string{"AWS_PROFILE": "resolves", "AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile, "AWS_EC2_METADATA_DISABLED": "true"}
+	var during []string
+	previous := afterProfileValidated
+	t.Cleanup(func() { afterProfileValidated = previous })
+	afterProfileValidated = func() {
+		during, _ = filepath.Glob(pattern)
+	}
+
+	scoped := AWS(t.Context(), Environment(env, io.Discard, io.Discard))
+
+	assert.Equal(t, "AKIARESOLVES", scoped.Env[envAccessKeyID])
+	require.Len(t, during, 1, "the snapshot directory exists in the isolated root while the profile resolves")
+	after, err := filepath.Glob(pattern)
+	require.NoError(t, err)
+	assert.Empty(t, after, "the snapshot directory is removed after resolution")
+}
+
+// ssoProfile writes a profile that resolves its credentials through SSO and the access token cache that
+// profile reads. A session profile gets an expired token so refreshing it reaches the SSO OIDC endpoint, and
+// a legacy profile gets a valid one so the call goes straight to the SSO portal.
+func ssoProfile(t *testing.T, session bool) (credentialsFile, configFile string) {
+	t.Helper()
+	home, dir := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	credentialsFile, configFile = filepath.Join(dir, "credentials"), filepath.Join(dir, "config")
+	require.NoError(t, os.WriteFile(credentialsFile, nil, 0o600))
+	const startURL = "https://example.awsapps.com/start"
+	cacheKey, expires, config := startURL, time.Now().Add(time.Hour), "[profile sso]\nsso_account_id = 123456789012\nsso_role_name = Admin\nsso_region = eu-west-1\nsso_start_url = "+startURL+"\n"
+	token := map[string]string{"accessToken": "cached-token", "startUrl": startURL, "region": "eu-west-1"}
+	if session {
+		cacheKey, expires = "team", time.Now().Add(-time.Hour)
+		config = "[profile sso]\nsso_account_id = 123456789012\nsso_role_name = Admin\nsso_session = team\n[sso-session team]\nsso_region = eu-west-1\nsso_start_url = " + startURL + "\n"
+		token["refreshToken"], token["clientId"], token["clientSecret"] = "refresh", "client", "client-secret"
+		token["registrationExpiresAt"] = time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
+	}
+	token["expiresAt"] = expires.UTC().Format(time.RFC3339)
+	digest := sha1.Sum([]byte(cacheKey))
+	cache := filepath.Join(home, ".aws", "sso", "cache")
+	require.NoError(t, os.MkdirAll(cache, 0o700))
+	payload, err := json.Marshal(token)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(cache, hex.EncodeToString(digest[:])+".json"), payload, 0o600))
+	require.NoError(t, os.WriteFile(configFile, []byte(config), 0o600))
+	return credentialsFile, configFile
+}
+
+// recordingServer answers every request with a forbidden status and counts the requests.
+func recordingServer(t *testing.T) (server *httptest.Server, hosts func() []string) {
+	t.Helper()
+	var mu sync.Mutex
+	var seen []string
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen = append(seen, r.Host+r.URL.Path)
+		mu.Unlock()
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(server.Close)
+	return server, func() []string { mu.Lock(); defer mu.Unlock(); return slices.Clone(seen) }
+}
+
+func TestAWSSSORequestsIgnoreProcessEndpointsAndUseInvocationOverrides(t *testing.T) {
+	for _, session := range []bool{false, true} {
+		name, service := "legacy sso", "SSO"
+		if session {
+			name, service = "sso session", "SSO_OIDC"
+		}
+		t.Run(name, func(t *testing.T) {
+			rogue, rogueHits := recordingServer(t)
+			approved, approvedHits := recordingServer(t)
+			for _, variable := range []string{"AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_SSO", "AWS_ENDPOINT_URL_SSO_OIDC"} {
+				t.Setenv(variable, rogue.URL)
+			}
+			credentials, configFile := ssoProfile(t, session)
+			env := map[string]string{
+				"AWS_PROFILE": "sso", "AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile,
+				"AWS_ENDPOINT_URL_" + service: approved.URL, "AWS_EC2_METADATA_DISABLED": "true",
+			}
+
+			_, err := resolveAWSCredentials(t.Context(), env, &awsTransport{endpoints: awsEndpoints(env)})
+
+			require.Error(t, err, "the approved endpoint refuses the request")
+			assert.Empty(t, rogueHits(), "a process endpoint never receives the bearer token request")
+			assert.NotEmpty(t, approvedHits(), "the invocation's own endpoint is used")
+		})
+	}
+}
+
+func TestAWSSSORequestsDefaultToAWSHostsWithoutOverrides(t *testing.T) {
+	for _, session := range []bool{false, true} {
+		name, host := "legacy sso", "portal.sso.eu-west-1.amazonaws.com"
+		if session {
+			name, host = "sso session", "oidc.eu-west-1.amazonaws.com"
+		}
+		t.Run(name, func(t *testing.T) {
+			rogue, rogueHits := recordingServer(t)
+			for _, variable := range []string{"AWS_ENDPOINT_URL", "AWS_ENDPOINT_URL_SSO", "AWS_ENDPOINT_URL_SSO_OIDC"} {
+				t.Setenv(variable, rogue.URL)
+			}
+			credentials, configFile := ssoProfile(t, session)
+			env := map[string]string{"AWS_PROFILE": "sso", "AWS_SHARED_CREDENTIALS_FILE": credentials, "AWS_CONFIG_FILE": configFile, "AWS_EC2_METADATA_DISABLED": "true"}
+			var sent []string
+			var mu sync.Mutex
+			next := NewMockRoundTripper(gomock.NewController(t))
+			next.EXPECT().RoundTrip(gomock.Any()).DoAndReturn(func(req *http.Request) (*http.Response, error) {
+				mu.Lock()
+				sent = append(sent, req.URL.Hostname())
+				mu.Unlock()
+				return &http.Response{StatusCode: http.StatusForbidden, Body: http.NoBody, Header: http.Header{}, Request: req}, nil
+			}).MinTimes(1)
+
+			_, err := resolveAWSCredentials(t.Context(), env, &awsTransport{next: next})
+
+			require.Error(t, err)
+			assert.Empty(t, rogueHits(), "a process endpoint never receives the request")
+			mu.Lock()
+			defer mu.Unlock()
+			assert.Equal(t, host, sent[0], "the request reaches the default AWS host")
+		})
+	}
+}
+
+func TestPinSSOEndpointAllowsOnlyTheCanonicalRegionalHost(t *testing.T) {
+	const getRole, createToken = "GetRoleCredentials", "CreateToken"
+	tests := []struct {
+		name, service, operation, region, url string
+		wantURL                               string
+		wantErr                               bool
+	}{
+		{name: "canonical portal host is unchanged", service: "SSO", operation: getRole, region: "eu-west-1", url: "https://portal.sso.eu-west-1.amazonaws.com/federation/credentials", wantURL: "https://portal.sso.eu-west-1.amazonaws.com/federation/credentials"},
+		{name: "canonical oidc host is unchanged", service: "SSO OIDC", operation: createToken, region: "eu-west-1", url: "https://oidc.eu-west-1.amazonaws.com/token", wantURL: "https://oidc.eu-west-1.amazonaws.com/token"},
+		{name: "attacker host with an AWS suffix", service: "SSO", operation: getRole, region: "eu-west-1", url: "https://evil.example.amazonaws.com/x", wantURL: "https://portal.sso.eu-west-1.amazonaws.com/federation/credentials"},
+		{name: "another AWS service host", service: "SSO OIDC", operation: createToken, region: "eu-west-1", url: "https://s3.eu-west-1.amazonaws.com/token", wantURL: "https://oidc.eu-west-1.amazonaws.com/token"},
+		{name: "another region's host", service: "SSO", operation: getRole, region: "eu-west-1", url: "https://portal.sso.us-east-1.amazonaws.com/federation/credentials", wantURL: "https://portal.sso.eu-west-1.amazonaws.com/federation/credentials"},
+		{name: "plain http on the canonical host", service: "SSO", operation: getRole, region: "eu-west-1", url: "http://portal.sso.eu-west-1.amazonaws.com/federation/credentials", wantURL: "https://portal.sso.eu-west-1.amazonaws.com/federation/credentials"},
+		{name: "china region domain", service: "SSO", operation: getRole, region: "cn-north-1", url: "https://evil.amazonaws.com/x", wantURL: "https://portal.sso.cn-north-1.amazonaws.com.cn/federation/credentials"},
+		{name: "unknown operation fails closed", service: "SSO", operation: "ListAccounts", region: "eu-west-1", url: "https://portal.sso.eu-west-1.amazonaws.com/assignment/accounts", wantErr: true},
+		{name: "missing region fails closed", service: "SSO OIDC", operation: createToken, region: "", url: "https://oidc.eu-west-1.amazonaws.com/token", wantErr: true},
+		{name: "non-SSO request is untouched", service: "STS", operation: "AssumeRole", region: "eu-west-1", url: "https://evil.example.amazonaws.com/x", wantURL: "https://evil.example.amazonaws.com/x"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := smithyhttp.NewStackRequest().(*smithyhttp.Request)
+			parsed, err := url.Parse(tt.url)
+			require.NoError(t, err)
+			req.URL = parsed
+			ctx := awsmiddleware.SetServiceID(t.Context(), tt.service)
+			ctx = awsmiddleware.SetOperationName(ctx, tt.operation)
+			ctx = awsmiddleware.SetRegion(ctx, tt.region)
+
+			err = pinSSOEndpoint(ctx, req)
+
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrAWSCredentials)
+				assert.Equal(t, tt.url, req.URL.String(), "a failed request is left as it was")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantURL, req.URL.String())
+		})
+	}
 }

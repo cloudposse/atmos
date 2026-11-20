@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -110,4 +112,63 @@ func mustRoot(t *testing.T, directory string) *os.Root {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = root.Close() })
 	return root
+}
+
+// A batch with a handoff commits nothing when a later file conflicts: the files it wrote and the
+// manifest are rolled back, while the same failure without a handoff keeps the partial progress.
+func TestHandoffBatchRollsBackWrittenFilesOnConflict(t *testing.T) {
+	files := []schema.ComponentConfigurationFile{
+		{Path: "remote.tf", Content: []byte("# generated"), IfExists: "overwrite"},
+		{Path: "other.tf", Content: []byte("# generated"), IfExists: "error"},
+	}
+	setup := func(t *testing.T) string {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "other.tf"), []byte("authored"), 0o600))
+		return root
+	}
+
+	t.Run("with a handoff", func(t *testing.T) {
+		root := setup(t)
+		err := WriteFilesWithHandoff(root, files, &Handoff{Run: func() error { return nil }})
+		require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+		assert.NoFileExists(t, filepath.Join(root, "remote.tf"), "the written file is rolled back")
+		assert.NotContains(t, readManifest(mustRoot(t, root)), "remote.tf", "its digest is not committed")
+		authored, readErr := os.ReadFile(filepath.Join(root, "other.tf"))
+		require.NoError(t, readErr)
+		assert.Equal(t, "authored", string(authored))
+	})
+
+	t.Run("without a handoff", func(t *testing.T) {
+		root := setup(t)
+		require.ErrorIs(t, WriteFiles(root, files), errUtils.ErrPluginInvalidConfig)
+		assert.FileExists(t, filepath.Join(root, "remote.tf"), "partial progress is kept")
+		assert.Contains(t, readManifest(mustRoot(t, root)), "remote.tf")
+	})
+}
+
+// The handoff's validation runs while the workdir lock is held, so another writer cannot change the
+// checked files between the check and the batch; a validation failure writes nothing.
+func TestHandoffValidateRunsUnderWorkdirLock(t *testing.T) {
+	root := t.TempDir()
+	var entered atomic.Bool
+	done := make(chan struct{})
+	files := []schema.ComponentConfigurationFile{{Path: "a.tf", Content: []byte("a"), IfExists: "overwrite"}}
+	err := WriteFilesWithHandoff(root, files, &Handoff{Validate: func() error {
+		go func() {
+			defer close(done)
+			assert.NoError(t, WithWorkdirLock(root, func() error { entered.Store(true); return nil }))
+		}()
+		time.Sleep(100 * time.Millisecond)
+		assert.False(t, entered.Load(), "another writer waits while validation runs")
+		return nil
+	}})
+	require.NoError(t, err)
+	<-done
+	assert.True(t, entered.Load(), "the lock is released after the batch")
+
+	failure := errUtils.ErrPluginInvalidConfig
+	err = WriteFilesWithHandoff(root, []schema.ComponentConfigurationFile{{Path: "b.tf", Content: []byte("b"), IfExists: "overwrite"}},
+		&Handoff{Validate: func() error { return failure }})
+	require.ErrorIs(t, err, failure)
+	assert.NoFileExists(t, filepath.Join(root, "b.tf"))
 }

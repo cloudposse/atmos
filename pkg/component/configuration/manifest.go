@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -199,7 +201,7 @@ func readFileDigest(root *os.Root, path string) (string, bool, error) {
 func removeStaleFiles(root *os.Root, previous map[string]string, current []string, kept map[string]string, undo restorePoint) error {
 	var failures error
 	for _, path := range slices.Sorted(mapKeys(previous)) {
-		if slices.Contains(current, path) || !filepath.IsLocal(filepath.FromSlash(path)) {
+		if slices.Contains(current, path) || !filepath.IsLocal(filepath.FromSlash(path)) || sharesFileWithAny(root, path, current) {
 			continue
 		}
 		if err := removeStaleFile(root, path, previous[path], undo); err != nil {
@@ -208,6 +210,34 @@ func removeStaleFiles(root *os.Root, previous map[string]string, current []strin
 		}
 	}
 	return failures
+}
+
+// sharesFileWithAny reports whether a recorded path and a current output name the same file, as two
+// spellings do on a case-insensitive working directory. The filesystem decides, so differently cased
+// names stay distinct on a case-sensitive one. Removing the old spelling would delete the output
+// that the run just accepted.
+func sharesFileWithAny(root *os.Root, path string, current []string) bool {
+	info, err := root.Lstat(filepath.FromSlash(path))
+	if err != nil {
+		return false
+	}
+	for _, name := range current {
+		other, err := root.Lstat(filepath.FromSlash(name))
+		if err == nil && os.SameFile(info, other) {
+			return true
+		}
+	}
+	return false
+}
+
+// ownedSnapshot reports whether the captured bytes are still what was generated: the recorded digest,
+// or the Terragrunt signature on the first line.
+func ownedSnapshot(content []byte, recorded string) bool {
+	if contentDigest(content) == recorded {
+		return true
+	}
+	first, _, _ := bytes.Cut(content, []byte("\n"))
+	return strings.HasSuffix(strings.TrimSpace(string(first)), terragruntSignature)
 }
 
 // removeStaleFile checks ownership and removes the leaf through one pinned ordinary parent.
@@ -222,16 +252,23 @@ func removeStaleFile(root *os.Root, path, recorded string, undo restorePoint) er
 	}
 	defer directory.Close()
 	leaf := filepath.Base(local)
-	digest, exists, err := readFileDigest(directory, leaf)
+	_, exists, err := readFileDigest(directory, leaf)
 	if err != nil {
 		// An unreadable file may still be the generated one; the caller keeps its record for a retry.
 		return err
 	}
-	if !exists || (digest != recorded && verifyTerragruntSignature(directory, leaf) != nil) {
+	if !exists {
 		return nil
 	}
+	// The snapshot that rollback restores is also the one ownership is judged on, so a file replaced
+	// after the check is never removed on the strength of the earlier bytes.
 	if err := undo.captureFrom(directory, path, leaf); err != nil {
 		return err
+	}
+	state := undo[path]
+	if !state.exists || !ownedSnapshot(state.content, recorded) || !state.unchanged(directory, leaf) {
+		// Changed since it was written: leave it in place, as for any other user-edited file.
+		return nil
 	}
 	if err := removeFile(directory, leaf); err != nil {
 		return err

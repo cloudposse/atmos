@@ -70,9 +70,16 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 // Handoff is an operation that must run after every destination validates and before the batch
 // writes, such as relinquishing a file the batch replaces. Paths lists the files it may change, so
 // the batch can put them back when it fails.
+//
+// Validate, when set, runs under the same lock before the handoff and any write, so a check of the
+// existing files cannot be invalidated by another process between the check and the batch.
+//
+// A batch with a Run func is all-or-nothing: the generated files and the manifest are committed only
+// when the handoff and the whole batch succeed, and any failure rolls back every file the batch wrote.
 type Handoff struct {
-	Paths []string
-	Run   func() error
+	Paths    []string
+	Validate func() error
+	Run      func() error
 }
 
 // WriteFilesWithHandoff is WriteFiles with a handoff that shares the batch's lock and rollback: it
@@ -95,6 +102,21 @@ func WriteFilesWithHandoff(directory string, files []schema.ComponentConfigurati
 	return filelock.New(lockPath).WithExclusive(ctx, func() error {
 		return writeFilesLocked(directory, files, handoff)
 	})
+}
+
+// WithWorkdirLock runs fn while holding the exclusive generated-files lock for the working directory,
+// the same lock every batch write holds. Writers of files that other batches inspect or remove, such as
+// the generated host backend, use it so a check-then-remove in a batch cannot race their write.
+func WithWorkdirLock(directory string, fn func() error) error {
+	defer perf.Track(nil, "configuration.WithWorkdirLock")()
+
+	lockPath, err := workdirLockPath(directory)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), lockTimeout)
+	defer cancel()
+	return filelock.New(lockPath).WithExclusive(ctx, fn)
 }
 
 // workdirLockName is the advisory lock beside the manifest, in the bookkeeping directory that saved-plan
@@ -148,6 +170,11 @@ func writeFilesLocked(directory string, files []schema.ComponentConfigurationFil
 	if err := validateFiles(root, files); err != nil {
 		return err
 	}
+	if handoff != nil && handoff.Validate != nil {
+		if err := handoff.Validate(); err != nil {
+			return err
+		}
+	}
 	handoffUndo, err := runHandoff(root, handoff)
 	if handoffUndo != nil {
 		defer func() {
@@ -159,12 +186,14 @@ func writeFilesLocked(directory string, files []schema.ComponentConfigurationFil
 	if err != nil {
 		return err
 	}
-	return writeBatch(root, files)
+	return writeBatch(root, files, handoff != nil && handoff.Run != nil)
 }
 
 // writeBatch writes the files against the recorded manifest, removes stale generated files, and
-// records the new manifest, rolling back what it changed when it cannot record ownership.
-func writeBatch(root *os.Root, files []schema.ComponentConfigurationFile) error {
+// records the new manifest, rolling back what it changed when it cannot record ownership. An atomic
+// batch (one with a handoff) keeps nothing when any step fails: every written file is restored and
+// the manifest is left as it was, instead of committing the partial progress.
+func writeBatch(root *os.Root, files []schema.ComponentConfigurationFile, atomic bool) error {
 	previous, err := loadManifest(root)
 	if err != nil {
 		return generatedFileError(manifestName, err)
@@ -173,16 +202,22 @@ func writeBatch(root *os.Root, files []schema.ComponentConfigurationFile) error 
 	current := make(map[string]string, len(files))
 	completed := make(map[string]bool, len(files))
 	names := make([]string, 0, len(files))
+	abort := func(cause error) error {
+		if atomic {
+			return errors.Join(cause, undo.restore(root))
+		}
+		return errors.Join(cause, keepRecordsAfterFailure(root, previous, current, completed, undo))
+	}
 	for _, file := range files {
 		// Clean the key, so ./provider.tf and provider.tf name the same recorded file.
 		key := filepath.ToSlash(filepath.Clean(file.Path))
 		names = append(names, key)
 		if err := undo.capture(root, key); err != nil {
-			return errors.Join(generatedFileError(file.Path, err), keepRecordsAfterFailure(root, previous, current, completed, undo))
+			return abort(generatedFileError(file.Path, err))
 		}
 		digest, err := writeFile(root, file, previous[key])
 		if err != nil {
-			return errors.Join(err, keepRecordsAfterFailure(root, previous, current, completed, undo))
+			return abort(err)
 		}
 		completed[key] = true
 		if digest != "" {
@@ -192,6 +227,9 @@ func writeBatch(root *os.Root, files []schema.ComponentConfigurationFile) error 
 	// Record the manifest even when a stale file cannot be removed, so the files written above stay
 	// owned and the stale file is retried; then report the removal failure.
 	staleErr := removeStaleFiles(root, previous, names, current, undo)
+	if atomic && staleErr != nil {
+		return errors.Join(staleErr, undo.restore(root))
+	}
 	return errors.Join(recordManifest(root, current, undo), staleErr)
 }
 
@@ -549,8 +587,12 @@ func openExistingRegularFile(root *os.Root, name string, flags int) (*os.File, e
 		return nil, err
 	}
 	after, err := output.Stat()
-	if err != nil || !os.SameFile(before, after) {
-		return nil, errors.Join(errUtils.ErrPluginInvalidConfig, err, output.Close())
+	if err != nil {
+		// A failed inspection is an I/O error, not a confirmed alias, so callers must not treat it as one.
+		return nil, errors.Join(err, output.Close())
+	}
+	if !os.SameFile(before, after) {
+		return nil, errors.Join(errUtils.ErrPluginInvalidConfig, output.Close())
 	}
 	return output, nil
 }

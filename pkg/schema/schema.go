@@ -2185,6 +2185,10 @@ type ConfigAndStacksInfo struct {
 	TerraformSecretVarKeys map[string]bool
 	// PreparedSensitiveInputKeys preserves plugin sensitivity even for empty input values.
 	PreparedSensitiveInputKeys map[string]bool
+	// TerraformSecretVarKeysComputed reports that TerraformSecretVarKeys was computed for the current
+	// ComponentVarsSection. An empty TerraformSecretVarKeys alone cannot tell "no secret inputs" from
+	// "not classified yet", and consumers that expose inputs must treat the latter as secret.
+	TerraformSecretVarKeysComputed bool
 	// ConfigurationSensitiveInputKeys retains provider-declared sensitivity independently of masking.
 	ConfigurationSensitiveInputKeys map[string]bool
 	// SanitizedEnv holds the sanitized process environment from auth.
@@ -2281,6 +2285,11 @@ type ConfigAndStacksInfo struct {
 	StoredPlanFile          string
 	// ConfigurationPlanImplicit retains implicit selection after restoration fills PlanFile.
 	ConfigurationPlanImplicit bool `yaml:"-" json:"-" mapstructure:"-"`
+	// ConfigurationPlanWorkdirExact reports that the working directory of the restored saved plan
+	// matched the reviewed digest byte for byte during this invocation, so its variable file is the
+	// reviewed one. A directory accepted only as a verified rebuild never sets it: the rebuild digest
+	// leaves the variable files out.
+	ConfigurationPlanWorkdirExact bool `yaml:"-" json:"-" mapstructure:"-"`
 	// VerifyPlanMode carries the explicit CLI planfile-verify override for `deploy`
 	// (--verify-plan => fail, --verify-plan=false => off; empty when the flag is unset).
 	// It is resolved against config + CI mode via planfile.ResolveVerifyMode at the

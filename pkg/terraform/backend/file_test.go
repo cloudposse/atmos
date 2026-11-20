@@ -4,11 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -143,4 +145,24 @@ func TestRemoveHostBackendWrapsFilesystemFailures(t *testing.T) {
 	err = RemoveHostBackend(dir)
 	require.ErrorIs(t, err, errUtils.ErrReadFile)
 	require.ErrorContains(t, err, "host-backend.sha256")
+}
+
+// The generated backend and its receipt are written under the workdir lock that RemoveHostBackend's
+// batch holds, so a backend written after a digest check cannot be removed by that handoff.
+func TestGenerateFileWaitsForWorkdirLock(t *testing.T) {
+	dir := t.TempDir()
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{}}}
+	path := filepath.Join(dir, hostBackendName)
+	done := make(chan error, 1)
+	require.NoError(t, configuration.WithWorkdirLock(dir, func() error {
+		go func() { done <- GenerateFile(config, info, dir) }()
+		time.Sleep(100 * time.Millisecond)
+		assert.NoFileExists(t, path, "the write waits for the lock holder")
+		return nil
+	}))
+	require.NoError(t, <-done)
+	assert.FileExists(t, path)
+	assert.FileExists(t, filepath.Join(dir, hostBackendReceipt))
 }

@@ -58,8 +58,12 @@ func checkEncryption(encrypted, generated bool, result *model.Resolution, reques
 		})
 		return nil
 	}
-	// The unit's terraform_binary, resolved before the backend, is the executable that runs it.
-	binary := result.TerraformBinary
+	// The executable the host resolved after a stack `command` or command-line override is the one that runs.
+	// Without one, the unit's terraform_binary, resolved before the backend, then the host default decide.
+	binary := environmentValue(request.Environment, effectiveBinaryEnvironment)
+	if binary == "" {
+		binary = result.TerraformBinary
+	}
 	if binary == "" {
 		binary = request.Tofu
 	}

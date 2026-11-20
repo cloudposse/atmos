@@ -67,6 +67,44 @@ func TestMissingPlanDigestStopsBeforeAfterHooks(t *testing.T) {
 	require.Len(t, shell.calls, 1, "a successful fingerprint permits the after hook")
 }
 
+// A plan left at the output path by an earlier run is not bound by a run that wrote nothing, such as
+// a help-only invocation that exits successfully. The earlier file is left as it was.
+func TestStalePlanIsNotBoundByARunThatWroteNothing(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
+	execCtx.planSnapshots = snapshotter
+	args := []string{"plan", "-out=" + path, "-help"}
+
+	err := snapshotter.around(args, func() error { return nil }, failedOnError)()
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed, "the run wrote no plan, so the digest step fails")
+	require.Nil(t, snapshotter.result, "no reviewed snapshot is recorded for a plan this run did not write")
+	require.Error(t, snapshotter.err)
+	stale, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.Equal(t, "reviewed plan", string(stale), "the earlier plan is restored untouched")
+	entries, readErr := os.ReadDir(filepath.Dir(path))
+	require.NoError(t, readErr)
+	for _, entry := range entries {
+		require.NotContains(t, entry.Name(), stalePlanDirPrefix, "no stash is left behind")
+	}
+	require.Error(t, recordConfigurationPlan(t.Context(), config, info, execCtx, args))
+	require.NoFileExists(t, path+configurationPlanSuffix)
+
+	// Negative path: a run that writes the plan, even with identical bytes, is bound.
+	err = snapshotter.around(args[:2], func() error { return os.WriteFile(path, []byte("reviewed plan"), 0o600) }, failedOnError)()
+	require.NoError(t, err)
+	require.NoError(t, snapshotter.err)
+	require.NotNil(t, snapshotter.result)
+	require.NotEmpty(t, snapshotter.result.planDigest)
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, args[:2]))
+	require.FileExists(t, path+configurationPlanSuffix)
+	entries, readErr = os.ReadDir(filepath.Dir(path))
+	require.NoError(t, readErr)
+	for _, entry := range entries {
+		require.NotContains(t, entry.Name(), stalePlanDirPrefix, "the stash is discarded after a fresh write")
+	}
+}
+
 // failedOnError classifies every error as a failed command.
 func failedOnError(err error) bool { return err != nil }
 
@@ -1133,4 +1171,20 @@ func TestRebuildReplaysTheReviewedPlanArguments(t *testing.T) {
 
 	assert.Equal(t, []string{"-target=aws_s3_bucket.logs", "-var=token="}, evaluated)
 	assert.Equal(t, []string{"-auto-approve"}, apply.AdditionalArgsAndFlags, "the apply keeps its own arguments")
+}
+
+// A plan output the stash refuses stops the run before the subprocess starts: a run that wrote partial
+// bytes and then failed could not be undone, because no backup of the earlier plan exists.
+func TestRefusedPlanStashStopsTheRunBeforeTheSubprocess(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	require.NoError(t, os.Remove(path))
+	require.NoError(t, os.Mkdir(path, 0o700), "a directory at the plan output is not a regular file, so the stash refuses it")
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
+	execCtx.planSnapshots = snapshotter
+
+	started := false
+	err := snapshotter.around([]string{"plan", "-out=" + path}, func() error { started = true; return nil }, failedOnError)()
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorIs(t, snapshotter.err, errUtils.ErrPlanVerificationFailed)
+	assert.False(t, started, "the subprocess must not start when the earlier plan cannot be stashed")
 }

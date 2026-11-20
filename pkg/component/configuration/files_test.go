@@ -643,6 +643,7 @@ func TestRemovalFailureKeepsTheGeneratedFileClassification(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(nested, "old.tf"), []byte("old"), 0o600))
 	require.NoError(t, os.Chmod(nested, 0o500))
 	t.Cleanup(func() { _ = os.Chmod(nested, 0o755) })
+	requireEffectiveDirectoryPermissions(t, nested)
 	err := WriteFiles(root, []schema.ComponentConfigurationFile{{Path: "nested/old.tf", IfExists: "remove"}})
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	require.ErrorIs(t, err, os.ErrPermission)

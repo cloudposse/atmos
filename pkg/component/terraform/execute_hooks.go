@@ -105,36 +105,10 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 		if captured, ok := ctx.Value(mainCommandArgsKey{}).(*[]string); ok {
 			*captured = slices.Clone(phaseArgs)
 		}
-		run := func() error {
-			var changesPresent error
-			err := ExecuteShellCommandWithRetry(
-				atmosConfig,
-				phaseInfo,
-				info.SubCommand,
-				func(o ...component.ExecutionOption) error {
-					err := e.executeReviewedStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
-						componentPath:  componentPath,
-						args:           phaseArgs,
-						gatePhase:      info.SubCommand,
-						subCommand:     info.SubCommand,
-						redirectStdErr: info.RedirectStdErr,
-						shellOpts:      o,
-					})
-					// Classify with the effective arguments and environment before legacy
-					// output matching can retry a plan that already succeeded.
-					if isDetailedExitCodeChanges(phase.command, phaseArgs, env, err, o...) {
-						changesPresent = err
-						return nil
-					}
-					return err
-				},
-				phaseOpts...,
-			)
-			if err != nil {
-				return err
-			}
-			return changesPresent
-		}
+		run := e.mainShellRun(atmosConfig, &mainShellRequest{
+			info: info, phaseInfo: phaseInfo, command: phase.command, componentPath: componentPath,
+			args: phaseArgs, env: env, opts: phaseOpts,
+		})
 		if snapshots, ok := ctx.Value(planSnapshotKey{}).(*planSnapshotter); ok {
 			run = snapshots.around(phaseArgs, run, func(err error) bool {
 				return err != nil && !isDetailedExitCodeChanges(phase.command, phaseArgs, env, err, phaseOpts...)
@@ -150,6 +124,51 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 		}
 		return err
 	})
+}
+
+// mainShellRequest holds what one run of the main Terraform command needs.
+type mainShellRequest struct {
+	info, phaseInfo        *schema.ConfigAndStacksInfo
+	command, componentPath string
+	args, env              []string
+	opts                   []component.ExecutionOption
+}
+
+// mainShellRun returns one run of the main Terraform command. A "changes present" status from
+// -detailed-exitcode is classified before legacy output matching can retry a plan that already
+// succeeded, and is returned once the retries settle.
+func (e *Executor) mainShellRun(atmosConfig *schema.AtmosConfiguration, r *mainShellRequest) func() error {
+	info, phaseInfo, command, componentPath, phaseArgs, env, phaseOpts := r.info, r.phaseInfo, r.command, r.componentPath, r.args, r.env, r.opts
+	return func() error {
+		var changesPresent error
+		err := ExecuteShellCommandWithRetry(
+			atmosConfig,
+			phaseInfo,
+			info.SubCommand,
+			func(o ...component.ExecutionOption) error {
+				err := e.executeReviewedStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
+					componentPath:  componentPath,
+					args:           phaseArgs,
+					gatePhase:      info.SubCommand,
+					subCommand:     info.SubCommand,
+					redirectStdErr: info.RedirectStdErr,
+					shellOpts:      o,
+				})
+				// Classify with the effective arguments and environment before legacy
+				// output matching can retry a plan that already succeeded.
+				if isDetailedExitCodeChanges(command, phaseArgs, env, err, o...) {
+					changesPresent = err
+					return nil
+				}
+				return err
+			},
+			phaseOpts...,
+		)
+		if err != nil {
+			return err
+		}
+		return changesPresent
+	}
 }
 
 // executeReviewedStreamingOrShell verifies the reviewed files immediately before each attempt.
@@ -221,7 +240,7 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 	env := slices.Concat(envpkg.ConvertMapToSlice(atmosConfig.Env), phaseInfo.ComponentEnvList)
 	attempts := &phaseAttempts{config: config, info: &phaseInfo, phase: phase, args: applied.Args, env: env, runner: runner, capture: capture, action: action}
 	if config.Errors != nil {
-		return e.recoverPhase(&phaseInfo, phase, config.Errors, opts, attempts.run)
+		return e.recoverPhase(&phaseInfo, phase, config.Errors, opts, attempts)
 	}
 	changesPresent, err := attempts.run(opts, nil)
 	if err != nil {
@@ -387,10 +406,11 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 	if err != nil {
 		return nil, err
 	}
-	arguments, err := r.hookArguments(hook, directory)
+	arguments, secretEnv, err := r.hookArguments(hook, directory)
 	if err != nil {
 		return nil, err
 	}
+	env = append(env, secretEnv...)
 	err = r.executor.services.ExecuteShellCommand(*r.atmosConfig, hook.Execute[0], arguments, directory, env, false, "", opts...)
 	finishStderr(err)
 	if file == nil {
@@ -414,18 +434,21 @@ func (r *hookRunner) failureCapture(captured io.Writer) (io.Writer, func(error))
 	}
 }
 
-// hookArguments returns the arguments a hook runs with. A tflint hook gets the stack's final inputs
-// bound to its variables.
-func (r *hookRunner) hookArguments(hook *schema.ComponentHook, directory string) ([]string, error) {
+// hookArguments returns the arguments and any extra environment a hook runs with. A tflint hook gets
+// the stack's final inputs bound to its variables, secret ones through the environment.
+func (r *hookRunner) hookArguments(hook *schema.ComponentHook, directory string) ([]string, []string, error) {
 	arguments := hook.Execute[1:]
 	if hook.Execute[0] != "tflint" {
-		return arguments, nil
+		return arguments, nil, nil
 	}
-	arguments, err := resolveTflintHookArguments(arguments, directory, r.info.ComponentVarsSection)
+	inputs, secretEnv, err := r.tflintChannels(arguments)
+	if err == nil {
+		arguments, err = resolveTflintHookArguments(arguments, directory, inputs)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("tflint hook %q: %w", hook.Name, err)
+		return nil, nil, fmt.Errorf("tflint hook %q: %w", hook.Name, err)
 	}
-	return arguments, nil
+	return arguments, secretEnv, nil
 }
 
 // hookUnitLabel names the component and stack a hook runs for, so output of a bulk run can be attributed.

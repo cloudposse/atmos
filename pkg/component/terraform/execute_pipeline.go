@@ -425,6 +425,7 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 		return e.executeGovernedTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, mainOpts...)
 	})
 	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
+	mainErr = withoutIgnoredPolicyFailure(mainErr, ignored)
 	// A completed -detailed-exitcode plan reports changes with status 2 after writing the plan, so
 	// it is neither recovered nor returned before the reviewed plan is recorded. A component with
 	// provider-supplied hooks already recovered inside its lifecycle.

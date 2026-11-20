@@ -695,3 +695,509 @@ func TestSensitivityProtectsWhatWasNotEvaluated(t *testing.T) {
 	assert.Equal(t, [][]string{nil}, sensitiveInputs(view, []string{unit}, map[string]any{"a": 1}, unit, nil))
 	assert.True(t, unredactedSensitivity(view, []string{unit}, unit, true))
 }
+
+// A local named through a literal index is the same local as one named through an attribute.
+func TestSensitiveInputsResolveLiteralIndexedLocalNames(t *testing.T) {
+	fsys := afero.NewMemMapFs()
+	writeFiles(t, fsys, map[string]string{"/unit.hcl": `locals {
+  token = sensitive("t")
+  plain = "visible"
+}
+inputs = {
+  attribute = local.token
+  indexed   = local["token"]
+  nested    = { key = local["token"] }
+  open      = local["plain"]
+  attr_open = local.plain
+}
+`})
+	inputs := map[string]any{"attribute": "t", "indexed": "t", "nested": map[string]any{"key": "t"}, "open": "visible", "attr_open": "visible"}
+
+	assert.Equal(t, [][]string{{"attribute"}, {"indexed"}, {"nested", "key"}}, SensitiveInputs(fsys, []string{"/unit.hcl"}, inputs))
+}
+
+// A child that copies a parent's exposed input keeps the sensitivity even when the parent's inputs are not
+// merged into the child's, because the parent's own path is then absent from the evaluated inputs.
+func TestSensitiveInputsFollowExposedParentInputs(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "repo")
+	unit := filepath.Join(root, "app", unitFile)
+	parent := filepath.Join(root, "parent.hcl")
+	child := "include \"root\" {\n  path = find_in_parent_folders(\"parent.hcl\")\n  expose = true\n}\n"
+	for _, test := range []struct {
+		name, parent, inputs string
+		files                []string
+		want                 [][]string
+	}{
+		{"attribute copy", `inputs = { token = sensitive("s"), open = "o" }`, "copy = include.root.inputs.token\n open = include.root.inputs.open", []string{unit, parent}, [][]string{{"copy"}}},
+		{"indexed copy", `inputs = { token = sensitive("s"), open = "o" }`, `copy = include.root.inputs["token"]`, []string{unit, parent}, [][]string{{"copy"}}},
+		{"copy of every input", `inputs = { token = sensitive("s") }`, "copy = include.root.inputs", []string{unit, parent}, [][]string{{"copy", "token"}}},
+		{"parent sensitive through its local", "locals { t = sensitive(\"s\") }\ninputs = { token = local.t }", "copy = include.root.inputs.token", []string{unit, parent}, [][]string{{"copy"}}},
+		{"only non-sensitive inputs are copied", `inputs = { token = sensitive("s"), open = "o" }`, "open = include.root.inputs.open", []string{unit, parent}, nil},
+		{"parent without inputs", `locals { a = 1 }`, "copy = include.root.inputs.token", []string{unit, parent}, nil},
+		{"exposed parent that cannot be read", `inputs = { token = sensitive("s") }`, "copy = include.root.inputs.token", []string{unit}, [][]string{{"copy"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			require.NoError(t, fsys.MkdirAll(filepath.Dir(unit), 0o755))
+			writeFiles(t, fsys, map[string]string{parent: test.parent, unit: child + "inputs = {\n " + test.inputs + "\n}\n"})
+			// With no_merge the child's evaluated inputs hold only its own keys.
+			inputs := map[string]any{"copy": "s", "open": "o"}
+			if test.name == "copy of every input" {
+				inputs["copy"] = map[string]any{"token": "s"}
+			}
+
+			assert.Equal(t, test.want, SensitiveInputs(fsys, test.files, inputs))
+		})
+	}
+}
+
+// A copy of an exposed include's whole locals object carries every sensitive local with it, at the path of
+// that local, while selecting one local keeps the precise result.
+func TestSensitiveInputsFollowACopyOfExposedIncludeLocals(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "repo")
+	unit := filepath.Join(root, "app", unitFile)
+	parent := filepath.Join(root, "parent.hcl")
+	child := "include \"root\" {\n  path = find_in_parent_folders(\"parent.hcl\")\n  expose = true\n}\n"
+	for _, test := range []struct {
+		name, parent, inputs string
+		files                []string
+		value                any
+		want                 [][]string
+	}{
+		{"sensitive local", "locals {\n token = sensitive(\"s\")\n open = \"o\"\n}", "copy = include.root.locals", []string{unit, parent}, map[string]any{"token": "s", "open": "o"}, [][]string{{"copy", "token"}}},
+		{"nested sensitive member", `locals { a = { x = sensitive("s"), y = "o" } }`, "copy = include.root.locals", []string{unit, parent}, map[string]any{"a": map[string]any{"x": "s", "y": "o"}}, [][]string{{"copy", "a", "x"}}},
+		{"sensitive through another local", "locals {\n t = sensitive(\"s\")\n copy = local.t\n}", "copy = include.root.locals", []string{unit, parent}, map[string]any{"t": "s", "copy": "s"}, [][]string{{"copy", "copy"}, {"copy", "t"}}},
+		{"no sensitive local", "locals {\n a = \"o\"\n b = \"p\"\n}", "copy = include.root.locals", []string{unit, parent}, map[string]any{"a": "o", "b": "p"}, nil},
+		{"exposed parent that cannot be read", `locals { token = sensitive("s") }`, "copy = include.root.locals", []string{unit}, "s", [][]string{{"copy"}}},
+		{"one local selected", "locals {\n token = sensitive(\"s\")\n open = \"o\"\n}", "copy = include.root.locals.open", []string{unit, parent}, "o", nil},
+		{"sensitive local selected", "locals {\n token = sensitive(\"s\")\n open = \"o\"\n}", "copy = include.root.locals.token", []string{unit, parent}, "s", [][]string{{"copy"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			require.NoError(t, fsys.MkdirAll(filepath.Dir(unit), 0o755))
+			writeFiles(t, fsys, map[string]string{parent: test.parent, unit: child + "inputs = {\n " + test.inputs + "\n}\n"})
+
+			assert.Equal(t, test.want, SensitiveInputs(fsys, test.files, map[string]any{"copy": test.value}))
+		})
+	}
+}
+
+// A later computed key may name the requested member, so an earlier static member cannot be selected
+// without scanning the whole object, unless the later key is provably different.
+func TestSensitiveInputsReverseMemberLookupAccountsForComputedKeys(t *testing.T) {
+	fsys := afero.NewMemMapFs()
+	writeFiles(t, fsys, map[string]string{"/unit.hcl": `locals {
+  name      = "token"
+  computed  = { token = "open", (local.name) = sensitive("s") }
+  different = { token = "open", ("other") = sensitive("s") }
+  replaced  = { token = sensitive("s"), (local.name) = "open" }
+  static    = { token = "open", token = sensitive("s") }
+  earlier   = { (local.name) = "open", token = "visible" }
+}
+inputs = {
+  computed  = local.computed.token
+  different = local.different.token
+  replaced  = local.replaced.token
+  static    = local.static.token
+  earlier   = local.earlier.token
+}
+`})
+	inputs := map[string]any{"computed": "s", "different": "open", "replaced": "open", "static": "s", "earlier": "visible"}
+
+	// Statically different keys keep the precise result; only an unresolvable later key falls back.
+	assert.Equal(t, [][]string{{"computed"}, {"replaced"}, {"static"}}, SensitiveInputs(fsys, []string{"/unit.hcl"}, inputs))
+}
+
+// A sensitive predicate is unknown to the sink even when neither branch is sensitive: only the selected
+// result is registered, so the command output the predicate consumed may already have been logged.
+func TestTransformsSensitiveInputsChecksSensitivePredicates(t *testing.T) {
+	for _, test := range []struct {
+		name, inputs string
+		want         bool
+	}{
+		{"sensitive command in the predicate", `{ flag = sensitive(run_cmd("echo", "x")) == "x" ? "a" : "b" }`, true},
+		{"predicate of a plain value", `sensitive(run_cmd("echo", "x")) == "x" ? "a" : "b"`, true},
+		{"predicate nested in a call", `{ flag = upper(sensitive(run_cmd("echo", "x")) == "x" ? "a" : "b") }`, true},
+		{"predicate under an object member", `{ nested = { flag = sensitive(run_cmd("echo", "x")) == "x" ? 1 : 2 } }`, true},
+		{"literal predicate", `{ flag = true ? "a" : "b" }`, false},
+		{"literal sensitive predicate cannot have logged", `{ flag = sensitive("x") == "x" ? "a" : "b" }`, false},
+		{"command predicate that is not sensitive", `{ flag = run_cmd("echo", "x") == "x" ? "a" : "b" }`, false},
+		{"literal conditional with a sensitive literal branch", `{ flag = true ? sensitive("s") : "b" }`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			writeFiles(t, fsys, map[string]string{"/unit.hcl": "inputs = " + test.inputs + "\n"})
+
+			assert.Equal(t, test.want, transformsSensitiveInputs(fsys, "/unit.hcl"))
+		})
+	}
+}
+
+// A sensitive predicate in a local is as unknown to the sink as one in an input.
+func TestTransformsSensitiveLocalChecksSensitivePredicates(t *testing.T) {
+	for _, test := range []struct {
+		name, local string
+		want        bool
+	}{
+		{"sensitive command in the predicate", `sensitive(run_cmd("echo", "x")) == "x" ? "a" : "b"`, true},
+		{"literal predicate", `true ? "a" : "b"`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			writeFiles(t, fsys, map[string]string{"/unit.hcl": "locals { choice = " + test.local + " }\n"})
+
+			assert.Equal(t, test.want, transformsSensitiveLocal(fsys, "/unit.hcl"))
+		})
+	}
+}
+
+// Selecting one member, or one element, drops the rest of the collection. A dropped sensitive command
+// result is never registered with the sink, so the events are withheld unless the selection retains it.
+func TestTransformsSensitiveInputsWithholdsWhenASelectionDiscardsSensitiveValues(t *testing.T) {
+	const call = `run_cmd("echo", "x")`
+	for _, test := range []struct {
+		name, inputs string
+		want         bool
+	}{
+		{"index drops a sensitive element", `{ token = [sensitive(` + call + `), "b"][1] }`, true},
+		{"index keeps the sensitive element", `{ token = [sensitive(` + call + `), "b"][0] }`, false},
+		{"key drops a sensitive member", `{ token = { a = sensitive(` + call + `), b = "b" }["b"] }`, true},
+		{"key keeps the sensitive member", `{ token = { a = sensitive(` + call + `), b = "b" }["a"] }`, false},
+		{"attribute drops a sensitive member", `{ token = ({ a = sensitive(` + call + `), b = "b" }).b }`, true},
+		{"attribute keeps the sensitive member", `{ token = ({ a = sensitive(` + call + `), b = "b" }).a }`, false},
+		{"nested selection drops a sibling", `{ token = { a = { x = sensitive(` + call + `), y = "y" } }["a"].y }`, true},
+		{"nested selection keeps the member", `{ token = { a = { x = sensitive(` + call + `), y = "y" } }["a"].x }`, false},
+		{"sensitive wrapper makes every member sensitive", `{ token = sensitive({ a = ` + call + `, b = "b" })["b"] }`, true},
+		{"unknown key may drop it", `{ token = [sensitive(` + call + `), "b"][length("ab") - 1] }`, true},
+		{"sensitive command as the key", `{ token = { a = "a" }[sensitive(` + call + `)] }`, true},
+		{"selection of a literal cannot have logged", `{ token = [sensitive("lit"), "b"][1] }`, false},
+		{"selection with no sensitive value", `{ token = ["a", "b"][1] }`, false},
+		{"numeric string selects the tuple element it names", `{ token = [sensitive(` + call + `), "b"]["0"] }`, false},
+		{"numeric string drops the other tuple element", `{ token = [sensitive(` + call + `), "b"]["1"] }`, true},
+		{"fractional number with an integral value selects an element", `{ token = [sensitive(` + call + `), "b"][1.0] }`, true},
+		{"string key beyond the tuple fails closed", `{ token = [sensitive(` + call + `), "b"]["5"] }`, true},
+		{"string key that is not a number fails closed", `{ token = [sensitive(` + call + `), "b"]["x"] }`, true},
+		{"fractional key fails closed", `{ token = [sensitive(` + call + `), "b"][0.5] }`, true},
+		{"number selects the object member it names", `{ token = { "1" = sensitive(` + call + `), "2" = "b" }[1] }`, false},
+		{"number drops the other object member", `{ token = { "1" = sensitive(` + call + `), "2" = "b" }[2] }`, true},
+		{"splat drops a sensitive member", `{ token = [{ a = sensitive(` + call + `), b = "b" }][*].b }`, true},
+		{"splat keeps the sensitive member", `{ token = [{ a = sensitive(` + call + `), b = "b" }][*].a }`, false},
+		{"splat keeps every element", `{ token = [sensitive(` + call + `), "b"][*] }`, false},
+		{"splat keeps the sensitive member of each element", `{ token = [{ a = sensitive(` + call + `), b = "b" }, { a = "x", b = "y" }][*].a }`, false},
+		{"splat drops a sensitive member of a later element", `{ token = [{ a = "x", b = "y" }, { a = sensitive(` + call + `), b = "b" }][*].b }`, true},
+		{"legacy attribute splat drops a sensitive member", `{ token = [{ a = sensitive(` + call + `), b = "b" }].*.b }`, true},
+		{"splat of a single object drops a sensitive member", `{ token = { a = sensitive(` + call + `), b = "b" }[*].b }`, true},
+		{"splat through a sensitive wrapper drops a sibling", `{ token = sensitive([{ a = ` + call + `, b = "b" }])[*].b }`, true},
+		{"splat of a literal cannot have logged", `{ token = [{ a = sensitive("lit"), b = "b" }][*].b }`, false},
+		{"splat with no sensitive value", `{ token = [{ a = "a", b = "b" }][*].b }`, false},
+		{"splat of an unfollowable source fails closed", `{ token = sensitive(` + call + `)[*].b }`, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			writeFiles(t, fsys, map[string]string{"/unit.hcl": "inputs = " + test.inputs + "\n"})
+
+			assert.Equal(t, test.want, transformsSensitiveInputs(fsys, "/unit.hcl"))
+		})
+	}
+}
+
+func TestResolveWithholdsLogsWhenASelectionDiscardsSensitiveCommandOutput(t *testing.T) {
+	for _, test := range []struct {
+		name, expression string
+		withheld         bool
+	}{
+		{"index drops the sensitive element", `[sensitive(%s), "b"][1]`, true},
+		{"index keeps the sensitive element", `[sensitive(%s), "b"][0]`, false},
+		{"key drops the sensitive member", `{ a = sensitive(%s), b = "b" }["b"]`, true},
+		{"key keeps the sensitive member", `{ a = sensitive(%s), b = "b" }["a"]`, false},
+		{"numeric string keeps the sensitive element", `[sensitive(%s), "b"]["0"]`, false},
+		{"numeric string drops the sensitive element", `[sensitive(%s), "b"]["1"]`, true},
+		{"splat drops the sensitive member", `[{ a = sensitive(%s), b = "b" }][*].b`, true},
+		{"splat keeps the sensitive member", `[{ a = sensitive(%s), b = "b" }][*].a`, false},
+		{"sensitive predicate", `sensitive(%s) == "raw-secret-91cd" ? "a" : "b"`, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			call := effectCommand(t, "raw-secret-91cd")
+			request := nativeUnit(t, "inputs = { token = "+fmt.Sprintf(test.expression, call)+" }\n")
+			request.Environment[effectChildEnv] = "1"
+			sink := NewLogSink("debug", request.BasePath)
+			logger(t, sink).Debug("before raw-secret-91cd")
+
+			_, err := Resolve(WithLogSink(t.Context(), sink), request)
+
+			require.NoError(t, err)
+			effects, err := os.ReadFile(filepath.Join(request.BasePath, "effects"))
+			require.NoError(t, err, "the Go subprocess must actually execute")
+			assert.Contains(t, string(effects), "raw-secret-91cd")
+			entries := sink.Entries()
+			require.NotEmpty(t, entries)
+			for _, entry := range entries {
+				assert.NotContains(t, entry.Message, "raw-secret-91cd")
+			}
+			if test.withheld {
+				require.Len(t, entries, 1)
+				assert.Contains(t, entries[0].Message, "withheld")
+			} else {
+				assert.Equal(t, "before <MASKED>", entries[0].Message)
+			}
+		})
+	}
+}
+
+// The sink registers values, never object keys, so a sensitive command result used as a key cannot be
+// masked later. An ordinary computed key must not trigger the fallback.
+func TestTransformsSensitiveInputsWithholdsSensitiveObjectKeys(t *testing.T) {
+	for _, test := range []struct {
+		name, inputs string
+		want         bool
+	}{
+		{"sensitive command as a key", `{ (sensitive(run_cmd("echo", "x"))) = "v" }`, true},
+		{"sensitive command key in a nested object", `{ nested = { (sensitive(run_cmd("echo", "x"))) = "v" } }`, true},
+		{"computed key from a local", "{ (local.name) = \"v\" }", false},
+		{"computed key from a command that is not sensitive", `{ (run_cmd("echo", "x")) = "v" }`, false},
+		{"static key", `{ name = "v" }`, false},
+		{"sensitive literal key cannot have logged", `{ (sensitive("lit")) = "v" }`, false},
+		{"sensitive command as a value", `{ name = sensitive(run_cmd("echo", "x")) }`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			writeFiles(t, fsys, map[string]string{"/unit.hcl": "locals { name = \"n\" }\ninputs = " + test.inputs + "\n"})
+
+			assert.Equal(t, test.want, transformsSensitiveInputs(fsys, "/unit.hcl"))
+		})
+	}
+}
+
+// A file that changed between reads cannot be vouched for, whether it still exists or was deleted since.
+func TestEvaluatedFSKeepsChangedFilesUnverifiableAfterDeletion(t *testing.T) {
+	disk := afero.NewMemMapFs()
+	writeFiles(t, disk, map[string]string{"/repo/unit.hcl": "first", "/repo/stable.hcl": "stable"})
+	recording := newEvaluatedFS(disk)
+	readThrough(t, recording, "/repo/unit.hcl")
+	readThrough(t, recording, "/repo/stable.hcl")
+	writeFiles(t, disk, map[string]string{"/repo/unit.hcl": "second"})
+	readThrough(t, recording, "/repo/unit.hcl")
+	require.NoError(t, disk.Remove("/repo/unit.hcl"))
+	require.NoError(t, disk.Remove("/repo/stable.hcl"))
+
+	view := recording.Evaluated()
+
+	_, err := view.Stat("/repo/unit.hcl")
+	require.ErrorIs(t, err, errNotEvaluated, "the deleted file changed while it was evaluated")
+	_, err = view.Open("/repo/unit.hcl")
+	require.ErrorIs(t, err, errNotEvaluated)
+	assert.True(t, unverifiable(view, "/repo/unit.hcl"))
+	assert.Equal(t, "stable", readThrough(t, view, "/repo/stable.hcl"), "an unchanged file keeps its captured bytes after deletion")
+	_, err = view.Stat("/repo/never-read.hcl")
+	require.ErrorIs(t, err, os.ErrNotExist, "a path that was never read stays missing")
+	assert.False(t, unverifiable(view, "/repo/never-read.hcl"))
+}
+
+// Copying the whole local object carries every sensitive local with it, at the path of that local, while
+// naming one local keeps the precise result so unrelated siblings gain no mark.
+func TestSensitiveInputsFollowACopyOfTheWholeLocalObject(t *testing.T) {
+	for _, test := range []struct {
+		name, locals, inputs string
+		value                any
+		want                 [][]string
+	}{
+		{"sensitive local", "token = sensitive(\"s\")\n open = \"o\"", "copy = local", map[string]any{"token": "s", "open": "o"}, [][]string{{"copy", "token"}}},
+		{"nested sensitive member", `a = { x = sensitive("s"), y = "o" }`, "copy = local", map[string]any{"a": map[string]any{"x": "s", "y": "o"}}, [][]string{{"copy", "a", "x"}}},
+		{"no sensitive local", "a = \"o\"\n b = \"p\"", "copy = local", map[string]any{"a": "o", "b": "p"}, nil},
+		{"named local keeps siblings clean", "token = sensitive(\"s\")\n open = \"o\"", "copy = local.open", "o", nil},
+		{"named sensitive local", "token = sensitive(\"s\")\n open = \"o\"", "copy = local.token", "s", [][]string{{"copy"}}},
+		{"copy through merge", "token = sensitive(\"s\")", "copy = merge(local, { extra = \"e\" })", map[string]any{"token": "s", "extra": "e"}, [][]string{{"copy", "token"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			writeFiles(t, fsys, map[string]string{"/unit.hcl": "locals {\n " + test.locals + "\n}\ninputs = {\n " + test.inputs + "\n}\n"})
+
+			assert.Equal(t, test.want, SensitiveInputs(fsys, []string{"/unit.hcl"}, map[string]any{"copy": test.value}))
+		})
+	}
+}
+
+// A value read from another configuration file is sensitive when that file's inputs or locals can hold a
+// sensitive value, and fails closed when the file cannot be inspected.
+func TestSensitiveInputsFollowReadTerragruntConfig(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "repo")
+	unit := filepath.Join(root, "app", unitFile)
+	settings := filepath.Join(root, "app", "settings.hcl")
+	other := filepath.Join(root, "app", "other.hcl")
+	for _, test := range []struct {
+		name, unit string
+		files      map[string]string
+		read       []string
+		want       [][]string
+	}{
+		{"sensitive input", `copy = read_terragrunt_config("settings.hcl").inputs.token`, map[string]string{settings: `inputs = { token = sensitive("s") }`}, []string{settings}, [][]string{{"copy"}}},
+		{"whole result", `copy = read_terragrunt_config("settings.hcl")`, map[string]string{settings: `inputs = { token = sensitive("s") }`}, []string{settings}, [][]string{{"copy"}}},
+		{"indexed result", `copy = read_terragrunt_config("settings.hcl")["inputs"]["token"]`, map[string]string{settings: `inputs = { token = sensitive("s") }`}, []string{settings}, [][]string{{"copy"}}},
+		{"sensitive local", `copy = read_terragrunt_config("settings.hcl").locals.token`, map[string]string{settings: "locals { token = sensitive(\"s\") }"}, []string{settings}, [][]string{{"copy"}}},
+		{"through a local of the unit", "copy = local.cfg.inputs.token", map[string]string{settings: `inputs = { token = sensitive("s") }`}, []string{settings}, [][]string{{"copy"}}},
+		{"through another read", `copy = read_terragrunt_config("other.hcl").inputs.token`, map[string]string{other: `inputs = { token = read_terragrunt_config("settings.hcl").inputs.token }`, settings: `inputs = { token = sensitive("s") }`}, []string{other, settings}, [][]string{{"copy"}}},
+		{"found in a parent folder", `copy = read_terragrunt_config(find_in_parent_folders("settings.hcl")).inputs.token`, map[string]string{filepath.Join(root, "settings.hcl"): `inputs = { token = sensitive("s") }`}, []string{filepath.Join(root, "settings.hcl")}, [][]string{{"copy"}}},
+		{"file that cannot be inspected", `copy = read_terragrunt_config("missing.hcl").inputs.token`, nil, nil, [][]string{{"copy"}}},
+		{"argument that is not static", `copy = read_terragrunt_config(get_env("FILE")).inputs.token`, nil, nil, [][]string{{"copy"}}},
+		{"nothing sensitive", `copy = read_terragrunt_config("settings.hcl").inputs.token`, map[string]string{settings: `inputs = { token = "t" }`}, []string{settings}, nil},
+		{"sensitive only outside inputs and locals", `copy = read_terragrunt_config("settings.hcl").inputs.token`, map[string]string{settings: "inputs = { token = \"t\" }\nterraform { source = sensitive(\"x\") }"}, []string{settings}, nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			require.NoError(t, fsys.MkdirAll(filepath.Dir(unit), 0o755))
+			files := map[string]string{unit: "locals {\n cfg = read_terragrunt_config(\"settings.hcl\")\n}\ninputs = {\n " + test.unit + "\n}\n"}
+			for name, content := range test.files {
+				files[name] = content
+			}
+			writeFiles(t, fsys, files)
+
+			assert.Equal(t, test.want, SensitiveInputs(fsys, append([]string{unit}, test.read...), map[string]any{"copy": "s"}))
+		})
+	}
+}
+
+// find_in_parent_folders starts its search in the parent of the unit directory, so a public file of the same
+// name next to the unit cannot stand in for the one it finds, while a literal relative read stays in the
+// directory of the file that reads it.
+func TestSensitiveInputsStartParentFolderSearchesAboveTheUnitDirectory(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "repo")
+	unit := filepath.Join(root, "app", unitFile)
+	local := filepath.Join(root, "app", "secrets.hcl")
+	parent := filepath.Join(root, "secrets.hcl")
+	const sensitive = `inputs = { token = sensitive("s") }`
+	const public = `inputs = { token = "t" }`
+	for _, test := range []struct {
+		name, read string
+		files      map[string]string
+		want       [][]string
+	}{
+		{"parent search skips the public file beside the unit", `read_terragrunt_config(find_in_parent_folders("secrets.hcl")).inputs.token`, map[string]string{local: public, parent: sensitive}, [][]string{{"password"}}},
+		{"parent search ignores a sensitive file beside the unit", `read_terragrunt_config(find_in_parent_folders("secrets.hcl")).inputs.token`, map[string]string{local: sensitive, parent: public}, nil},
+		{"literal read stays in the unit directory", `read_terragrunt_config("secrets.hcl").inputs.token`, map[string]string{local: public, parent: sensitive}, nil},
+		{"literal read finds a sensitive file beside the unit", `read_terragrunt_config("secrets.hcl").inputs.token`, map[string]string{local: sensitive, parent: public}, [][]string{{"password"}}},
+		{"parent search with no file above fails closed", `read_terragrunt_config(find_in_parent_folders("secrets.hcl")).inputs.token`, map[string]string{local: public}, [][]string{{"password"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			require.NoError(t, fsys.MkdirAll(filepath.Dir(unit), 0o755))
+			files := map[string]string{unit: "inputs = {\n password = " + test.read + "\n}\n"}
+			for name, content := range test.files {
+				files[name] = content
+			}
+			writeFiles(t, fsys, files)
+			read := []string{unit}
+			for name := range test.files {
+				read = append(read, name)
+			}
+
+			assert.Equal(t, test.want, SensitiveInputs(fsys, read, map[string]any{"password": "s"}))
+		})
+	}
+}
+
+// A literal read_terragrunt_config path is relative to the file that names it and never searched for in
+// ancestors: a missing file yields the default argument, so a public file of the same name above the unit
+// must not mask a sensitive default.
+func TestSensitiveInputsLiteralConfigReadDoesNotSearchAncestorsAndUsesDefault(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "repo")
+	unit := filepath.Join(root, "app", unitFile)
+	local := filepath.Join(root, "app", "secrets.hcl")
+	parent := filepath.Join(root, "secrets.hcl")
+	const public = `inputs = { token = "t" }`
+	const sensitive = `inputs = { token = sensitive("s") }`
+	const sensitiveDefault = `{ inputs = { token = sensitive("s") } }`
+	const publicDefault = `{ inputs = { token = "t" } }`
+	for _, test := range []struct {
+		name, read string
+		files      map[string]string
+		want       [][]string
+	}{
+		{"sensitive default is not masked by a public ancestor file", `read_terragrunt_config("secrets.hcl", ` + sensitiveDefault + `).inputs.token`, map[string]string{parent: public}, [][]string{{"password"}}},
+		{"public default with a public ancestor stays non-sensitive", `read_terragrunt_config("secrets.hcl", ` + publicDefault + `).inputs.token`, map[string]string{parent: public}, nil},
+		{"file beside the unit is still read instead of the default", `read_terragrunt_config("secrets.hcl", ` + publicDefault + `).inputs.token`, map[string]string{local: public, parent: sensitive}, nil},
+		{"sensitive file beside the unit is still read", `read_terragrunt_config("secrets.hcl", ` + publicDefault + `).inputs.token`, map[string]string{local: sensitive, parent: public}, [][]string{{"password"}}},
+		{"sensitive ancestor file is not read for a missing literal file", `read_terragrunt_config("secrets.hcl", ` + publicDefault + `).inputs.token`, map[string]string{parent: sensitive}, nil},
+		{"missing file with no default fails closed", `read_terragrunt_config("secrets.hcl").inputs.token`, map[string]string{parent: public}, [][]string{{"password"}}},
+		{"parent search still walks up", `read_terragrunt_config(find_in_parent_folders("secrets.hcl"), ` + publicDefault + `).inputs.token`, map[string]string{parent: sensitive}, [][]string{{"password"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			require.NoError(t, fsys.MkdirAll(filepath.Dir(unit), 0o755))
+			files := map[string]string{unit: "inputs = {\n password = " + test.read + "\n}\n"}
+			for name, content := range test.files {
+				files[name] = content
+			}
+			writeFiles(t, fsys, files)
+			read := []string{unit}
+			for name := range test.files {
+				read = append(read, name)
+			}
+
+			assert.Equal(t, test.want, SensitiveInputs(fsys, read, map[string]any{"password": "s"}))
+		})
+	}
+}
+
+// An expanded final argument is a list of merge operands, so its members replace earlier ones like any other
+// argument; a final argument that is not a literal tuple fails closed.
+func TestTransformsSensitiveInputsWhenAnExpandedMergeArgumentReplacesTheKey(t *testing.T) {
+	const call = `sensitive(run_cmd("echo", "x"))`
+	for _, test := range []struct {
+		name, inputs string
+		want         bool
+	}{
+		{"tuple member replaces the key", `merge({ token = ` + call + ` }, [{ token = "other" }]...)`, true},
+		{"later tuple member replaces the key", `merge({ token = ` + call + ` }, [{ name = "n" }, { token = "other" }]...)`, true},
+		{"tuple members keep different keys", `merge({ token = ` + call + ` }, [{ name = "n" }, { other = "o" }]...)`, false},
+		{"tuple member with an unknown key", `merge({ token = ` + call + ` }, [{ (local.name) = "n" }]...)`, true},
+		{"sensitive member of the tuple replaced by a later one", `merge([{ token = ` + call + ` }, { token = "other" }]...)`, true},
+		{"tuple of sensitive members with distinct keys", `merge([{ token = ` + call + ` }, { name = "n" }]...)`, false},
+		{"final argument that is not a tuple fails closed", `merge({ token = ` + call + ` }, local.list...)`, true},
+		{"expanded final argument holding no sensitive value", `merge({ token = "t" }, local.list...)`, false},
+		{"unexpanded tuple is one operand", `merge({ token = ` + call + ` }, { name = "n" })`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			writeFiles(t, fsys, map[string]string{"/unit.hcl": "locals {\n name = \"n\"\n list = [{ name = \"n\" }]\n}\ninputs = " + test.inputs + "\n"})
+
+			assert.Equal(t, test.want, transformsSensitiveInputs(fsys, "/unit.hcl"))
+		})
+	}
+}
+
+// A file read by read_terragrunt_config resolves its own nested reads relative to its own directory, so a
+// public file of the same name next to the caller cannot stand in for the one the target reads.
+func TestSensitiveInputsResolveNestedReadsFromTheTargetFile(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "repo")
+	unit := filepath.Join(root, "app", unitFile)
+	target := filepath.Join(root, "app", "sub", "target.hcl")
+	nested := filepath.Join(root, "app", "sub", "nested.hcl")
+	decoy := filepath.Join(root, "app", "nested.hcl")
+	const read = `read_terragrunt_config("sub/target.hcl").inputs.token`
+	const targetBody = `inputs = { token = read_terragrunt_config("nested.hcl").inputs.token }`
+	for _, test := range []struct {
+		name  string
+		files map[string]string
+		want  [][]string
+	}{
+		{"decoy next to the caller cannot mask a sensitive nested read", map[string]string{target: targetBody, nested: `inputs = { token = sensitive("s") }`, decoy: `inputs = { token = "t" }`}, [][]string{{"copy"}}},
+		{"nested read relative to the target holding nothing sensitive", map[string]string{target: targetBody, nested: `inputs = { token = "t" }`, decoy: `inputs = { token = "t" }`}, nil},
+		{"nested read in the same directory as the caller", map[string]string{target: targetBody, decoy: `inputs = { token = sensitive("s") }`}, [][]string{{"copy"}}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fsys := afero.NewMemMapFs()
+			require.NoError(t, fsys.MkdirAll(filepath.Dir(target), 0o755))
+			files := map[string]string{unit: "inputs = {\n copy = " + read + "\n}\n"}
+			for name, content := range test.files {
+				files[name] = content
+			}
+			writeFiles(t, fsys, files)
+			read := []string{unit}
+			for name := range test.files {
+				read = append(read, name)
+			}
+
+			assert.Equal(t, test.want, SensitiveInputs(fsys, read, map[string]any{"copy": "s"}))
+		})
+	}
+}

@@ -648,3 +648,68 @@ func TestRevisionStateRequestsCarryTheInvocationProviderOptions(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, again["download_dir"].SensitivePaths)
 }
+
+// An uncached state reference resolved on a revision window reaches the provider with the explicit
+// provider options of the invocation, exactly as on the HEAD window, so a feature override applies to
+// the revision's state. A window with no explicit options sends none.
+func TestRevisionResolveStateSendsTheInvocationProviderOptionsToTheProvider(t *testing.T) {
+	tests := []struct {
+		name    string
+		options map[string]map[string]schema.ComponentProviderOption
+		want    map[string]any
+	}{
+		{
+			name: "explicit options",
+			options: map[string]map[string]schema.ComponentProviderOption{"terragrunt": {
+				"feature":      {Value: map[string]any{"alpha": "true"}, FromCLI: true},
+				"download_dir": {Value: "/job-cache", FromCLI: true, Type: "string", EnvNames: []string{"TG_DOWNLOAD_DIR"}},
+			}},
+			want: map[string]any{"feature": map[string]any{"alpha": "true"}, "download_dir": "/job-cache"},
+		},
+		{name: "no explicit options", want: map[string]any{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := enabledConfig(t)
+			config.ComponentProviderOptions = tt.options
+			provider := NewMockProvider(gomock.NewController(t))
+			provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+			network := unit(t, "network")
+			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network}}, nil).AnyTimes()
+			roots := map[string]map[string]*pluginv1.ComponentValue{}
+			provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+				require.Equal(t, "network", request.Address.Component)
+				roots[request.RootDirectory] = request.Operation.Options
+				return &pluginv1.ResolveComponentStateResponse{State: &pluginv1.ComponentStateIdentity{BackendType: "local", Workspace: "default"}}, nil
+			}).Times(2)
+			head, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) {
+				return map[string]Provider{"terragrunt": provider}, nil
+			})
+			require.NoError(t, err)
+			revisionRoot := t.TempDir()
+			runtime, err := head.ForRevision(revisionRoot)
+			require.NoError(t, err)
+			info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "network", Command: "tofu", SubCommand: "output", TerraformWorkspace: "default", ComponentSettingsSection: map[string]any{"configuration": true}}
+
+			// Nothing is cached on either window, so each state reference reaches the provider.
+			_, err = head.ResolveState(t.Context(), info)
+			require.NoError(t, err)
+			_, err = runtime.(*Session).ResolveState(t.Context(), info)
+			require.NoError(t, err)
+
+			require.Len(t, roots, 2, "the head and the revision window each resolve their own state")
+			decode := func(options map[string]*pluginv1.ComponentValue) map[string]any {
+				decoded := make(map[string]any, len(options))
+				for name, value := range options {
+					decoded[name], err = adapter.DecodeValue(value)
+					require.NoError(t, err)
+				}
+				return decoded
+			}
+			require.Contains(t, roots, config.BasePathAbsolute)
+			require.Contains(t, roots, revisionRoot)
+			require.Equal(t, tt.want, decode(roots[config.BasePathAbsolute]), "the head window sends the explicit options")
+			require.Equal(t, tt.want, decode(roots[revisionRoot]), "the revision window sends the same explicit options")
+		})
+	}
+}

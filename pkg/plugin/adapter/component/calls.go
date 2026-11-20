@@ -152,14 +152,18 @@ func registerResponseInputs(result *pluginv1.PrepareComponentResponse) error {
 }
 
 // registerResponseSecrets registers everything a preparation response carries that must be masked, before any
-// diagnostic is rendered: the sensitive inputs, then the module source authorization. A value that cannot be
-// decoded is a protocol failure that takes precedence over the response's diagnostics, which could otherwise
-// print what was never registered; the inputs are checked first.
+// diagnostic is rendered: the sensitive inputs, then the module source authorization, then the IAM web identity
+// token. A value that cannot be decoded is a protocol failure that takes precedence over the response's
+// diagnostics, which could otherwise print what was never registered; the inputs are checked first. A missing
+// IAM payload or token registers nothing and stays valid.
 func registerResponseSecrets(result *pluginv1.PrepareComponentResponse) error {
 	if err := registerResponseInputs(result); err != nil {
 		return err
 	}
-	_, err := DecodeString(result.GetModuleSourceAuthorization())
+	if _, err := DecodeString(result.GetModuleSourceAuthorization()); err != nil {
+		return err
+	}
+	_, err := DecodeString(result.GetIam().GetWebIdentityToken())
 	return err
 }
 

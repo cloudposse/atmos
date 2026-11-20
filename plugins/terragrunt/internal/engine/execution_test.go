@@ -688,6 +688,11 @@ func TestTflintVariablesFromExtraArguments(t *testing.T) {
 	}}
 	require.Equal(t, []string{"--var-file=a.tfvars", "--var=c=3", "--var-file=d.tfvars", tflintOptionalVarFilePrefix + existing, tflintOptionalVarFilePrefix + "absent.tfvars"}, tflintExtraVariables("plan", execution))
 	require.Equal(t, []string{"--var=ignored=1"}, tflintExtraVariables("apply", execution))
+
+	doubleDash := &model.Execution{ExtraArguments: []model.ExtraArguments{
+		{Commands: []string{"plan"}, Arguments: []string{"--var=region=west", "--var-file=env.tfvars", "--var", "a=1", "--var-file", "b.tfvars", "-var=c=2", "--other"}},
+	}}
+	require.Equal(t, []string{"--var=region=west", "--var-file=env.tfvars", "--var=a=1", "--var-file=b.tfvars", "--var=c=2"}, tflintExtraVariables("plan", doubleDash))
 	require.Empty(t, tflintExtraVariables("plan", &model.Execution{ExtraArguments: []model.ExtraArguments{
 		{Commands: []string{"plan"}, Environment: map[string]string{"TF_VAR_b": "2"}},
 	}}), "TFLint reads TF_VAR_ from the hook environment, below terraform.tfvars")
@@ -1235,6 +1240,8 @@ func TestUnitBinaryOverriddenByTheStackIsNotProbed(t *testing.T) {
 			require.Equal(t, WarningTerraformBinaryOverridden, warning.Code)
 			require.Contains(t, warning.Message, tt.effective)
 			require.Contains(t, warning.Message, filepath.ToSlash(tt.unitBinary))
+			// The override may come from the stack or the command line, so the hint names both.
+			require.Contains(t, warning.Message, "--command")
 		})
 	}
 }

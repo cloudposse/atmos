@@ -147,3 +147,48 @@ func TestInlineRoleConfigAndEnvironment(t *testing.T) {
 	assert.Nil(t, identity.Spec)
 	assert.NotContains(t, identity.Principal, "duration")
 }
+
+// Web identity keeps its place in the chain, and the selected profile supplies the region when the
+// environment names none.
+func TestWebIdentityTakesTheRegionOfTheSelectedProfile(t *testing.T) {
+	sts := newSTSRecorder(t)
+	dir := t.TempDir()
+	tokenFile := filepath.Join(dir, "token")
+	require.NoError(t, os.WriteFile(tokenFile, []byte("oidc-token-value"), 0o600))
+	configFile := filepath.Join(dir, "config")
+	require.NoError(t, os.WriteFile(configFile, []byte("[profile ci]\nregion = eu-west-3\n"), 0o600))
+	base := []string{
+		"AWS_WEB_IDENTITY_TOKEN_FILE=" + tokenFile, "AWS_ROLE_ARN=arn:aws:iam::1:role/oidc",
+		"AWS_ENDPOINT_URL_STS=" + sts.server.URL, "AWS_CONFIG_FILE=" + configFile, "AWS_SHARED_CREDENTIALS_FILE=" + filepath.Join(dir, "none"),
+	}
+
+	value, err := baseCredentials(t.Context(), environMap(append(base, "AWS_PROFILE=ci")))
+	require.NoError(t, err)
+	assert.Equal(t, assumedKey, value.AccessKeyID, "web identity stays the credential source")
+	assert.Equal(t, "eu-west-3", value.Region, "the profile region applies when the environment has none")
+
+	value, err = baseCredentials(t.Context(), environMap(append(base, "AWS_PROFILE=ci", "AWS_REGION=us-east-2")))
+	require.NoError(t, err)
+	assert.Equal(t, "us-east-2", value.Region, "the environment region wins over the profile")
+
+	_, err = baseCredentials(t.Context(), environMap(append(base, "AWS_PROFILE=missing")))
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed, "a named profile that does not exist is an error")
+}
+
+// On Windows an environment variable name is case-insensitive, so any spelling of an AWS name selects it.
+func TestEnvironMapMatchesAWSNamesCaseInsensitivelyOnWindows(t *testing.T) {
+	environ := []string{"aws_access_key_id=AKIALOWER", "Aws_Secret_Access_Key=lower-secret", "AWS_REGION=a", "aws_region=b", "Path=p"}
+
+	windows := environMapForGOOS(environ, "windows")
+	key, secret := invocationEnvironmentKeys(windows)
+	assert.Equal(t, "AKIALOWER", key)
+	assert.Equal(t, "lower-secret", secret)
+	assert.Equal(t, "b", windows["AWS_REGION"], "the last of the duplicate spellings wins")
+	assert.Equal(t, "p", windows["Path"], "names outside the AWS prefix keep their case")
+
+	unix := environMapForGOOS(environ, "linux")
+	key, secret = invocationEnvironmentKeys(unix)
+	assert.Empty(t, key, "exact-case matching stays on Unix")
+	assert.Empty(t, secret)
+	assert.Equal(t, "a", unix["AWS_REGION"])
+}
