@@ -1051,6 +1051,11 @@ func addHelmSectionAffected(
 		{sectionNameValuesF, affectedReasonStackValuesFile},
 		{sectionNameChart, affectedReasonStackChart},
 		{sectionNameRepos, affectedReasonStackRepos},
+		{"version", "stack.version"},
+		{"namespace", "stack.namespace"},
+		{"name", "stack.name"},
+		{"create_namespace", "stack.create_namespace"},
+		{"release", "stack.release"},
 	}
 
 	for _, section := range sections {
@@ -1085,7 +1090,7 @@ func isComponentSectionEqual(
 				if remoteComponentSection, ok := remoteComponentTypeSection[localComponentName].(map[string]any); ok {
 					remoteSection, ok := remoteComponentSection[sectionName]
 					if ok {
-						return reflect.DeepEqual(localSection, remoteSection)
+						return deepEqualValues(localSection, remoteSection)
 					}
 				}
 			}

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -512,6 +513,11 @@ func TestAddHelmSectionAffected(t *testing.T) {
 		{"values_files", sectionNameValuesF, []any{"a.yaml"}, []any{"b.yaml"}, affectedReasonStackValuesFile},
 		{"chart", sectionNameChart, "bitnami/nginx", "bitnami/redis", affectedReasonStackChart},
 		{"repositories", sectionNameRepos, []any{map[string]any{"name": "a"}}, []any{map[string]any{"name": "b"}}, affectedReasonStackRepos},
+		{"version", "version", "1.24.0", "1.23.0", "stack.version"},
+		{"namespace", "namespace", "new", "old", "stack.namespace"},
+		{"name", "name", "new", "old", "stack.name"},
+		{"create_namespace", "create_namespace", true, false, "stack.create_namespace"},
+		{"release", "release", "new", "old", "stack.release"},
 	}
 
 	for _, tt := range tests {
@@ -582,6 +588,37 @@ func TestAddHelmSectionAffected_NoFalsePositives(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, affected)
 	})
+}
+
+func TestHelmValuesYAMLFunctionCheckoutPaths(t *testing.T) {
+	t.Parallel()
+
+	local := yamlsource.Source{Tag: "!terraform.state", Argument: "vpc vpc_id", File: "/checkout-a/stack.yaml"}.Encode()
+	remote := yamlsource.Source{Tag: "!terraform.state", Argument: "vpc vpc_id", File: "/checkout-b/stack.yaml"}.Encode()
+	changed := yamlsource.Source{Tag: "!terraform.state", Argument: "vpc other_id", File: "/checkout-b/stack.yaml"}.Encode()
+	for _, tc := range []struct {
+		name, value string
+		affected    bool
+	}{
+		{"same function in another checkout", remote, false},
+		{"changed function argument", changed, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			component := map[string]any{sectionNameValues: map[string]any{"vpcId": local}}
+			stacks := helmRemoteStacksWith(map[string]any{sectionNameValues: map[string]any{"vpcId": tc.value}})
+			var affected []schema.Affected
+			err := addHelmSectionAffected(&affected, helmAtmosConfig(), helmTestComponent, helmTestStack, &component, &stacks, &stacks, false, false)
+			require.NoError(t, err)
+			if tc.affected {
+				require.Len(t, affected, 1)
+				assert.Equal(t, affectedReasonStackValues, affected[0].Affected)
+			} else {
+				assert.Empty(t, affected)
+			}
+		})
+	}
 }
 
 const (
