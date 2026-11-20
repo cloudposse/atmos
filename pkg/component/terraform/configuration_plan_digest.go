@@ -398,8 +398,10 @@ func (s *planSnapshotter) around(phaseArgs []string, run func() error, failed fu
 		settleStale, stashErr := stashStalePlan(s.execCtx.componentPath, effectiveDataDir(s.config, s.info), writtenPath)
 		defer func() { runResult = s.settle(settleStale, runResult, failed) }()
 		if stashErr != nil {
+			// No copy of the earlier plan exists, so a run that wrote partial bytes and failed could not
+			// be undone. The refusal stops the run before the subprocess starts.
 			s.err = stashErr
-			return run()
+			return stashErr
 		}
 		return s.observe(path, writtenPath, run, failed)
 	}

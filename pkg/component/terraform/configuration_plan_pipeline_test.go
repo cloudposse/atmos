@@ -1172,3 +1172,19 @@ func TestRebuildReplaysTheReviewedPlanArguments(t *testing.T) {
 	assert.Equal(t, []string{"-target=aws_s3_bucket.logs", "-var=token="}, evaluated)
 	assert.Equal(t, []string{"-auto-approve"}, apply.AdditionalArgsAndFlags, "the apply keeps its own arguments")
 }
+
+// A plan output the stash refuses stops the run before the subprocess starts: a run that wrote partial
+// bytes and then failed could not be undone, because no backup of the earlier plan exists.
+func TestRefusedPlanStashStopsTheRunBeforeTheSubprocess(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	require.NoError(t, os.Remove(path))
+	require.NoError(t, os.Mkdir(path, 0o700), "a directory at the plan output is not a regular file, so the stash refuses it")
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
+	execCtx.planSnapshots = snapshotter
+
+	started := false
+	err := snapshotter.around([]string{"plan", "-out=" + path}, func() error { started = true; return nil }, failedOnError)()
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.ErrorIs(t, snapshotter.err, errUtils.ErrPlanVerificationFailed)
+	assert.False(t, started, "the subprocess must not start when the earlier plan cannot be stashed")
+}
