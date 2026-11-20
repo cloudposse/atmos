@@ -131,6 +131,18 @@ func withStderrCapture(opts []component.ExecutionOption, buffer *bytes.Buffer) [
 	return append(slices.Clone(opts), component.WithStderrCapture(writer))
 }
 
+// commandStderrKey carries the standard error capture of the running attempt, which error policies match.
+type commandStderrKey struct{}
+
+// resetCommandStderr discards what the running attempt captured. The smart-init retry runs inside the
+// same attempt, so without it the first diagnostic, which the init already handled, would be matched
+// against the policies together with the retry's own output. What was printed stays printed.
+func resetCommandStderr(ctx context.Context) {
+	if captured, ok := ctx.Value(commandStderrKey{}).(*bytes.Buffer); ok {
+		captured.Reset()
+	}
+}
+
 // phaseAttempts runs one phase's hooks and command, once per recovery attempt.
 //
 // The retry scope is the work that did not complete. A command that finished, such as a saved-plan
@@ -171,6 +183,7 @@ func (a *phaseAttempts) run(opts []component.ExecutionOption, failed *failureTex
 	var commandStderr bytes.Buffer
 	if failed != nil {
 		opts = withStderrCapture(opts, &commandStderr)
+		opts = append(opts, component.WithProcessContext(context.WithValue(component.ContextFromOptions(opts...), commandStderrKey{}, &commandStderr)))
 	}
 	a.runner.failed = failed
 	runner := &resumingRunner{inner: a.runner, done: a.afterDone}
