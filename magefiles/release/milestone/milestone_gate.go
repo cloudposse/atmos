@@ -284,7 +284,42 @@ func (c *Client) reconcileMilestoneStatuses(eventHead string) (result error) {
 	if err != nil {
 		return err
 	}
+	// Queue heads are recorded first, so a failed lookup still revokes them.
+	prs, err = c.addQueuedPRs(prs, entries)
+	if err != nil {
+		return err
+	}
+	for _, pr := range prs {
+		heads[pr.Head.SHA] = true
+	}
 	return c.publishPolicyVerdicts(prs, entries, queueHeads, branch)
+}
+
+// addQueuedPRs evaluates open queued PRs that target another branch. A native
+// PR stack queues every layer into the default branch while each upper layer
+// still targets its parent branch, so the base-filtered open list omits them.
+// Merged entries keep the landed-commit rule in queuePolicy.checkEntry, and a
+// PR that is no longer open stays missing so its group fails closed.
+func (c *Client) addQueuedPRs(prs []ReleasePR, entries []queueEntry) ([]ReleasePR, error) {
+	known := make(map[int]bool, len(prs))
+	for i := range prs {
+		known[prs[i].Number] = true
+	}
+	for _, entry := range entries {
+		number := entry.PR.Number
+		if number <= 0 || known[number] || entry.PR.Merged {
+			continue
+		}
+		known[number] = true
+		var pr ReleasePR
+		if err := c.Get(fmt.Sprintf("pulls/%d", number), &pr); err != nil {
+			return nil, err
+		}
+		if pr.Number == number && pr.State == "open" {
+			prs = append(prs, pr)
+		}
+	}
+	return prs, nil
 }
 
 func (c *Client) revokeStatuses(heads map[string]bool) error {
