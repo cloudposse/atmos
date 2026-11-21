@@ -1,10 +1,17 @@
 package terraform
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -165,4 +172,141 @@ func finalizeVerification(info *schema.ConfigAndStacksInfo, freshPlanFile, diff 
 		log.Info("Plan verification passed: stored plan matches current state")
 	}
 	return nil
+}
+
+// appliesReviewedPlan reports whether the invocation applies a saved plan of a provider-owned component.
+func appliesReviewedPlan(info *schema.ConfigAndStacksInfo) bool {
+	return !info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) && usesConfigurationPlan(info) && restoresConfigurationPlan(info)
+}
+
+// reviewedPlanInputs returns the inputs of the variable file that the plan run wrote into the retained
+// working directory. That file is part of the working directory digest recorded with the plan, so a
+// saved plan whose variable file changed is rejected before it is applied. Secret inputs are never
+// written to it, so they are absent here. Numbers keep their exact text.
+func reviewedPlanInputs(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	path := ConstructTerraformComponentVarfilePath(config, info)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: the reviewed variable file of the saved plan cannot be read: %w", errUtils.ErrComponentHookFailed, err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var inputs map[string]any
+	if err := decoder.Decode(&inputs); err != nil {
+		return nil, fmt.Errorf("%w: the reviewed variable file %s of the saved plan is not a JSON object: %w", errUtils.ErrComponentHookFailed, path, err)
+	}
+	return inputs, nil
+}
+
+// withoutContent copies files, dropping the bytes of every one.
+func withoutContent(files []schema.ComponentConfigurationFile) []schema.ComponentConfigurationFile {
+	stored := slices.Clone(files)
+	for i := range stored {
+		stored[i].Content = nil
+	}
+	return stored
+}
+
+// restoreSensitiveContent reads the bytes of each sensitive file back from the working directory and
+// restores them only when they are the reviewed ones. The working directory digest excludes some
+// locations, so the reviewed bytes are verified here against the digest recorded with the plan.
+func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurationFile, reviewed string) error {
+	contents, err := readSensitiveFiles(workdir, files)
+	if err != nil {
+		return err
+	}
+	if contents == nil {
+		return nil
+	}
+	// The digest binds absence as well as bytes: a file that was already absent when the plan was
+	// reviewed and is still absent matches, while one that disappeared or appeared since does not.
+	if digestSensitiveContents(contents) != reviewed {
+		if missing, ok := soleMissingSensitiveFile(files, contents); ok {
+			return fmt.Errorf("%w: reviewed generated file %s is missing: %w", errUtils.ErrPlanVerificationFailed, missing, fs.ErrNotExist)
+		}
+		return fmt.Errorf("%w: reviewed generated file changed", errUtils.ErrPlanVerificationFailed)
+	}
+	for i := range files {
+		if files[i].Sensitive {
+			files[i].Content = contents[files[i].Path]
+		}
+	}
+	return nil
+}
+
+// soleMissingSensitiveFile names the file whose disappearance explains a digest mismatch. The digest is
+// one aggregate, so an absent file can be blamed only when it is the single possible cause: no other
+// sensitive file exists whose bytes could have changed, and no other absent file could be the one that
+// went missing. A file its entry removes is absent by design and is never reported.
+func soleMissingSensitiveFile(files []schema.ComponentConfigurationFile, contents map[string][]byte) (string, bool) {
+	var missing []string
+	for i := range files {
+		path := files[i].Path
+		switch {
+		case !files[i].Sensitive:
+		case contents[path] != nil:
+			return "", false
+		case !slices.Contains([]string{"remove", "remove_terragrunt"}, files[i].IfExists):
+			missing = append(missing, path)
+		}
+	}
+	if len(missing) != 1 {
+		return "", false
+	}
+	return missing[0], true
+}
+
+// sensitiveDigest fingerprints the sensitive generated files as they are in the working directory.
+// It is empty when no file is sensitive.
+func sensitiveDigest(workdir string, files []schema.ComponentConfigurationFile) (string, error) {
+	contents, err := readSensitiveFiles(workdir, files)
+	if err != nil || contents == nil {
+		return "", err
+	}
+	return digestSensitiveContents(contents), nil
+}
+
+// readSensitiveFiles reads every sensitive file below workdir, keyed by path. A missing file maps
+// to nil content. It returns nil when no file is sensitive.
+func readSensitiveFiles(workdir string, files []schema.ComponentConfigurationFile) (map[string][]byte, error) {
+	if !slices.ContainsFunc(files, func(file schema.ComponentConfigurationFile) bool { return file.Sensitive }) {
+		return nil, nil
+	}
+	root, err := os.OpenRoot(workdir)
+	if err != nil {
+		return nil, planIOError(err)
+	}
+	defer root.Close()
+	contents := make(map[string][]byte)
+	for i := range files {
+		if !files[i].Sensitive {
+			continue
+		}
+		content, err := root.ReadFile(files[i].Path)
+		if errors.Is(err, fs.ErrNotExist) {
+			contents[files[i].Path] = nil
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: reviewed generated file %s cannot be read: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, err)
+		}
+		if content == nil {
+			content = []byte{}
+		}
+		contents[files[i].Path] = content
+	}
+	return contents, nil
+}
+
+// digestSensitiveContents hashes the paths and bytes of the sensitive files in a stable order.
+func digestSensitiveContents(contents map[string][]byte) string {
+	hash := sha256.New()
+	for _, path := range slices.Sorted(maps.Keys(contents)) {
+		if contents[path] == nil {
+			fmt.Fprintf(hash, "%s\x00absent\n", path)
+			continue
+		}
+		fmt.Fprintf(hash, "%s\x00%x\n", path, sha256.Sum256(contents[path]))
+	}
+	return hex.EncodeToString(hash.Sum(nil))
 }

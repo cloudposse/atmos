@@ -118,3 +118,63 @@ integration:
     script: |
       hardening = module.load("scripts/hardening.star")
       hardening.pinned_tools()
+  - name: state-encryption
+    type: script
+    interpreter: starlark
+    script: |
+      identity = module.load("scripts/identity_sources.star")
+      identity.state_encryption()
+  - name: disable-init
+    type: script
+    interpreter: starlark
+    script: |
+      identity = module.load("scripts/identity_sources.star")
+      identity.disable_init()
+  - name: registry-sources
+    type: script
+    interpreter: starlark
+    script: |
+      identity = module.load("scripts/identity_sources.star")
+      identity.registry_sources()
+  - name: iam-role
+    type: script
+    interpreter: starlark
+    script: |
+      identity = module.load("scripts/identity_sources.star")
+      identity.iam_role()
+  - name: semantics-features
+    type: script
+    interpreter: starlark
+    script: |
+      semantics = module.load("scripts/semantics.star")
+      semantics.features()
+  - name: semantics-terraform-binary
+    type: script
+    interpreter: starlark
+    script: |
+      semantics = module.load("scripts/semantics.star")
+      semantics.terraform_binary()
+  - name: semantics-errors-block
+    type: script
+    interpreter: starlark
+    script: |
+      semantics = module.load("scripts/semantics.star")
+      semantics.errors_block()
+  - name: semantics-exclude-block
+    type: script
+    interpreter: starlark
+    script: |
+      semantics = module.load("scripts/semantics.star")
+      semantics.exclude_block()
+  - name: semantics-lifecycle-hooks
+    type: script
+    interpreter: starlark
+    script: |
+      semantics = module.load("scripts/semantics.star")
+      semantics.lifecycle_hooks()
+  - name: semantics-tflint-hook
+    type: script
+    interpreter: starlark
+    script: |
+      semantics = module.load("scripts/semantics.star")
+      semantics.tflint_hook()

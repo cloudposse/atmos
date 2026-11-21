@@ -89,6 +89,14 @@ var (
 	ErrComponentVarFileMissing = errors.New("required variable file does not exist")
 	// ErrComponentHookWorkingDirectory identifies a hook whose working directory does not exist.
 	ErrComponentHookWorkingDirectory = errors.New("hook working directory does not exist")
+	// ErrComponentMaxAttempts identifies a command that kept failing with a retryable error until its retry policy ran out of attempts.
+	ErrComponentMaxAttempts = errors.New("maximum retry attempts reached")
+	// ErrComponentBinaryChanged identifies a unit whose terraform_binary differs from the one it was discovered with.
+	ErrComponentBinaryChanged = errors.New("terraform_binary changed after discovery")
+	// ErrComponentRunIgnored ends a component run successfully after error handling ignored a failure in a preparatory step.
+	ErrComponentRunIgnored = errors.New("component run ended by an ignored error")
+	// ErrComponentExcluded ends a component run successfully because the provider excluded the operation.
+	ErrComponentExcluded = errors.New("component excluded from this operation")
 	// ErrComponentOutputCapture identifies command output that could not be recorded for error hook matching.
 	ErrComponentOutputCapture = errors.New("failed to capture command output for error hooks")
 

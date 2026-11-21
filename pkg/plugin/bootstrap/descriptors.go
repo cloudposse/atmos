@@ -11,6 +11,7 @@ import (
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/auth"
 	"github.com/cloudposse/atmos/pkg/plugin/credential"
 	"github.com/cloudposse/atmos/pkg/plugin/extension"
+	"github.com/cloudposse/atmos/pkg/plugin/manifest"
 )
 
 // Descriptors declares supported extension types. Lifecycle code receives this
@@ -30,7 +31,7 @@ func descriptors(constructors *ConstructorSet) (*extension.Registry, error) {
 		{Capability: "auth.identity", Path: []string{"auth", "identities"}, Version: 1, Validate: extension.ValidateAuth, Scaffold: "plugin-oidc"},
 		{Capability: extension.ComponentDiscovery, Path: []string{componentsPath, "discovery"}, Version: 1, Validate: extension.ValidateComponent},
 		{Capability: extension.ComponentValidation, Path: []string{componentsPath, "validation"}, Version: 1, Validate: extension.ValidateComponent},
-		{Capability: extension.ComponentPreparation, Path: []string{componentsPath, "preparation"}, Version: 1, Validate: extension.ValidateComponent},
+		{Capability: extension.ComponentPreparation, Path: []string{componentsPath, "preparation"}, Version: manifest.HostContractVersion(extension.ComponentPreparation), Validate: extension.ValidateComponent},
 		{Capability: extension.ComponentState, Path: []string{componentsPath, "state"}, Version: 1, Validate: extension.ValidateComponent},
 	} {
 		if constructors != nil {

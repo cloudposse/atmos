@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -22,21 +23,7 @@ import (
 // the non-existent remainder. The plain filepath.EvalSymlinks errors on
 // missing paths, and unused helmfile/packer default dirs routinely do not exist.
 func evalSymlinksBestEffort(path string) string {
-	remainder := ""
-	current := path
-	for {
-		resolved, err := filepath.EvalSymlinks(current)
-		if err == nil {
-			return filepath.Join(resolved, remainder)
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			// Nothing along the path resolves — return the input unchanged.
-			return path
-		}
-		remainder = filepath.Join(filepath.Base(current), remainder)
-		current = parent
-	}
+	return filesystem.EvalSymlinksBestEffort(path)
 }
 
 // rebaseOnePathOntoWorktree maps one absolute config path from the local repo

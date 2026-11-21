@@ -256,6 +256,38 @@ func terraformConfigurationFile(path string) bool {
 		strings.HasSuffix(lower, ".tofu") || strings.HasSuffix(lower, ".tofu.json")
 }
 
+// mentionsDownloadDir reports whether any parsed configuration file names download_dir. The probe
+// in downloadDir parses the whole unit, so a unit that never sets it skips the probe and its
+// inputs stay unevaluated during backend reads. Automatic includes merge into the unit, so they
+// are scanned too; one that cannot be inspected is skipped, which at worst skips an optional probe.
+func mentionsDownloadDir(filesystem afero.Fs, paths []string) bool {
+	if expanded, err := withAutomaticIncludes(filesystem, paths); err == nil {
+		paths = expanded
+	}
+	for _, path := range paths {
+		data, err := afero.ReadFile(filesystem, path)
+		if err != nil {
+			continue
+		}
+		parser := hclparse.NewParser()
+		var file *hcl.File
+		var diagnostics hcl.Diagnostics
+		if strings.HasSuffix(path, ".json") {
+			file, diagnostics = parser.ParseJSON(data, path)
+		} else {
+			file, diagnostics = parser.ParseHCL(data, path)
+		}
+		if diagnostics.HasErrors() {
+			continue
+		}
+		content, _, _ := file.Body.PartialContent(&hcl.BodySchema{Attributes: []hcl.AttributeSchema{{Name: "download_dir"}}})
+		if content.Attributes["download_dir"] != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // checkLiteralGeneratedBackends rejects, during discovery, a generate block whose path and contents
 // are literal and declare a backend. Full preparation rejects such a unit anyway; rejecting it here
 // records the failure before bulk preflight lets a healthy prerequisite run. Declarations that need

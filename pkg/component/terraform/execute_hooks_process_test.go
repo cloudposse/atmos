@@ -233,6 +233,17 @@ func TestPipelineRunsHooksAroundEachPhaseSeparately(t *testing.T) {
 	require.NotContains(t, pipeline.stdout.String(), "hook says hello", "hook stdout must not mix into data stdout")
 }
 
+func TestIgnoredInitStopsPreparedPipelineSuccessfully(t *testing.T) {
+	pipeline := newProcessPipeline(t, &schema.ComponentExecution{
+		ExtraArguments: []schema.ComponentExtraArguments{{Commands: []string{"init"}, Arguments: []string{"stderr=already exists", "exit=1"}}},
+		Errors:         &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "existing", Patterns: []string{"already exists"}}}},
+	})
+	streams := process.Streams{Stdout: pipeline.stdout, Stderr: pipeline.stderr}
+	err := testExecutor(t).runPreparedPipeline(&schema.AtmosConfiguration{}, pipeline.info, pipeline.execCtx, component.WithProcessStreams(streams))
+	require.NoError(t, err, "an ignored preparatory failure ends the unit successfully")
+	require.Equal(t, []string{"init"}, timeline(readHookLog(t, pipeline.log)), "plan and workspace setup must not run after ignored init")
+}
+
 func physicalPath(t *testing.T, path string) string {
 	t.Helper()
 	resolved, err := filepath.EvalSymlinks(path)
@@ -503,4 +514,54 @@ func TestFinishMainTerraformCommandKeepsHookFailuresUnderPermissiveCIMapping(t *
 	pipeline.info.ExecMetadataDetailedExitCodeAdded = true
 	err = executor.finishMainTerraformCommand(config, pipeline.info, hookErr, false)
 	require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
+}
+
+// TestLifecycleCapturesBeforeHookOutputForErrorHooks verifies that a lifecycle stage with error hooks records
+// the output of its before hooks, so an error hook can match a before hook's failure, and removes the
+// capture files once the lifecycle has finished.
+func TestLifecycleCapturesBeforeHookOutputForErrorHooks(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		pattern  string
+		wantHook bool
+	}{
+		{"matching before hook output", "BeforeNeedle", true},
+		{"non matching before hook output", "NotInAnyOutput", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			temp := t.TempDir()
+			for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+				t.Setenv(name, temp)
+			}
+			shell := newShellFixture(t, func(call *shellCall) error {
+				if call.command == "hook-before" {
+					_, _ = call.options.StdoutCapture.Write([]byte("BeforeNeedle"))
+					return errUtils.ExitCodeError{Code: 2}
+				}
+				return nil
+			})
+			config := &schema.ComponentExecution{
+				BeforeHooks: []schema.ComponentHook{execHook("before", "init")},
+				ErrorHooks:  []schema.ComponentHook{{Name: "recover", Commands: []string{"init"}, Execute: []string{"hook-recover"}, OnErrors: []string{test.pattern}}},
+			}
+			actionRan := false
+
+			err := hookExecutor(shell).runLifecycle(t.Context(), &schema.AtmosConfiguration{}, hookInfo("init", config),
+				lifecycleStage{command: "init", config: config}, func(context.Context) error {
+					actionRan = true
+					return nil
+				})
+
+			require.Error(t, err)
+			require.False(t, actionRan, "a failing before hook keeps the action from starting")
+			if test.wantHook {
+				require.Equal(t, []string{"hook-before arg", "hook-recover"}, shell.names())
+			} else {
+				require.Equal(t, []string{"hook-before arg"}, shell.names())
+			}
+			entries, readErr := os.ReadDir(temp)
+			require.NoError(t, readErr)
+			require.Empty(t, entries, "every capture file is removed")
+		})
+	}
 }

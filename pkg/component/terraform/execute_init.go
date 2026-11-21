@@ -223,7 +223,7 @@ func prepareInitExecution(ctx context.Context, writers provisioner.OutputWriters
 // invocation via prepareInitExecution.  These two code paths must never both execute
 // in the same command invocation or provisioners will run twice.
 func (e *Executor) executeTerraformInitPhase(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, varFile string, opts ...component.ExecutionOption) (string, error) {
-	newPath, err := prepareInitExecution(component.ContextFromOptions(opts...), executionOutputWriters(opts...), atmosConfig, info, componentPath)
+	newPath, err := prepareInitExecution(e.withInitFromModule(component.ContextFromOptions(opts...), atmosConfig, info), executionOutputWriters(opts...), atmosConfig, info, componentPath)
 	if err != nil {
 		return componentPath, err
 	}

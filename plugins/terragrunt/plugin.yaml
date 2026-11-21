@@ -30,7 +30,7 @@ spec:
     contracts:
       component.discovery: '>=1'
       component.validation: '>=1'
-      component.preparation: '>=1'
+      component.preparation: '>=2 <3'
       component.state: '>=1'
   capabilities:
     components:

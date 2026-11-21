@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
+	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/spf13/afero"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zclconf/go-cty/cty"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
@@ -111,23 +115,6 @@ func TestExecutionSkipsHooksWhoseConditionIsFalse(t *testing.T) {
 
 func TestExecutionRejectsUnimplementedHookSemantics(t *testing.T) {
 	for _, test := range []struct{ name, body, message string }{
-		{"read-config before", `before_hook "x" {
-    commands = ["terragrunt-read-config"]
-    execute  = ["tool"]
-  }`, "terragrunt-read-config"},
-		{"read-config alias after", `after_hook "x" {
-    commands = ["plan", "read-config"]
-    execute  = ["tool"]
-  }`, "read-config"},
-		{"init-from-module error", `error_hook "x" {
-    commands  = ["init-from-module"]
-    execute   = ["tool"]
-    on_errors = [".*"]
-  }`, "init-from-module"},
-		{"tflint built in", `before_hook "lint" {
-    commands = ["plan"]
-    execute  = ["tflint", "--init"]
-  }`, "tflint"},
 		{"invalid on_errors", `error_hook "bad" {
     commands  = ["plan"]
     execute   = ["tool"]
@@ -201,6 +188,574 @@ func TestValidateHookRequiresRunnableExecuteList(t *testing.T) {
 	require.NoError(t, validateHook("before_hook", &model.Hook{Name: "h", Commands: []string{"plan"}, Execute: []string{"tool"}}))
 }
 
+// fixtureEngine returns a request whose executable is a fake OpenTofu that answers `version`.
+func fixtureEngine(t *testing.T, original *model.Request) model.Request {
+	request := *original
+	t.Helper()
+	request.Tofu = installFixtureExecutable(t, t.TempDir(), toolchainTofuName)
+	request.Environment = map[string]string{toolchainChildEnv: "1"}
+	return request
+}
+
+func TestTerraformBinaryAnchorsRelativePaths(t *testing.T) {
+	unit := filepath.Join("repo", "live", "terragrunt.hcl")
+	assert.Equal(t, "tofu", terraformBinary(" tofu ", unit), "a bare name is left to the toolchain")
+	assert.Empty(t, terraformBinary("", unit))
+	assert.Equal(t, filepath.Join("repo", "live", "bin", "tofu"), terraformBinary("./bin/tofu", unit))
+	absolute := filepath.Join(t.TempDir(), "tofu")
+	assert.Equal(t, absolute, terraformBinary(absolute, unit))
+}
+
+func TestResolveReturnsTerraformBinaryAndValidatesTheEngine(t *testing.T) {
+	// The probe runs the executable the unit selected, not the host's command.
+	tofu := filepath.ToSlash(installFixtureExecutable(t, t.TempDir(), toolchainTofuName))
+	request := nativeUnit(t, `terraform_binary = "`+tofu+`"`)
+	request.Environment = map[string]string{toolchainChildEnv: "1"}
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, tofu, result.TerraformBinary, "an absolute path is returned as the unit wrote it")
+
+	// A unit without terraform_binary never probes the executable.
+	plain := nativeUnit(t, "")
+	result, err = Resolve(t.Context(), plain)
+	require.NoError(t, err)
+	require.Empty(t, result.TerraformBinary)
+
+	// An executable that is not Terraform or OpenTofu is rejected with the setting named.
+	tool := filepath.ToSlash(installFixtureExecutable(t, t.TempDir(), toolchainToolName))
+	wrong := nativeUnit(t, `terraform_binary = "`+tool+`"`)
+	wrong.Environment = map[string]string{toolchainChildEnv: "1"}
+	_, err = Resolve(t.Context(), wrong)
+	problem := asProblem(t, err)
+	require.Equal(t, "terraform_binary", problem.Key)
+	require.Contains(t, problem.Summary, "not a Terraform or OpenTofu executable")
+}
+
+func TestBareTerraformBinaryIsResolvedOnTheInvocationPath(t *testing.T) {
+	bin := t.TempDir()
+	installFixtureExecutable(t, bin, toolchainTofuName)
+	empty := t.TempDir()
+
+	t.Run("a name found on the invocation PATH is probed", func(t *testing.T) {
+		request := nativeUnit(t, `terraform_binary = "`+toolchainTofuName+`"`)
+		request.Environment = map[string]string{toolchainChildEnv: "1", "PATH": bin}
+		result, err := Resolve(t.Context(), request)
+		require.NoError(t, err)
+		require.Equal(t, toolchainTofuName, result.TerraformBinary, "the unit's name is returned as written")
+	})
+
+	t.Run("a name missing from the invocation PATH fails even when this process could find it", func(t *testing.T) {
+		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+		request := nativeUnit(t, `terraform_binary = "`+toolchainTofuName+`"`)
+		request.Environment = map[string]string{toolchainChildEnv: "1", "PATH": empty}
+		_, err := Resolve(t.Context(), request)
+		problem := asProblem(t, err)
+		require.Equal(t, "terraform_binary", problem.Key)
+		require.Contains(t, problem.Summary, "not a Terraform or OpenTofu executable")
+	})
+
+	t.Run("an invocation without PATH leaves the name to the executor", func(t *testing.T) {
+		executable, err := resolveOnInvocationPath("tofu", map[string]string{})
+		require.NoError(t, err)
+		require.Equal(t, "tofu", executable)
+	})
+
+	t.Run("an explicit path is not searched", func(t *testing.T) {
+		explicit := filepath.Join(empty, "bin", "tofu")
+		executable, err := resolveOnInvocationPath(explicit, map[string]string{"PATH": bin})
+		require.NoError(t, err)
+		require.Equal(t, explicit, executable)
+	})
+}
+
+func TestDiscoveryReadsTerraformBinaryWithoutRunningIt(t *testing.T) {
+	request := nativeUnit(t, `terraform_binary = "./bin/tofu"`)
+	request.Phase = "discover"
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(physicalPath(t, filepath.Dir(request.Path)), "bin", "tofu"), result.TerraformBinary)
+}
+
+func TestErrorsBlockIsReturnedInDeclarationOrder(t *testing.T) {
+	request := nativeUnit(t, `errors {
+  retry "network" {
+    retryable_errors   = ["(?s).*timeout.*", "!ignore me"]
+    max_attempts       = 4
+    sleep_interval_sec = 2
+  }
+  retry "quota" {
+    retryable_errors   = ["quota"]
+    max_attempts       = 2
+    sleep_interval_sec = 0
+  }
+  ignore "known" {
+    ignorable_errors = ["already exists"]
+    message          = "resource existed"
+    signals = {
+      note  = "kept"
+      other = "also"
+    }
+  }
+}`)
+	request.Phase = "discover"
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []model.RetryPolicy{
+		{Name: "network", Patterns: []string{"(?s).*timeout.*", "!ignore me"}, MaxAttempts: 4, SleepIntervalSec: 2},
+		{Name: "quota", Patterns: []string{"quota"}, MaxAttempts: 2},
+	}, result.Errors.Retry)
+	require.Len(t, result.Errors.Ignore, 1)
+	ignore := result.Errors.Ignore[0]
+	require.Equal(t, "known", ignore.Name)
+	require.Equal(t, "resource existed", ignore.Message)
+	require.Equal(t, "kept", ignore.Signals["note"])
+	require.Equal(t, "also", ignore.Signals["other"])
+}
+
+func TestErrorsBlockRejectsInvalidPolicies(t *testing.T) {
+	for name, test := range map[string]struct{ body, key, message string }{
+		"no attempts": {`retry "x" {
+    retryable_errors = ["a"]
+    max_attempts = 0
+    sleep_interval_sec = 1
+  }`, `errors.retry "x"`, "max_attempts"},
+		"negative sleep": {`retry "x" {
+    retryable_errors = ["a"]
+    max_attempts = 1
+    sleep_interval_sec = -1
+  }`, `errors.retry "x"`, "sleep_interval_sec"},
+		"attempts out of range": {`retry "x" {
+    retryable_errors = ["a"]
+    max_attempts = 4294967296
+    sleep_interval_sec = 1
+  }`, `errors.retry "x"`, "too large"},
+		"sleep out of range": {`retry "x" {
+    retryable_errors = ["a"]
+    max_attempts = 1
+    sleep_interval_sec = 4294967296
+  }`, `errors.retry "x"`, "too large"},
+		"bad retry pattern": {`retry "x" {
+    retryable_errors = ["("]
+    max_attempts = 1
+    sleep_interval_sec = 1
+  }`, `errors.retry "x"`, "Invalid error pattern"},
+		"bad ignore pattern": {`ignore "y" {
+    ignorable_errors = ["!("]
+  }`, `errors.ignore "y"`, "Invalid error pattern"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := nativeUnit(t, "errors {\n  "+test.body+"\n}")
+			request.Phase = "discover"
+			_, err := Resolve(t.Context(), request)
+			problem := asProblem(t, err)
+			require.Equal(t, test.key, problem.Key)
+			require.Contains(t, problem.Summary+problem.Detail, test.message)
+			require.True(t, problem.Safe)
+			require.NotEmpty(t, problem.Hints)
+		})
+	}
+}
+
+func TestExcludeBlockOnlyAppliesWhileItsConditionHolds(t *testing.T) {
+	enabled := nativeUnit(t, "exclude {\n  if = true\n  actions = [\"plan\", \"destroy\"]\n  exclude_dependencies = true\n  no_run = true\n}")
+	enabled.Phase = "discover"
+	result, err := Resolve(t.Context(), enabled)
+	require.NoError(t, err)
+	noRun := true
+	require.Equal(t, &model.Exclude{Actions: []string{"plan", "destroy"}, ExcludeDependencies: true, NoRun: &noRun}, result.Exclude)
+
+	disabled := nativeUnit(t, "exclude {\n  if = false\n  actions = [\"all\"]\n}")
+	disabled.Phase = "discover"
+	result, err = Resolve(t.Context(), disabled)
+	require.NoError(t, err)
+	require.Nil(t, result.Exclude)
+
+	absent := nativeUnit(t, "")
+	absent.Phase = "discover"
+	result, err = Resolve(t.Context(), absent)
+	require.NoError(t, err)
+	require.Nil(t, result.Exclude)
+}
+
+func TestExcludeActionMatching(t *testing.T) {
+	for _, test := range []struct {
+		actions []string
+		command string
+		want    bool
+	}{
+		{[]string{"plan"}, "plan", true},
+		{[]string{"PLAN"}, "plan", true},
+		{[]string{"plan"}, "apply", false},
+		{[]string{"all"}, "output", true},
+		{[]string{"all_except_output"}, "output", false},
+		{[]string{"all_except_output"}, "plan", true},
+		{nil, "plan", false},
+	} {
+		assert.Equal(t, test.want, ExcludeListsAction(test.actions, test.command), "%v %s", test.actions, test.command)
+	}
+}
+
+func TestPreventsRunFollowsNoRun(t *testing.T) {
+	yes, no := true, false
+	all := []string{"all"}
+	for name, test := range map[string]struct {
+		exclude *model.Exclude
+		command string
+		want    bool
+	}{
+		"no block":                   {nil, "plan", false},
+		"unset, exact action":        {&model.Exclude{Actions: []string{"plan"}}, "plan", true},
+		"unset, all does not apply":  {&model.Exclude{Actions: all}, "plan", false},
+		"unset, other action":        {&model.Exclude{Actions: []string{"apply"}}, "plan", false},
+		"true honors all":            {&model.Exclude{Actions: all, NoRun: &yes}, "plan", true},
+		"true honors all_except":     {&model.Exclude{Actions: []string{"all_except_output"}, NoRun: &yes}, "output", false},
+		"false never prevents":       {&model.Exclude{Actions: []string{"plan"}, NoRun: &no}, "plan", false},
+		"true, command not listed":   {&model.Exclude{Actions: []string{"apply"}, NoRun: &yes}, "plan", false},
+		"true, case insensitive set": {&model.Exclude{Actions: []string{"PLAN"}, NoRun: &yes}, "plan", true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, test.want, PreventsRun(test.exclude, test.command))
+		})
+	}
+}
+
+const featureUnit = `
+feature "enabled" {
+  default = false
+}
+feature "size" {
+  default = 3
+}
+feature "tier" {
+  default = "basic"
+}
+inputs = {
+  enabled = feature.enabled.value
+  size    = feature.size.value
+  tier    = feature.tier.value
+}
+`
+
+func TestFeatureDefaultsAreRenderedAsStrings(t *testing.T) {
+	result, err := Resolve(t.Context(), nativeUnit(t, featureUnit))
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"enabled": "false", "size": "3", "tier": "basic"}, result.FeatureFlags)
+	require.Equal(t, false, result.Inputs["enabled"])
+	require.Equal(t, json.Number("3"), result.Inputs["size"])
+	require.Equal(t, "basic", result.Inputs["tier"])
+}
+
+func TestFeatureOverridesReplaceDefaults(t *testing.T) {
+	request := nativeUnit(t, featureUnit)
+	request.Features = map[string]string{"enabled": "true", "tier": "premium", "size": "8"}
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"enabled": "true", "size": "8", "tier": "premium"}, result.FeatureFlags)
+	require.Equal(t, true, result.Inputs["enabled"], "a boolean feature is typed from its override")
+	require.Equal(t, "8", result.Inputs["size"], "Terragrunt keeps a numeric feature override as its CLI string")
+	require.Equal(t, "premium", result.Inputs["tier"])
+}
+
+func TestFeatureOverrideOfWrongTypeNamesTheFeature(t *testing.T) {
+	request := nativeUnit(t, featureUnit)
+	request.Features = map[string]string{"enabled": "sometimes"}
+	_, err := Resolve(t.Context(), request)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "enabled")
+}
+
+func TestFeatureCanChooseADependencyOrSource(t *testing.T) {
+	request := nativeUnit(t, `
+feature "wide" {
+  default = false
+}
+exclude {
+  if      = feature.wide.value
+  actions = ["plan"]
+}
+`)
+	request.Phase = "discover"
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Nil(t, result.Exclude)
+
+	request.Features = map[string]string{"wide": "true"}
+	result, err = Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NotNil(t, result.Exclude, "the override must reach the discovery evaluation too")
+}
+
+func TestParseFeatureEnvironment(t *testing.T) {
+	parsed, err := ParseFeatureEnvironment(" a=1, b = text ,,c=")
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"a": "1", "b": "text", "c": ""}, parsed)
+
+	for _, bad := range []string{"novalue", "=x"} {
+		_, err = ParseFeatureEnvironment(bad)
+		problem := asProblem(t, err)
+		require.Equal(t, "TG_FEATURE", problem.Key)
+	}
+}
+
+func TestFeatureOverrideWarningsNameUnusedKeys(t *testing.T) {
+	inventory := []model.DiscoveredUnit{{Config: model.Resolution{FeatureFlags: map[string]string{"known": "x"}}}}
+	assert.Nil(t, featureOverrideWarnings(nil, inventory))
+	assert.Empty(t, featureOverrideWarnings(map[string]string{"known": "1"}, inventory))
+	warnings := featureOverrideWarnings(map[string]string{"typo": "1", "known": "1", "also": "2"}, inventory)
+	require.Len(t, warnings, 2)
+	require.Equal(t, WarningFeatureOverrideUnused, warnings[0].Code)
+	require.Contains(t, warnings[0].Message, "`also`")
+	require.Contains(t, warnings[1].Message, "`typo`")
+}
+
+func TestLifecycleHooksRunInTheUnitDirectory(t *testing.T) {
+	request := executionUnit(t, `
+  after_hook "read" {
+    commands = ["terragrunt-read-config", "read-config"]
+    execute  = ["tool", "read"]
+  }
+  before_hook "fetch" {
+    commands    = ["init-from-module"]
+    execute     = ["tool", "fetch"]
+    working_dir = "elsewhere"
+  }
+  error_hook "download_failed" {
+    commands  = ["init-from-module"]
+    execute   = ["tool", "report"]
+    on_errors = [".*"]
+  }
+  after_hook "mixed" {
+    commands = ["init-from-module", "apply"]
+    execute  = ["tool", "mixed"]
+  }
+`)
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	unit := physicalPath(t, filepath.Dir(request.Path))
+
+	require.Equal(t, "read", result.Execution.AfterHooks[0].Name)
+	require.Equal(t, unit, result.Execution.AfterHooks[0].WorkingDirectory)
+	require.Equal(t, "elsewhere", result.Execution.BeforeHooks[0].WorkingDirectory, "an explicit working_dir is kept")
+	require.Equal(t, unit, result.Execution.ErrorHooks[0].WorkingDirectory)
+
+	// A hook listing both stages is split so each keeps its own default directory.
+	require.Len(t, result.Execution.AfterHooks, 3)
+	require.Equal(t, []string{"init-from-module"}, result.Execution.AfterHooks[1].Commands)
+	require.Equal(t, unit, result.Execution.AfterHooks[1].WorkingDirectory)
+	require.Equal(t, []string{"apply"}, result.Execution.AfterHooks[2].Commands)
+	require.Empty(t, result.Execution.AfterHooks[2].WorkingDirectory)
+}
+
+func TestReadConfigBeforeHookIsReportedAsNeverRunning(t *testing.T) {
+	result, err := Resolve(t.Context(), executionUnit(t, `
+  before_hook "early" {
+    commands = ["terragrunt-read-config"]
+    execute  = ["tool"]
+  }
+  before_hook "disabled" {
+    commands = ["read-config"]
+    execute  = ["tool"]
+    if       = false
+  }
+`))
+	require.NoError(t, err)
+	require.Len(t, result.Warnings, 1)
+	require.Equal(t, WarningReadConfigBeforeHook, result.Warnings[0].Code)
+	require.Contains(t, result.Warnings[0].Message, `"early"`)
+}
+
+func TestTflintHookBecomesInitAndLintCommands(t *testing.T) {
+	request := executionUnit(t, `
+  extra_arguments "vars" {
+    commands           = ["plan"]
+    arguments          = ["-var=region=eu"]
+    required_var_files = ["required.tfvars"]
+    env_vars           = { TF_VAR_zone = "a" }
+  }
+  before_hook "lint" {
+    commands = ["plan"]
+    execute  = ["tflint", "--terragrunt-external-tflint", "--minimum-failure-severity=error"]
+  }
+`)
+	request.Phase = ""
+	root := physicalPath(t, filepath.Dir(request.Path))
+	config := filepath.Join(root, ".tflint.hcl")
+	require.NoError(t, os.WriteFile(config, []byte("plugin \"x\" {}\n"), 0o644))
+	body, err := os.ReadFile(request.Path)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(request.Path, append(body, []byte("inputs = { name = \"web\", count = 2 }\n")...), 0o644))
+	request = fixtureEngine(t, &request)
+
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Len(t, result.Execution.BeforeHooks, 2)
+	initHook, lintHook := result.Execution.BeforeHooks[0], result.Execution.BeforeHooks[1]
+	require.Equal(t, []string{"tflint", "--init", "--config", tflintConfigSearchPrefix + root, "--chdir", "."}, initHook.Execute)
+	require.Equal(t, []string{
+		"tflint", "--config", tflintConfigSearchPrefix + root, "--chdir", ".",
+		tflintInputVariablesMarker,
+		"--var=region=eu", "--var-file=required.tfvars",
+		"--minimum-failure-severity=error",
+	}, lintHook.Execute)
+	require.Equal(t, "lint", initHook.Name)
+	require.Equal(t, []string{"plan"}, lintHook.Commands)
+}
+
+func TestTflintHookDefersConfigurationLookup(t *testing.T) {
+	root := t.TempDir()
+	unit := filepath.Join(root, "a", "b")
+	require.NoError(t, os.MkdirAll(unit, 0o755))
+	hooks := expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}, &model.Execution{}, filepath.Join(unit, "terragrunt.hcl"))
+	require.Len(t, hooks, 2)
+	require.Contains(t, hooks[0].Execute, tflintConfigSearchPrefix+unit)
+}
+
+func TestTflintConfigFlagForms(t *testing.T) {
+	dir := t.TempDir()
+	absolute := filepath.Join(dir, "abs.hcl")
+	for _, arguments := range [][]string{
+		{"tflint", "--config", absolute},
+		{"tflint", "-c", absolute},
+		{"tflint", "--config=" + absolute},
+		{"tflint", "-c=" + absolute},
+	} {
+		got, err := tflintConfig(arguments, dir)
+		require.NoError(t, err)
+		require.Equal(t, absolute, got)
+	}
+	got, err := tflintConfig([]string{"tflint", "--config", "rel.hcl"}, dir)
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(dir, "rel.hcl"), got, "a relative config is anchored at the unit")
+	require.Equal(t, []string{"--format", "json"}, withoutConfigFlag([]string{"--config", "x", "--format", "json", "-c=y", "--config=z"}))
+}
+
+func TestCtyStringRendersEveryValueKind(t *testing.T) {
+	assert.Equal(t, "text", ctyString(cty.StringVal("text")))
+	assert.Equal(t, "true", ctyString(cty.True))
+	assert.Equal(t, "2.5", ctyString(cty.NumberFloatVal(2.5)))
+	assert.Equal(t, "7", ctyString(cty.NumberIntVal(7)))
+	assert.Equal(t, `["a","b"]`, ctyString(cty.ListVal([]cty.Value{cty.StringVal("a"), cty.StringVal("b")})))
+	assert.Equal(t, "", ctyString(cty.NullVal(cty.String)))
+	assert.Equal(t, "", ctyString(cty.UnknownVal(cty.String)))
+	assert.Equal(t, "secret", ctyString(cty.StringVal("secret").Mark("sensitive")))
+}
+
+func TestSignalValuesConvertToPlainJSON(t *testing.T) {
+	assert.Nil(t, mustSignals(t, nil))
+	signals := mustSignals(t, map[string]cty.Value{
+		"text":    cty.StringVal("x"),
+		"number":  cty.NumberIntVal(3),
+		"large":   cty.NumberIntVal(9007199254740993),
+		"list":    cty.TupleVal([]cty.Value{cty.True, cty.StringVal("y")}),
+		"nothing": cty.NullVal(cty.String),
+		"unknown": cty.UnknownVal(cty.String),
+	})
+	assert.Equal(t, "x", signals["text"])
+	assert.Equal(t, json.Number("3"), signals["number"])
+	data, err := json.Marshal(signals)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"large":9007199254740993`)
+	assert.Equal(t, []any{true, "y"}, signals["list"])
+	assert.Nil(t, signals["nothing"])
+	assert.Nil(t, signals["unknown"])
+}
+
+func mustSignals(t *testing.T, signals map[string]cty.Value) map[string]any {
+	t.Helper()
+	result, err := signalValues(signals)
+	require.NoError(t, err)
+	return result
+}
+
+func TestFinalizeExecutionHandlesAbsentAndEveryHookKind(t *testing.T) {
+	finalizeExecution(nil, "terragrunt.hcl")
+	unit := filepath.Join(t.TempDir(), "terragrunt.hcl")
+	lint := []model.Hook{{Name: "lint", Commands: []string{"plan"}, Execute: []string{"tflint"}}}
+	execution := &model.Execution{BeforeHooks: slices.Clone(lint), AfterHooks: slices.Clone(lint), ErrorHooks: slices.Clone(lint)}
+	finalizeExecution(execution, unit)
+	for name, hooks := range map[string][]model.Hook{"before": execution.BeforeHooks, "after": execution.AfterHooks, "error": execution.ErrorHooks} {
+		require.Len(t, hooks, 2, name)
+		require.Contains(t, hooks[1].Execute, tflintInputVariablesMarker, name)
+	}
+}
+
+func TestTflintVariablesFromExtraArguments(t *testing.T) {
+	existing := filepath.Join(t.TempDir(), "optional.tfvars")
+	require.NoError(t, os.WriteFile(existing, nil, 0o644))
+	execution := &model.Execution{ExtraArguments: []model.ExtraArguments{
+		{Commands: []string{"apply"}, Arguments: []string{"-var=ignored=1"}},
+		{Commands: []string{"plan"}, Arguments: []string{"-var-file=a.tfvars", "-lock=false", "-var", "c=3", "-var-file", "d.tfvars"}, OptionalVarFiles: []string{existing, "absent.tfvars"}, Environment: map[string]string{"OTHER": "x", "TF_VAR_b": "2"}},
+	}}
+	require.Equal(t, []string{"--var-file=a.tfvars", "--var=c=3", "--var-file=d.tfvars", tflintOptionalVarFilePrefix + existing, tflintOptionalVarFilePrefix + "absent.tfvars"}, tflintExtraVariables("plan", execution))
+	require.Equal(t, []string{"--var=ignored=1"}, tflintExtraVariables("apply", execution))
+
+	doubleDash := &model.Execution{ExtraArguments: []model.ExtraArguments{
+		{Commands: []string{"plan"}, Arguments: []string{"--var=region=west", "--var-file=env.tfvars", "--var", "a=1", "--var-file", "b.tfvars", "-var=c=2", "--other"}},
+	}}
+	require.Equal(t, []string{"--var=region=west", "--var-file=env.tfvars", "--var=a=1", "--var-file=b.tfvars", "--var=c=2"}, tflintExtraVariables("plan", doubleDash))
+	require.Empty(t, tflintExtraVariables("plan", &model.Execution{ExtraArguments: []model.ExtraArguments{
+		{Commands: []string{"plan"}, Environment: map[string]string{"TF_VAR_b": "2"}},
+	}}), "TFLint reads TF_VAR_ from the hook environment, below terraform.tfvars")
+}
+
+func TestTflintHookScopesExtraArgumentsToEachCommand(t *testing.T) {
+	unit := filepath.Join(t.TempDir(), "terragrunt.hcl")
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(unit), ".tflint.hcl"), nil, 0o644))
+	execution := &model.Execution{ExtraArguments: []model.ExtraArguments{
+		{Commands: []string{"plan"}, Arguments: []string{"-var=only=plan"}},
+		{Commands: []string{"apply"}, Arguments: []string{"-var=only=apply"}},
+	}}
+	hooks := expandTflint(&model.Hook{Name: "lint", Commands: []string{"plan", "apply"}, Execute: []string{"tflint"}}, execution, unit)
+	require.Len(t, hooks, 4)
+	require.Equal(t, []string{"plan"}, hooks[1].Commands)
+	require.Contains(t, hooks[1].Execute, "--var=only=plan")
+	require.NotContains(t, hooks[1].Execute, "--var=only=apply")
+	require.Equal(t, []string{"apply"}, hooks[3].Commands)
+	require.Contains(t, hooks[3].Execute, "--var=only=apply")
+	require.NotContains(t, hooks[3].Execute, "--var=only=plan")
+}
+
+func TestExcludeFromConfigWithoutBlock(t *testing.T) {
+	assert.Nil(t, excludeFromConfig(nil))
+	assert.Nil(t, excludeFromConfig(&config.ExcludeConfig{If: false}))
+	assert.Equal(t, &model.Exclude{Actions: []string{"plan"}}, excludeFromConfig(&config.ExcludeConfig{If: true, Actions: []string{"plan"}}))
+	assert.Nil(t, mustErrors(t, nil))
+	assert.Nil(t, mustErrors(t, &config.ErrorsConfig{}))
+}
+
+func mustErrors(t *testing.T, block *config.ErrorsConfig) *model.Errors {
+	t.Helper()
+	result, err := errorsFromConfig(block, "terragrunt.hcl")
+	require.NoError(t, err)
+	return result
+}
+
+func TestFeatureValuesIgnoreUndeclaredAndNilFlags(t *testing.T) {
+	assert.Nil(t, mustFeatures(t, nil, map[string]string{"x": "1"}))
+	tier := cty.StringVal("basic")
+	values := mustFeatures(t, []*config.FeatureFlag{nil, {Name: "tier", Default: &tier}, {Name: "nodefault"}}, nil)
+	assert.Equal(t, map[string]string{"tier": "basic"}, values)
+}
+
+func mustFeatures(t *testing.T, flags []*config.FeatureFlag, overrides map[string]string) map[string]string {
+	t.Helper()
+	result, err := featureFlagValues(flags, overrides, "terragrunt.hcl")
+	require.NoError(t, err)
+	return result
+}
+
+func TestCheckFeatureOverridesLeavesParseErrorsToTheEvaluator(t *testing.T) {
+	failing := func() (*config.TerragruntConfig, error) { return nil, os.ErrInvalid }
+	require.NoError(t, checkFeatureOverrides("terragrunt.hcl", map[string]string{"a": "1"}, failing))
+	require.NoError(t, checkFeatureOverrides("terragrunt.hcl", nil, failing))
+	flag := cty.True
+	declared := func() (*config.TerragruntConfig, error) {
+		return &config.TerragruntConfig{FeatureFlags: []*config.FeatureFlag{{Name: "on", Default: &flag}}}, nil
+	}
+	require.NoError(t, checkFeatureOverrides("terragrunt.hcl", map[string]string{"on": "false"}, declared))
+	require.Error(t, checkFeatureOverrides("terragrunt.hcl", map[string]string{"on": "maybe"}, declared))
+}
+
 // effectChildEnv makes the test binary act as a cross-platform effect command (see TestMain).
 const effectChildEnv = "ATMOS_TERRAGRUNT_EFFECT_CHILD"
 
@@ -266,14 +821,6 @@ func TestDiscoveryValidatesExecutionSyntaxWithoutEffects(t *testing.T) {
 	for _, test := range []struct {
 		name, body, want string
 	}{
-		{"lifecycle", `before_hook "hook" {
- commands = ["read-config"]
- execute = [run_cmd("must-not-execute")]
-}`, "Unsupported hook command"},
-		{"builtin", `before_hook "hook" {
- commands = [run_cmd("must-not-execute")]
- execute = ["tflint"]
-}`, "Unsupported built-in"},
 		{"missing execute", `before_hook "hook" {
  commands = ["plan"]
 }`, "execute"},
@@ -445,17 +992,18 @@ func TestDiscoveryDefersInheritedExecutionValues(t *testing.T) {
 }
 
 func TestPreparationValidatesDynamicHookSettings(t *testing.T) {
-	request := executionUnit(t, `before_hook "dynamic" {
- commands = [get_env("HOOK_COMMAND")]
+	request := executionUnit(t, `error_hook "dynamic" {
+ commands = ["plan"]
  execute = ["echo"]
+ on_errors = [get_env("HOOK_PATTERN")]
 }`)
-	request.Environment["HOOK_COMMAND"] = "read-config"
+	request.Environment["HOOK_PATTERN"] = "["
 	request.Phase = "discover"
 	_, err := Resolve(t.Context(), request)
 	require.NoError(t, err)
 	request.Phase = ""
 	_, err = Resolve(t.Context(), request)
-	require.ErrorContains(t, err, "Unsupported hook command")
+	require.ErrorContains(t, err, "Invalid `on_errors`")
 }
 
 func TestObservesCommandAssumesUnreadableFilesDo(t *testing.T) {
@@ -470,8 +1018,53 @@ func hookNames(hooks []model.Hook) []string {
 	return names
 }
 
-// A parent hook that a unit replaces by name never runs, so its unsupported built-in executable
-// does not block the unit. The same parent hook is still rejected when nothing replaces it.
+// The apply-time evaluation of a saved plan sees the same feature overrides as the plan, and its
+// hooks are prepared for the host the same way: a lifecycle hook runs in the unit directory.
+func TestApplyTimeExecutionUsesFeatureOverridesAndFinalizesHooks(t *testing.T) {
+	root := t.TempDir()
+	module := filepath.Join(root, "module")
+	require.NoError(t, os.MkdirAll(module, 0o755))
+	source, err := json.Marshal(filepath.ToSlash(module))
+	require.NoError(t, err)
+	path := filepath.Join(root, "terragrunt.hcl")
+	require.NoError(t, os.WriteFile(path, []byte(`feature "notify" {
+  default = false
+}
+terraform {
+  source = `+string(source)+`
+  after_hook "notify" {
+    commands = ["apply"]
+    execute  = ["tool", "notify"]
+    if       = feature.notify.value && get_terraform_command() == "apply"
+  }
+  before_hook "fetch" {
+    commands = ["init-from-module"]
+    execute  = ["tool", "fetch"]
+    if       = get_terraform_command() == "apply"
+  }
+}
+`), 0o644))
+	request := model.Request{Path: path, BasePath: root, Command: "plan", Tofu: "must-not-execute", Environment: map[string]string{}}
+
+	planned, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NotNil(t, planned.Execution)
+	require.NotNil(t, planned.Execution.Apply)
+	require.Empty(t, planned.Execution.Apply.AfterHooks, "the feature defaults to off for apply too")
+	require.Equal(t, []string{"fetch"}, hookNames(planned.Execution.Apply.BeforeHooks))
+	unitDir, err := logicalPath(root)
+	require.NoError(t, err)
+	require.Equal(t, unitDir, planned.Execution.Apply.BeforeHooks[0].WorkingDirectory, "apply-time lifecycle hooks are finalized")
+
+	request.Features = map[string]string{"notify": "true"}
+	overridden, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NotNil(t, overridden.Execution.Apply)
+	require.Equal(t, []string{"notify"}, hookNames(overridden.Execution.Apply.AfterHooks), "feature overrides reach the apply-time evaluation")
+}
+
+// A parent hook that a unit replaces by name never runs, so its invalid execute list does not
+// block the unit. The same parent hook is still rejected when nothing replaces it.
 func TestDiscoveryValidatesEffectiveHooksNotOverriddenParents(t *testing.T) {
 	for _, test := range []struct {
 		name, child, want string
@@ -480,7 +1073,7 @@ func TestDiscoveryValidatesEffectiveHooksNotOverriddenParents(t *testing.T) {
  commands = ["plan"]
  execute = ["./wrapper.sh"]
 }`, ""},
-		{"inherited unchanged", "", "Unsupported built-in"},
+		{"inherited unchanged", "", "has no command to run"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := executionUnit(t, test.child)
@@ -488,7 +1081,7 @@ func TestDiscoveryValidatesEffectiveHooksNotOverriddenParents(t *testing.T) {
 			require.NoError(t, os.WriteFile(parent, []byte(`terraform {
  before_hook "lint" {
   commands = ["plan"]
-  execute = ["tflint"]
+  execute = [""]
  }
 }
 `), 0o644))
@@ -507,21 +1100,22 @@ func TestDiscoveryValidatesEffectiveHooksNotOverriddenParents(t *testing.T) {
 }
 
 // Includes merge in declaration order, so a later declaration replaces an earlier one whatever the
-// include names sort to. Here the unsupported built-in hook is replaced only when its include is first.
+// include names sort to. Here the invalid hook, which has no command to run, is replaced only when its
+// include is first.
 func TestDiscoveryUsesIncludeDeclarationOrderForHookOverrides(t *testing.T) {
 	for _, test := range []struct {
 		name, first, second, want string
 	}{
 		{"later declaration replaces an earlier one", "zeta", "alpha", ""},
-		{"earlier declaration is replaced by the later one", "alpha", "zeta", "Unsupported built-in"},
+		{"earlier declaration is replaced by the later one", "alpha", "zeta", "has no command to run"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := executionUnit(t, "")
 			hook := func(execute string) []byte {
 				return []byte("terraform {\n before_hook \"lint\" {\n  commands = [\"plan\"]\n  execute = [" + execute + "]\n }\n}\n")
 			}
-			// The built-in executable is declared by the "zeta" include, the wrapper by "alpha".
-			require.NoError(t, os.WriteFile(filepath.Join(request.BasePath, "zeta.hcl"), hook(`"tflint"`), 0o644))
+			// The invalid hook is declared by the "zeta" include, the wrapper by "alpha".
+			require.NoError(t, os.WriteFile(filepath.Join(request.BasePath, "zeta.hcl"), hook(`""`), 0o644))
 			require.NoError(t, os.WriteFile(filepath.Join(request.BasePath, "alpha.hcl"), hook(`"./wrapper.sh"`), 0o644))
 			body, err := os.ReadFile(request.Path)
 			require.NoError(t, err)
@@ -591,39 +1185,117 @@ inputs = { value = dependency.upstream.outputs.value }
 	require.NotNil(t, result.Execution.Apply)
 }
 
-func TestDiscoveryPreservesRepeatedHooksInOneFile(t *testing.T) {
-	request := executionUnit(t, `before_hook "lint" {
- commands = ["plan"]
- execute = ["tflint"]
+func TestUnitBinaryOverriddenByTheStackIsNotProbed(t *testing.T) {
+	bin := t.TempDir()
+	unitBinary := installFixtureExecutable(t, bin, toolchainTofuName)
+	// A copy, not a hard link: hard links of the fixture are the same file.
+	other := filepath.Join(t.TempDir(), "other-"+filepath.Base(unitBinary))
+	content, err := os.ReadFile(unitBinary)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(other, content, 0o755))
+	missing := filepath.Join(t.TempDir(), "absent", "tofu")
+	notEngine := installFixtureExecutable(t, t.TempDir(), toolchainToolName)
+
+	link := filepath.Join(t.TempDir(), "link-"+filepath.Base(unitBinary))
+	linked := os.Symlink(unitBinary, link) == nil
+
+	tests := []struct {
+		name         string
+		unitBinary   string
+		effective    string
+		wantProblem  bool
+		wantWarnings int
+		needsLink    bool
+	}{
+		{name: "same path probes without a warning", unitBinary: unitBinary, effective: unitBinary},
+		{name: "same file through a symlink probes without a warning", unitBinary: unitBinary, effective: link, needsLink: true},
+		{name: "unset effective binary probes as before", unitBinary: unitBinary},
+		{name: "unset effective binary still fails a bad unit binary", unitBinary: missing, wantProblem: true},
+		{name: "bad unit binary without an override fails", unitBinary: notEngine, wantProblem: true, effective: notEngine},
+		{name: "another executable skips the probe and warns", unitBinary: notEngine, effective: other, wantWarnings: 1},
+		{name: "missing unit binary with another effective one warns", unitBinary: missing, effective: other, wantWarnings: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.needsLink && !linked {
+				t.Skip("symlinks are not available on this platform")
+			}
+			request := nativeUnit(t, `terraform_binary = "`+filepath.ToSlash(tt.unitBinary)+`"`)
+			request.Environment = map[string]string{toolchainChildEnv: "1", "PATH": bin}
+			if tt.effective != "" {
+				request.Environment["ATMOS_TERRAFORM_BINARY"] = tt.effective
+			}
+			result, err := Resolve(t.Context(), request)
+			if tt.wantProblem {
+				problem := asProblem(t, err)
+				require.Equal(t, "terraform_binary", problem.Key)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, result.Warnings, tt.wantWarnings)
+			if tt.wantWarnings == 0 {
+				return
+			}
+			warning := result.Warnings[0]
+			require.Equal(t, WarningTerraformBinaryOverridden, warning.Code)
+			require.Contains(t, warning.Message, tt.effective)
+			require.Contains(t, warning.Message, filepath.ToSlash(tt.unitBinary))
+			// The override may come from the stack or the command line, so the hint names both.
+			require.Contains(t, warning.Message, "--command")
+		})
+	}
 }
-before_hook "lint" {
+
+func TestTflintLifecycleAliasesExpandOncePerStage(t *testing.T) {
+	commands := []string{"read-config", "plan", "init-from-module", "terragrunt-read-config", "apply", "init-from-module", "read-config"}
+	hook := model.Hook{Name: "lint", Commands: commands, Execute: []string{"tflint"}}
+	hooks := finalizeHooks([]model.Hook{hook}, &model.Execution{}, filepath.Join(t.TempDir(), "terragrunt.hcl"))
+	require.Len(t, hooks, 8, "aliases and duplicates must not repeat the init/lint pair")
+	for i, command := range []string{"terragrunt-read-config", "init-from-module", "plan", "apply"} {
+		require.Equal(t, []string{command}, hooks[2*i].Commands)
+		require.Equal(t, []string{command}, hooks[2*i+1].Commands)
+		require.Contains(t, hooks[2*i].Execute, "--init")
+		require.NotContains(t, hooks[2*i+1].Execute, "--init")
+	}
+	require.Equal(t, []string{"read-config", "plan", "init-from-module", "terragrunt-read-config", "apply", "init-from-module", "read-config"}, hook.Commands, "normalization does not mutate the input hook")
+}
+
+// Invalid error patterns remain unsupported in L7, which supports the TFLint built-in.
+func TestDiscoveryPreservesRepeatedHooksInOneFile(t *testing.T) {
+	request := executionUnit(t, `error_hook "lint" {
  commands = ["plan"]
  execute = ["./wrapper.sh"]
-}`)
+ on_errors = ["("]
+ }
+ error_hook "lint" {
+ commands = ["plan"]
+ execute = ["./wrapper.sh"]
+ on_errors = [".*"]
+ }`)
 	for _, phase := range []string{"discover", ""} {
 		request.Phase = phase
 		_, err := Resolve(t.Context(), request)
-		require.ErrorContains(t, err, "Unsupported built-in")
+		require.ErrorContains(t, err, "Invalid `on_errors` pattern")
 	}
 }
 
 func TestDiscoveryHonorsAutomaticHookOverride(t *testing.T) {
-	for _, unsupportedAuto := range []bool{false, true} {
-		t.Run(fmt.Sprint(unsupportedAuto), func(t *testing.T) {
-			unit, auto := "tflint", "./wrapper.sh"
-			if unsupportedAuto {
+	for _, invalidAuto := range []bool{false, true} {
+		t.Run(fmt.Sprint(invalidAuto), func(t *testing.T) {
+			unit, auto := "(", ".*"
+			if invalidAuto {
 				unit, auto = auto, unit
 			}
-			hook := func(program string) string {
-				return fmt.Sprintf("before_hook \"lint\" {\n commands = [\"plan\"]\n execute = [%q]\n}", program)
+			hook := func(pattern string) string {
+				return fmt.Sprintf("error_hook \"lint\" {\n commands = [\"plan\"]\n execute = [\"./wrapper.sh\"]\n on_errors = [%q]\n}", pattern)
 			}
 			request := executionUnit(t, hook(unit))
 			require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), "terragrunt.autoinclude.hcl"), []byte("terraform {\n"+hook(auto)+"\n}"), 0o600))
 			for _, phase := range []string{"discover", ""} {
 				request.Phase = phase
 				_, err := Resolve(t.Context(), request)
-				if unsupportedAuto {
-					require.ErrorContains(t, err, "Unsupported built-in")
+				if invalidAuto {
+					require.ErrorContains(t, err, "Invalid `on_errors` pattern")
 				} else {
 					require.NoError(t, err)
 				}
@@ -658,5 +1330,27 @@ func TestArgumentCallsDistinguishJSONTemplatesFromLiterals(t *testing.T) {
 		{`{"inputs":{"value":"${join(\",\", get\u005fterraform_cli_args())}"}}`, true},
 	} {
 		require.Equal(t, test.called, callsFunction([]byte(test.input), "terragrunt.hcl.json", "get_terraform_cli_args"))
+	}
+}
+
+func TestTflintReadConfigHooksKeepTheUnitDirectory(t *testing.T) {
+	unit := filepath.Join(t.TempDir(), "unit")
+	path := filepath.Join(unit, "terragrunt.hcl")
+	hooks := finalizeHooks([]model.Hook{
+		{Name: "lint-config", Commands: []string{model.LifecycleReadConfig}, Execute: []string{"tflint"}},
+		{Name: "lint-plan", Commands: []string{"plan"}, Execute: []string{"tflint"}},
+		{Name: "lint-explicit", Commands: []string{model.LifecycleReadConfig}, Execute: []string{"tflint"}, WorkingDirectory: "elsewhere"},
+	}, &model.Execution{}, path)
+	require.Len(t, hooks, 6)
+	for _, hook := range hooks[:2] {
+		require.Equal(t, "lint-config", hook.Name)
+		require.Equal(t, unit, hook.WorkingDirectory, "read-config runs before provisioning, so it needs the unit directory")
+	}
+	for _, hook := range hooks[2:4] {
+		require.Equal(t, "lint-plan", hook.Name)
+		require.Empty(t, hook.WorkingDirectory, "an ordinary hook still runs in the provisioned module")
+	}
+	for _, hook := range hooks[4:] {
+		require.Equal(t, unit, hook.WorkingDirectory, "an explicit working_dir does not move read-config off the unit")
 	}
 }

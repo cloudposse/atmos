@@ -2157,6 +2157,11 @@ type ConfigAndStacksInfo struct {
 	ComponentEnvSection       AtmosSectionMapType
 	ComponentAuthSection      AtmosSectionMapType
 	ComponentEnvList          []string
+	// SourceAuthorization is an invocation-only header for a resolved registry archive.
+	SourceAuthorization *SourceAuthorization `json:"-" yaml:"-" mapstructure:"-"`
+	// IAMSession is the invocation-only AWS session of a role the component configuration assumed.
+	// In-process source downloads use it so they run as the same principal as the component's commands.
+	IAMSession map[string]string `json:"-" yaml:"-" mapstructure:"-"`
 	// TerraformSecretVarKeys holds the set of top-level keys in ComponentVarsSection
 	// whose value contains a resolved secret (detected via the masker). These variables
 	// are excluded from the on-disk Terraform varfile and injected at runtime as
@@ -2165,6 +2170,10 @@ type ConfigAndStacksInfo struct {
 	// before auth credentials are registered) to keep the varfile-write and env-assembly
 	// steps consistent.
 	TerraformSecretVarKeys map[string]bool
+	// TerraformSecretVarKeysComputed reports that TerraformSecretVarKeys was computed for the current
+	// ComponentVarsSection. An empty TerraformSecretVarKeys alone cannot tell "no secret inputs" from
+	// "not classified yet", and consumers that expose inputs must treat the latter as secret.
+	TerraformSecretVarKeysComputed bool
 	// ConfigurationSensitiveInputKeys retains provider-declared sensitivity independently of masking.
 	ConfigurationSensitiveInputKeys map[string]bool
 	// SanitizedEnv holds the sanitized process environment from auth.
@@ -2172,6 +2181,9 @@ type ConfigAndStacksInfo struct {
 	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).
 	SanitizedEnv            []string
 	ComponentBackendSection AtmosSectionMapType
+	// BackendFileGeneration is the prepared component's invocation-local choice.
+	// Nil retains the project-wide auto_generate_backend_file default.
+	BackendFileGeneration *bool `json:"-" yaml:"-" mapstructure:"-"`
 	// ComponentRetrySection holds the per-component `retry:` block parsed from stack
 	// manifests. When non-nil and `Conditions` is populated, each subprocess invocation
 	// in the terraform execution pipeline (init, workspace, main) is retried independently

@@ -1,18 +1,17 @@
 package terraform
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -48,10 +47,23 @@ type executionPhase struct {
 	planFileArgument bool
 	// componentPath is the provisioned module directory.
 	componentPath string
+	// main marks the command the user asked for, as opposed to a step that prepares for it.
+	main bool
 }
 
 // mainCommandArgsKey carries the effective main command arguments to plan binding.
 type mainCommandArgsKey struct{}
+
+// mainCommandIgnoredKey carries a flag that the errors policy sets when it ignores a failure of the
+// main command, so the caller can tell that run from one that succeeded.
+type mainCommandIgnoredKey struct{}
+
+// markMainCommandIgnored records that the errors policy ignored the main command's failure.
+func markMainCommandIgnored(ctx context.Context) {
+	if ignored, ok := ctx.Value(mainCommandIgnoredKey{}).(*bool); ok {
+		*ignored = true
+	}
+}
 
 // mainCommandRecoveryKey carries smart init's recovery into the main command's hook lifecycle.
 type mainCommandRecoveryKey struct{}
@@ -83,6 +95,7 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 		insertAt:         position,
 		planFileArgument: info.SubCommand == subcommandApply && info.UseTerraformPlan,
 		componentPath:    componentPath,
+		main:             true,
 	}
 	return e.runExecutionPhase(atmosConfig, info, phase, opts, func(phaseInfo *schema.ConfigAndStacksInfo, phaseArgs []string, phaseOpts []component.ExecutionOption) error {
 		ctx := component.ContextFromOptions(phaseOpts...)
@@ -105,7 +118,10 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 			return err
 		}
 		if recovery, ok := ctx.Value(mainCommandRecoveryKey{}).(*mainCommandRecovery); ok {
-			return recovery.recover(err, run)
+			return recovery.recover(err, func() error {
+				resetCommandStderr(ctx)
+				return run()
+			})
 		}
 		return err
 	})
@@ -222,22 +238,16 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 		defer capture.cleanup()
 	}
 	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: &phaseInfo, phase: phase, opts: hookOptions(opts), capture: capture}
-	// With -detailed-exitcode, exit status 2 reports a plan with changes. Hooks must not see that
-	// as a failure, but the status still has to reach the caller once the hooks are done.
-	var changesPresent error
 	env := slices.Concat(envpkg.ConvertMapToSlice(atmosConfig.Env), phaseInfo.ComponentEnvList)
-	err = execution.Run(component.ContextFromOptions(opts...), config, phase.command, runner, func() (execution.Output, error) {
-		output, actionErr := runPhaseAction(&phaseInfo, applied.Args, opts, capture, action)
-		if isDetailedExitCodeChanges(phase.command, applied.Args, env, actionErr, opts...) {
-			changesPresent = actionErr
-			return output, nil
-		}
-		return output, actionErr
-	})
+	attempts := &phaseAttempts{config: config, info: &phaseInfo, phase: phase, args: applied.Args, env: env, runner: runner, capture: capture, action: action}
+	if config.Errors != nil {
+		return e.recoverPhase(&phaseInfo, phase, config.Errors, opts, attempts)
+	}
+	changesPresent, err := attempts.run(opts, nil)
 	if err != nil {
 		return err
 	}
-	return successfulPlanResult(phase.command, applied.Args, env, changesPresent, opts...)
+	return changesPresent
 }
 
 // successfulPlanChanges distinguishes a completed plan (including its hooks) from a
@@ -387,6 +397,9 @@ type hookRunner struct {
 	opts        []component.ExecutionOption
 	// capture records hook output for error hook matching; nil means no error hooks exist.
 	capture *phaseCapture
+	// failed receives the standard error of a hook that fails, for error handling policies. It is
+	// per attempt and separate from the caller's command capture; nil means no policy applies.
+	failed *failureText
 }
 
 // RunHook runs one hook and returns its captured output for error hook matching.
@@ -414,11 +427,12 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 		file = r.capture.create()
 		captured = file
 	}
+	stderrCapture, finishStderr := r.failureCapture(captured)
 	opts := append(
 		slices.Clone(r.opts),
 		component.WithStdoutOverride(stdout),
 		component.WithStdoutCapture(captured),
-		component.WithStderrCapture(captured),
+		component.WithStderrCapture(stderrCapture),
 	)
 	env := append(
 		slices.Clone(r.info.ComponentEnvList),
@@ -430,11 +444,49 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 	if err != nil {
 		return nil, err
 	}
-	err = r.executor.services.ExecuteShellCommand(*r.atmosConfig, hook.Execute[0], hook.Execute[1:], directory, env, false, "", opts...)
+	arguments, secretEnv, err := r.hookArguments(hook, directory)
+	if err != nil {
+		return nil, err
+	}
+	env = append(env, secretEnv...)
+	err = r.executor.services.ExecuteShellCommand(*r.atmosConfig, hook.Execute[0], arguments, directory, env, false, "", opts...)
+	finishStderr(err)
 	if file == nil {
 		return nil, err
 	}
 	return file.finish(), err
+}
+
+// failureCapture adds a private capture of the hook's standard error beside captured. The returned
+// function hands that output to error handling when the hook failed, so a hook that succeeded never
+// influences how a policy treats another step.
+func (r *hookRunner) failureCapture(captured io.Writer) (io.Writer, func(error)) {
+	if r.failed == nil {
+		return captured, func(error) {}
+	}
+	var stderr bytes.Buffer
+	return io.MultiWriter(captured, &syncWriter{w: &stderr}), func(err error) {
+		if err != nil {
+			r.failed.add(stderr.String())
+		}
+	}
+}
+
+// hookArguments returns the arguments and any extra environment a hook runs with. A tflint hook gets
+// the stack's final inputs bound to its variables, secret ones through the environment.
+func (r *hookRunner) hookArguments(hook *schema.ComponentHook, directory string) ([]string, []string, error) {
+	arguments := hook.Execute[1:]
+	if hook.Execute[0] != "tflint" {
+		return arguments, nil, nil
+	}
+	inputs, secretEnv, err := r.tflintChannels(arguments)
+	if err == nil {
+		arguments, err = resolveTflintHookArguments(arguments, directory, inputs)
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("tflint hook %q: %w", hook.Name, err)
+	}
+	return arguments, secretEnv, nil
 }
 
 // hookUnitLabel names the component and stack a hook runs for, so output of a bulk run can be attributed.
@@ -450,6 +502,9 @@ func hookUnitLabel(info *schema.ConfigAndStacksInfo) string {
 func (r *hookRunner) workingDirectory(hook *schema.ComponentHook) (string, error) {
 	switch {
 	case hook.WorkingDirectory == "":
+		if r.phase.command == execution.CommandInitFromModule {
+			return r.phase.componentPath, requireDirectory(r.phase.componentPath, "")
+		}
 		return r.phase.componentPath, nil
 	case filepath.IsAbs(hook.WorkingDirectory):
 		return hook.WorkingDirectory, requireDirectory(hook.WorkingDirectory, "")
@@ -530,102 +585,4 @@ func extraArgumentsPosition(info *schema.ConfigAndStacksInfo, args []string) int
 		position++
 	}
 	return position
-}
-
-// phaseCapture owns the temporary files that record phase and hook output for error hook
-// matching. Cleanup removes every file once the lifecycle, including matching, has finished.
-type phaseCapture struct {
-	mu    sync.Mutex
-	files []*captureFile
-}
-
-// create starts a new capture file. If the file cannot be created, the command still runs and
-// the capture reports the failure when error hooks read it.
-func (c *phaseCapture) create() *captureFile {
-	file, err := os.CreateTemp("", "atmos-phase-output-*")
-	capture := &captureFile{file: file}
-	if err != nil {
-		capture.err = captureError(err)
-		return capture
-	}
-	capture.path = file.Name()
-	c.mu.Lock()
-	c.files = append(c.files, capture)
-	c.mu.Unlock()
-	return capture
-}
-
-// cleanup closes and removes every capture file.
-func (c *phaseCapture) cleanup() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for _, file := range c.files {
-		file.close()
-		if err := os.Remove(file.path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			log.Debug("Failed to remove captured command output", "path", file.path, "error", err)
-		}
-	}
-	c.files = nil
-}
-
-// captureFile records output in a temporary file. A write failure is kept and reported when
-// the output is read. The command keeps running, so a full disk cannot fail it.
-type captureFile struct {
-	mu   sync.Mutex
-	file *os.File
-	path string
-	err  error
-}
-
-// Write appends to the capture and always reports success to the writer chain.
-//
-//nolint:lintroller // Called for every output chunk; tracking would dominate the copy.
-func (c *captureFile) Write(p []byte) (int, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.err == nil && c.file != nil {
-		if _, err := c.file.Write(p); err != nil {
-			c.err = captureError(err)
-		}
-	}
-	return len(p), nil
-}
-
-// finish closes the file for writing and returns it as lifecycle output.
-func (c *captureFile) finish() execution.Output {
-	c.close()
-	return c
-}
-
-func (c *captureFile) close() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.file == nil {
-		return
-	}
-	if err := c.file.Close(); err != nil && c.err == nil {
-		c.err = captureError(err)
-	}
-	c.file = nil
-}
-
-// Open returns a reader over the captured output, or the capture failure.
-func (c *captureFile) Open() (io.Reader, error) {
-	defer perf.Track(nil, "terraform.captureFile.Open")()
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.err != nil {
-		return nil, c.err
-	}
-	file, err := os.Open(c.path)
-	if err != nil {
-		return nil, captureError(err)
-	}
-	return file, nil
-}
-
-// captureError marks a failure to record or read captured command output.
-func captureError(err error) error {
-	return fmt.Errorf("%w: %w", errUtils.ErrComponentOutputCapture, err)
 }

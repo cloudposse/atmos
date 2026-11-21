@@ -11,6 +11,8 @@ import (
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
 
+const currentDirectory = "."
+
 // Discover expands local stacks in an isolated overlay without preparing units.
 //
 //nolint:lintroller // Standalone plugin code cannot import the host performance tracker.
@@ -20,6 +22,9 @@ func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverCompo
 		return nil, rpcError(err)
 	}
 	if err := settings(request.GetProviderConfiguration()); err != nil {
+		return nil, rpcError(err)
+	}
+	if err := withFeatures(&req, request.GetProviderConfiguration()); err != nil {
 		return nil, rpcError(err)
 	}
 	paths, err := importPaths(request)
@@ -59,7 +64,7 @@ func discoveredUnit(req *model.Request, unit *model.DiscoveredUnit, addresses ma
 	if err != nil {
 		return nil, err
 	}
-	module, err := discoveredModule(req.BasePath, &unit.Config)
+	module, moduleSubdir, err := discoveredModule(req.BasePath, &unit.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +79,7 @@ func discoveredUnit(req *model.Request, unit *model.DiscoveredUnit, addresses ma
 	if workspace == "" {
 		workspace = "default"
 	}
-	config, err := encode(map[string]any{
+	component := map[string]any{
 		"source": module, "vars": map[string]any{},
 		"provision":    map[string]any{"workdir": map[string]any{"enabled": true}},
 		"backend_type": "local", "backend": map[string]any{"local": map[string]any{}},
@@ -83,7 +88,12 @@ func discoveredUnit(req *model.Request, unit *model.DiscoveredUnit, addresses ma
 			"terragrunt":    map[string]any{"generation_root": generation},
 			"configuration": map[string]any{"watch_excludes": []string{"**/.terragrunt-cache/**", "**/.terragrunt-stack/**", "**/.terraform/**", "**/.atmos/**"}},
 		},
-	})
+	}
+	if moduleSubdir != "" {
+		component["metadata"].(map[string]any)["source_subdir"] = moduleSubdir
+	}
+	discoveryParity(component, &unit.Config)
+	config, err := encode(component)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +101,7 @@ func discoveredUnit(req *model.Request, unit *model.DiscoveredUnit, addresses ma
 	if err != nil {
 		return nil, err
 	}
-	instance := &pluginv1.DiscoveredComponent{Address: addresses[unit.Config.Path], Provider: "terragrunt", Engine: engineName(req.Tofu), Source: source, Configuration: config, Sources: watched}
+	instance := &pluginv1.DiscoveredComponent{Address: addresses[unit.Config.Path], Provider: "terragrunt", Engine: unitEngine(req, &unit.Config), Source: source, Configuration: config, Sources: watched}
 	instance.Dependencies, err = discoveredDependencies(req.BasePath, &unit.Config, addresses)
 	if err != nil {
 		return nil, err
@@ -100,8 +110,12 @@ func discoveredUnit(req *model.Request, unit *model.DiscoveredUnit, addresses ma
 }
 
 // discoveredModule resolves local module identities relative to the project.
-func discoveredModule(root string, cfg *model.Resolution) (string, error) {
+func discoveredModule(root string, cfg *model.Resolution) (string, string, error) {
 	module := cfg.Source
+	if localRoot, subdir, ok := localModuleSubdir(module); ok {
+		local, err := relative(root, localRoot)
+		return "./" + local + "//" + subdir, subdir, err
+	}
 	if len(cfg.Folders) > 0 && (module == "" || filepath.IsAbs(module)) {
 		path := module
 		if path == "" {
@@ -109,14 +123,14 @@ func discoveredModule(root string, cfg *model.Resolution) (string, error) {
 		}
 		local, err := relative(root, path)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		module = "./" + local
 	}
 	if module == "" {
-		return "", ErrUnsupported
+		return "", "", ErrUnsupported
 	}
-	return module, nil
+	return module, "", nil
 }
 
 // discoveredDependencies binds evaluated dependency paths to discovered addresses.
@@ -139,6 +153,24 @@ func discoveredDependencies(root string, cfg *model.Resolution, addresses map[st
 		dependencies = append(dependencies, &pluginv1.ComponentDependency{Target: target, Kind: kind})
 	}
 	return dependencies, nil
+}
+
+func localModuleSubdir(source string) (root, subdir string, ok bool) {
+	volume := filepath.VolumeName(source)
+	rest := source[len(volume):]
+	if strings.ContainsAny(rest, "?:") {
+		return "", "", false
+	}
+	index := strings.Index(filepath.ToSlash(rest), "//")
+	if index <= 0 {
+		return "", "", false
+	}
+	root = volume + rest[:index]
+	first := strings.SplitN(strings.TrimPrefix(root, "./"), "/", 2)[0]
+	if strings.Contains(first, ".") && !strings.HasPrefix(root, ".") && !filepath.IsAbs(root) {
+		return "", "", false
+	}
+	return root, rest[index+2:], true
 }
 
 // importPaths adds explicit files or directory roots to the same scoped inventory.
@@ -174,7 +206,7 @@ func importPaths(request *pluginv1.DiscoverComponentsRequest) ([]string, error) 
 // project-relative unit paths discovery compares against.
 func directoryPattern(path string) string {
 	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(path)))
-	if clean == "." {
+	if clean == currentDirectory {
 		return "**"
 	}
 	return clean + "/**"
@@ -195,9 +227,9 @@ func derivedAddress(base, path string) (*pluginv1.ComponentAddress, error) {
 		return nil, err
 	}
 	stack, name := "default", "root"
-	if dir != "." {
+	if dir != currentDirectory {
 		name = filepath.Base(dir)
-		if parent := filepath.ToSlash(filepath.Dir(dir)); parent != "." {
+		if parent := filepath.ToSlash(filepath.Dir(dir)); parent != currentDirectory {
 			stack = parent
 		}
 	}
