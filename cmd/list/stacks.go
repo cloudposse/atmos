@@ -237,7 +237,7 @@ func initStacksConfig(
 		return schema.AtmosConfiguration{}, nil, err
 	}
 
-	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := config.InitCliConfigWithContext(cmd.Context(), configAndStacksInfo, true)
 	if err != nil {
 		return schema.AtmosConfiguration{}, nil, fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
 	}

@@ -29,9 +29,13 @@ var (
 
 // Services declares the implementations exported by the plugin.
 type Services struct {
-	Provider pluginv1.AuthProviderServer
-	Identity pluginv1.AuthIdentityServer
-	Commands pluginv1.CommandsServer
+	Provider    pluginv1.AuthProviderServer
+	Identity    pluginv1.AuthIdentityServer
+	Commands    pluginv1.CommandsServer
+	Discovery   pluginv1.ComponentDiscoveryServer
+	Validation  pluginv1.ComponentValidationServer
+	Preparation pluginv1.ComponentPreparationServer
+	State       pluginv1.ComponentStateServer
 }
 
 // Config supplies static identity and builds handlers sharing one Atmos API connection.
@@ -71,7 +75,24 @@ func (p *nativePlugin) GRPCServer(broker *plugin.GRPCBroker, server *grpc.Server
 	if services.Commands != nil {
 		pluginv1.RegisterCommandsServer(server, services.Commands)
 	}
+	registerComponents(server, &services)
 	return nil
+}
+
+// Component services are optional; configuration providers do not own execution.
+func registerComponents(server *grpc.Server, services *Services) {
+	if services.Discovery != nil {
+		pluginv1.RegisterComponentDiscoveryServer(server, services.Discovery)
+	}
+	if services.Validation != nil {
+		pluginv1.RegisterComponentValidationServer(server, services.Validation)
+	}
+	if services.Preparation != nil {
+		pluginv1.RegisterComponentPreparationServer(server, services.Preparation)
+	}
+	if services.State != nil {
+		pluginv1.RegisterComponentStateServer(server, services.State)
+	}
 }
 
 func (*nativePlugin) GRPCClient(context.Context, *plugin.GRPCBroker, *grpc.ClientConn) (any, error) {

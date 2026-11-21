@@ -49,8 +49,21 @@ func (e *Executor) prepareComponentExecution(
 		return nil, err
 	}
 
+	tenv, err := e.prepareConfigurationEnvironment(ctx, atmosConfig, info, shouldProcess)
+	if err != nil {
+		return nil, err
+	}
+	prepared, err := prepareConfiguration(ctx, atmosConfig, info)
+	if err != nil {
+		return nil, err
+	}
+
 	componentPath, err := e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := writePreparedConfigurationFiles(info, prepared, componentPath); err != nil {
 		return nil, err
 	}
 
@@ -58,13 +71,9 @@ func (e *Executor) prepareComponentExecution(
 		return nil, err
 	}
 
-	var tenv *dependencies.ToolchainEnvironment
-	if shouldProcess {
-		tenv, err = resolveAndInstallToolchainDeps(atmosConfig, info)
-		if err != nil {
-			return nil, err
-		}
-		info.Command = tenv.Resolve(info.Command)
+	tenv, err = resolveExecutionToolchain(atmosConfig, info, shouldProcess, tenv)
+	if err != nil {
+		return nil, err
 	}
 
 	varFile := ConstructTerraformComponentVarfileName(info)
@@ -87,6 +96,20 @@ func (e *Executor) prepareComponentExecution(
 		workingDir:    workingDir,
 		tenv:          tenv,
 	}, nil
+}
+
+// resolveExecutionToolchain installs dependencies only if preparation has not already
+// selected a toolchain, preserving the selected executable for configuration evaluation.
+func resolveExecutionToolchain(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, shouldProcess bool, tenv *dependencies.ToolchainEnvironment) (*dependencies.ToolchainEnvironment, error) {
+	if shouldProcess && tenv == nil {
+		var err error
+		tenv, err = resolveAndInstallToolchainDeps(atmosConfig, info)
+		if err != nil {
+			return nil, err
+		}
+		info.Command = tenv.Resolve(info.Command)
+	}
+	return tenv, nil
 }
 
 // runPreExecutionSteps performs validation, auth pre-hook, config file generation,
@@ -117,16 +140,18 @@ func (e *Executor) runPreExecutionSteps(
 		return err
 	}
 
-	if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
-		// The error is returned and rendered once by the command boundary, so it is only logged
-		// at debug level here to avoid printing the same failure twice.
-		log.Debug("Error executing 'atmos auth terraform pre-hook'",
-			logFieldComponent, info.ComponentFromArg, "error", err)
-		// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
-		// Authentication setup failures must not silently produce unauthenticated terraform commands.
-		return err
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) || info.DryRun {
+		if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
+			// The error is returned and rendered once by the command boundary, so it is only logged
+			// at debug level here to avoid printing the same failure twice.
+			log.Debug("Error executing 'atmos auth terraform pre-hook'",
+				logFieldComponent, info.ComponentFromArg, "error", err)
+			// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
+			// Authentication setup failures must not silently produce unauthenticated terraform commands.
+			return err
+		}
+		disableTerraformPluginCacheForExecution(atmosConfig, info)
 	}
-	disableTerraformPluginCacheForExecution(atmosConfig, info)
 
 	// Generate backend and provider-override files. When AutoGenerateFiles=true,
 	// GenerateFilesForComponent was already called inside resolveAndProvisionComponentPath
@@ -138,6 +163,19 @@ func (e *Executor) runPreExecutionSteps(
 
 	warnOnConflictingEnvVars()
 
+	return assemblePreExecutionEnvVars(atmosConfig, info, tenv)
+}
+
+// assemblePreExecutionEnvVars keeps the prepared environment for configuration-owned
+// execution; ordinary components and dry runs still assemble their full environment.
+func assemblePreExecutionEnvVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, tenv *dependencies.ToolchainEnvironment) error {
+	if schema.ConfigurationOwned(info.ComponentSettingsSection) && !info.DryRun {
+		if err := checkConfigurationWorkspace(info); err != nil {
+			return err
+		}
+		// Inputs have now been evaluated; append their secret variables after masking.
+		return appendTerraformSecretEnv(info)
+	}
 	return assembleComponentEnvVars(atmosConfig, info, tenv)
 }
 

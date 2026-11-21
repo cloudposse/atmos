@@ -61,14 +61,18 @@ func WithAPI(server *bridge.Server) Option { return func(o *options) { o.api = s
 
 // Handle owns a native process and its versioned service clients.
 type Handle struct {
-	Info     pluginv1.InfoClient
-	Provider pluginv1.AuthProviderClient
-	Identity pluginv1.AuthIdentityClient
-	Commands pluginv1.CommandsClient
-	api      *bridge.Server
-	broker   *plugin.GRPCBroker
-	process  *plugin.Client
-	close    sync.Once
+	Info        pluginv1.InfoClient
+	Provider    pluginv1.AuthProviderClient
+	Identity    pluginv1.AuthIdentityClient
+	Commands    pluginv1.CommandsClient
+	Discovery   pluginv1.ComponentDiscoveryClient
+	Validation  pluginv1.ComponentValidationClient
+	Preparation pluginv1.ComponentPreparationClient
+	State       pluginv1.ComponentStateClient
+	api         *bridge.Server
+	broker      *plugin.GRPCBroker
+	process     *plugin.Client
+	close       sync.Once
 	// command is the plugin process, kept to stop its process group.
 	command *exec.Cmd
 	// interrupt ends on SIGINT or SIGTERM so in-flight calls stop together with the process.
@@ -228,5 +232,10 @@ func (*protocol) GRPCServer(*plugin.GRPCBroker, *grpc.Server) error {
 func (*protocol) GRPCClient(_ context.Context, broker *plugin.GRPCBroker, connection *grpc.ClientConn) (any, error) {
 	defer perf.Track(nil, "native.protocol.GRPCClient")()
 
-	return &Handle{Info: pluginv1.NewInfoClient(connection), Provider: pluginv1.NewAuthProviderClient(connection), Identity: pluginv1.NewAuthIdentityClient(connection), Commands: pluginv1.NewCommandsClient(connection), broker: broker}, nil
+	return &Handle{
+		Info: pluginv1.NewInfoClient(connection), Provider: pluginv1.NewAuthProviderClient(connection),
+		Identity: pluginv1.NewAuthIdentityClient(connection), Commands: pluginv1.NewCommandsClient(connection),
+		Discovery: pluginv1.NewComponentDiscoveryClient(connection), Validation: pluginv1.NewComponentValidationClient(connection),
+		Preparation: pluginv1.NewComponentPreparationClient(connection), State: pluginv1.NewComponentStateClient(connection), broker: broker,
+	}, nil
 }

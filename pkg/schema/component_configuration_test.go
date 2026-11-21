@@ -1,0 +1,70 @@
+package schema
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
+)
+
+func TestComponentConfigurationSerialization(t *testing.T) {
+	config := Terraform{Command: "tofu", ConfigurationProviders: map[string]ComponentConfiguration{"terragrunt": {Enabled: true, Mode: "native", Discovery: ComponentDiscoveryConfig{Enabled: true, IncludedPaths: []string{"live/**"}}, Options: map[string]any{"limit": json.Number("9007199254740993")}}}}
+	raw, err := json.Marshal(config)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"limit":9007199254740993`)
+	require.Contains(t, string(raw), `"terragrunt":{`)
+	require.NotContains(t, string(raw), "ConfigurationProviders")
+	data, err := yaml.Marshal(config)
+	require.NoError(t, err)
+	var decoded Terraform
+	require.NoError(t, yaml.Unmarshal(data, &decoded))
+	require.True(t, decoded.ConfigurationProviders["terragrunt"].Discovery.Enabled)
+	require.Equal(t, []string{"live/**"}, decoded.ConfigurationProviders["terragrunt"].Discovery.IncludedPaths)
+	config.ConfigurationProviders["command"] = ComponentConfiguration{}
+	_, err = json.Marshal(config)
+	require.ErrorIs(t, err, ErrComponentConfigurationCollision)
+	_, err = json.Marshal(ComponentConfiguration{Options: map[string]any{"enabled": false}})
+	require.ErrorIs(t, err, ErrComponentConfigurationCollision)
+	// An empty omitempty field is still reserved and must not be replaced by an option.
+	_, err = json.Marshal(ComponentConfiguration{Options: map[string]any{"mode": "native"}})
+	require.ErrorIs(t, err, ErrComponentConfigurationCollision)
+	_, err = json.Marshal(ComponentConfiguration{Options: map[string]any{"provider": "other"}})
+	require.ErrorIs(t, err, ErrComponentConfigurationCollision)
+	raw, err = json.Marshal(ComponentConfiguration{Enabled: true, Options: map[string]any{"version": "1"}})
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"version":"1"`)
+	_, err = json.Marshal(ComponentConfiguration{Options: map[string]any{"bad": make(chan int)}})
+	require.Error(t, err)
+}
+
+func TestComponentDiscoveryRequiresBothOptIns(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		for _, discovery := range []bool{false, true} {
+			config := AtmosConfiguration{Components: Components{Terraform: Terraform{ConfigurationProviders: map[string]ComponentConfiguration{
+				"terragrunt": {Enabled: enabled, Discovery: ComponentDiscoveryConfig{Enabled: discovery}},
+			}}}}
+			require.Equal(t, enabled && discovery, config.HasComponentDiscovery())
+		}
+	}
+	require.False(t, (&AtmosConfiguration{}).HasComponentDiscovery())
+}
+
+func TestConfigurationOwned(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		settings map[string]any
+		want     bool
+	}{
+		{name: "absent", settings: map[string]any{}},
+		{name: "nil settings"},
+		{name: "explicit false", settings: map[string]any{"configuration": false}},
+		{name: "explicit null", settings: map[string]any{"configuration": nil}},
+		{name: "explicit true", settings: map[string]any{"configuration": true}, want: true},
+		{name: "discovered", settings: map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}, want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, ConfigurationOwned(test.settings))
+		})
+	}
+}

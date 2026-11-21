@@ -1186,6 +1186,14 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: https://github.com/virtuald/go-ordered-json/blob/b18e6e673d74/LICENSE
 
+  - github.com/vmihailenco/msgpack/v5
+    License: BSD-2-Clause
+    URL: https://github.com/vmihailenco/msgpack/blob/v5.4.1/LICENSE
+
+  - github.com/vmihailenco/tagparser/v2
+    License: BSD-2-Clause
+    URL: https://github.com/vmihailenco/tagparser/blob/v2.0.0/LICENSE
+
   - github.com/yosida95/uritemplate/v3
     License: BSD-3-Clause
     URL: https://github.com/yosida95/uritemplate/blob/v3.0.2/LICENSE

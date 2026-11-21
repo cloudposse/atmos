@@ -216,6 +216,13 @@ func (e *Executor) GetTerraformState(
 		return staticTerraformStateOutput(atmosConfig, lookup, remoteStateBackendStaticTypeOutputs)
 	}
 
+	// Discovery does not provide the native unit's state identity. Reading the
+	// placeholder backend could return a different component's local state.
+	settings, _ := componentSections["settings"].(map[string]any)
+	if schema.ConfigurationOwned(settings) {
+		return nil, fmt.Errorf("%w: %s does not support state lookup for configuration-owned component `%s` in stack `%s`", errUtils.ErrPluginUnsupportedExtension, yamlFunc, component, stack)
+	}
+
 	// Read Terraform backend using resolved auth context.
 	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, resolvedAuthContext)
 	if err != nil {

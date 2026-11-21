@@ -1,0 +1,52 @@
+apiVersion: atmos/v1
+kind: AtmosPluginConfig
+metadata:
+  name: cloudposse/terragrunt
+  version: 0.1.0
+  display_name: Terragrunt configuration
+  description: Evaluate local Terragrunt stacks and units for native Atmos execution
+  author: Cloud Posse
+  repository: https://github.com/cloudposse/atmos
+spec:
+  runtime:
+    type: native
+    protocol: 1
+    executable: bin/plugin.exe
+  platforms:
+    linux/amd64:
+      executable: bin/linux-amd64/plugin
+    linux/arm64:
+      executable: bin/linux-arm64/plugin
+    darwin/amd64:
+      executable: bin/darwin-amd64/plugin
+    darwin/arm64:
+      executable: bin/darwin-arm64/plugin
+    windows/amd64:
+      executable: bin/windows-amd64/plugin.exe
+    windows/arm64:
+      executable: bin/windows-arm64/plugin.exe
+  compatibility:
+    protocol: '>=1 <2'
+    contracts:
+      component.discovery: '>=1'
+      component.validation: '>=1'
+      component.preparation: '>=1'
+      component.state: '>=1'
+  capabilities:
+    components:
+      discovery:
+        terragrunt:
+          component_type: terraform
+          schema: schemas/config.json
+      validation:
+        terragrunt:
+          component_type: terraform
+          schema: schemas/config.json
+      preparation:
+        terragrunt:
+          component_type: terraform
+          schema: schemas/config.json
+      state:
+        terragrunt:
+          component_type: terraform
+          schema: schemas/config.json
