@@ -6,6 +6,10 @@ on:
       - 'sdk/**'
       - 'proto/**'
       - 'pkg/plugin/**'
+      - 'plugins/terragrunt/**'
+      - 'internal/exec/describe_affected*'
+      - 'pkg/schema/component_configuration.go'
+      - 'pkg/script/starlark/**'
       - 'pkg/generator/templates/plugin-oidc/**'
       - 'cmd/plugin/**'
       - 'cmd/plugin_oidc_test.go'
@@ -19,6 +23,35 @@ permissions:
   contents: read
 
 jobs:
+  terragrunt-native:
+    name: Native Terragrunt (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15, windows-2022]
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: plugins/terragrunt/go.mod
+          cache-dependency-path: |
+            go.sum
+            plugins/terragrunt/go.sum
+            plugins/terragrunt/bridge/go.sum
+            sdk/go.sum
+      - name: Bootstrap Atmos
+        run: go build -p=2 -ldflags=-w -o build/atmos.exe .
+      - name: Build the native Terragrunt plugin
+        run: ./build/atmos.exe plugin build plugins/terragrunt
+      - name: Test native evaluation and affected revision discovery
+        run: ./build/atmos.exe plugin test plugins/terragrunt
+
   contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 30

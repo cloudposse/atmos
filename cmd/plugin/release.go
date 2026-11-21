@@ -121,8 +121,17 @@ func (backend *releaseBackend) Test(ctx context.Context, directory string) error
 	return conformance.Present(report, err, conformance.FormatText)
 }
 
-func (backend *releaseBackend) Pack(_ context.Context, directory, layout string) error {
-	return pluginoci.Pack(directory, layout, backend.manager.Installer.Descriptors, pluginoci.WithExecutableFormatCheck())
+func (backend *releaseBackend) Pack(ctx context.Context, directory, layout string) error {
+	if err := pluginoci.Pack(directory, layout, backend.manager.Installer.Descriptors, pluginoci.WithExecutableFormatCheck()); err != nil {
+		return err
+	}
+	// Inventory entries always supply a destination. Directory-only checks can
+	// remain offline unless the caller supplies --to.
+	destination := backend.values.GetString(publishDestinationFlag)
+	if backend.values.GetBool(releaseCheckFlag) && destination != "" {
+		return pluginoci.CheckPublication(ctx, backend.manager.Installer.Registry, layout, destination)
+	}
+	return nil
 }
 
 func (backend *releaseBackend) Publish(ctx context.Context, layout string) (*pluginoci.Release, error) {

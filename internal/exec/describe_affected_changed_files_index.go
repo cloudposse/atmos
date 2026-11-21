@@ -24,6 +24,9 @@ type changedFilesIndex struct {
 	// outside a component base path, such as native Helm values_files.
 	allFilesSet map[string]struct{}
 
+	resolvedOnce sync.Once
+	resolved     *changedFilesIndex
+
 	mu sync.RWMutex
 }
 

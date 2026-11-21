@@ -1,0 +1,18 @@
+version: 1
+steps:
+  - name: native-unit-tests
+    type: script
+    interpreter: starlark
+    script: |
+      exec.run(["go", "test", "-p=2", "./..."])
+      exec.run(["go", "test", "-p=2", "./..."], working_directory=fs.resolve("bridge"))
+  - name: affected-revisions
+    type: script
+    interpreter: starlark
+    script: |
+      affected = module.load("scripts/affected.star")
+      affected.main()
+integration:
+  - name: native-lifecycle
+    type: script
+    source: scripts/native.star

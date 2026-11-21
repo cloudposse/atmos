@@ -50,7 +50,7 @@ func (e *Executor) ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error
 // ExecuteTerraformQueryWithContext executes graph-backed multi-component Terraform work.
 func (e *Executor) ExecuteTerraformQueryWithContext(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformQueryWithContext")()
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	atmosConfig, err := cfg.InitCliConfigWithContext(ctx, *info, true)
 	if err != nil {
 		return err
 	}
