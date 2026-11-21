@@ -4,6 +4,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -59,16 +60,16 @@ func resolveRequest(ctx context.Context, request *model.Request, filesystem afer
 		return nil, err
 	}
 	ctx = config.WithCaches(ctx)
-	logger, err := evaluationLogger(request.LogLevel)
+	logger, err := evaluationLogger(ctx, request.LogLevel)
 	if err != nil {
 		return nil, err
 	}
-	environment, err := evaluationEnvironment(request, filesystem, path)
+	environment, err := evaluationEnvironment(ctx, request, filesystem, path)
 	if err != nil {
 		return nil, err
 	}
 	evaluator := unitEvaluator{logger: logger, environment: environment, pctx: requestParsingContext(request, path), request: request, path: path}
-	return evaluator.resolve(ctx)
+	return evaluator.resolve(ctx, &sensitivityScan{})
 }
 
 // unitEvaluator groups the invocation-local parser dependencies without changing request fields.
@@ -80,7 +81,13 @@ type unitEvaluator struct {
 	path        string
 }
 
-func (e *unitEvaluator) resolve(ctx context.Context) (*model.Resolution, error) {
+func (e *unitEvaluator) resolve(ctx context.Context, scan *sensitivityScan) (*model.Resolution, error) {
+	defer func() {
+		files := append(append(e.pctx.FilesRead.Paths(), e.path), scan.applyFiles...)
+		if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(e.checkedFS(), files, e.path, scan.registered) {
+			sink.Withhold()
+		}
+	}()
 	if e.request.Phase == "iam" {
 		return e.resolveIAM(ctx)
 	}
@@ -93,42 +100,7 @@ func (e *unitEvaluator) resolve(ctx context.Context) (*model.Resolution, error) 
 	if discovering(e.request) {
 		return e.resolveUnitInventory(ctx)
 	}
-	return e.resolveUnit(ctx)
-}
-
-func (e *unitEvaluator) resolveUnit(ctx context.Context) (*model.Resolution, error) {
-	if err := e.checkDestroyGuard(ctx); err != nil {
-		return nil, err
-	}
-	cfg, err := e.parseUnit(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if err := checkUnitPolicies(ctx, e.request, cfg, e.path); err != nil {
-		return nil, err
-	}
-	execution, applyFiles, err := e.unitExecution(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	result, err := e.unitResolution(ctx, cfg, execution)
-	if err != nil {
-		return nil, err
-	}
-	result.Files = append(result.Files, applyFiles...)
-	if err := resolveBackend(cfg, result, e.request); err != nil {
-		return nil, err
-	}
-	if e.request.Phase != phaseBackend {
-		result.Overlay, result.OverlayModes, err = atmosbridge.UnitOverlay(e.logger, e.environment, filepath.Dir(e.path), cfg.Terraform)
-		if err != nil {
-			return nil, err
-		}
-	}
-	if err := generatedFiles(ctx, e.logger, cfg, result); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return e.resolveUnit(ctx, scan)
 }
 
 const (
@@ -170,10 +142,15 @@ func requestPath(path string) (string, error) {
 	return logicalPath(path)
 }
 
-func evaluationLogger(level string) (log.Logger, error) {
+func evaluationLogger(ctx context.Context, level string) (log.Logger, error) {
 	formatter := format.NewFormatter(format.NewKeyValueFormatPlaceholders())
 	formatter.SetDisabledColors(true)
-	logger := log.New(log.WithOutput(io.Discard), log.WithFormatter(formatter))
+	options := []log.Option{log.WithOutput(io.Discard), log.WithFormatter(formatter)}
+	if sink := logSinkFrom(ctx); sink != nil {
+		options = append(options, log.WithHooks(sink.Hook()))
+		level = sink.TerragruntLevel()
+	}
+	logger := log.New(options...)
 	if level != "" {
 		if err := logger.SetLevel(level); err != nil {
 			return nil, err
@@ -193,7 +170,7 @@ func generating(request *model.Request) bool {
 // evaluationEnvironment uses the local maintained facade, which exposes the
 // pinned upstream virtual environment and scoped stack generation without
 // modifying upstream source.
-func evaluationEnvironment(request *model.Request, filesystem afero.Fs, path string) (*atmosbridge.Venv, error) {
+func evaluationEnvironment(ctx context.Context, request *model.Request, filesystem afero.Fs, path string) (*atmosbridge.Venv, error) {
 	environment := atmosbridge.Environment(request.Environment, io.Discard, io.Discard)
 	if filesystem != nil {
 		environment = environment.WithFS(filesystem)
@@ -201,8 +178,12 @@ func evaluationEnvironment(request *model.Request, filesystem afero.Fs, path str
 	if _, err := environment.FS.Stat(path); err != nil {
 		return nil, err
 	}
+	// The sensitivity checks scan the contents the evaluation read, not what is on disk afterwards.
+	environment = environment.WithFS(newEvaluatedFS(environment.FS))
 	if discovering(request) || request.Phase == phaseBackend || generating(request) {
 		environment = atmosbridge.Discovery(environment, generating(request))
+	} else {
+		environment = atmosbridge.AWS(ctx, environment)
 	}
 	return environment, nil
 }
@@ -313,7 +294,7 @@ func literalPreventDestroy(body *hclsyntax.Body, parseErr error) error {
 // unitExecution returns hooks and extra arguments as data for the host to run;
 // evaluation never executes them. Backend identity is read from a partial parse
 // that does not decode them.
-func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.TerragruntConfig) (*model.Execution, []string, error) {
+func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.TerragruntConfig, scan *sensitivityScan) (*model.Execution, []string, error) {
 	if e.request.Phase == phaseBackend {
 		return nil, nil, nil
 	}
@@ -323,7 +304,23 @@ func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.Terragrun
 	}
 	finalizeExecution(execution, e.path)
 	reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
-		return config.ParseConfigFile(ctx, e.logger, e.environment, apply, e.path, nil)
+		parsed, err := config.ParseConfigFile(ctx, e.logger, e.environment, apply, e.path, nil)
+		// Retain reads even when later execution validation rejects the reparse.
+		scan.applyFiles = append(scan.applyFiles, apply.FilesRead.Paths()...)
+		if err != nil {
+			// The apply-time values are unknown, and the unit's own inputs and locals no longer count as
+			// registered: whatever Terragrunt logged before failing may carry them.
+			files := append(append(apply.FilesRead.Paths(), e.pctx.FilesRead.Paths()...), e.path)
+			if sink := logSinkFrom(ctx); sink.collecting() && unredactedSensitivity(e.checkedFS(), files, e.path, false) {
+				sink.Withhold()
+			}
+			return nil, err
+		}
+		// Apply-time values can differ from the ones planned, so register them before any event is returned.
+		sink := logSinkFrom(ctx)
+		redactUnitInputs(sink, e.checkedFS(), append(apply.FilesRead.Paths(), e.path), e.path, parsed)
+		redactLocals(sink, e.checkedFS(), e.path, parsed.Locals)
+		return parsed, nil
 	}
 	return e.applyTimeExecution(execution, reparse)
 }
@@ -455,4 +452,23 @@ func (e *unitEvaluator) unitResolution(ctx context.Context, cfg *config.Terragru
 	result.Files = append(result.Files, e.request.OriginFiles...)
 	result.Folders = append(result.Folders, e.request.OriginFolders...)
 	return result, nil
+}
+
+// checkInlineModule identifies inline Terraform modules and reports shared configurations to skip.
+func (d *projectDiscovery) checkInlineModule(path string) (bool, error) {
+	entries, err := afero.ReadDir(d.overlay, filepath.Dir(path))
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".tf") || strings.HasSuffix(entry.Name(), ".tf.json")) {
+			return true, nil
+		}
+	}
+	rel, _ := filepath.Rel(d.root, path)
+	d.result.Warnings = append(d.result.Warnings, model.Warning{
+		Code: model.WarningUnitWithoutSource, Path: filepath.ToSlash(rel),
+		Message: fmt.Sprintf("%s has no terraform { source } block and no Terraform files next to it, so it is treated as a shared configuration and is not listed as a component", filepath.ToSlash(rel)),
+	})
+	return false, nil
 }

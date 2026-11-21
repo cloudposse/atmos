@@ -27,6 +27,15 @@ const (
 	// LockFilename is the well-known name for the lock file within a bundle.
 	LockFilename = ".terraform.lock.hcl"
 
+	// BindingFilename is the well-known name for the plan record within a bundle. Components
+	// whose configuration provider owns their saved plans (for example Terragrunt units) keep a
+	// record beside the plan file that proves what was reviewed; without it another runner cannot
+	// apply the plan. Components that have no record upload nothing under this name.
+	BindingFilename = PlanFilename + ".atmos.json"
+
+	// BindingSuffix is the suffix of the record stored beside a plan file on disk.
+	bindingSuffix = ".atmos.json"
+
 	// StoredPlanPrefix is the prefix used for stored planfiles during plan verification.
 	// When --verify-plan is set in CI mode, the downloaded planfile gets this prefix
 	// so terraform can generate a fresh plan at the canonical path for comparison.

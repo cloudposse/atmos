@@ -97,7 +97,17 @@ var (
 	ErrComponentRunIgnored = errors.New("component run ended by an ignored error")
 	// ErrComponentExcluded ends a component run successfully because the provider excluded the operation.
 	ErrComponentExcluded = errors.New("component excluded from this operation")
-	// ErrComponentOutputCapture identifies command output that could not be recorded for error hook matching.
+	// ErrProviderOption identifies a configuration provider option that is declared or supplied incorrectly.
+	ErrProviderOption = errors.New("invalid configuration provider option")
+	// ErrProviderOptionCollision identifies a provider option whose flag name an Atmos or another provider flag already uses.
+	ErrProviderOptionCollision = errors.New("configuration provider option collides with an existing flag")
+	// ErrExecutableModeUnsupported identifies a command or stack override that executable mode cannot honor.
+	ErrExecutableModeUnsupported = errors.New("not supported in executable mode")
+	// ErrExecutableNotFound identifies a missing or unusable terragrunt executable in executable mode.
+	ErrExecutableNotFound = errors.New("terragrunt executable not found")
+	// ErrExecutableVersion identifies a terragrunt executable that is older than the supported minimum.
+	ErrExecutableVersion = errors.New("terragrunt version is not supported")
+	// ErrComponentOutputCapture identifies output that could not be recorded for error hook matching.
 	ErrComponentOutputCapture = errors.New("failed to capture command output for error hooks")
 
 	ErrInvalidCredentialCodec    = errors.New("invalid credential codec")

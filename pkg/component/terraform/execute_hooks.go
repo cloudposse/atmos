@@ -14,11 +14,13 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/component/execution"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/planfile"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -299,7 +301,7 @@ func isDetailedExitCodeChanges(command string, args, env []string, err error, op
 // values are unquoted and tabs and newlines separate flags. A value that cannot be tokenized makes
 // the engine refuse to run, so it contributes no flags here.
 func detailedExitCodeEnabled(command string, args, env []string, opts ...component.ExecutionOption) bool {
-	suffix := strings.NewReplacer("-", "_", " ", "_").Replace(command)
+	suffix := strings.NewReplacer(hookFlagPrefix, "_", " ", "_").Replace(command)
 	words := slices.Concat(
 		environmentWords(environmentValue(env, "TF_CLI_ARGS_"+suffix, opts...)),
 		environmentWords(environmentValue(env, "TF_CLI_ARGS", opts...)),
@@ -307,8 +309,8 @@ func detailedExitCodeEnabled(command string, args, env []string, opts ...compone
 	)
 	enabled := false
 	for _, word := range words {
-		name, value, hasValue := strings.Cut(strings.TrimLeft(word, "-"), "=")
-		if !strings.HasPrefix(word, "-") || name != "detailed-exitcode" {
+		name, value, hasValue := strings.Cut(strings.TrimLeft(word, hookFlagPrefix), envAssign)
+		if !strings.HasPrefix(word, hookFlagPrefix) || name != "detailed-exitcode" {
 			continue
 		}
 		if !hasValue {
@@ -320,33 +322,6 @@ func detailedExitCodeEnabled(command string, args, env []string, opts ...compone
 		}
 	}
 	return enabled
-}
-
-// environmentWords tokenizes a TF_CLI_ARGS value like the engine. A malformed value is refused by
-// the engine, so it yields no words.
-func environmentWords(value string) []string {
-	words, err := tokenizeEnvironmentArgs(value)
-	if err != nil {
-		return nil
-	}
-	return words
-}
-
-// planBaseEnvironment is the process environment layer of a plan subprocess: the environment
-// chosen for the execution when there is one, otherwise the sanitized environment, otherwise the
-// inherited one.
-func planBaseEnvironment(info *schema.ConfigAndStacksInfo, opts []component.ExecutionOption) []string {
-	var options component.ExecutionOptions
-	for _, opt := range opts {
-		opt(&options)
-	}
-	switch {
-	case options.ProcessEnv != nil:
-		return options.ProcessEnv
-	case info.SanitizedEnv != nil:
-		return info.SanitizedEnv
-	}
-	return os.Environ()
 }
 
 // environmentValue returns the value of key the subprocess sees: the component environment is
@@ -409,17 +384,7 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 
 	ui.Info(fmt.Sprintf("Executing %s: %s%s", strings.ReplaceAll(string(kind), "_", " "), hook.Name, hookUnitLabel(r.info)))
 
-	var base component.ExecutionOptions
-	for _, opt := range r.opts {
-		opt(&base)
-	}
-	stdout := process.OSStreams().Stderr
-	if base.Streams != nil && base.Streams.Stderr != nil {
-		stdout = base.Streams.Stderr
-	}
-	if hook.SuppressStdout {
-		stdout = io.Discard
-	}
+	stdout := r.hookStdout(hook)
 
 	captured := io.Discard
 	var file *captureFile
@@ -436,9 +401,9 @@ func (r *hookRunner) RunHook(_ context.Context, kind execution.HookKind, hook *s
 	)
 	env := append(
 		slices.Clone(r.info.ComponentEnvList),
-		hookEnvTerraformPath+"="+r.info.Command,
-		hookEnvCommand+"="+r.phase.command,
-		hookEnvHookName+"="+hook.Name,
+		hookEnvTerraformPath+envAssign+r.info.Command,
+		hookEnvCommand+envAssign+r.phase.command,
+		hookEnvHookName+envAssign+hook.Name,
 	)
 	directory, err := r.workingDirectory(hook)
 	if err != nil {
@@ -585,4 +550,99 @@ func extraArgumentsPosition(info *schema.ConfigAndStacksInfo, args []string) int
 		position++
 	}
 	return position
+}
+
+// hookStdout returns where a hook writes its output: the run's stderr stream, or nowhere when the hook suppresses stdout.
+func (r *hookRunner) hookStdout(hook *schema.ComponentHook) io.Writer {
+	var base component.ExecutionOptions
+	for _, opt := range r.opts {
+		opt(&base)
+	}
+	stdout := process.OSStreams().Stderr
+	if base.Streams != nil && base.Streams.Stderr != nil {
+		stdout = base.Streams.Stderr
+	}
+	if hook.SuppressStdout {
+		stdout = io.Discard
+	}
+
+	return stdout
+}
+
+const hookFlagPrefix = "-"
+
+// recoverFromInitRequired is smart init's plan/apply-time safety net: when the main command
+// just failed, it classifies the captured output for a known "init is required" diagnostic
+// (autoinit.Classify) and, if Atmos's own recovery policy says to (autoinit.ShouldRecover),
+// forces exactly one `terraform init` re-run with the flag(s) the diagnostic asked for, then
+// retries the main command exactly once more. This is the correction for a smart-init bet gone
+// wrong: skipping init looked safe based on the fingerprint, but terraform/tofu itself now
+// disagrees.
+//
+// No recovery is attempted for the init subcommand itself (there is no "init required" fallback
+// for init) or when ShouldRecover reports a policy error (e.g. the user explicitly disabled
+// implicit init) — that error is joined with the original failure and returned as-is.
+func (e *Executor) recoverFromInitRequired( //nolint:revive // argument-limit: every parameter is load-bearing context from runMainCommandPhase.
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+	allArgsAndFlags []string,
+	componentPath string,
+	uploadStatusFlag bool,
+	mainErr error,
+	stdoutBuf, stderrBuf *bytes.Buffer,
+	opts ...component.ExecutionOption,
+) error {
+	retry, err := e.runInitRecovery(atmosConfig, info, execCtx, componentPath, mainErr, stdoutBuf, stderrBuf, opts...)
+	if !retry {
+		return err
+	}
+	return e.retryMainCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, opts...)
+}
+
+// recoverWithinLifecycle is recoverFromInitRequired for a main command wrapped by provider
+// hooks. It runs inside that command's lifecycle and retries only the Terraform subprocess, so
+// before and after hooks run once for the user command. The exec-metadata capture is reset so
+// it reflects only the retry's own output, as retryMainCommand does.
+func (e *Executor) recoverWithinLifecycle( //nolint:revive // argument-limit: every parameter is load-bearing context from runMainCommandPhase.
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+	componentPath string,
+	mainErr error,
+	stdoutBuf, stderrBuf *bytes.Buffer,
+	retry func() error,
+	opts ...component.ExecutionOption,
+) error {
+	again, err := e.runInitRecovery(atmosConfig, info, execCtx, componentPath, mainErr, stdoutBuf, stderrBuf, opts...)
+	if !again {
+		return err
+	}
+	stdoutBuf.Reset()
+	stderrBuf.Reset()
+	return retry()
+}
+
+// retryMainCommand re-runs the main subcommand once after a forced init recovery, resetting the
+// exec-metadata capture so info.ExecMetadataRawOutput reflects only the retry's own output.
+func (e *Executor) retryMainCommand( //nolint:revive // argument-limit: every parameter is load-bearing context passed straight through to executeMainTerraformCommandFn.
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	allArgsAndFlags []string,
+	componentPath string,
+	uploadStatusFlag bool,
+	gate *planfile.Guard,
+	opts ...component.ExecutionOption,
+) error {
+	var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
+	mainOpts := append(slices.Clone(opts), component.WithMetadataOutputCapture(&execMetadataStdoutBuf, &execMetadataStderrBuf))
+
+	err := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, info.SubCommand), func() error {
+		if gate != nil {
+			return e.executeGovernedTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, gate, mainOpts...)
+		}
+		return e.executeMainTerraformCommandFn(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, mainOpts...)
+	})
+	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
+	return err
 }

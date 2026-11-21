@@ -5,11 +5,32 @@ import (
 	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// canonicalPlanfilePath returns where `atmos terraform plan` keeps a component's plan file. A
+// workdir-enabled component (every Terragrunt unit) keeps it in its workdir, which is derived from
+// the configuration here because nothing has been provisioned in a new process or on a fresh runner.
+func canonicalPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
+	defer perf.Track(atmosConfig, "planfile.canonicalPlanfilePath")()
+
+	if provWorkdir.IsWorkdirEnabled(info.ComponentSection) {
+		workdir, _, err := component.BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
+		if err != nil {
+			return "", err
+		}
+		info.ComponentSection[provWorkdir.WorkdirPathKey] = workdir
+	}
+	return exec.ConstructTerraformComponentPlanfilePath(atmosConfig, info), nil
+}
 
 // resolvedContext holds SHA and branch resolved from environment or git.
 type resolvedContext struct {

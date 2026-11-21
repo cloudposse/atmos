@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -204,4 +205,118 @@ func TestMalformedComponentMetadataCannotActivate(t *testing.T) {
 			require.Nil(t, registry)
 		})
 	}
+}
+
+const optionsManifest = `apiVersion: atmos/v1
+kind: AtmosPluginConfig
+metadata:
+  name: fixture/options
+  version: 1.0.0
+spec:
+  runtime: {type: native, protocol: 1, executable: bin/plugin}
+  compatibility: {protocol: ">=1 <2"}
+  platforms:
+    PLATFORM: {executable: bin/plugin}
+  capabilities:
+    components:
+      discovery:
+        tool:
+          component_type: terraform
+          schema: schemas/config.json
+          modes: [native, executable]
+          options:
+            - {name: level, type: string, description: Level., commands: [plan, apply], modes: [executable]}
+            - {name: always, type: bool, description: Always., commands: [plan]}
+`
+
+func optionsFixture(t *testing.T, mode, manifest string) *schema.AtmosConfiguration {
+	t.Helper()
+	directory := localPackageFixture(t)
+	require.NoError(t, os.Mkdir(filepath.Join(directory, "schemas"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "schemas", "config.json"), []byte(`{"type":"object"}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(strings.ReplaceAll(manifest, "PLATFORM", install.CurrentPlatform())), 0o600))
+	atmos := &schema.AtmosConfiguration{BasePathConfigDir: t.TempDir(), Plugins: schema.PluginsConfig{Packages: map[string]schema.PluginPackage{"fixture": {Path: directory}}}}
+	atmos.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"tool": {Enabled: true, Mode: mode}}
+	return atmos
+}
+
+func TestComponentOptionsReadStaticMetadataWithoutStartingThePlugin(t *testing.T) {
+	for mode, want := range map[string][]string{"": {"always"}, "native": {"always"}, "executable": {"level", "always"}} {
+		providers, err := ComponentOptions(t.Context(), optionsFixture(t, mode, optionsManifest))
+		require.NoError(t, err, "the fixture executable does not exist, so nothing may start")
+		require.Len(t, providers, 1)
+		require.Equal(t, "tool", providers[0].Section)
+		names := []string{}
+		for index := range providers[0].Options {
+			if providers[0].Options[index].AppliesTo(providers[0].Mode) {
+				names = append(names, providers[0].Options[index].Name)
+			}
+		}
+		require.ElementsMatch(t, want, names, mode)
+	}
+}
+
+func TestComponentOptionsIgnoreDisabledAndUnknownProviders(t *testing.T) {
+	atmos := optionsFixture(t, "", optionsManifest)
+	atmos.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"tool": {Enabled: false}, "other": {Enabled: true}}
+	providers, err := ComponentOptions(t.Context(), atmos)
+	require.NoError(t, err)
+	require.Empty(t, providers)
+	atmos.Components.Terraform.ConfigurationProviders = nil
+	providers, err = ComponentOptions(t.Context(), atmos)
+	require.NoError(t, err)
+	require.Nil(t, providers)
+}
+
+func TestRegisterComponentFlagsAddsFlagsAndReportsDeclarationErrors(t *testing.T) {
+	root := &cobra.Command{Use: "terraform"}
+	plan := &cobra.Command{Use: "plan"}
+	root.AddCommand(plan, &cobra.Command{Use: "apply"})
+	require.NoError(t, RegisterComponentFlags(t.Context(), optionsFixture(t, "executable", optionsManifest), root))
+	require.NotNil(t, plan.Flags().Lookup("tool-level"))
+	require.NotNil(t, plan.Flags().Lookup("tool-always"))
+
+	broken := strings.ReplaceAll(optionsManifest, "type: string, description: Level.", "type: float, description: Level.")
+	err := RegisterComponentFlags(t.Context(), optionsFixture(t, "executable", broken), &cobra.Command{Use: "terraform"})
+	require.Error(t, err, "a declaration problem is reported")
+
+	// A package that cannot be read does not break unrelated commands; activation reports it later.
+	missing := optionsFixture(t, "", optionsManifest)
+	missing.Plugins.Packages["fixture"] = schema.PluginPackage{Path: filepath.Join(t.TempDir(), "absent")}
+	require.NoError(t, RegisterComponentFlags(t.Context(), missing, &cobra.Command{Use: "terraform"}))
+}
+
+func TestComponentOptionsSkipPackagesThatAreNotInstalled(t *testing.T) {
+	atmos := optionsFixture(t, "executable", optionsManifest)
+	// A registry package with no lock entry has nothing on disk to read, and reading never installs it.
+	atmos.Plugins.Packages["remote"] = schema.PluginPackage{Source: "oci://registry.example.test/atmos/remote", Version: "1.0.0"}
+	providers, err := ComponentOptions(t.Context(), atmos)
+	require.NoError(t, err)
+	require.Len(t, providers, 1)
+	require.Equal(t, "tool", providers[0].Name)
+}
+
+func TestFlagDiscoverySkipsUnrelatedLockedExports(t *testing.T) {
+	state := &config.Selections{Packages: map[string]config.Selection{}}
+	file := pluginlock.New()
+	file.Spec.Packages["other"] = pluginlock.Entry{Exports: []pluginlock.Export{{Capability: extension.ComponentDiscovery, Name: "other/hcl"}}}
+	wanted := map[string][]string{"fixture/hcl": {"terraform"}}
+	require.False(t, packageExportsWanted("other", state, file, wanted))
+	entry := file.Spec.Packages["other"]
+	entry.Exports = append(entry.Exports, pluginlock.Export{Capability: extension.ComponentDiscovery, Name: "fixture/hcl"})
+	file.Spec.Packages["other"] = entry
+	require.True(t, packageExportsWanted("other", state, file, wanted))
+}
+
+func TestComponentOptionsSurviveAnUnrelatedPackageThatCannotBeRead(t *testing.T) {
+	atmos := optionsFixture(t, "executable", optionsManifest)
+	unrelated := localPackageFixture(t)
+	require.NoError(t, os.WriteFile(filepath.Join(unrelated, "plugin.yaml"), []byte("apiVersion: atmos/v1\nkind: [unterminated\n"), 0o600))
+	atmos.Plugins.Packages["future"] = schema.PluginPackage{Path: unrelated}
+
+	providers, err := ComponentOptions(t.Context(), atmos)
+	require.NoError(t, err)
+	require.Len(t, providers, 1, "the healthy provider keeps its options")
+	require.Equal(t, "tool", providers[0].Name)
+	require.Equal(t, "level", providers[0].Options[0].Name)
 }

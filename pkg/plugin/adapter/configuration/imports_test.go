@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -45,10 +46,17 @@ func TestImportedUnitsBecomeComponentsOfTheImportingStack(t *testing.T) {
 	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
 	network, app := unit(t, "network"), unit(t, "app")
 	app.Dependencies = []*pluginv1.ComponentDependency{{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT}}
+	discoveryCalls := 0
 	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, req *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
-		require.Empty(t, req.IncludePaths, "imports are not limited by included_paths")
+		if discoveryCalls == 0 {
+			require.Empty(t, req.IncludePaths, "imports are not limited by included_paths")
+			require.Equal(t, []string{"terragrunt://live"}, req.Imports)
+		} else {
+			require.Equal(t, []string{"live/app/terragrunt.hcl", "live/network/terragrunt.hcl", "root.hcl"}, req.IncludePaths)
+			require.Empty(t, req.Imports, "the recheck must not rescan the entire import")
+		}
+		discoveryCalls++
 		require.Empty(t, req.ExcludePaths, "imports are not filtered by excluded_paths")
-		require.Equal(t, []string{"terragrunt://live"}, req.Imports)
 		require.Nil(t, req.Effects)
 		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil
 	}).Times(2) // The import, then the dependency recheck that preparation runs under its own environment.
@@ -326,7 +334,7 @@ func TestImportOfAProviderWithInvalidSettingsReportsTheSetting(t *testing.T) {
 	_, handled, err := session.ImportComponents(t.Context(), "terragrunt://live")
 	require.True(t, handled)
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
-	require.Contains(t, cockroachErrors.FlattenHints(err), "The only supported mode is `native`")
+	require.Contains(t, cockroachErrors.FlattenHints(err), "The supported modes are `native` and `executable`")
 	// A scheme no section configures is still not handled here.
 	_, handled, err = session.ImportComponents(t.Context(), "other://live")
 	require.NoError(t, err)
@@ -604,13 +612,22 @@ func TestImportedDependencyUsesItsPreparedStateInTheImportingStack(t *testing.T)
 			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil).AnyTimes()
 			provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
 				require.Equal(t, "dependent", request.Invocation.Environment["IDENTITY"], "a prepared dependency must not be re-resolved")
+				require.Equal(t, "apply", request.Operation.Command)
+				require.Equal(t, "native", request.Operation.Mode)
+				feature, err := adapter.DecodeValue(request.Operation.Options["feature"])
+				require.NoError(t, err)
+				require.Equal(t, map[string]any{"backend": "alternate"}, feature)
 				return &pluginv1.ResolveComponentStateResponse{State: test.dependent}, nil
 			}).MinTimes(1)
 			provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", ModuleSource: "/module", State: stateAt("network.tfstate")}, nil)
 			if test.want == nil {
 				provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", ModuleSource: "/module", State: stateAt("app.tfstate")}, nil)
 			}
-			session, err := New(t.Context(), importOnlyConfig(t), "apply", func(context.Context, []string) (map[string]Provider, error) {
+			config := importOnlyConfig(t)
+			config.ComponentProviderOptions = map[string]map[string]schema.ComponentProviderOption{"terragrunt": {
+				"feature": {Value: map[string]any{"backend": "alternate"}},
+			}}
+			session, err := New(t.Context(), config, "apply", func(context.Context, []string) (map[string]Provider, error) {
 				return map[string]Provider{"terragrunt": provider}, nil
 			})
 			require.NoError(t, err)
@@ -656,6 +673,15 @@ func TestDependencyPreparedStateIsComparedAcrossSeparateImports(t *testing.T) {
 			network, app := unit(t, "network"), unit(t, "app")
 			app.Dependencies = []*pluginv1.ComponentDependency{{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT}}
 			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+				if len(request.Imports) == 0 {
+					require.Len(t, request.IncludePaths, 2)
+					require.Contains(t, request.IncludePaths, "root.hcl")
+					if slices.Contains(request.IncludePaths, network.Source) {
+						return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network}}, nil
+					}
+					require.Contains(t, request.IncludePaths, app.Source)
+					return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{app}}, nil
+				}
 				require.Len(t, request.Imports, 1)
 				if request.Imports[0] == "terragrunt://live/network" {
 					return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network}}, nil

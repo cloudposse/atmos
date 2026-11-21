@@ -65,11 +65,17 @@ func FilterPlanDiffFlags(args []string) []string {
 func (s *Operations) GenerateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, tmpDir string) (string, error) {
 	defer perf.Track(atmosConfig, "terraform.Operations.GenerateNewPlanFile")()
 
+	// Terraform runs inside the component directory, so a relative directory (a workdir below a
+	// relative base path) would not resolve to the same place there.
+	absoluteDir, err := filepath.Abs(tmpDir)
+	if err != nil {
+		return "", err
+	}
 	// Create a temporary file for the new plan
-	newPlanFile := filepath.Join(tmpDir, "new.plan")
+	newPlanFile := filepath.Join(absoluteDir, freshPlanName)
 
 	// Run terraform init before plan
-	if err := s.runTerraformInit(atmosConfig, componentPath, info); err != nil {
+	if err = s.runTerraformInit(atmosConfig, componentPath, info); err != nil {
 		return "", err
 	}
 
@@ -91,7 +97,7 @@ func (s *Operations) GenerateNewPlanFile(atmosConfig *schema.AtmosConfiguration,
 	planInfo.AdditionalArgsAndFlags = planArgs
 
 	// Execute the plan command using the standard Atmos terraform execution
-	err := s.host.ExecuteTerraform(planInfo)
+	err = s.host.ExecuteTerraform(planInfo)
 	if err != nil {
 		// If the error is ErrPlanHasDiff, we want to propagate that error
 		if errors.Is(err, errUtils.ErrPlanHasDiff) {

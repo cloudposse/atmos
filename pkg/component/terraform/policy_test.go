@@ -76,6 +76,20 @@ func TestTerraformPolicyRequiresSavedPlan(t *testing.T) {
 	require.NoError(t, validateTerraformPolicyCommand(&schema.ConfigAndStacksInfo{SubCommand: "state list"}))
 }
 
+func TestTerragruntPlanRejectsOnlyMatchingPolicy(t *testing.T) {
+	info := schema.ConfigAndStacksInfo{SubCommand: "plan", ComponentFromArg: "app", Stack: "dev", ComponentSection: schema.AtmosSectionMapType{"metadata": map[string]any{"labels": map[string]any{"stage": "dev"}}}}
+	newGate := func() *planfile.Guard {
+		return &planfile.Guard{Rules: []policy.Rule{{ID: "platform/protect", Match: &policy.Selector{Labels: map[string]string{"stage": "prod"}}}}}
+	}
+	gate, err := bindTerraformPolicy(newGate(), &info)
+	require.NoError(t, err)
+	require.NoError(t, rejectTerragruntPlanPolicy(&info, gate))
+	info.ComponentSection["metadata"] = map[string]any{"labels": map[string]any{"stage": "prod"}}
+	gate, err = bindTerraformPolicy(newGate(), &info)
+	require.NoError(t, err)
+	require.ErrorIs(t, rejectTerragruntPlanPolicy(&info, gate), errUtils.ErrPolicyPlan)
+}
+
 func TestTerraformPolicyAttachments(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{
 		SubCommand: "apply", ComponentFromArg: "app", Stack: "dev",

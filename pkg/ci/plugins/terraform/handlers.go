@@ -569,6 +569,16 @@ func (p *Plugin) uploadPlanfile(ctx *plugin.HookContext) error {
 		files = append(files, planfile.FileEntry{Name: planfile.LockFilename, Data: lf, Size: -1})
 	}
 
+	// Include the plan record when the component keeps one, so another runner can verify and apply the plan.
+	entry, closer, err := planfile.OpenBinding(planfilePath)
+	if err != nil {
+		return err
+	}
+	if closer != nil {
+		defer closer.Close()
+		files = append(files, entry)
+	}
+
 	metadata := p.buildPlanfileMetadata(ctx)
 	if err := metadata.Validate(); err != nil {
 		return errUtils.Build(errUtils.ErrPlanfileUploadFailed).WithCause(err).

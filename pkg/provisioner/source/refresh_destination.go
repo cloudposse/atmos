@@ -1,7 +1,6 @@
 package source
 
 import (
-	"archive/zip"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,20 +39,6 @@ func rejectSourceTypeChange(target, name string) error {
 		}
 	}
 	return nil
-}
-
-func isTerraformPlan(path string) bool {
-	archive, err := zip.OpenReader(path)
-	if err != nil {
-		return false
-	}
-	defer archive.Close()
-	for _, file := range archive.File {
-		if file.Name == "tfplan" {
-			return true
-		}
-	}
-	return false
 }
 
 // sourceChange distinguishes files owned by the source from runtime artifacts.

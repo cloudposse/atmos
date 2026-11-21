@@ -17,21 +17,41 @@ const currentDirectory = "."
 //
 //nolint:lintroller // Standalone plugin code cannot import the host performance tracker.
 func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+	ctx, sink := withLogs(ctx, request.GetInvocation(), request.GetRootDirectory(), request.GetProviderConfiguration())
+	response, err := p.discover(ctx, request)
+	if response != nil {
+		response.Logs = logEntries(sink)
+	}
+	return response, withFailureLogs(err, sink)
+}
+
+// discoveryRequest validates a discovery request and turns it into an inventory evaluation.
+func discoveryRequest(request *pluginv1.DiscoverComponentsRequest) (model.Request, error) {
 	req, err := operation(request.GetRootDirectory(), request.GetProvider(), request.GetOperation(), request.GetInvocation())
 	if err != nil {
-		return nil, rpcError(err)
+		return req, rpcError(err)
 	}
 	if err := settings(request.GetProviderConfiguration()); err != nil {
-		return nil, rpcError(err)
+		return req, rpcError(err)
 	}
 	if err := withFeatures(&req, request.GetProviderConfiguration()); err != nil {
-		return nil, rpcError(err)
+		return req, rpcError(err)
 	}
 	paths, err := importPaths(request)
 	if err != nil {
-		return nil, rpcError(err)
+		return req, rpcError(err)
 	}
 	req.Phase, req.IncludedPaths, req.ExcludedPaths = "inventory", paths, request.ExcludePaths
+	req.Mode = request.GetOperation().GetMode()
+	return req, nil
+}
+
+func (p *Provider) discover(ctx context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+	req, err := discoveryRequest(request)
+	if err != nil {
+		return nil, err
+	}
+	executable := request.GetOperation().GetMode() == ModeExecutable
 	result, err := p.evaluate(ctx, req)
 	if err != nil {
 		return nil, rpcError(err)
@@ -48,6 +68,10 @@ func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverCompo
 	for i := range result.Inventory {
 		unit := &result.Inventory[i]
 		discovered, err := discoveredUnit(&req, unit, addresses)
+		if err == nil && executable {
+			// The host lists the unit with the engine that runs it.
+			discovered.Engine = "terragrunt"
+		}
 		if err != nil {
 			// One unit that cannot be described must not hide the others.
 			response.Diagnostics = append(response.Diagnostics, unitDiagnostic(req.BasePath, model.UnitFailure{Stack: unit.Stack, Name: unit.Name, Err: problemFor(err, unit.Config.Path)}))

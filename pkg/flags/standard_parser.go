@@ -277,6 +277,27 @@ func (p *StandardParser) buildStandardOptions(parsedConfig *ParsedConfig, compon
 	}
 }
 
+// IsFlagExplicitlySet reports whether the user set the named flag on the command line or through
+// an environment variable registered with it, of any flag type. Unlike viper.IsSet, a registered
+// default does not count, so an absent flag is distinguishable from an explicit false, zero, or empty value.
+func (p *StandardParser) IsFlagExplicitlySet(cmd *cobra.Command, flagName string) bool {
+	defer perf.Track(nil, "flags.StandardParser.IsFlagExplicitlySet")()
+
+	if _, changed := lookupCommandFlag(cmd, flagName); changed {
+		return true
+	}
+	reg := p.parser.registry.Get(flagName)
+	if reg == nil {
+		return false
+	}
+	for _, envVar := range reg.GetEnvVars() {
+		if _, ok := os.LookupEnv(envVar); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // IsBoolFlagExplicitlySet reports whether the named boolean flag was explicitly set
 // by the user via CLI or via an environment variable registered with the flag.
 //

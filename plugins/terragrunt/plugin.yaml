@@ -38,6 +38,43 @@ spec:
         terragrunt:
           component_type: terraform
           schema: schemas/config.json
+          modes: [native, executable]
+          # Static option declarations: Atmos registers these flags and renders their help without
+          # starting the plugin. Atmos owns stack selection, --affected, --all, --ui, and scheduling,
+          # so Terragrunt's queue, filter, parallelism, and auth-provider flags are not options.
+          options:
+            - name: feature
+              type: map
+              config: features
+              env: [TG_FEATURE]
+              commands: &unit-commands [plan, apply, deploy, destroy, init, import, output, refresh, show, state, taint, test, untaint, validate, workspace]
+              description: Override a Terragrunt feature flag with name=value. Repeat the flag for several features.
+            - name: iam_assume_role
+              type: string
+              env: [TG_IAM_ASSUME_ROLE]
+              commands: *unit-commands
+              description: IAM role ARN that overrides the unit's iam_role.
+            - name: iam_assume_role_duration
+              type: int
+              env: [TG_IAM_ASSUME_ROLE_DURATION]
+              commands: *unit-commands
+              description: Session duration in seconds for the assumed IAM role.
+            - name: iam_assume_role_session_name
+              type: string
+              env: [TG_IAM_ASSUME_ROLE_SESSION_NAME]
+              commands: *unit-commands
+              description: Session name for the assumed IAM role.
+            - name: iam_assume_role_web_identity_token
+              type: string
+              sensitive: true
+              env: [TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN]
+              commands: *unit-commands
+              description: Web identity token, or the path of a file that holds it, for AssumeRoleWithWebIdentity.
+            - name: download_dir
+              type: string
+              env: [TG_DOWNLOAD_DIR]
+              commands: *unit-commands
+              description: Directory that receives downloaded module sources instead of .terragrunt-cache.
       validation:
         terragrunt:
           component_type: terraform

@@ -2,12 +2,15 @@ package planfile
 
 import (
 	"errors"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestResolveContext(t *testing.T) {
@@ -147,5 +150,31 @@ func TestGetFirstEnvValue(t *testing.T) {
 
 		result := getFirstEnvValue("TEST_X", "TEST_Y")
 		assert.Empty(t, result)
+	})
+}
+
+func TestCanonicalPlanfilePathFollowsTheComponentWorkdir(t *testing.T) {
+	base := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePath: base, TerraformDirAbsolutePath: filepath.Join(base, "components", "terraform")}
+	config.Components.Terraform.BasePath = filepath.Join("components", "terraform")
+
+	t.Run("workdir component keeps its plan in the workdir, which need not exist yet", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Stack: "live/dev", ComponentFromArg: "app", FinalComponent: "app",
+			ComponentSettingsSection: map[string]any{"configuration": true},
+			ComponentSection:         map[string]any{"provision": map[string]any{"workdir": map[string]any{"enabled": true}}},
+		}
+		path, err := canonicalPlanfilePath(config, info)
+		require.NoError(t, err)
+		assert.Contains(t, filepath.ToSlash(path), ".workdir/terraform/live/dev-app-")
+		assert.True(t, strings.HasSuffix(path, ".planfile"), path)
+		assert.NoDirExists(t, filepath.Dir(path), "resolving the path must not provision anything")
+	})
+
+	t.Run("ordinary component keeps its plan beside its sources", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc", FinalComponent: "vpc", ComponentSection: map[string]any{}}
+		path, err := canonicalPlanfilePath(config, info)
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(base, "components", "terraform", "vpc"), filepath.Dir(path))
 	})
 }

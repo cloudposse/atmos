@@ -129,10 +129,9 @@ func (s *Operations) loadStoredAndFreshPlans(atmosConfig *schema.AtmosConfigurat
 		return plans, fmt.Errorf("error getting JSON for stored plan: %w", err)
 	}
 
-	// Generate a fresh plan at the canonical planfile path in the component dir,
-	// where terraform expects it, rather than in a temp dir.
-	freshPlanPath := ConstructTerraformComponentPlanfilePath(atmosConfig, processedInfo)
-	plans.freshPlanFile, err = s.GenerateNewPlanFile(atmosConfig, processedInfo, componentPath, filepath.Dir(freshPlanPath))
+	// Generate a fresh plan in the component dir, where terraform expects it, rather than in a temp
+	// dir. For a workdir-enabled component that is its workdir, which componentPath already is.
+	plans.freshPlanFile, err = s.GenerateNewPlanFile(atmosConfig, processedInfo, componentPath, componentPath)
 	if err != nil {
 		return plans, fmt.Errorf("error generating fresh plan for verification: %w", err)
 	}
@@ -175,19 +174,30 @@ func finalizeVerification(info *schema.ConfigAndStacksInfo, freshPlanFile, diff 
 }
 
 // appliesReviewedPlan reports whether the invocation applies a saved plan of a provider-owned component.
+// Whether its working directory is the reviewed one is checked where the inputs are read, because a
+// working directory accepted only as a verified rebuild has a variable file outside the rebuild digest.
 func appliesReviewedPlan(info *schema.ConfigAndStacksInfo) bool {
-	return !info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) && usesConfigurationPlan(info) && restoresConfigurationPlan(info)
+	return !info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) &&
+		usesConfigurationPlan(info) && restoresConfigurationPlan(info)
 }
 
 // reviewedPlanInputs returns the inputs of the variable file that the plan run wrote into the retained
-// working directory. That file is part of the working directory digest recorded with the plan, so a
-// saved plan whose variable file changed is rejected before it is applied. Secret inputs are never
-// written to it, so they are absent here. Numbers keep their exact text.
+// working directory. That file is part of the working directory digest recorded with the plan, so its
+// bytes must be the ones read around that comparison: a file a hook or step changed since, or a working
+// directory that was only rebuilt, has no verified inputs, and the hook stops instead of linting the
+// module with none. Secret inputs are never written to the file, so they are absent here. Numbers keep
+// their exact text.
 func reviewedPlanInputs(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	if !info.ConfigurationPlanWorkdirExact {
+		return nil, fmt.Errorf("%w: tflint cannot bind the inputs of a saved plan applied in a rebuilt working directory, because they are not part of what was verified; apply it in the working directory the plan ran in, or drop %s from the hook", errUtils.ErrComponentHookFailed, tflintInputVariablesMarker)
+	}
 	path := ConstructTerraformComponentVarfilePath(config, info)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("%w: the reviewed variable file of the saved plan cannot be read: %w", errUtils.ErrComponentHookFailed, err)
+	}
+	if !bytes.Equal(data, info.ConfigurationPlanVarfile) {
+		return nil, fmt.Errorf("%w: the variable file %s changed after the saved plan was verified", errUtils.ErrComponentHookFailed, path)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
