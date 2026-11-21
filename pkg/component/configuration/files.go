@@ -58,7 +58,7 @@ func validateFile(file schema.ComponentConfigurationFile) error {
 	if !filepath.IsLocal(file.Path) || file.Mode > maxRequestedMode {
 		return errUtils.ErrPluginProtocol
 	}
-	if file.IfExists != "error" && file.IfExists != "skip" && file.IfExists != "overwrite" {
+	if !validFilePolicy(file.IfExists) {
 		return errUtils.ErrPluginUnsupportedExtension
 	}
 	if IsRuntimeArtifact(file.Path) {
@@ -67,15 +67,33 @@ func validateFile(file schema.ComponentConfigurationFile) error {
 	return nil
 }
 
-func writeFile(root *os.Root, file schema.ComponentConfigurationFile) (result error) {
+func writeFile(root *os.Root, file schema.ComponentConfigurationFile) error {
 	if err := validateFile(file); err != nil {
 		return err
 	}
-	directory, err := destinationDirectory(root, filepath.Dir(file.Path), true)
+	remove := file.IfExists == "remove" || file.IfExists == "remove_terragrunt"
+	directory, err := destinationDirectory(root, filepath.Dir(file.Path), !remove)
+	if remove && errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		return generatedFileError(file.Path, err)
 	}
 	defer directory.Close()
+	leaf := file
+	leaf.Path = filepath.Base(file.Path)
+	remove, err = checkFileOwnership(directory, leaf)
+	if err != nil {
+		return generatedFileError(file.Path, err)
+	}
+	if remove {
+		return generatedFileError(file.Path, removeFile(directory, leaf.Path))
+	}
+	return replaceGeneratedContent(directory, file)
+}
+
+// replaceGeneratedContent applies permissions before replacing the pinned file contents.
+func replaceGeneratedContent(directory *os.Root, file schema.ComponentConfigurationFile) (result error) {
 	mode := writtenMode(file)
 	output, temporary, err := openGeneratedFile(directory, filepath.Base(file.Path), file.IfExists, mode, !file.Sensitive && file.Mode == 0)
 	if err != nil {
@@ -246,6 +264,15 @@ func IsRuntimeArtifact(path string) bool {
 		}
 	}
 	return false
+}
+
+// removeFile deletes a provider-owned file, treating an already absent file as removed.
+func removeFile(root *os.Root, path string) error {
+	err := root.Remove(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 // applyMode sets the permission bits explicitly because open applies the umask

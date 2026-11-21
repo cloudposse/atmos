@@ -18,6 +18,9 @@ commands:
         name: casts-fixtures-native-terraform-output
         command: atmos casts generate demo fixtures native-terraform output
       - type: shell
+        name: casts-fixtures-terragrunt-native-plan
+        command: atmos casts generate demo fixtures terragrunt-native plan
+      - type: shell
         name: casts-fixtures-demo-vendoring-pull
         command: atmos casts generate demo fixtures demo-vendoring pull
       - type: shell
@@ -47,6 +50,9 @@ commands:
       - type: shell
         name: casts-fixtures-native-terraform-output
         command: atmos casts validate demo fixtures native-terraform output
+      - type: shell
+        name: casts-fixtures-terragrunt-native-plan
+        command: atmos casts validate demo fixtures terragrunt-native plan
       - type: shell
         name: casts-fixtures-demo-vendoring-pull
         command: atmos casts validate demo fixtures demo-vendoring pull

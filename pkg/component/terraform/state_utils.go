@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -202,6 +203,12 @@ func (e *Executor) GetTerraformState(
 		return nil, er
 	}
 
+	state, err := tfoutput.ResolveConfigurationState(context.Background(), atmosConfig, &tfoutput.ConfigurationStateRequest{Sections: componentSections, Component: component, Stack: stack, AuthContext: resolvedAuthContext, AuthManagers: []any{resolvedAuthMgr}})
+	if err != nil {
+		return nil, err
+	}
+	componentSections = tfoutput.ConfigurationStateSections(componentSections, state)
+
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
 	// `output` from the static remote state instead of executing `terraform output`.
 	remoteStateBackendStaticTypeOutputs := GetComponentRemoteStateBackendStaticType(&componentSections)
@@ -214,13 +221,6 @@ func (e *Executor) GetTerraformState(
 			terraformStateCache.Store(cacheKey, terraformStateStaticCacheEntry{outputs: remoteStateBackendStaticTypeOutputs})
 		}
 		return staticTerraformStateOutput(atmosConfig, lookup, remoteStateBackendStaticTypeOutputs)
-	}
-
-	// Discovery does not provide the native unit's state identity. Reading the
-	// placeholder backend could return a different component's local state.
-	settings, _ := componentSections["settings"].(map[string]any)
-	if schema.ConfigurationOwned(settings) {
-		return nil, fmt.Errorf("%w: %s does not support state lookup for configuration-owned component `%s` in stack `%s`", errUtils.ErrPluginUnsupportedExtension, yamlFunc, component, stack)
 	}
 
 	// Read Terraform backend using resolved auth context.

@@ -52,9 +52,9 @@ def write(root, path, content):
     fs.write_file(target, content, overwrite=True)
 
 
-def run(root, arguments, revision="r1"):
+def invoke(root, arguments, revision="r1"):
     # Call the running Atmos binary with its normal process and output handling.
-    result = atmos.run(
+    return atmos.run(
         arguments,
         working_directory=root,
         env={
@@ -66,7 +66,18 @@ def run(root, arguments, revision="r1"):
         output="capture",
         check=False,
     )
+
+
+def run(root, arguments, revision="r1"):
+    result = invoke(root, arguments, revision)
     check(result.exit_code == 0, " ".join(arguments) + ":\n" + result.stdout + result.stderr)
+    return result
+
+
+def run_failing(root, arguments, revision="r1"):
+    # Negative paths: the command must be rejected, and its diagnostics are returned.
+    result = invoke(root, arguments, revision)
+    check(result.exit_code != 0, " ".join(arguments) + " unexpectedly succeeded:\n" + result.stdout + result.stderr)
     return result
 
 

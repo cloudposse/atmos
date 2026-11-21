@@ -13,10 +13,60 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/component/configuration"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// warnConfigurationDryRun explains which plugin metadata a dry-run preview omits.
+func warnConfigurationDryRun(info *schema.ConfigAndStacksInfo) {
+	if info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) {
+		ui.Warning("Dry-run preview may omit Terragrunt extra arguments, required var files, and environment variables because Terragrunt configuration is not evaluated")
+	}
+}
+
+// resolvePreparedComponentPath keeps reviewed plans on their retained workdir.
+func (e *Executor) resolvePreparedComponentPath(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) (string, error) {
+	if prepared != nil && usesConfigurationPlan(info) {
+		// Provisioning could replace the reviewed plan's modules.
+		return ConstructTerraformComponentWorkingDir(atmosConfig, info), nil
+	}
+	return e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
+}
+
+// resolveComponentToolchain preserves an environment already selected during preparation.
+func resolveComponentToolchain(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, shouldProcess bool, environment *dependencies.ToolchainEnvironment) (*dependencies.ToolchainEnvironment, error) {
+	if !shouldProcess || environment != nil {
+		return environment, nil
+	}
+	environment, err := resolveAndInstallToolchainDeps(config, info)
+	if err != nil {
+		return nil, err
+	}
+	info.Command = environment.Resolve(info.Command)
+	return environment, nil
+}
+
+// writePreparedConfigurationFiles validates generated paths before writing a live preparation.
+func writePreparedConfigurationFiles(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, componentPath string) error {
+	if prepared == nil || info.DryRun || (usesConfigurationPlan(info) && restoresConfigurationPlan(info)) {
+		return nil
+	}
+	if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
+		return err
+	}
+	if err := configuration.WriteFiles(componentPath, prepared.Files); err != nil {
+		return err
+	}
+	// Prepared files can introduce sensitive declarations at an already inspected path.
+	loadTerraformModuleInfo(info, componentPath)
+	return nil
+}
 
 func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
 	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
@@ -31,22 +81,15 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	if info.DryRun {
 		return nil, nil
 	}
-	// Plugins do not inherit PATH. Resolve the selected host executable before
-	// Terragrunt evaluates version constraints or dependency outputs.
-	binary, err := exec.LookPath(info.Command)
-	if err != nil {
-		return nil, fmt.Errorf("%w: Terraform executable: %w", errUtils.ErrPluginInvalidConfig, err)
+	if err := resolveHostExecutable(info); err != nil {
+		return nil, err
 	}
-	binary, err = filepath.Abs(binary)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
-	}
-	info.Command = binary
-	prepared, err := config.ComponentConfigurations.Prepare(ctx, info)
+	prepared, execution, err := prepareOrRestore(ctx, config, info)
 	if err != nil || prepared == nil {
 		return prepared, err
 	}
 	info.ComponentVarsSection = prepared.Inputs
+	info.ComponentExecution = execution
 	info.ConfigurationSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
 	info.TerraformWorkspace = prepared.Workspace
@@ -57,11 +100,69 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 		source = make(map[string]any)
 	}
 	source["uri"] = prepared.Source
+	if isLocalModuleSource(prepared.Source) {
+		// A local module changes without its location changing, so the retained workdir
+		// would keep the code of the first run. Refreshing is a cheap local copy.
+		source["ttl"] = "0s"
+	}
 	info.ComponentSection["source"] = source
 	info.ComponentSection["backend_type"] = prepared.BackendType
 	info.ComponentSection["backend"] = prepared.Backend
-	config.Components.Terraform.AutoGenerateBackendFile = true
+	config.Components.Terraform.AutoGenerateBackendFile = !prepared.BackendGenerated
 	return prepared, nil
+}
+
+// resolveHostExecutable makes info.Command the absolute path of the selected executable.
+func resolveHostExecutable(info *schema.ConfigAndStacksInfo) error {
+	// Plugins do not inherit PATH. Resolve the selected host executable before
+	// Terragrunt evaluates version constraints or dependency outputs.
+	binary, err := exec.LookPath(info.Command)
+	if err != nil {
+		return fmt.Errorf("%w: Terraform executable: %w", errUtils.ErrPluginInvalidConfig, err)
+	}
+	binary, err = filepath.Abs(binary)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
+	}
+	info.Command = binary
+	return nil
+}
+
+// prepareOrRestore prepares the component, or restores the reviewed preparation of a saved
+// plan. It also returns the hooks and extra arguments the invocation runs: a saved plan was
+// prepared for plan, so it runs the apply-time metadata recorded with it.
+func prepareOrRestore(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *schema.ComponentExecution, error) {
+	if !usesConfigurationPlan(info) {
+		prepared, err := config.ComponentConfigurations.Prepare(ctx, info)
+		if err != nil || prepared == nil {
+			return prepared, nil, err
+		}
+		return prepared, prepared.Execution, nil
+	}
+	if err := useRetainedWorkdir(config, info); err != nil {
+		return nil, nil, err
+	}
+	prepared, err := restoreConfigurationPlan(ctx, config, info)
+	if err != nil || prepared == nil {
+		return prepared, nil, err
+	}
+	return prepared, prepared.Execution.ForSavedPlanApply(), nil
+}
+
+// isLocalModuleSource reports whether the evaluated module source is a path on this machine.
+func isLocalModuleSource(uri string) bool {
+	return strings.HasPrefix(uri, ".") || filepath.IsAbs(uri)
+}
+
+// useRetainedWorkdir points the invocation at the directory the reviewed plan was created in.
+// A new process has not provisioned anything, so the path is derived the way provisioning does.
+func useRetainedWorkdir(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	fallback, err := u.GetComponentPath(config, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component path: %w", err)
+	}
+	_, err = component.ResolveRetainedWorkdir(config, info, cfg.TerraformComponentType, fallback)
+	return err
 }
 
 func configurationArtifactName(info *schema.ConfigAndStacksInfo, suffix string) (string, bool) {
@@ -163,18 +264,11 @@ func isRuntimeArtifact(path string) bool {
 	return configuration.IsRuntimeArtifact(path)
 }
 
-// writePreparedConfigurationFiles rejects runtime artifacts before writing any prepared files.
-func writePreparedConfigurationFiles(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, componentPath string) error {
-	if prepared != nil && !info.DryRun {
-		if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
-			return err
-		}
-		if err := configuration.WriteFiles(componentPath, prepared.Files); err != nil {
-			return err
-		}
-		// Prepared files can introduce sensitive variable declarations at the same
-		// path already inspected during provisioning. Reload before partitioning.
-		loadTerraformModuleInfo(info, componentPath)
+// recheckReviewedApply runs inside each subprocess attempt, after before hooks and recovery init.
+func recheckReviewedApply(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if info.DryRun || !schema.ConfigurationOwned(info.ComponentSettingsSection) || !usesConfigurationPlan(info) || !restoresConfigurationPlan(info) {
+		return nil
 	}
-	return nil
+	_, err := restoreConfigurationPlan(ctx, config, info)
+	return err
 }

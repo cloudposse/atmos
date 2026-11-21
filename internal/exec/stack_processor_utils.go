@@ -19,6 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/condition"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/function/yamlsource"
@@ -1634,6 +1635,19 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, impErr
 		}
 		imp = renderedImp
+		if handled, importErr := configuration.RegisterImport(atmosConfig, imp, &importStruct); handled || importErr != nil {
+			if importErr != nil {
+				return nil, nil, importErr
+			}
+			// Report the provider import with the stack's other imports, keyed by its URI as
+			// remote imports are. It contributes no YAML, so its recorded configuration is empty.
+			importsConfigLock.Lock()
+			if _, recorded := importsConfig[imp]; !recorded {
+				importsConfig[imp] = map[string]any{}
+			}
+			importsConfigLock.Unlock()
+			continue
+		}
 
 		// Snapshot the accumulated context for the child import. The outer loop is
 		// sequential, so this captures only the sections from earlier siblings.

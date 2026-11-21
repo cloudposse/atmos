@@ -7,6 +7,7 @@ import (
 	fmt "fmt"
 	os "os"
 	filepath "path/filepath"
+	runtime "runtime"
 	slices "slices"
 	sort "sort"
 	strconv "strconv"
@@ -27,6 +28,13 @@ import (
 	tfvars "github.com/cloudposse/atmos/pkg/terraform/tfvars"
 )
 
+const (
+	// Process executable search path variable.
+	envPath = "PATH"
+	// Separator between the name and the value in a KEY=value environment entry.
+	envAssign = "="
+)
+
 // warnOnConflictingEnvVars inspects the current process environment for variables
 // that are known to interfere with Atmos's management of Terraform, and emits a
 // warning when any are detected.
@@ -36,7 +44,7 @@ func warnOnConflictingEnvVars() {
 
 	var problematicVars []string
 	for _, envVar := range os.Environ() {
-		parts := strings.SplitN(envVar, "=", 2)
+		parts := strings.SplitN(envVar, envAssign, 2)
 		if len(parts) != 2 {
 			continue
 		}
@@ -104,7 +112,7 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 
 	// Toolchain PATH must come last so it takes precedence over all other PATH entries.
 	if tenv != nil {
-		info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
+		info.ComponentEnvList = append(info.ComponentEnvList, toolchainPathEnv(info, tenv)...)
 	}
 
 	if len(info.ComponentEnvList) > 0 {
@@ -115,6 +123,53 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 	}
 
 	return appendTerraformSecretEnv(info)
+}
+
+// toolchainPathEnv returns the PATH entry that puts the toolchain directories first.
+//
+// The toolchain PATH is built from the host process PATH. A PATH selected for this component
+// (the stack or component env section, or the identity's sanitized environment) must not be
+// discarded by it, so the toolchain directories are prepended to that PATH instead. Without a
+// component-specific PATH this is exactly the toolchain PATH.
+func toolchainPathEnv(info *schema.ConfigAndStacksInfo, tenv *dependencies.ToolchainEnvironment) []string {
+	return toolchainPathEnvForGOOS(info, tenv, runtime.GOOS)
+}
+
+// toolchainPathEnvForGOOS is toolchainPathEnv parameterized by GOOS so the Windows
+// case-insensitive PATH name (Path, PATH) can be unit-tested from any host platform.
+func toolchainPathEnvForGOOS(info *schema.ConfigAndStacksInfo, tenv *dependencies.ToolchainEnvironment, goos string) []string {
+	if tenv.PATH() == "" {
+		return tenv.EnvVars()
+	}
+	selected, ok := lastEnvListValue(info.ComponentEnvList, envPath, goos)
+	if !ok {
+		selected, ok = lastEnvListValue(info.SanitizedEnv, envPath, goos)
+	}
+	if !ok {
+		return tenv.EnvVars()
+	}
+	return []string{envPath + envAssign + tenv.PrependToPath(selected)}
+}
+
+// envNamesEqual reports whether two environment variable names are the same variable on goos.
+// Windows names are case-insensitive; every other platform compares them exactly.
+func envNamesEqual(a, b, goos string) bool {
+	if goos == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
+// lastEnvListValue returns the value of the last KEY=value entry for key; later entries win.
+// Names compare case-insensitively on Windows only.
+func lastEnvListValue(list []string, key, goos string) (string, bool) {
+	value, found := "", false
+	for _, entry := range list {
+		if k, v, ok := strings.Cut(entry, envAssign); ok && envNamesEqual(k, key, goos) {
+			value, found = v, true
+		}
+	}
+	return value, found
 }
 
 // configureTerraformRC builds the effective Terraform CLI-config map from the

@@ -12,6 +12,9 @@ commands:
         name: native-terraform
         command: atmos casts generate demo fixtures native-terraform
       - type: shell
+        name: terragrunt-native
+        command: atmos casts generate demo fixtures terragrunt-native
+      - type: shell
         name: streaming-ui
         command: atmos casts generate demo fixtures streaming-ui
       - type: shell
@@ -56,6 +59,9 @@ commands:
       - type: shell
         name: native-terraform
         command: atmos casts validate demo fixtures native-terraform
+      - type: shell
+        name: terragrunt-native
+        command: atmos casts validate demo fixtures terragrunt-native
       - type: shell
         name: streaming-ui
         command: atmos casts validate demo fixtures streaming-ui

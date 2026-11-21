@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -50,6 +51,64 @@ func TestFactoryRegistrationAndOptIn(t *testing.T) {
 	}
 	factories.Unlock()
 	require.NoError(t, Attach(t.Context(), config, "list"))
+}
+
+type importRuntime struct {
+	schema.ComponentConfigurationRuntime
+	imports []string
+	err     error
+}
+
+func (r *importRuntime) RegisterImport(_ context.Context, uri string) (bool, error) {
+	r.imports = append(r.imports, uri)
+	return true, r.err
+}
+
+func TestConfigurationImportRouting(t *testing.T) {
+	config := &schema.AtmosConfiguration{}
+	for _, uri := range []string{"ordinary", "https://example.com/config.yaml"} {
+		handled, err := RegisterImport(config, uri, &schema.StackImport{})
+		require.NoError(t, err)
+		require.False(t, handled)
+	}
+	handled, err := RegisterImport(nil, "terragrunt://live", &schema.StackImport{})
+	require.NoError(t, err)
+	require.False(t, handled)
+	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {}}
+	_, err = RegisterImport(config, "terragrunt://live", &schema.StackImport{})
+	require.ErrorContains(t, err, "disabled")
+	config.Components.Terraform.ConfigurationProviders["terragrunt"] = schema.ComponentConfiguration{Enabled: true}
+	_, err = RegisterImport(config, "terragrunt://live", &schema.StackImport{})
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+	runtime := &importRuntime{}
+	config.ComponentConfigurations = runtime
+	for _, declaration := range []schema.StackImport{{Context: map[string]any{"stage": "dev"}}, {SkipIfMissing: true}, {TTL: "1h"}, {NestedImports: "local"}} {
+		_, err := RegisterImport(config, "terragrunt://live", &declaration)
+		require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+	}
+	handled, err = RegisterImport(config, "terragrunt://live", &schema.StackImport{})
+	require.NoError(t, err)
+	require.True(t, handled)
+	require.Equal(t, []string{"terragrunt://live"}, runtime.imports)
+	runtime.err = errors.New("registration failed")
+	_, err = RegisterImport(config, "terragrunt://live", &schema.StackImport{})
+	require.ErrorIs(t, err, runtime.err)
+}
+
+func TestWatchExcludes(t *testing.T) {
+	patterns, err := WatchExcludes(map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/.cache/**"}}})
+	require.NoError(t, err)
+	root := t.TempDir()
+	files := []string{filepath.Join(root, "a", ".cache", "x"), filepath.Join(root, "a", "main.tf")}
+	filtered, err := UnexcludedWatchFiles(root, files, patterns)
+	require.NoError(t, err)
+	require.Equal(t, files[1:], filtered)
+	for _, value := range []any{"bad shape", []any{"["}, []any{42}} {
+		_, err := WatchExcludes(map[string]any{"configuration": map[string]any{"watch_excludes": value}})
+		require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	}
+	_, err = UnexcludedWatchFiles("relative", files, patterns)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 }
 
 func TestMatchDependencies(t *testing.T) {

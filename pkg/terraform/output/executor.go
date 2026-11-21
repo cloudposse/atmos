@@ -264,7 +264,7 @@ func (e *Executor) GetOutput(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil, true)
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, nil, true, authManager)
 	if err != nil {
 		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
@@ -326,43 +326,24 @@ func (e *Executor) GetOutputWithOptions(
 	defer stopSpinner()
 
 	// Describe the component to get its configuration.
-	yamlFunctions := processYamlFunctions(opts, authManager)
-	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
-		SecretsMaskOnly:      maskOnly,
-		Skip:                 optsSkip(opts),
-		AtmosConfig:          atmosConfig,
-		Component:            component,
-		Stack:                stack,
-		ProcessTemplates:     true,
-		ProcessYamlFunctions: yamlFunctions,
-		AuthManager:          authManager,
-	})
+	sections, yamlFunctions, err := e.describeOutputWithOptions(atmosConfig, component, stack, authManager, opts)
 	if err != nil {
 		outputLookupFailed(message)
 		return nil, false, wrapDescribeError(component, stack, err)
 	}
 
 	// Check for static remote state backend.
-	if e.staticRemoteStateGetter != nil {
-		if staticOutputs := e.staticRemoteStateGetter.GetStaticRemoteStateOutputs(&sections); staticOutputs != nil {
-			if !maskOnly || deferred.IsCacheable(staticOutputs) {
-				terraformOutputsCache.Store(key, staticOutputs)
-			}
-			value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
-			if resultErr != nil {
-				outputLookupFailed(message)
-				return nil, false, resultErr
-			}
-			outputLookupSucceeded(message)
-			return value, exists, nil
-		}
+	if staticOutputs := e.staticOutputValues(&sections); staticOutputs != nil {
+		cacheOutputValues(&key, staticOutputs, maskOnly)
+		value, exists, resultErr := GetStaticRemoteStateOutput(atmosConfig, component, stack, staticOutputs, output)
+		return completeOutputLookup(message, value, exists, resultErr)
 	}
 
 	// Execute terraform output with caller-supplied options.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, yamlFunctions)
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, yamlFunctions, authManager)
 	if err != nil {
 		outputLookupFailed(message)
 		return nil, false, errUtils.Build(errUtils.ErrTerraformOutputFailed).
@@ -372,18 +353,10 @@ func (e *Executor) GetOutputWithOptions(
 	}
 
 	// Cache the result.
-	if !maskOnly || deferred.IsCacheable(outputs) {
-		terraformOutputsCache.Store(key, outputs)
-	}
+	cacheOutputValues(&key, outputs, maskOnly)
 
 	value, exists, resultErr := getOutputVariable(atmosConfig, component, stack, outputs, output)
-	if resultErr != nil {
-		outputLookupFailed(message)
-		return nil, false, resultErr
-	}
-
-	outputLookupSucceeded(message)
-	return value, exists, nil
+	return completeOutputLookup(message, value, exists, resultErr)
 }
 
 // ExecuteWithSections retrieves terraform outputs using pre-loaded sections.
@@ -447,7 +420,7 @@ func (e *Executor) fetchAndCacheOutputs(
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
-	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, yamlFunctions)
+	outputs, err := e.execute(ctx, atmosConfig, component, stack, sections, authContext, opts, yamlFunctions, authManager)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
@@ -471,6 +444,7 @@ func (e *Executor) execute(
 	authContext *schema.AuthContext,
 	opts *OutputOptions,
 	processYamlFunctions bool,
+	authManagers ...any,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.execute")()
 
@@ -480,13 +454,15 @@ func (e *Executor) execute(
 		return handleDisabledComponent(component, stack, enabled, abstract), nil
 	}
 
-	// Step 2: Extract and validate component configuration.
-	// ExtractComponentConfig uses utils.GetComponentPath internally to ensure
-	// proper path resolution that works correctly with --chdir and when running
-	// from non-project-root directories.
-	config, err := ExtractComponentConfig(atmosConfig, sections, component, stack)
+	request := &ConfigurationStateRequest{Sections: sections, Component: component, Stack: stack, AuthContext: authContext, AuthManagers: authManagers}
+	resolved, err := prepareOutputConfiguration(ctx, atmosConfig, request, opts != nil && opts.SkipInit)
 	if err != nil {
 		return nil, err
+	}
+	config, skipInit := resolved.config, resolved.skipInit
+	defer resolved.cleanup()
+	if resolved.owned {
+		processYamlFunctions = !skipInit
 	}
 
 	// Step 2.5: Auto-provision JIT workdir if needed before toolchain resolution and init.
@@ -520,17 +496,8 @@ func (e *Executor) execute(
 	// correctly-rendered file produced by the preceding init/apply phase.
 	// Skipping regen is safe in that path because init/apply just ran in this
 	// process and has already written valid artifacts.
-	if processYamlFunctions {
-		backendGen := e.backendGenerator
-		if err := backendGen.GenerateBackendIfNeeded(config, component, stack, authContext); err != nil {
-			return nil, err
-		}
-		if err := backendGen.GenerateProvidersIfNeeded(config, authContext); err != nil {
-			return nil, err
-		}
-	} else {
-		log.Debug("Skipping backend/providers regeneration: YAML functions were not processed upstream (see #2356)",
-			"component", component, "stack", stack)
+	if err := e.generateOutputFiles(config, request, processYamlFunctions); err != nil {
+		return nil, err
 	}
 
 	// Step 6: Create terraform runner.
@@ -540,12 +507,7 @@ func (e *Executor) execute(
 	}
 
 	// Step 7: Configure quiet mode if requested.
-	var stderrCapture *quietModeWriter
-	if opts != nil && opts.QuietMode {
-		runner.SetStdout(io.Discard)
-		stderrCapture = newQuietModeWriter()
-		runner.SetStderr(stderrCapture)
-	}
+	stderrCapture := configureOutputCapture(runner, opts)
 
 	// Step 8: Setup environment variables.
 	envSetup := &defaultEnvironmentSetup{}
@@ -557,9 +519,7 @@ func (e *Executor) execute(
 	// Prepend toolchain bin dirs to subprocess PATH so terraform/tofu subprocesses
 	// can also find toolchain-installed binaries. Uses PrependToPath to preserve
 	// any PATH overrides from the component's env section.
-	if len(tenv.ToolchainDirs()) > 0 {
-		environMap["PATH"] = tenv.PrependToPath(environMap["PATH"])
-	}
+	prependOutputToolchainPath(tenv, environMap)
 	// terraform-exec rejects TF_VAR_* in SetEnv (issue #3231), so the runner gets a TF_VAR-free copy;
 	// the full environMap (with TF_VAR_* from init.pass_vars, issue #1412) is delivered to the init
 	// subprocess by the runner returned from withVarsInit, and still feeds the smart-init fingerprint.
@@ -578,7 +538,6 @@ func (e *Executor) execute(
 	// SkipInit is set: the component was just applied and .terraform/ state is
 	// already correct — re-initializing would require auth credentials that
 	// may not be available in PostRunE context.
-	skipInit := opts != nil && opts.SkipInit
 	if err := e.ensureInitialized(ctx, atmosConfig, runner, config, component, stack, stderrCapture, pluginCache, environMap, skipInit); err != nil {
 		return nil, err
 	}
@@ -592,4 +551,73 @@ func (e *Executor) execute(
 
 	// Step 12: Process and convert output values.
 	return processOutputs(outputMeta, atmosConfig), nil
+}
+
+// generateOutputFiles leaves retained skip-init files exactly as their prior execution wrote them.
+func (e *Executor) generateOutputFiles(config *ComponentConfig, request *ConfigurationStateRequest, enabled bool) error {
+	if !enabled {
+		log.Debug("Skipping backend/providers regeneration: YAML functions were not processed upstream (see #2356)", "component", request.Component, "stack", request.Stack)
+		return nil
+	}
+	if err := e.backendGenerator.GenerateBackendIfNeeded(config, request.Component, request.Stack, request.AuthContext); err != nil {
+		return err
+	}
+	return e.backendGenerator.GenerateProvidersIfNeeded(config, request.AuthContext)
+}
+
+func configureOutputCapture(runner TerraformRunner, opts *OutputOptions) *quietModeWriter {
+	if opts == nil || !opts.QuietMode {
+		return nil
+	}
+	runner.SetStdout(io.Discard)
+	capture := newQuietModeWriter()
+	runner.SetStderr(capture)
+	return capture
+}
+
+func prependOutputToolchainPath(tenv *dependencies.ToolchainEnvironment, environment map[string]string) {
+	if len(tenv.ToolchainDirs()) > 0 {
+		environment["PATH"] = tenv.PrependToPath(environment["PATH"])
+	}
+}
+
+// staticOutputValues keeps missing static-state support distinct from an empty static result.
+func (e *Executor) staticOutputValues(sections *map[string]any) map[string]any {
+	if e.staticRemoteStateGetter == nil {
+		return nil
+	}
+	return e.staticRemoteStateGetter.GetStaticRemoteStateOutputs(sections)
+}
+
+// cacheOutputValues never caches deferred secrets during a mask-only lookup.
+func cacheOutputValues(key *refcache.Key, outputs map[string]any, maskOnly bool) {
+	if !maskOnly || deferred.IsCacheable(outputs) {
+		terraformOutputsCache.Store(*key, outputs)
+	}
+}
+
+// describeOutputWithOptions preserves mask-only evaluation and auth context routing.
+func (e *Executor) describeOutputWithOptions(atmosConfig *schema.AtmosConfiguration, component, stack string, authManager any, opts *OutputOptions) (map[string]any, bool, error) {
+	yamlFunctions := processYamlFunctions(opts, authManager)
+	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
+		SecretsMaskOnly:      opts != nil && opts.SecretsMaskOnly,
+		Skip:                 optsSkip(opts),
+		AtmosConfig:          atmosConfig,
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: yamlFunctions,
+		AuthManager:          authManager,
+	})
+	return sections, yamlFunctions, err
+}
+
+// completeOutputLookup keeps success and error reporting after output selection.
+func completeOutputLookup(message string, value any, exists bool, err error) (any, bool, error) {
+	if err != nil {
+		outputLookupFailed(message)
+		return nil, false, err
+	}
+	outputLookupSucceeded(message)
+	return value, exists, nil
 }

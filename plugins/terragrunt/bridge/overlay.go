@@ -22,20 +22,13 @@ var ErrUnsupportedOverlay = errors.New("unit file cannot be exported through the
 // owner-only or otherwise unreadable-by-others files, such as copied keys, stay
 // private. The host ignores modes on Windows, so the exported modes only take
 // effect on platforms with POSIX permission bits.
+//
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.TerraformConfig) (map[string][]byte, map[string]uint32, error) {
 	memory := afero.NewMemMapFs()
 	fsys := afero.NewCopyOnWriteFs(afero.NewReadOnlyFs(env.FS), memory)
 	destination := filepath.Join(filepath.Dir(unit), ".atmos-unit-overlay")
-	include := []string{".tflint.hcl"}
-	var exclude []string
-	if terraform.IncludeInCopy != nil {
-		include = append(include, (*terraform.IncludeInCopy)...)
-	}
-	if terraform.ExcludeFromCopy != nil {
-		exclude = append(exclude, (*terraform.ExcludeFromCopy)...)
-	}
-	if err := util.CopyFolderContents(logger, fsys, unit, destination, ".terragrunt-module-manifest",
-		util.WithIncludeInCopy(include...), util.WithExcludeFromCopy(exclude...)); err != nil {
+	if err := copyOverlayContents(logger, fsys, unit, destination, terraform); err != nil {
 		return nil, nil, err
 	}
 	files := map[string][]byte{}
@@ -71,6 +64,20 @@ func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.Te
 	return files, modes, err
 }
 
+// copyOverlayContents applies Terragrunt's configured copy filters to the temporary overlay.
+func copyOverlayContents(logger log.Logger, fsys afero.Fs, unit, destination string, terraform *config.TerraformConfig) error {
+	include := []string{".tflint.hcl"}
+	var exclude []string
+	if terraform.IncludeInCopy != nil {
+		include = append(include, (*terraform.IncludeInCopy)...)
+	}
+	if terraform.ExcludeFromCopy != nil {
+		exclude = append(exclude, (*terraform.ExcludeFromCopy)...)
+	}
+	return util.CopyFolderContents(logger, fsys, unit, destination, ".terragrunt-module-manifest",
+		util.WithIncludeInCopy(include...), util.WithExcludeFromCopy(exclude...))
+}
+
 // restrictByDirectories conservatively narrows a file's permission bits by the
 // subdirectories that contain it. The overlay carries file modes only, so a
 // readable file inside a private directory (for example 0644 under 0700) would
@@ -79,14 +86,16 @@ func UnitOverlay(logger log.Logger, env *Venv, unit string, terraform *config.Te
 // access to the file. The unit directory itself is not considered because the
 // host owns the working directory's mode.
 func restrictByDirectories(fsys afero.Fs, unit, dir string, perm os.FileMode) os.FileMode {
+	const groupExecute, groupPermissions = 0o010, 0o070
+	const otherExecute, otherPermissions = 0o001, 0o007
 	for dir != "." && dir != string(filepath.Separator) && dir != "" {
 		if info, err := fsys.Stat(filepath.Join(unit, dir)); err == nil {
 			mode := info.Mode().Perm()
-			if mode&0o010 == 0 {
-				perm &^= 0o070
+			if mode&groupExecute == 0 {
+				perm &^= groupPermissions
 			}
-			if mode&0o001 == 0 {
-				perm &^= 0o007
+			if mode&otherExecute == 0 {
+				perm &^= otherPermissions
 			}
 		}
 		dir = filepath.Dir(dir)
@@ -99,7 +108,8 @@ func restrictByDirectories(fsys afero.Fs, unit, dir string, perm os.FileMode) os
 // group or other lacks read access.
 func exportsMode(perm os.FileMode) bool {
 	const groupAndOtherRead = 0o044
-	return perm&0o111 != 0 || perm&groupAndOtherRead != groupAndOtherRead
+	const executeBits = 0o111
+	return perm&executeBits != 0 || perm&groupAndOtherRead != groupAndOtherRead
 }
 
 // checkOverlayFile rejects a committed provider lock file. Atmos manages the

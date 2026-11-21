@@ -18,6 +18,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	if runToolchainChild() {
+		os.Exit(0)
+	}
 	if os.Getenv("ATMOS_TERRAGRUNT_VERSION_TREE") != "" {
 		versionTreeHelper()
 		os.Exit(0)

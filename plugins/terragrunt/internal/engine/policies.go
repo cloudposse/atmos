@@ -6,24 +6,26 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/hashicorp/go-version"
+	"github.com/mattn/go-shellwords"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
 var (
-	errTerraformSource     = errors.New("native adapter requires terraform.source")
-	errStateEncryption     = errors.New("native adaptation of remote_state.encryption is not implemented")
-	errTerraformBinary     = errors.New("native adaptation of terraform_binary is not implemented")
-	errTerraformHooks      = errors.New("native adaptation of hooks/extra_arguments is not implemented")
-	errPreventDestroy      = errors.New("native adaptation of prevent_destroy is not implemented")
-	errUnsupportedSettings = errors.New("native adaptation of errors, exclude, feature flags, or IAM settings is not implemented")
+	errModuleSourceTransport = errors.New("native adapter does not support this module source transport")
+	errTerraformSource       = errors.New("native adapter requires terraform.source")
+	errTerraformBinary       = errors.New("native adaptation of terraform_binary is not implemented")
+	errUnsupportedSettings   = errors.New("native adaptation of errors, exclude, feature flags, or IAM settings is not implemented")
 )
 
 // ErrVersionRejected reports a terraform or terragrunt version that violates a
@@ -99,19 +101,29 @@ func checkUnitPolicies(ctx context.Context, request *model.Request, cfg *config.
 			return err
 		}
 	}
-	if cfg.RemoteState != nil && len(cfg.RemoteState.Encryption) > 0 {
-		return errStateEncryption
-	}
 	if cfg.TerraformBinary != "" {
 		return errTerraformBinary
 	}
-	if hasTerraformHooks(cfg.Terraform) {
-		return errTerraformHooks
-	}
-	if cfg.PreventDestroy != nil && *cfg.PreventDestroy {
-		return errPreventDestroy
+	// Hooks and extra arguments are adapted as execution data by unitExecution.
+	if err := checkPreventDestroy(request, cfg); err != nil {
+		return err
 	}
 	return checkUnsupportedSettings(cfg)
+}
+
+// checkPreventDestroy evaluates the same effective arguments as the engine.
+func checkPreventDestroy(request *model.Request, cfg *config.TerragruntConfig) error {
+	if request.Phase == "backend" || cfg.PreventDestroy == nil || !*cfg.PreventDestroy {
+		return nil
+	}
+	args, err := effectivePolicyArguments(request, cfg)
+	if err != nil {
+		return err
+	}
+	if atmosbridge.IsDestroyOperation(request.Command, args) {
+		return ErrPreventDestroy
+	}
+	return nil
 }
 
 // checkUnsupportedSettings rejects error handling, exclusion, feature flag and
@@ -123,9 +135,51 @@ func checkUnsupportedSettings(cfg *config.TerragruntConfig) error {
 	return nil
 }
 
-// hasTerraformHooks identifies customization that native execution cannot represent.
-func hasTerraformHooks(terraform *config.TerraformConfig) bool {
-	return len(terraform.BeforeHooks)+len(terraform.AfterHooks)+len(terraform.ErrorHooks)+len(terraform.ExtraArgs) > 0
+// validateRemoteSource preserves the getter URI for Atmos's source provisioner.
+// Registry sources need Terragrunt version selection and are not interchangeable
+// with direct archive or Git sources.
+func validateRemoteSource(source string) error {
+	for _, prefix := range []string{"git::https://", "git::http://", "git::ssh://", "git::file://", "https://", "http://"} {
+		if strings.HasPrefix(source, prefix) {
+			return nil
+		}
+	}
+	return errModuleSourceTransport
+}
+
+// effectivePolicyArguments matches engine insertion order: command environment,
+// global environment, extra arguments, then explicit arguments. Matching extra
+// argument blocks override environment values in declaration order.
+func effectivePolicyArguments(request *model.Request, cfg *config.TerragruntConfig) ([]string, error) {
+	environment := map[string]string{}
+	maps.Copy(environment, request.Environment)
+	var args []string
+	if cfg.Terraform != nil {
+		for _, extra := range cfg.Terraform.ExtraArgs {
+			if !slices.Contains(extra.Commands, request.Command) {
+				continue
+			}
+			if extra.Arguments != nil {
+				args = append(args, (*extra.Arguments)...)
+			}
+			if extra.EnvVars != nil {
+				maps.Copy(environment, *extra.EnvVars)
+			}
+		}
+	}
+	var injected []string
+	suffix := strings.NewReplacer("-", "_", " ", "_").Replace(request.Command)
+	for _, name := range []string{"TF_CLI_ARGS_" + suffix, "TF_CLI_ARGS"} {
+		parser := shellwords.NewParser()
+		parser.ParseEnv, parser.ParseBacktick = false, false
+		tokens, err := parser.Parse(environment[name])
+		if err != nil {
+			return nil, fmt.Errorf("invalid %s arguments: %w", name, err)
+		}
+		injected = append(injected, tokens...)
+	}
+	args = append(injected, args...)
+	return append(args, request.Arguments...), nil
 }
 
 // unsupportedDependencyWorkspace preserves the existing output-dependency workspace guard.
