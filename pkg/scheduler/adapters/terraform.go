@@ -1074,7 +1074,8 @@ func (d *TerraformDispatcher) runBeforeNodeHooks(ctx context.Context, nodeInfo *
 	return wrapBeforeHookError(d.info.NodeHooks.Before(ctx, nodeInfo))
 }
 
-// wrapBeforeHookError labels a before-hook failure with ErrPerComponentHookFailed.
+// wrapBeforeHookError labels a before-hook failure with ErrPerComponentHookFailed
+// and marks its exit status as belonging to a prerequisite, not Terraform itself.
 // A policy admission error is returned unchanged: it is not a hook failure, and
 // the multi-%w wrap would hide the rule id and reason explanation the denial
 // carries from the error formatter.
@@ -1082,7 +1083,7 @@ func wrapBeforeHookError(err error) error {
 	if err == nil || policy.IsAdmissionError(err) {
 		return err
 	}
-	return fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, err)
+	return fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, errUtils.AsPrerequisiteError(err))
 }
 
 // runAfterNodeHooks runs this node's after-event hooks, if wired, and returns
@@ -1956,6 +1957,10 @@ func terraformPlanHasNoChanges(result TerraformExecutionResult, execErr error) b
 // terraformPlanChangedError treats Terraform plan exit code 2 as a changed result.
 func terraformPlanChangedError(info *schema.ConfigAndStacksInfo, err error) bool {
 	if info == nil || info.SubCommand != terraformSubCommandPlan {
+		return false
+	}
+	var prerequisiteErr *errUtils.PrerequisiteError
+	if errors.As(err, &prerequisiteErr) {
 		return false
 	}
 	var exitCodeErr errUtils.ExitCodeError

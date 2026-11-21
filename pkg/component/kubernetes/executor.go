@@ -206,7 +206,7 @@ func ensureComponentInputExists(
 	if err != nil {
 		return err
 	}
-	if componentPathExists || len(manifestsInput) > 0 || len(pathsInput) > 0 {
+	if componentPathExists || component.DryRunDefersMissingPath(info) || len(manifestsInput) > 0 || len(pathsInput) > 0 {
 		return nil
 	}
 

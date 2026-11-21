@@ -159,3 +159,29 @@ func TestGoGetterResolver_Resolve(t *testing.T) {
 	r := goGetterResolver{downloader: md}
 	require.NoError(t, r.Resolve(context.Background(), "git::https://example.com/repo.git", "/dest/dir"))
 }
+
+func TestFingerprintContributionStableEndpointAndTrust(t *testing.T) {
+	var absent *Setup
+	contribution, identity := absent.FingerprintContribution()
+	assert.Nil(t, contribution)
+	assert.Empty(t, identity)
+	cfg := &schema.AtmosConfiguration{}
+	cfg.Components.Terraform.Cache = &schema.TerraformCacheConfig{Enabled: true, Location: t.TempDir()}
+	first, err := Start(t.Context(), cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, first.Close(context.Background())) })
+	second, err := Start(t.Context(), cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, second.Close(context.Background())) })
+	a, aid := first.FingerprintContribution()
+	b, bid := second.FingerprintContribution()
+	assert.NotEqual(t, first.Contribute(), second.Contribute())
+	assert.Equal(t, a, b)
+	assert.Equal(t, aid, bid)
+	cfg.Components.Terraform.Cache.Location = t.TempDir()
+	other, err := Start(t.Context(), cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, other.Close(context.Background())) })
+	_, otherID := other.FingerprintContribution()
+	assert.NotEqual(t, aid, otherID)
+}

@@ -150,7 +150,7 @@ func ExecutePacker(
 	if err != nil {
 		return err
 	}
-	if !componentPathExists {
+	if !componentPathExists && !component.DryRunDefersMissingPath(info) {
 		basePath, _ := u.GetComponentBasePath(&atmosConfig, componentTypePacker)
 		return fmt.Errorf(
 			"%w: '%s' points to the Packer component '%s', but it does not exist in '%s'",

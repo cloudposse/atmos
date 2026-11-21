@@ -560,3 +560,14 @@ func TestHelmDiffColorEnabled(t *testing.T) {
 		assert.True(t, helmDiffColorEnabled(term))
 	})
 }
+
+// A dry run never downloads source, so a cold source Helmfile component must not be rejected as missing.
+// Helmfile dry runs return through previewHelmfile before the component directory check.
+func TestExecuteHelmfile_DryRunAcceptsColdSourceComponent(t *testing.T) {
+	writeColdSourceProject(t, "helmfile", "cold")
+	info := schema.ConfigAndStacksInfo{
+		Stack: "dev", ComponentType: "helmfile", ComponentFromArg: "cold", SubCommand: "diff",
+		ProcessTemplates: true, ProcessFunctions: true, DryRun: true,
+	}
+	require.NoError(t, ExecuteHelmfile(info))
+}
