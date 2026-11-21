@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -25,13 +26,16 @@ import (
 // componentExecContext holds the per-execution state assembled by prepareComponentExecution.
 // It is consumed by executeCommandPipeline without further modification.
 type componentExecContext struct {
-	componentPath string
-	varFile       string
-	testVarFile   string
-	planFile      string
-	workingDir    string
-	tenv          *dependencies.ToolchainEnvironment
-	planPolicy    *planfile.Guard
+	preparedConfiguration *schema.PreparedComponentConfiguration
+	componentPath         string
+	varFile               string
+	testVarFile           string
+	planFile              string
+	workingDir            string
+	tenv                  *dependencies.ToolchainEnvironment
+	planPolicy            *planfile.Guard
+	// planSnapshots observes the configuration around the main command for plan binding.
+	planSnapshots *planSnapshotter
 }
 
 // prepareComponentExecution consolidates all per-component setup into one call:
@@ -58,7 +62,7 @@ func (e *Executor) prepareComponentExecution(
 		return nil, err
 	}
 
-	componentPath, err := e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
+	componentPath, err := e.resolvePreparedComponentPath(ctx, writers, atmosConfig, info, prepared)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +75,7 @@ func (e *Executor) prepareComponentExecution(
 		return nil, err
 	}
 
-	tenv, err = resolveExecutionToolchain(atmosConfig, info, shouldProcess, tenv)
+	tenv, err = resolveComponentToolchain(atmosConfig, info, shouldProcess, tenv)
 	if err != nil {
 		return nil, err
 	}
@@ -89,27 +93,14 @@ func (e *Executor) prepareComponentExecution(
 	}
 
 	return &componentExecContext{
-		componentPath: componentPath,
-		varFile:       varFile,
-		testVarFile:   testVarFile,
-		planFile:      planFile,
-		workingDir:    workingDir,
-		tenv:          tenv,
+		preparedConfiguration: prepared,
+		componentPath:         componentPath,
+		varFile:               varFile,
+		testVarFile:           testVarFile,
+		planFile:              planFile,
+		workingDir:            workingDir,
+		tenv:                  tenv,
 	}, nil
-}
-
-// resolveExecutionToolchain installs dependencies only if preparation has not already
-// selected a toolchain, preserving the selected executable for configuration evaluation.
-func resolveExecutionToolchain(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, shouldProcess bool, tenv *dependencies.ToolchainEnvironment) (*dependencies.ToolchainEnvironment, error) {
-	if shouldProcess && tenv == nil {
-		var err error
-		tenv, err = resolveAndInstallToolchainDeps(atmosConfig, info)
-		if err != nil {
-			return nil, err
-		}
-		info.Command = tenv.Resolve(info.Command)
-	}
-	return tenv, nil
 }
 
 // runPreExecutionSteps performs validation, auth pre-hook, config file generation,
@@ -201,6 +192,7 @@ func (e *Executor) executeCommandPipeline(
 	opts ...component.ExecutionOption,
 ) error {
 	componentPath := execCtx.componentPath
+	warnConfigurationDryRun(info)
 
 	if shouldRunTerraformInit(atmosConfig, info) {
 		// Phase-level CI log grouping (Dimension "phase"): fold the `init` phase
@@ -223,6 +215,11 @@ func (e *Executor) executeCommandPipeline(
 
 	allArgsAndFlags, uploadStatusFlag, err := buildTerraformCommandArgs(atmosConfig, info, execCtx.varFile, execCtx.planFile, &componentPath, opts...)
 	if err != nil {
+		return err
+	}
+
+	// A missing required variable file must fail before workspace selection runs a subprocess.
+	if err = preflightRequiredVarFiles(info, componentPath); err != nil {
 		return err
 	}
 
@@ -266,8 +263,29 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	// this, incidental init/workspace-select output (e.g. a stray "No changes."
 	// lookalike) can poison the exec-metadata parser's extraction even though the
 	// real plan/apply's own output is correct (research.md Decision 32).
+	// Init/provisioning can relocate the execution directory after preparation.
+	execCtx.componentPath, execCtx.workingDir = componentPath, componentPath
+	if err := validateEnvironmentPlanOutput(atmosConfig, info, execCtx); err != nil {
+		return err
+	}
+	allArgsAndFlags, restore, err := expandPolicyPlanArguments(info, execCtx, allArgsAndFlags, componentPath)
+	if err != nil {
+		return err
+	}
+	defer restore()
 	var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
-	mainOpts := append(slices.Clone(opts), component.WithMetadataOutputCapture(&execMetadataStdoutBuf, &execMetadataStderrBuf))
+	var effectiveArgs []string
+	captureCtx := context.WithValue(component.ContextFromOptions(opts...), mainCommandArgsKey{}, &effectiveArgs)
+	captureCtx = execCtx.observePlanSnapshots(captureCtx, atmosConfig, info, allArgsAndFlags)
+	captureArgs := component.WithProcessContext(captureCtx)
+	// A component with provider-supplied hooks recovers inside its main-command lifecycle, so
+	// the retry runs between the same before and after hooks instead of repeating them.
+	recovery := &mainCommandRecovery{recover: func(mainErr error, retry func() error) error {
+		return e.recoverWithinLifecycle(atmosConfig, info, execCtx, componentPath, mainErr,
+			&execMetadataStdoutBuf, &execMetadataStderrBuf, retry, append(slices.Clone(opts), captureArgs)...)
+	}}
+	captureArgs = component.WithProcessContext(context.WithValue(captureCtx, mainCommandRecoveryKey{}, recovery))
+	mainOpts := append(slices.Clone(opts), component.WithMetadataOutputCapture(&execMetadataStdoutBuf, &execMetadataStderrBuf), captureArgs)
 
 	// Phase-level CI log grouping (Dimension "phase"): fold the main subcommand
 	// (plan/apply/destroy/…) into its own collapsible group, separate from init
@@ -276,12 +294,179 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 		return e.executeGovernedTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, mainOpts...)
 	})
 	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
-	if mainErr == nil {
-		return nil
+	if mainErr != nil && !lifecycleOwnsRecovery(info) {
+		mainErr = e.recoverFromInitRequired(atmosConfig, info, execCtx, allArgsAndFlags, componentPath, uploadStatusFlag,
+			mainErr, &execMetadataStdoutBuf, &execMetadataStderrBuf, append(slices.Clone(opts), captureArgs)...)
 	}
+	// An explicit -detailed-exitcode plan reports changes with status 2 after writing the
+	// plan, so the reviewed plan is recorded before that status is returned.
+	if mainErr != nil && !isExplicitDetailedPlanChanges(info, effectiveArgs, mainErr) {
+		return mainErr
+	}
+	// Policy plans run against a private artifact that is removed after the guard
+	// publishes it to the original output path. The effective arguments were
+	// validated before execution; bind the published destination instead.
+	if execCtx.planPolicy != nil && info.SubCommand == "plan" && !info.DryRun {
+		effectiveArgs = allArgsAndFlags
+	}
+	if err := recordConfigurationPlan(component.ContextFromOptions(opts...), atmosConfig, info, execCtx, effectiveArgs); err != nil {
+		return err
+	}
+	return mainErr
+}
 
-	return e.recoverFromInitRequired(atmosConfig, info, execCtx, allArgsAndFlags, componentPath, uploadStatusFlag,
-		mainErr, &execMetadataStdoutBuf, &execMetadataStderrBuf, opts...)
+// planSnapshot is the configuration a saved plan is bound to: the provider identity and the
+// digest of the retained working directory, excluding the plan and the state Terraform writes.
+type planSnapshot struct {
+	path, identity, workingDigest string
+	// engineDigest is the digest of the Terraform executable observed around the subprocess, so a hook
+	// that replaces the binary afterwards cannot move the binding onto the replacement. It is empty when
+	// the executable could not be read, and the binding then falls back to its own observation.
+	engineDigest string
+	// planDigest is the digest of the plan file Terraform wrote, taken before any after hook runs. It is
+	// empty when no digest was observed, and it is not part of the before-and-after comparison.
+	planDigest string
+}
+
+// planSnapshotKey carries the plan snapshotter to the main command's subprocess.
+type planSnapshotKey struct{}
+
+// planSnapshotter observes the configuration around the Terraform subprocess, after the before
+// hooks and before the after hooks. A hook that rewrites the module after Terraform read it then
+// cannot move the binding onto the rewritten bytes.
+type planSnapshotter struct {
+	ctx      context.Context
+	config   *schema.AtmosConfiguration
+	info     *schema.ConfigAndStacksInfo
+	execCtx  *componentExecContext
+	pathFrom func(phaseArgs []string) string
+	result   *planSnapshot
+	err      error
+}
+
+// takePlanSnapshot fingerprints the configuration with the inputs the binding record uses.
+func takePlanSnapshot(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, path string) (*planSnapshot, error) {
+	runtime, err := planRuntime(config)
+	if err != nil {
+		return nil, err
+	}
+	identity, err := runtime.PlanIdentity(ctx, info, execCtx.preparedConfiguration.Sources)
+	if err != nil {
+		return nil, err
+	}
+	digest, err := configurationWorkdirDigest(execCtx.workingDir, path)
+	if err != nil {
+		return nil, err
+	}
+	engineDigest, _ := fileDigest(info.Command)
+	return &planSnapshot{path: path, identity: identity, workingDigest: digest, engineDigest: engineDigest}, nil
+}
+
+// around wraps one run of the Terraform subprocess. The configuration must be the same before and
+// after it; the unchanged snapshot is kept for the binding, and a changed one rejects the plan.
+func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() error {
+	return func() error {
+		s.result, s.err = nil, nil
+		path := s.pathFrom(phaseArgs)
+		if path == "" {
+			return run()
+		}
+		before, err := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
+		if err != nil {
+			return err
+		}
+		runErr := run()
+		after, err := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
+		switch {
+		case err != nil:
+			s.err = err
+		case *after != *before:
+			s.err = fmt.Errorf("%w: configuration changed while Terraform ran", errUtils.ErrPlanVerificationFailed)
+		default:
+			// Hash the engine's actual -out artifact before after hooks, even when policy
+			// later publishes it at a different path retained by the companion.
+			writtenPath := path
+			if s.execCtx.planPolicy != nil {
+				writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
+			}
+			if planCommandFailed(phaseArgs, runErr) {
+				return runErr
+			}
+			digest, digestErr := fileDigest(writtenPath)
+			if digestErr != nil {
+				s.err = digestErr
+				return digestErr
+			}
+			after.planDigest = digest
+			s.result = after
+		}
+		return runErr
+	}
+}
+
+// planCommandFailed leaves Terraform's detailed plan status available for binding.
+func planCommandFailed(args []string, err error) bool {
+	return err != nil && (!detailedExitCodeEnabled(args) || resolveExitCode(err) != detailedExitCodeChangesDetected)
+}
+
+// reviewedSnapshot returns the configuration Terraform read, or takes a fresh snapshot when no
+// observed run recorded one for this plan.
+func (c *componentExecContext) reviewedSnapshot(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, path string) (*planSnapshot, error) {
+	if s := c.planSnapshots; s != nil {
+		if s.err != nil {
+			return nil, s.err
+		}
+		if s.result != nil && s.result.path == path {
+			return s.result, nil
+		}
+	}
+	return takePlanSnapshot(ctx, config, info, c, path)
+}
+
+// observePlanSnapshots returns ctx carrying a snapshotter for a plan this invocation binds. Policy
+// plans publish the artifact at the original output path, so that path is the one excluded from the
+// digest. The returned context is unchanged when no plan is bound.
+func (c *componentExecContext) observePlanSnapshots(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, policyArgs []string) context.Context {
+	c.planSnapshots = nil
+	if !bindsPlan(info, c) {
+		return ctx
+	}
+	c.planSnapshots = &planSnapshotter{ctx: ctx, config: config, info: info, execCtx: c, pathFrom: func(phaseArgs []string) string {
+		if c.planPolicy != nil {
+			phaseArgs = policyArgs
+		}
+		return plannedOutputPath(c.componentPath, phaseArgs)
+	}}
+	return context.WithValue(ctx, planSnapshotKey{}, c.planSnapshots)
+}
+
+// isExplicitDetailedPlanChanges reports plan's "changes present" status from -detailed-exitcode.
+// A failed hook is never that status, even when the hook itself exited with 2.
+func isExplicitDetailedPlanChanges(info *schema.ConfigAndStacksInfo, args []string, err error) bool {
+	if errors.Is(err, errUtils.ErrComponentHookFailed) {
+		return false
+	}
+	return info.SubCommand == subcommandPlan && detailedExitCodeEnabled(args) && resolveExitCode(err) == detailedExitCodeChangesDetected
+}
+
+// detailedExitCodeEnabled reports whether args enable -detailed-exitcode. It accepts the bare flag
+// and the explicit boolean forms (-detailed-exitcode=true, --detailed-exitcode=false), and the last
+// occurrence wins, matching Go flag semantics. An unparsable value counts as not enabled.
+func detailedExitCodeEnabled(args []string) bool {
+	enabled := false
+	for _, arg := range args {
+		name, value, hasValue := strings.Cut(arg, "=")
+		if name != detailedExitCodeFlag && name != "-"+detailedExitCodeFlag {
+			continue
+		}
+		if !hasValue {
+			enabled = true
+			continue
+		}
+		parsed, err := strconv.ParseBool(value)
+		enabled = err == nil && parsed
+	}
+	return enabled
 }
 
 // recoverFromInitRequired is smart init's plan/apply-time safety net: when the main command
@@ -306,17 +491,36 @@ func (e *Executor) recoverFromInitRequired( //nolint:revive // argument-limit: e
 	stdoutBuf, stderrBuf *bytes.Buffer,
 	opts ...component.ExecutionOption,
 ) error {
+	retry, err := e.runInitRecovery(atmosConfig, info, execCtx, componentPath, mainErr, stdoutBuf, stderrBuf, opts...)
+	if !retry {
+		return err
+	}
+	return e.retryMainCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, opts...)
+}
+
+// runInitRecovery classifies a failed main command and, when smart init's recovery policy
+// allows it, runs the forced init the diagnostic asked for. It reports whether the main command
+// should now be retried; otherwise it returns the error to propagate.
+func (e *Executor) runInitRecovery( //nolint:revive // argument-limit: every parameter is load-bearing context from the recovering caller.
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+	componentPath string,
+	mainErr error,
+	stdoutBuf, stderrBuf *bytes.Buffer,
+	opts ...component.ExecutionOption,
+) (bool, error) {
 	if info.SubCommand == subcommandInit {
-		return mainErr
+		return false, mainErr
 	}
 
 	combined := stdoutBuf.String() + "\n" + stderrBuf.String() + "\n" + mainErr.Error()
 	rec, policyErr := classifyInitRecovery(atmosConfig, info, combined)
 	if policyErr != nil {
-		return errors.Join(mainErr, policyErr)
+		return false, errors.Join(mainErr, policyErr)
 	}
 	if !rec.Run {
-		return mainErr
+		return false, mainErr
 	}
 
 	ui.Warning(fmt.Sprintf("Terraform requires initialization; running init and retrying '%s'", info.SubCommand))
@@ -325,10 +529,32 @@ func (e *Executor) recoverFromInitRequired( //nolint:revive // argument-limit: e
 		return e.executeTerraformInitForcedFn(atmosConfig, info, componentPath, execCtx.varFile, rec.WithReconfigure, rec.WithUpgrade, opts...)
 	})
 	if initErr != nil {
-		return errors.Join(mainErr, initErr)
+		return false, errors.Join(mainErr, initErr)
 	}
+	return true, nil
+}
 
-	return e.retryMainCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, opts...)
+// recoverWithinLifecycle is recoverFromInitRequired for a main command wrapped by provider
+// hooks. It runs inside that command's lifecycle and retries only the Terraform subprocess, so
+// before and after hooks run once for the user command. The exec-metadata capture is reset so
+// it reflects only the retry's own output, as retryMainCommand does.
+func (e *Executor) recoverWithinLifecycle( //nolint:revive // argument-limit: every parameter is load-bearing context from runMainCommandPhase.
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+	componentPath string,
+	mainErr error,
+	stdoutBuf, stderrBuf *bytes.Buffer,
+	retry func() error,
+	opts ...component.ExecutionOption,
+) error {
+	again, err := e.runInitRecovery(atmosConfig, info, execCtx, componentPath, mainErr, stdoutBuf, stderrBuf, opts...)
+	if !again {
+		return err
+	}
+	stdoutBuf.Reset()
+	stderrBuf.Reset()
+	return retry()
 }
 
 // retryMainCommand re-runs the main subcommand once after a forced init recovery, resetting the

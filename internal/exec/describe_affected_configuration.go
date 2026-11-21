@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"encoding/json"
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -24,6 +25,38 @@ func rebaseConfigurationDiscovery(config *schema.AtmosConfiguration) error {
 	}
 	config.ComponentConfigurations = session
 	return nil
+}
+
+// configurationWatchIndex applies provider-declared cache exclusions only to its
+// file watches. It never changes YAML dependencies or the shared Git change set.
+func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[string]any, original *changedFilesIndex) (*changedFilesIndex, error) {
+	patterns, err := configuration.WatchExcludes(settings)
+	if err != nil {
+		return nil, err
+	}
+	if len(patterns) == 0 {
+		return original, nil
+	}
+	keyBytes, err := json.Marshal(append([]string{config.BasePathAbsolute}, patterns...))
+	if err != nil {
+		return nil, err
+	}
+	key := string(keyBytes)
+	original.watchMu.Lock()
+	defer original.watchMu.Unlock()
+	if filtered := original.watchIndexes[key]; filtered != nil {
+		return filtered, nil
+	}
+	files, err := configuration.UnexcludedWatchFiles(config.BasePathAbsolute, original.getAllFiles(), patterns)
+	if err != nil {
+		return nil, err
+	}
+	filtered := newChangedFilesIndex(config, files, config.BasePathAbsolute)
+	if original.watchIndexes == nil {
+		original.watchIndexes = make(map[string]*changedFilesIndex)
+	}
+	original.watchIndexes[key] = filtered
+	return filtered, nil
 }
 
 // configurationMatchInputs returns the change set and dependencies to match.

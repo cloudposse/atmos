@@ -12,3 +12,12 @@ packages:
       - pkg/plugin/oci/**
       - sdk/**
       - proto/**
+  terragrunt:
+    path: plugins/terragrunt
+    repository: oci://ghcr.io/cloudposse/atmos/plugins/terragrunt
+    inputs:
+      - .github/workflows/plugin-packages.yaml
+      - pkg/plugin/build/**
+      - pkg/plugin/oci/**
+      - sdk/**
+      - proto/**

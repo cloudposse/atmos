@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -67,10 +68,19 @@ func vendorSourcePreserving(ctx context.Context, config *schema.AtmosConfigurati
 	// Concurrent publishers of one checkout run one after another: a waiter later finds the target
 	// up to date or republishes the same files. The wait is bounded by the caller's context.
 	lock := filelock.New(provisioner.LockCoordPath(canonical+".source-refresh") + ".lock")
-	warning := time.AfterFunc(sourceRefreshLockWarnAfter, func() { warnSourceRefreshLockWait(ctx, target) })
-	defer warning.Stop()
+	warningDone := make(chan struct{})
+	warning := time.AfterFunc(sourceRefreshLockWarnAfter, func() {
+		defer close(warningDone)
+		warnSourceRefreshLockWait(ctx, target)
+	})
+	stopWarning := sync.OnceFunc(func() {
+		if !warning.Stop() {
+			<-warningDone
+		}
+	})
+	defer stopWarning()
 	err = lock.WithExclusive(ctx, func() error {
-		warning.Stop()
+		stopWarning()
 		return stageSourceRefresh(ctx, config, spec, target, opts)
 	})
 	if errors.Is(err, filelock.ErrAcquire) {

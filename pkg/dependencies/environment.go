@@ -6,6 +6,7 @@ import (
 	"os"
 	execPkg "os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -435,7 +436,9 @@ func resolveBinaryPaths(env *ToolchainEnvironment, cfg *envConfig, deps map[stri
 	}
 
 	seenDir := make(map[string]struct{})
-	for tool, version := range deps {
+	// Tool name order keeps ToolchainDirs and same-named binaries deterministic.
+	for _, tool := range slices.Sorted(maps.Keys(deps)) {
+		version := deps[tool]
 		owner, repo, err := resolveFunc(tool)
 		if err != nil {
 			log.Debug("Could not resolve tool for toolchain environment", "tool", tool, "error", err)

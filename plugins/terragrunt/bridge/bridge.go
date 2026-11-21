@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/gruntwork-io/terragrunt/internal/configbridge"
+	"github.com/gruntwork-io/terragrunt/internal/iacargs"
 	"github.com/gruntwork-io/terragrunt/internal/tf"
 	"github.com/gruntwork-io/terragrunt/internal/venv"
 	"github.com/gruntwork-io/terragrunt/internal/vexec"
@@ -32,6 +34,8 @@ import (
 type Venv = venv.Venv
 
 // Environment isolates invocation environments and output writers.
+//
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func Environment(env map[string]string, stdout, stderr io.Writer) *venv.Venv {
 	// Invocation environments must not replace the plugin's process-wide environment.
 	return venv.OSVenv().WithExec(scopedExec{Exec: vexec.NewOSExec(), environment: env}).WithEnv(env).WithReplaceEnviron(func(map[string]string) error { return nil }).WithWriter(stdout).WithErrWriter(stderr)
@@ -39,11 +43,27 @@ func Environment(env map[string]string, stdout, stderr io.Writer) *venv.Venv {
 
 // Discovery denies process execution, network access, and decryption. Only an
 // explicit stack generation phase may write its generated files.
+//
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func Discovery(v *venv.Venv, generate bool) *venv.Venv {
+	return DiscoveryObserved(v, generate, func() {})
+}
+
+var (
+	errDiscoveryExecute = errors.New("read-only discovery cannot execute")
+	errDiscoveryDecrypt = errors.New("read-only discovery cannot decrypt")
+)
+
+// DiscoveryObserved reports denied effects even if an HCL try expression swallows the error.
+//
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
+func DiscoveryObserved(v *venv.Venv, generate bool, denied func()) *venv.Venv {
 	v = v.WithHandler(func(_ context.Context, inv vexec.Invocation) vexec.Result {
-		return vexec.Result{Err: fmt.Errorf("read-only discovery cannot execute %s", inv.Name)}
-	}).WithHTTP(vhttp.NewNoNetworkClient()).WithSops(vsops.NewMemDecrypter(func(_ map[string]string, path, _ string) ([]byte, error) {
-		return nil, fmt.Errorf("read-only discovery cannot decrypt %s", path)
+		denied()
+		return vexec.Result{Err: fmt.Errorf("%w %s", errDiscoveryExecute, inv.Name)}
+	}).WithHTTP(&http.Client{Transport: deniedTransport{base: vhttp.NewNoNetworkClient().Transport, denied: denied}}).WithSops(vsops.NewMemDecrypter(func(_ map[string]string, path, _ string) ([]byte, error) {
+		denied()
+		return nil, fmt.Errorf("%w %s", errDiscoveryDecrypt, path)
 	}))
 	if !generate {
 		v = v.WithFS(afero.NewReadOnlyFs(v.FS))
@@ -52,6 +72,8 @@ func Discovery(v *venv.Venv, generate bool) *venv.Venv {
 }
 
 // WorkingDir uses upstream cache identity without downloading or changing state.
+//
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func WorkingDir(logger log.Logger, env *venv.Venv, source, download, directory string) (string, error) {
 	resolved, err := tf.NewSource(logger, env.FS, source, download, directory, false)
 	if err != nil {
@@ -65,6 +87,8 @@ func WorkingDir(logger log.Logger, env *venv.Venv, source, download, directory s
 // generation, it never lists or generates other stack files under the same
 // directory; callers recurse into the nested stacks the file declares. It does
 // not execute the Terragrunt CLI or apply infrastructure.
+//
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func GenerateStack(ctx context.Context, logger log.Logger, env *venv.Venv, path, tofu string) error {
 	opts := options.NewTerragruntOptions(env.Exec)
 	opts.WorkingDir = filepath.Dir(path)
@@ -90,6 +114,7 @@ type scopedExec struct {
 	environment map[string]string
 }
 
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func (e scopedExec) LookPath(file string) (string, error) {
 	return e.lookPath(file, runtime.GOOS)
 }
@@ -121,6 +146,7 @@ func (e scopedExec) lookPath(file, platform string) (string, error) {
 	return "", &exec.Error{Name: file, Err: exec.ErrNotFound}
 }
 
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func (e scopedExec) Command(ctx context.Context, name string, args ...string) vexec.Cmd {
 	// Explicit relative commands belong to the unit's directory, which upstream
 	// assigns with SetDir after constructing the command. Let os/exec resolve
@@ -133,6 +159,51 @@ func (e scopedExec) Command(ctx context.Context, name string, args ...string) ve
 		return vexec.NewMemExec(func(context.Context, vexec.Invocation) vexec.Result { return vexec.Result{Err: err} }).Command(ctx, name, args...)
 	}
 	return e.Exec.Command(ctx, path, args...)
+}
+
+// IsDestroyOperation skips values of Terraform's string flags before applying upstream
+// boolean flag parsing, including last-value precedence.
+//
+//nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
+func IsDestroyOperation(command string, arguments []string) bool {
+	if command == "destroy" {
+		return true
+	}
+	flags := make([]string, 0, len(arguments))
+	for i := 0; i < len(arguments); i++ {
+		argument := arguments[i]
+		if argument == "--" {
+			break
+		}
+		name, _, inline := strings.Cut(argument, "=")
+		if !inline && strings.HasPrefix(name, "-") && destroyValueOption(strings.TrimLeft(name, "-")) {
+			i++
+			continue
+		}
+		flags = append(flags, argument)
+	}
+	return iacargs.HasDestroyFlag(flags)
+}
+
+func destroyValueOption(name string) bool {
+	switch name {
+	case "backend-config", "backup", "chdir", "config", "from-module", "fs-mirror", "generate-config-out", "lock-timeout", "net-mirror", "out", "parallelism", "platform", "plugin-dir", "replace", "state", "state-out", "target", "var", "var-file":
+		return true
+	default:
+		return false
+	}
+}
+
+// deniedTransport retains the upstream no-network error shape while recording its use.
+type deniedTransport struct {
+	base   http.RoundTripper
+	denied func()
+}
+
+//nolint:lintroller // Pure HTTP interface delegation in the standalone compatibility module.
+func (t deniedTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	t.denied()
+	return t.base.RoundTrip(request)
 }
 
 // exactCandidate avoids os/exec applying ambient PATHEXT to an already selected

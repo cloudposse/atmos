@@ -1,1 +1,46 @@
-{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"enabled":{"type":"boolean"},"provider":{"const":"terragrunt"},"mode":{"const":"native"},"discovery":{"type":"object","properties":{"enabled":{"type":"boolean"},"included_paths":{"type":"array","items":{"type":"string"},"minItems":1},"excluded_paths":{"type":"array","items":{"type":"string"}}},"required":["enabled","included_paths"],"additionalProperties":false}},"required":["enabled","discovery"],"additionalProperties":false}
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "provider": {
+      "const": "terragrunt"
+    },
+    "mode": {
+      "const": "native"
+    },
+    "discovery": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "included_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "excluded_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "enabled",
+        "included_paths"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "enabled",
+    "discovery"
+  ],
+  "additionalProperties": false
+}

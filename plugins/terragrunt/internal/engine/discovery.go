@@ -21,7 +21,6 @@ import (
 
 var (
 	errDiscoveryDepth       = errors.New("nested-stack discovery depth exceeded at")
-	errLocalDiscoverySource = errors.New("discovery requires local sources")
 	errInlineModuleSource   = errors.New("inline Terraform modules require terraform.source")
 	errIdentityCollision    = errors.New("discovered instance collision")
 	errGenerationDepth      = errors.New("nested-stack generation depth exceeded at")
@@ -277,18 +276,18 @@ func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement *uni
 }
 
 func (d *projectDiscovery) visitUnit(path string, resolved *model.Resolution, placement *unitPlacement) error {
-	if len(resolved.Folders) == 0 {
+	if resolved.Source == "" && len(resolved.Folders) == 0 {
 		if placement.generationRoot != "" {
 			return discoveryError(d.root, path, "MISSING_TERRAFORM_SOURCE", errInlineModuleSource)
 		}
-		// Shared include, not a runnable local-source unit.
+		// Shared include, not a runnable unit.
 		return d.checkInlineModule(path)
-	}
-	if !plainLocalSource(resolved.Folders[0]) {
-		return discoveryError(d.root, path, "NONLOCAL_SOURCE", errLocalDiscoverySource)
 	}
 	resolved.Files = append(resolved.Files, placement.files...)
 	resolved.Folders = append(resolved.Folders, placement.folders...)
+	if err := trackInputSources(d.overlay, d.root, resolved); err != nil {
+		return err
+	}
 	d.result.Inventory = append(d.result.Inventory, model.DiscoveredUnit{Stack: placement.stack, Name: filepath.ToSlash(placement.name), GenerationRoot: placement.generationRoot, Config: *resolved})
 	return nil
 }
@@ -357,7 +356,7 @@ func (e *unitEvaluator) generateStack(ctx context.Context, path string, depth in
 	if err := atmosbridge.GenerateStack(ctx, e.logger, e.environment, path, e.request.Tofu); err != nil {
 		return err
 	}
-	stack, err := readStack(ctx, e.logger, e.environment, parsingContext(e.request, path), path)
+	stack, err := readStack(ctx, e.logger, e.environment, requestParsingContext(e.request, path), path)
 	if err != nil {
 		return err
 	}
@@ -442,7 +441,11 @@ func (e *unitEvaluator) resolveUnitInventory(ctx context.Context) (*model.Resolu
 		return nil, fmt.Errorf("%w: %s", errDependencyWorkspace, e.path)
 	}
 	if cfg.Terraform != nil && cfg.Terraform.Source != nil {
-		result.Folders = []string{localPath(filepath.Dir(e.path), *cfg.Terraform.Source)}
+		result.Source = *cfg.Terraform.Source
+		if plainLocalSource(result.Source) {
+			result.Source = localPath(filepath.Dir(e.path), result.Source)
+			result.Folders = []string{result.Source}
+		}
 	}
 	if result.OutputDependencies, err = outputDependencies(e.environment, cfg, e.path); err != nil {
 		return nil, err
