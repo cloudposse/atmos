@@ -665,7 +665,6 @@ func sanitizeTestName(name string) string {
 	return name
 }
 
-// Drop any lines matched by the ignore patterns so they do not affect the comparison.
 // stripTrailingWhitespace removes trailing whitespace from each line.
 func stripTrailingWhitespace(input string) string {
 	lines := strings.Split(input, "\n")
@@ -708,14 +707,12 @@ func applyIgnorePatterns(input string, patterns []string) string {
 // - This matches real terminal behavior where users see everything in one stream.
 //
 // For tests that need separate stderr/stdout streams, use non-TTY execution instead.
-func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, error) {
+func simulateTtyCommand(cmd *exec.Cmd, input string) (string, error) {
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
-		return "", fmt.Errorf("failed to start TTY: %v", err)
+		return "", fmt.Errorf("failed to start TTY: %w", err)
 	}
 	defer func() { _ = ptmx.Close() }()
-
-	// t.Logf("PTY Fd: %d, IsTerminal: %v", ptmx.Fd(), term.IsTerminal(int(ptmx.Fd())))
 
 	if input != "" {
 		go func() {
@@ -738,11 +735,10 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 	}
 
 	if readErr := <-done; readErr != nil {
-		return "", fmt.Errorf("failed to read PTY output: %v", readErr)
+		return "", fmt.Errorf("failed to read PTY output: %w", readErr)
 	}
 
 	output := buffer.String()
-	// t.Logf("Captured Output:\n%s", output)
 
 	// Return the wait error so exit codes can be captured.
 	return output, waitErr
@@ -753,7 +749,8 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 // See https://github.com/creack/pty/issues/21
 // See https://github.com/owenthereal/upterm/pull/11
 func ptyError(err error) error {
-	if pathErr, ok := err.(*os.PathError); !ok || pathErr.Err != syscall.EIO {
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) || !errors.Is(pathErr.Err, syscall.EIO) {
 		return err
 	}
 	return nil
@@ -765,7 +762,7 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 
 	entries, err := os.ReadDir(testCasesDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read test-cases directory: %v", err)
+		return nil, fmt.Errorf("failed to read test-cases directory: %w", err)
 	}
 
 	for _, entry := range entries {
@@ -773,7 +770,7 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 			filePath := filepath.Join(testCasesDir, entry.Name())
 			suite, err := loadTestSuite(filePath)
 			if err != nil {
-				return nil, fmt.Errorf("failed to load %s: %v", filePath, err)
+				return nil, fmt.Errorf("failed to load %s: %w", filePath, err)
 			}
 			mergedSuite.Tests = append(mergedSuite.Tests, suite.Tests...)
 		}
@@ -1253,7 +1250,8 @@ func ensureGitMirrorCoversFixtureTokens(t *testing.T, tc *TestCase) {
 	tc.Env["GIT_CONFIG_GLOBAL"] = mirrorConfigPath
 }
 
-func runCLICommandTest(t *testing.T, tc TestCase) {
+func runCLICommandTest(t *testing.T, testCase *TestCase) {
+	tc := *testCase // Keep per-run field changes local to this execution.
 	// Skip long tests in short mode
 	if testing.Short() && tc.Short != nil && !*tc.Short {
 		t.Skipf("Skipping long-running test in short mode (use 'go test' without -short to run)")
@@ -1281,23 +1279,17 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	// to prevent any single test from consuming the entire test budget.
 	const defaultTestTimeout = 10 * time.Minute
 
-	var ctx context.Context
-	var cancel context.CancelFunc
-
+	timeout := defaultTestTimeout
 	if tc.Expect.Timeout != "" {
-		// Parse the timeout from the Expectation
-		timeout, err := parseTimeout(tc.Expect.Timeout)
+		parsed, err := parseTimeout(tc.Expect.Timeout)
 		if err != nil {
 			t.Fatalf("Failed to parse timeout for test %s: %v", tc.Name, err)
 		}
-		if timeout > 0 {
-			ctx, cancel = context.WithTimeout(context.Background(), timeout)
-		} else {
-			ctx, cancel = context.WithTimeout(context.Background(), defaultTestTimeout)
+		if parsed > 0 {
+			timeout = parsed
 		}
-	} else {
-		ctx, cancel = context.WithTimeout(context.Background(), defaultTestTimeout)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	// Create a temporary HOME directory for the test case that's clean
@@ -1444,119 +1436,9 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["GIT_TRACE_REDACT"] = "true"
 	}
 
-	if runtime.GOOS == "darwin" && isCIEnvironment() {
-		if liveGitHub {
-			homeDir := os.Getenv("HOME")
-			if override, ok := tc.Env["HOME"]; ok {
-				homeDir = override
-			}
-			requireNetrcFreeHome(t, homeDir)
-		}
-		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
-		// Copying over the `.gitconfig` was not enough to fix the issue.
-		// A "live_github" case can only keep this HOME after the .netrc guard above passes.
-		logger.Info("skipping empty home dir on macOS in CI", "GOOS", runtime.GOOS)
-	} else {
-		// Set environment variables for the test case
-		tc.Env["HOME"] = tempDir
-		tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
-		tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
-		// Copy some files to the temporary HOME directory
-		originalHome := os.Getenv("HOME")
-		for _, file := range homeFilesToCopy(liveGitHub) {
-			src := filepath.Join(originalHome, file)
-			dest := filepath.Join(tempDir, file)
+	setupTestHome(t, &tc, tempDir, liveGitHub)
 
-			if _, err := os.Stat(src); err == nil { // Check if the file/directory exists
-				// t.Logf("Copying %s to %s\n", src, dest)
-				// Skip socket files (e.g., SSH agent sockets) that cannot be copied.
-				copyOpts := copy.Options{
-					Skip: func(info os.FileInfo, src, dest string) (bool, error) {
-						return info.Mode()&os.ModeSocket != 0, nil
-					},
-				}
-				if err := copy.Copy(src, dest, copyOpts); err != nil {
-					t.Fatalf("Failed to copy %s to test folder: %v", src, err)
-				}
-			}
-		}
-	}
-
-	// Change to the specified working directory
-	if tc.Workdir != "" {
-		absoluteWorkdir, err := filepath.Abs(tc.Workdir)
-		if err != nil {
-			t.Fatalf("failed to resolve absolute path of workdir %q: %v", tc.Workdir, err)
-		}
-		t.Chdir(absoluteWorkdir)
-
-		// Setup sandbox environment if enabled
-		var sandboxEnv *testhelpers.SandboxEnvironment
-		switch v := tc.Sandbox.(type) {
-		case bool:
-			if v {
-				// Boolean true = isolated sandbox for this test only
-				logger.Info("Setting up isolated sandbox", "test", tc.Name, "workdir", absoluteWorkdir)
-				sandboxEnv = createIsolatedSandbox(t, absoluteWorkdir)
-				// Clean up immediately after test
-				defer func() {
-					logger.Debug("Cleaning up isolated sandbox", "tempdir", sandboxEnv.TempDir)
-					sandboxEnv.Cleanup()
-				}()
-			}
-		case string:
-			if v != "" {
-				// Named sandbox = shared across related tests
-				logger.Info("Using named sandbox", "test", tc.Name, "name", v, "workdir", absoluteWorkdir)
-				sandboxEnv = getOrCreateNamedSandbox(t, v, absoluteWorkdir)
-				// Cleanup handled by TestMain
-			}
-		}
-
-		// Add sandbox environment variables to override component paths
-		if sandboxEnv != nil {
-			if tc.Env == nil {
-				tc.Env = make(map[string]string)
-			}
-			for k, v := range sandboxEnv.GetEnvironmentVariables() {
-				logger.Debug("Setting sandbox env var", "key", k, "value", v)
-				tc.Env[k] = v
-			}
-		}
-
-		// Clean the directory if enabled
-		if tc.Clean {
-			logger.Info("Cleaning directory", "workdir", tc.Workdir)
-			if err := cleanDirectory(t, absoluteWorkdir); err != nil {
-				t.Fatalf("Failed to clean directory %q: %v", tc.Workdir, err)
-			}
-		}
-
-		// Set ATMOS_CLI_CONFIG_PATH to ensure test isolation.
-		// This forces Atmos to use the workdir's atmos.yaml instead of searching
-		// up the directory tree or using ~/.config/atmos/atmos.yaml.
-		// BUT: Skip this for tests that use --chdir/-C, since they need to test
-		// config loading in the target directory.
-		usesChdirFlag := false
-		for _, arg := range tc.Args {
-			if arg == "--chdir" || arg == "-C" || strings.HasPrefix(arg, "--chdir=") {
-				usesChdirFlag = true
-				break
-			}
-		}
-		if !usesChdirFlag {
-			atmosConfigPath := filepath.Join(absoluteWorkdir, "atmos.yaml")
-			if _, err := os.Stat(atmosConfigPath); err == nil {
-				if tc.Env == nil {
-					tc.Env = make(map[string]string)
-				}
-				tc.Env["ATMOS_CLI_CONFIG_PATH"] = absoluteWorkdir
-				logger.Debug("Setting ATMOS_CLI_CONFIG_PATH for test isolation", "path", absoluteWorkdir)
-			}
-		} else {
-			logger.Debug("Skipping ATMOS_CLI_CONFIG_PATH for --chdir test")
-		}
-	}
+	setupTestWorkdir(t, &tc)
 
 	// Include the system PATH in the test environment
 	tc.Env["PATH"] = os.Getenv("PATH")
@@ -1752,67 +1634,29 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	var stdout, stderr bytes.Buffer
 	var exitCode int
 
+	var commandErr error
 	if tc.Tty {
-		// Run the command in TTY mode
-		ptyOutput, err := simulateTtyCommand(t, cmd, "")
-
-		// Check if the context timeout was exceeded
-		if ctx.Err() == context.DeadlineExceeded {
-			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
-			t.Errorf("Captured stdout:\n%s", stdout.String())
-			t.Errorf("Captured stderr:\n%s", stderr.String())
-			return
-		}
-
-		if err != nil {
-			// Check if the error is an ExitError
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				// Capture the actual exit code
-				exitCode = exitErr.ExitCode()
-
-				if exitCode < 0 {
-					// Negative exit code indicates interruption by a signal
-					t.Errorf("TTY Command interrupted by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
-				}
-			} else {
-				// Handle other types of errors
-				t.Fatalf("Failed to simulate TTY command: %v", err)
-			}
-		}
-		stdout.WriteString(ptyOutput)
+		var output string
+		output, commandErr = simulateTtyCommand(cmd, "")
+		stdout.WriteString(output)
 	} else {
-		// Run the command in non-TTY mode
-
-		// Attach stdout and stderr buffers for non-TTY execution
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
-
-		err := cmd.Run()
-		if ctx.Err() == context.DeadlineExceeded {
-			// Handle the timeout case first
-			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
-			t.Errorf("Captured stdout:\n%s", stdout.String())
-			t.Errorf("Captured stderr:\n%s", stderr.String())
-			return
+		commandErr = cmd.Run()
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
+		dumpCapturedOutput(t, &stdout, &stderr)
+		return
+	}
+	if commandErr != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(commandErr, &exitErr) {
+			t.Fatalf("Failed to run command: %v", commandErr)
 		}
-
-		if err != nil {
-			// Handle other command execution errors
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				// Capture the actual exit code
-				exitCode = exitErr.ExitCode()
-
-				if exitCode < 0 {
-					// Negative exit code indicates termination by a signal
-					t.Errorf("Non-TTY Command terminated by signal: %s, Signal: %d, Error: %v", tc.Command, -exitCode, err)
-				}
-			} else {
-				// Handle other non-exec-related errors
-				t.Fatalf("Failed to run command; Error: %v", err)
-			}
-		} else {
-			// Successful command execution
-			exitCode = 0
+		exitCode = exitErr.ExitCode()
+		if exitCode < 0 {
+			t.Errorf("Command interrupted by signal: %s, Error: %v", tc.Command, commandErr)
 		}
 	}
 
@@ -1850,7 +1694,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	}
 
 	// Validate snapshots
-	if !verifySnapshot(t, tc, stdout.String(), stderr.String(), *regenerateSnapshots) {
+	if !verifySnapshot(t, &tc, stdout.String(), stderr.String(), *regenerateSnapshots) {
 		t.Errorf("Description: %s", tc.Description)
 	}
 }
@@ -1858,7 +1702,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 func removeCacheFile() error {
 	cacheFilePath, err := config.GetCacheFilePath()
 	if err != nil {
-		return nil
+		return err
 	}
 
 	if _, err := os.Stat(cacheFilePath); os.IsNotExist(err) {
@@ -1908,7 +1752,7 @@ func TestCLICommands(t *testing.T) {
 
 		// Run tests
 		t.Run(tc.Name, func(t *testing.T) {
-			runCLICommandTest(t, tc)
+			runCLICommandTest(t, &tc)
 		})
 	}
 }
@@ -2196,7 +2040,8 @@ func verifyJSONFormat(t *testing.T, output string) bool {
 	if err != nil {
 		t.Logf("JSON validation failed: %v", err)
 		// Try to provide context about where the error occurred.
-		if syntaxErr, ok := err.(*json.SyntaxError); ok {
+		var syntaxErr *json.SyntaxError
+		if errors.As(err, &syntaxErr) {
 			offset := syntaxErr.Offset
 			// Show a snippet around the error location.
 			start := max(0, int(offset)-50)
@@ -2609,14 +2454,14 @@ func colorizeDiffWithThreshold(actual, expected string, threshold int) string {
 		case diffmatchpatch.DiffInsert, diffmatchpatch.DiffDelete:
 			if len(text) < threshold {
 				// For short diffs, highlight entire line
-				sb.WriteString(fmt.Sprintf("\033[1m\033[33m%s\033[0m", text))
+				fmt.Fprintf(&sb, "\033[1m\033[33m%s\033[0m", text)
 			} else {
 				// For long diffs, highlight at word/character level
 				color := "\033[32m" // Insert: green
 				if diff.Type == diffmatchpatch.DiffDelete {
 					color = "\033[31m" // Delete: red
 				}
-				sb.WriteString(fmt.Sprintf("%s%s\033[0m", color, text))
+				fmt.Fprintf(&sb, "%s%s\033[0m", color, text)
 			}
 		case diffmatchpatch.DiffEqual:
 			sb.WriteString(text)
@@ -2691,7 +2536,7 @@ func verifyTestOutputs(t *testing.T, tc *TestCase, stdout, stderr string) {
 	}
 }
 
-func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string, regenerate bool) bool {
+func verifySnapshot(t *testing.T, tc *TestCase, stdoutOutput, stderrOutput string, regenerate bool) bool {
 	if !tc.Snapshot {
 		return true
 	}
@@ -2722,7 +2567,7 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 	// TTY mode: combined output in single .tty.golden file
 	if tc.Tty {
 		// In TTY mode, stdout contains the combined output (from PTY)
-		return verifyTTYSnapshot(t, &tc, ttyPath, stdoutOutput, regenerate)
+		return verifyTTYSnapshot(t, tc, ttyPath, stdoutOutput, regenerate)
 	}
 
 	// Non-TTY mode: separate stdout and stderr snapshots
@@ -2989,4 +2834,135 @@ func TestRemoveIgnoredEntriesPreservesGitDir(t *testing.T) {
 	assert.DirExists(t, filepath.Join(repoRoot, ".git"), "removeIgnoredEntries must never delete the .git directory")
 	assert.FileExists(t, trackedPath, "tracked files must be left untouched")
 	assert.NoFileExists(t, untrackedPath, "untracked/gitignored entries must still be removed")
+}
+
+func setupTestHome(t *testing.T, tc *TestCase, tempDir string, liveGitHub bool) {
+	t.Helper()
+	if runtime.GOOS == "darwin" && isCIEnvironment() {
+		if liveGitHub {
+			homeDir := os.Getenv("HOME")
+			if override, ok := tc.Env["HOME"]; ok {
+				homeDir = override
+			}
+			requireNetrcFreeHome(t, homeDir)
+		}
+		// For some reason the empty HOME directory causes issues on macOS in GitHub Actions
+		// Copying over the `.gitconfig` was not enough to fix the issue.
+		// A "live_github" case can only keep this HOME after the .netrc guard above passes.
+		logger.Info("skipping empty home dir on macOS in CI", "GOOS", runtime.GOOS)
+		return
+	}
+	// Set environment variables for the test case
+	tc.Env["HOME"] = tempDir
+	tc.Env["XDG_CONFIG_HOME"] = filepath.Join(tempDir, ".config")
+	tc.Env["XDG_DATA_HOME"] = filepath.Join(tempDir, ".local", "share")
+	// Copy some files to the temporary HOME directory
+	originalHome := os.Getenv("HOME")
+	for _, file := range homeFilesToCopy(liveGitHub) {
+		src := filepath.Join(originalHome, file)
+		dest := filepath.Join(tempDir, file)
+
+		if _, err := os.Stat(src); err == nil { // Check if the file/directory exists
+			// Skip socket files (e.g., SSH agent sockets) that cannot be copied.
+			copyOpts := copy.Options{
+				Skip: func(info os.FileInfo, src, dest string) (bool, error) {
+					return info.Mode()&os.ModeSocket != 0, nil
+				},
+			}
+			if err := copy.Copy(src, dest, copyOpts); err != nil {
+				t.Fatalf("Failed to copy %s to test folder: %v", src, err)
+			}
+		}
+	}
+}
+
+func setupTestWorkdir(t *testing.T, tc *TestCase) {
+	t.Helper()
+	if tc.Workdir == "" {
+		return
+	}
+
+	absoluteWorkdir, err := filepath.Abs(tc.Workdir)
+	if err != nil {
+		t.Fatalf("failed to resolve absolute path of workdir %q: %v", tc.Workdir, err)
+	}
+	t.Chdir(absoluteWorkdir)
+
+	setupTestSandbox(t, tc, absoluteWorkdir)
+
+	// Clean the directory if enabled
+	if tc.Clean {
+		logger.Info("Cleaning directory", "workdir", tc.Workdir)
+		if err := cleanDirectory(t, absoluteWorkdir); err != nil {
+			t.Fatalf("Failed to clean directory %q: %v", tc.Workdir, err)
+		}
+	}
+
+	setupTestConfigPath(tc, absoluteWorkdir)
+}
+
+func setupTestSandbox(t *testing.T, tc *TestCase, absoluteWorkdir string) {
+	t.Helper()
+
+	// Setup sandbox environment if enabled
+	var sandboxEnv *testhelpers.SandboxEnvironment
+	switch v := tc.Sandbox.(type) {
+	case bool:
+		if v {
+			// Boolean true = isolated sandbox for this test only
+			logger.Info("Setting up isolated sandbox", "test", tc.Name, "workdir", absoluteWorkdir)
+			sandboxEnv = createIsolatedSandbox(t, absoluteWorkdir)
+			// Clean up immediately after test
+			t.Cleanup(func() {
+				logger.Debug("Cleaning up isolated sandbox", "tempdir", sandboxEnv.TempDir)
+				sandboxEnv.Cleanup()
+			})
+		}
+	case string:
+		if v != "" {
+			// Named sandbox = shared across related tests
+			logger.Info("Using named sandbox", "test", tc.Name, "name", v, "workdir", absoluteWorkdir)
+			sandboxEnv = getOrCreateNamedSandbox(t, v, absoluteWorkdir)
+			// Cleanup handled by TestMain
+		}
+	}
+
+	// Add sandbox environment variables to override component paths
+	if sandboxEnv != nil {
+		if tc.Env == nil {
+			tc.Env = make(map[string]string)
+		}
+		for k, v := range sandboxEnv.GetEnvironmentVariables() {
+			logger.Debug("Setting sandbox env var", "key", k, "value", v)
+			tc.Env[k] = v
+		}
+	}
+}
+
+func setupTestConfigPath(tc *TestCase, absoluteWorkdir string) {
+	// Set ATMOS_CLI_CONFIG_PATH to ensure test isolation.
+	// This forces Atmos to use the workdir's atmos.yaml instead of searching
+	// up the directory tree or using ~/.config/atmos/atmos.yaml.
+	// BUT: Skip this for tests that use --chdir/-C, since they need to test
+	// config loading in the target directory.
+	usesChdirFlag := false
+	for _, arg := range tc.Args {
+		if arg == "--chdir" || arg == "-C" || strings.HasPrefix(arg, "--chdir=") {
+			usesChdirFlag = true
+			break
+		}
+	}
+	if usesChdirFlag {
+		logger.Debug("Skipping ATMOS_CLI_CONFIG_PATH for --chdir test")
+		return
+	}
+	atmosConfigPath := filepath.Join(absoluteWorkdir, "atmos.yaml")
+	if _, err := os.Stat(atmosConfigPath); err != nil {
+		return
+	}
+	if tc.Env == nil {
+		tc.Env = make(map[string]string)
+	}
+	tc.Env["ATMOS_CLI_CONFIG_PATH"] = absoluteWorkdir
+	logger.Debug("Setting ATMOS_CLI_CONFIG_PATH for test isolation", "path", absoluteWorkdir)
 }

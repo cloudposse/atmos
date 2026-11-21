@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gruntwork-io/terragrunt/pkg/log"
@@ -44,6 +45,9 @@ type LogSink struct {
 	off     bool
 	// Withheld is set when the call may have logged a sensitive value the sink cannot redact.
 	withheld bool
+	// progress receives fixed plugin progress events without unit paths immediately. Unit paths and
+	// Terragrunt events stay buffered until sensitive values discovered during evaluation are registered.
+	progress func(*model.LogEntry)
 }
 
 // logRecord is a collected event together with which of its texts were cut to the length bound, so that a
@@ -72,6 +76,41 @@ func NewLogSink(level, root string) *LogSink {
 		sink.level, sink.off = log.TraceLevel, false
 	}
 	return sink
+}
+
+// Enabled reports whether the sink keeps any event, which depends on the level the host asked for.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
+func (s *LogSink) Enabled() bool { return !s.off }
+
+// Forward hands fixed plugin progress events without unit paths to deliver as they happen. Events with
+// unit paths and Terragrunt events remain collected until discovered sensitive values can be redacted.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
+func (s *LogSink) Forward(deliver func(*model.LogEntry)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.progress = deliver
+}
+
+// Event reports an event of the plugin itself, such as the start of an evaluation, the way the Terragrunt
+// logger's events are reported: kept at the sink's level, collected or forwarded in order.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
+func (s *LogSink) Event(level log.Level, message, unit string) {
+	if s == nil || s.off || level > s.level {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	event := &model.LogEntry{Time: time.Now(), Level: level.String(), Message: message, Unit: s.relative(unit)}
+	// Unit paths can contain secrets discovered later during evaluation. Keep them
+	// buffered so Entries can redact them or withhold them if evaluation fails.
+	if s.progress != nil && unit == "" {
+		s.progress(event)
+		return
+	}
+	s.keep(event)
 }
 
 // TerragruntLevel returns the Terragrunt logger level that produces every event the sink keeps.
@@ -255,6 +294,16 @@ func (s *LogSink) add(level log.Level, entry *logrus.Entry) {
 	}
 	record.entry = model.LogEntry{Time: entry.Time, Level: level.String(), Message: message, Fields: fields, Unit: unit}
 	s.entries = append(s.entries, record)
+}
+
+// keep collects a plugin progress event until it can be safely delivered. The caller holds the lock.
+func (s *LogSink) keep(entry *model.LogEntry) {
+	if len(s.entries) >= maxLogEntries || s.size >= maxLogBytes {
+		s.dropped++
+		return
+	}
+	s.size += len(entry.Message) + len(entry.Unit)
+	s.entries = append(s.entries, logRecord{entry: *entry})
 }
 
 // sortedSecrets returns the registered values longest first, so a value that contains another is redacted

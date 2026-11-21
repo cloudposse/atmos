@@ -11,18 +11,19 @@ import (
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
 
+// currentDirectory is the project-relative identity of its root.
 const currentDirectory = "."
 
 // Discover expands local stacks in an isolated overlay without preparing units.
 //
-//nolint:lintroller // Standalone plugin code cannot import the host performance tracker.
+//nolint:lintroller // Plugin code cannot import the host performance tracker.
 func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
-	ctx, sink := withLogs(ctx, request.GetInvocation(), request.GetRootDirectory(), request.GetProviderConfiguration())
+	ctx, logs := p.withLogs(ctx, request.GetInvocation(), request.GetRootDirectory(), request.GetProviderConfiguration())
 	response, err := p.discover(ctx, request)
 	if response != nil {
-		response.Logs = logEntries(sink)
+		response.Logs = logs.entries()
 	}
-	return response, withFailureLogs(err, sink)
+	return response, withFailureLogs(err, logs)
 }
 
 // discoveryRequest validates a discovery request and turns it into an inventory evaluation.

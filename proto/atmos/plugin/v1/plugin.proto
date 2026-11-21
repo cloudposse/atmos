@@ -99,7 +99,9 @@ enum LogLevel {
 }
 
 // LogEntry is one structured log event from a plugin's engine, for example a Terragrunt logger event.
-// A response carries the entries produced while it was computed, in order. The host renders them through
+// A plugin delivers entries while the call runs through the Log service of the Atmos API, so a slow
+// operation shows progress as it happens. A response carries only the entries that could not be delivered
+// that way, in order, and never an entry that was delivered live. The host renders them through
 // the Atmos logger on the UI channel (stderr), scoped to the component and stack of the call, with secret
 // masking, at the level each entry carries. They are hidden at the Atmos default level and shown with
 // --logs-level=Debug or Trace. Entries never change the outcome of the call and are never written to the
@@ -114,6 +116,20 @@ message LogEntry {
   // Unit the event is about, relative to the project root, when the engine reports one.
   string unit = 5;
 }
+
+// Log is served by Atmos on the Atmos API broker connection, next to the API services, and called by the
+// plugin. It delivers LogEntry messages while a call is still running, instead of in the response where they
+// show only when the call ends. Atmos renders each entry through its logger on the UI channel (stderr),
+// scoped to the component and stack of the call, with secret masking, and drops entries below the Atmos log
+// level. Entries arrive in the order of the calls, and a call returns only after Atmos has rendered its
+// entries, so a plugin that waits for its last call before it returns the result shows every entry before the
+// result. Delivery never changes the outcome of the call and is never part of a result. A call that fails with
+// UNAVAILABLE, PERMISSION_DENIED, UNIMPLEMENTED, or FAILED_PRECONDITION delivered nothing, and the plugin then
+// returns those entries in the logs field of its response. Entries delivered here are never repeated there.
+// Like the API services, Log accepts only calls that carry the active invocation ID in the
+// atmos-invocation-id metadata.
+service Log { rpc Write(LogRequest) returns (google.protobuf.Empty); }
+message LogRequest { repeated LogEntry entries = 1; }
 
 // ErrorDetail is the structured, user-facing description of a plugin failure.
 // A plugin returns it as a gRPC status detail (google.rpc.Status.details) on a

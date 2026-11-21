@@ -16,6 +16,7 @@ import (
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
+	"github.com/cloudposse/atmos/sdk/api"
 	"github.com/cloudposse/atmos/sdk/component"
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
@@ -32,16 +33,33 @@ type Provider struct {
 	pluginv1.UnimplementedComponentPreparationServer
 	pluginv1.UnimplementedComponentStateServer
 	evaluate Evaluator
+	// api delivers log events to Atmos while a call runs. Nil keeps them for the response.
+	api *api.Client
+}
+
+// Option configures a Provider.
+type Option func(*Provider)
+
+// WithAPI lets the provider deliver its log events to Atmos while a call runs, so a slow operation shows
+// progress instead of nothing until it ends.
+//
+//nolint:lintroller // Plugin code cannot import the host performance tracker.
+func WithAPI(client *api.Client) Option {
+	return func(p *Provider) { p.api = client }
 }
 
 // New constructs a provider with the pinned evaluator when none is supplied.
 //
-//nolint:lintroller // This SDK-only factory cannot import the host performance tracker.
-func New(evaluate Evaluator) *Provider {
+//nolint:lintroller // Plugin code cannot import the host performance tracker.
+func New(evaluate Evaluator, options ...Option) *Provider {
 	if evaluate == nil {
 		evaluate = engine.Resolve
 	}
-	return &Provider{evaluate: evaluate}
+	p := &Provider{evaluate: evaluate}
+	for _, apply := range options {
+		apply(p)
+	}
+	return p
 }
 
 func encode(value any) (*pluginv1.ComponentValue, error) {
@@ -229,10 +247,6 @@ func operation(root, name string, op *pluginv1.ComponentOperation, invocation *p
 	return request, nil
 }
 
-func supportedOperationMode(mode string) bool {
-	return mode == ModeNative || mode == ModeExecutable || mode == "iam-probe"
-}
-
 // engineName names the engine of an executable with the rule the engine package shares with the host.
 func engineName(binary string) string {
 	if engine.IsOpenTofu(binary) {
@@ -278,7 +292,7 @@ func sources(root string, resolved *model.Resolution) ([]*pluginv1.ComponentSour
 
 // Validate rejects unsupported operation and provider settings without evaluating HCL.
 //
-//nolint:lintroller // Standalone plugin code cannot import the host performance tracker.
+//nolint:lintroller // Plugin code cannot import the host performance tracker.
 func (p *Provider) Validate(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ValidateResponse, error) {
 	if err := validate(ctx, request); err != nil {
 		return nil, scoped(rpcError(err), "validate", request.GetRootDirectory(), request.GetAddress())
@@ -295,4 +309,9 @@ func validate(ctx context.Context, request *pluginv1.ComponentRequest) error {
 		return err
 	}
 	return settings(request.GetProviderConfiguration())
+}
+
+// supportedOperationMode accepts execution modes represented by the native evaluator.
+func supportedOperationMode(mode string) bool {
+	return mode == ModeNative || mode == ModeExecutable || mode == "iam-probe"
 }
