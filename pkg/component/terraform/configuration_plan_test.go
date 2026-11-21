@@ -1473,6 +1473,25 @@ func TestEffectiveDataDirPrecedence(t *testing.T) {
 		{name: "component overrides global", base: []string{"TF_DATA_DIR=base"}, global: map[string]string{"TF_DATA_DIR": "global"}, comp: []string{"TF_DATA_DIR=component"}, want: "component"},
 		{name: "empty value falls back to the default", base: []string{"TF_DATA_DIR=base"}, comp: []string{"TF_DATA_DIR="}, want: defaultDataDir},
 	}
+	if runtime.GOOS == "windows" {
+		tests = append(
+			tests,
+			struct {
+				name   string
+				base   []string
+				global map[string]string
+				comp   []string
+				want   string
+			}{name: "case insensitive last entry", base: []string{"TF_DATA_DIR=base"}, comp: []string{"tf_data_dir=component"}, want: "component"},
+			struct {
+				name   string
+				base   []string
+				global map[string]string
+				comp   []string
+				want   string
+			}{name: "case insensitive empty override", base: []string{"TF_DATA_DIR=base"}, comp: []string{"tf_data_dir="}, want: defaultDataDir},
+		)
+	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			info := &schema.ConfigAndStacksInfo{SanitizedEnv: test.base, ComponentEnvList: test.comp}
