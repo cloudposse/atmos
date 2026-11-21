@@ -3,7 +3,6 @@ package exec
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,11 +10,8 @@ import (
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/auth/credentials/credtest"
-	"github.com/cloudposse/atmos/pkg/ci"
-	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -77,9 +73,6 @@ func TestMain(m *testing.M) {
 	}
 	if os.Getenv(testEnvFakeTerraform) == "1" {
 		os.Exit(runFakeTerraformForTest())
-	}
-	if os.Getenv(testEnvRunLogGroupPipeline) == "1" {
-		os.Exit(runLogGroupPipelineForTest())
 	}
 
 	// Write a single byte to the counter file on every invocation.
@@ -203,7 +196,7 @@ func runFakeTerraformForTest() int {
 	args := os.Args[1:]
 	fmt.Printf("fake terraform %s\n", strings.Join(args, " "))
 
-	isWorkspaceSelect := len(args) >= 3 && args[0] == subcommandWorkspace && args[1] == "select"
+	isWorkspaceSelect := len(args) >= 3 && args[0] == "workspace" && args[1] == "select"
 	if isWorkspaceSelect && os.Getenv(testEnvFakeTerraformSelectFail) == "1" {
 		fmt.Fprintf(os.Stderr, "Workspace %q doesn't exist.\n", args[2])
 		return 1
@@ -218,53 +211,6 @@ func runFakeTerraformForTest() int {
 		if out := os.Getenv(testEnvFakeTerraformPlanOutput); out != "" {
 			fmt.Println(out)
 		}
-	}
-	return 0
-}
-
-func runLogGroupPipelineForTest() int {
-	ci.Register(githubprovider.NewProvider())
-
-	componentPath := filepath.Join(os.TempDir(), fmt.Sprintf("atmos-log-group-pipeline-%d", os.Getpid()))
-	if err := os.MkdirAll(componentPath, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "creating temp component path: %v\n", err)
-		return 1
-	}
-	defer func() { _ = os.RemoveAll(componentPath) }()
-
-	exePath, err := os.Executable()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "resolving test executable: %v\n", err)
-		return 1
-	}
-
-	atmosConfig := schema.AtmosConfiguration{}
-	atmosConfig.CI.Enabled = true
-	atmosConfig.CI.Groups.Mode = ci.GroupModeAuto
-
-	componentEnv := []string{testEnvFakeTerraform + "=1"}
-	if os.Getenv(testEnvFakeTerraformSelectFail) == "1" {
-		componentEnv = append(componentEnv, testEnvFakeTerraformSelectFail+"=1")
-	}
-
-	info := schema.ConfigAndStacksInfo{
-		SubCommand:           "plan",
-		SkipInit:             os.Getenv(testEnvPipelineSkipInit) == "1",
-		ComponentBackendType: os.Getenv(testEnvPipelineBackendType),
-		TerraformWorkspace:   "dev",
-		Command:              exePath,
-		ComponentEnvList:     componentEnv,
-	}
-	execCtx := &componentExecContext{
-		componentPath: componentPath,
-		varFile:       "vars.tfvars",
-		planFile:      "plan.tfplan",
-		workingDir:    componentPath,
-	}
-
-	if err := executeCommandPipeline(&atmosConfig, &info, execCtx); err != nil {
-		fmt.Fprintf(os.Stderr, "pipeline failed: %v\n", err)
-		return 1
 	}
 	return 0
 }

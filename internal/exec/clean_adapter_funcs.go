@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfclean "github.com/cloudposse/atmos/pkg/terraform/clean"
@@ -85,8 +86,8 @@ func ConstructTerraformComponentVarfilePath(atmosConfig *schema.AtmosConfigurati
 func ComputeTerraformSecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
 	defer perf.Track(nil, "exec.ComputeTerraformSecretVarEnv")()
 
-	computeTerraformSecretVarKeys(info)
-	return secretVarEnv(info)
+	terraformcomponent.ComputeTerraformSecretVarKeys(info)
+	return terraformcomponent.SecretVarEnv(info)
 }
 
 // ConstructTerraformComponentPlanfileNameForClean exports the planfile name constructor for clean.

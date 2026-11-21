@@ -208,8 +208,8 @@ func TestRunTerraformShowCapturesWithInjectedStdout(t *testing.T) {
 		for _, opt := range opts {
 			opt(&cfg)
 		}
-		require.NotNil(t, cfg.stdoutOverride)
-		_, err := cfg.stdoutOverride.Write([]byte("terraform noise\n{\"format_version\":\"1.0\"}"))
+		require.NotNil(t, cfg.StdoutOverride)
+		_, err := cfg.StdoutOverride.Write([]byte("terraform noise\n{\"format_version\":\"1.0\"}"))
 		require.NoError(t, err)
 		return nil
 	})

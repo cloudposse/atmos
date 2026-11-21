@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/component/typedetect"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -293,25 +294,7 @@ type DescribeComponentResult struct {
 }
 
 // ExecuteDescribeComponentParams contains parameters for ExecuteDescribeComponent.
-type ExecuteDescribeComponentParams struct {
-	// ResolveSecrets retrieves actual secrets for internal value-producing callers.
-	// The default preserves credential-free, masked inspection.
-	ResolveSecrets       bool
-	AtmosConfig          *schema.AtmosConfiguration // Optional: Use provided config instead of initializing new one.
-	Component            string
-	Stack                string
-	ComponentType        string // Optional: if set, only try this component type.
-	ProcessTemplates     bool
-	ProcessYamlFunctions bool
-	UseMocks             bool
-	Skip                 []string
-	AuthManager          auth.AuthManager
-	AuthDisabled         bool
-	ErrorOptions         DescribeStacksErrorOptions
-	// CommandPath names the CLI command that needs the component, such as
-	// ["secret", "shell"], for component admission. Empty means `describe component`.
-	CommandPath []string
-}
+type ExecuteDescribeComponentParams = component.ExecuteDescribeComponentParams
 
 // ExecuteDescribeComponent describes component config.
 func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[string]any, error) {

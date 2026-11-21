@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
@@ -949,10 +950,10 @@ func TestExecutePackerCommandWithRetry_MatchingError_Retries(t *testing.T) {
 	}
 
 	atmosConfig := schema.AtmosConfiguration{}
-	err = executePackerCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
-		allArgsAndFlags: []string{"build"},
-		componentPath:   t.TempDir(),
-		envVars:         info.ComponentEnvList,
+	err = executePackerCommandWithRetry(&atmosConfig, info, nil, terraformcomponent.RetryExecParams{
+		AllArgsAndFlags: []string{"build"},
+		ComponentPath:   t.TempDir(),
+		EnvVars:         info.ComponentEnvList,
 	})
 	require.Error(t, err, "all 3 attempts fail in this fixture, so the final error must propagate")
 
@@ -985,10 +986,10 @@ func TestExecutePackerCommandWithRetry_NonMatchingError_FailsFast(t *testing.T) 
 	}
 
 	atmosConfig := schema.AtmosConfiguration{}
-	err = executePackerCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
-		allArgsAndFlags: []string{"build"},
-		componentPath:   t.TempDir(),
-		envVars:         info.ComponentEnvList,
+	err = executePackerCommandWithRetry(&atmosConfig, info, nil, terraformcomponent.RetryExecParams{
+		AllArgsAndFlags: []string{"build"},
+		ComponentPath:   t.TempDir(),
+		EnvVars:         info.ComponentEnvList,
 	})
 	require.Error(t, err)
 
