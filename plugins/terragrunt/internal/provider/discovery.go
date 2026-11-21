@@ -37,14 +37,20 @@ func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverCompo
 		addresses[unit.Config.Path] = &pluginv1.ComponentAddress{Stack: unit.Stack, Component: unit.Name, ComponentType: "terraform"}
 	}
 	response := &pluginv1.DiscoverComponentsResponse{}
+	for _, failure := range result.Failures {
+		response.Diagnostics = append(response.Diagnostics, unitDiagnostic(req.BasePath, failure))
+	}
 	for i := range result.Inventory {
 		unit := &result.Inventory[i]
 		discovered, err := discoveredUnit(&req, unit, addresses)
 		if err != nil {
-			return nil, rpcError(err)
+			// One unit that cannot be described must not hide the others.
+			response.Diagnostics = append(response.Diagnostics, unitDiagnostic(req.BasePath, model.UnitFailure{Stack: unit.Stack, Name: unit.Name, Err: problemFor(err, unit.Config.Path)}))
+			continue
 		}
 		response.Components = append(response.Components, discovered)
 	}
+	response.Diagnostics = append(response.Diagnostics, warningDiagnostics(result.Warnings)...)
 	return response, nil
 }
 
@@ -86,7 +92,7 @@ func discoveredUnit(req *model.Request, unit *model.DiscoveredUnit, addresses ma
 		return nil, err
 	}
 	instance := &pluginv1.DiscoveredComponent{Address: addresses[unit.Config.Path], Provider: "terragrunt", Engine: engineName(req.Tofu), Source: source, Configuration: config, Sources: watched}
-	instance.Dependencies, err = discoveredDependencies(&unit.Config, addresses)
+	instance.Dependencies, err = discoveredDependencies(req.BasePath, &unit.Config, addresses)
 	if err != nil {
 		return nil, err
 	}
@@ -114,12 +120,17 @@ func discoveredModule(root string, cfg *model.Resolution) (string, error) {
 }
 
 // discoveredDependencies binds evaluated dependency paths to discovered addresses.
-func discoveredDependencies(cfg *model.Resolution, addresses map[string]*pluginv1.ComponentAddress) ([]*pluginv1.ComponentDependency, error) {
+func discoveredDependencies(root string, cfg *model.Resolution, addresses map[string]*pluginv1.ComponentAddress) ([]*pluginv1.ComponentDependency, error) {
 	var dependencies []*pluginv1.ComponentDependency
 	for _, path := range cfg.Dependencies {
 		target := addresses[path]
 		if target == nil {
-			return nil, ErrUnsupported
+			// The target is outside this evaluation (not discovered, or imported on its own).
+			// Name it the way discovery would, so the host can decide whether it exists.
+			var err error
+			if target, err = derivedAddress(root, path); err != nil {
+				return nil, err
+			}
 		}
 		kind := pluginv1.ComponentDependency_ORDER
 		if slices.Contains(cfg.OutputDependencies, path) {
@@ -167,4 +178,28 @@ func directoryPattern(path string) string {
 		return "**"
 	}
 	return clean + "/**"
+}
+
+// derivedAddress names a unit that was not part of the evaluation: the component is its
+// directory name and the stack is the directory above it, relative to the project.
+func derivedAddress(base, path string) (*pluginv1.ComponentAddress, error) {
+	name := filepath.Base(path)
+	if name != "terragrunt.hcl" && name != "terragrunt.hcl.json" {
+		return nil, ErrUnsupported
+	}
+	if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() {
+		return nil, ErrUnsupported
+	}
+	dir, err := relative(base, filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	stack, name := "default", "root"
+	if dir != "." {
+		name = filepath.Base(dir)
+		if parent := filepath.ToSlash(filepath.Dir(dir)); parent != "." {
+			stack = parent
+		}
+	}
+	return &pluginv1.ComponentAddress{Stack: stack, Component: name, ComponentType: "terraform"}, nil
 }

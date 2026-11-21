@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"cmp"
+	"slices"
 	"sync"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -107,7 +109,40 @@ func findAffectedParallel(
 	}
 	allAffected = append(allAffected, deletedAffected...)
 
+	// Stacks finish in any order and component maps iterate in any order, so the same
+	// comparison would otherwise print its results in a different order on every run.
+	sortAffected(allAffected)
+
 	return allAffected, nil
+}
+
+// sortAffected makes the order of results independent of goroutine scheduling and map
+// iteration: results are grouped by stack, component types within a stack follow the
+// processing order (deleted components included), and components of one type are ordered
+// by name.
+func sortAffected(affected []schema.Affected) {
+	slices.SortStableFunc(affected, func(a, b schema.Affected) int {
+		return cmp.Or(
+			cmp.Compare(a.Stack, b.Stack),
+			cmp.Compare(affectedTypeRank(a.ComponentType), affectedTypeRank(b.ComponentType)),
+			cmp.Compare(a.ComponentType, b.ComponentType),
+			cmp.Compare(a.Component, b.Component),
+			cmp.Compare(a.Affected, b.Affected),
+		)
+	})
+}
+
+// affectedTypeOrder lists component types in the order processStackAffected processes them.
+var affectedTypeOrder = slices.Concat([]string{cfg.TerraformComponentType}, simpleAffectedComponentTypes,
+	[]string{cfg.KubernetesComponentType, cfg.HelmComponentType, cfg.CloudFormationComponentType})
+
+// affectedTypeRank orders component types by affectedTypeOrder. An unknown type sorts after the
+// known ones.
+func affectedTypeRank(componentType string) int {
+	if index := slices.Index(affectedTypeOrder, componentType); index >= 0 {
+		return index
+	}
+	return len(affectedTypeOrder)
 }
 
 // processStackAffected processes a single stack to find affected components.

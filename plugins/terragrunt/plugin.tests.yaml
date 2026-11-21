@@ -52,3 +52,69 @@ integration:
     script: |
       lifecycle = module.load("scripts/lifecycle_extended.star")
       lifecycle.local_source_refresh()
+  - name: imports-and-discovery
+    type: script
+    interpreter: starlark
+    script: |
+      imports = module.load("scripts/imports.star")
+      imports.imports_and_discovery()
+  - name: stack-overrides
+    type: script
+    interpreter: starlark
+    script: |
+      imports = module.load("scripts/imports.star")
+      imports.stack_overrides()
+  - name: stack-pinned-tools
+    type: script
+    interpreter: starlark
+    script: |
+      imports = module.load("scripts/imports.star")
+      imports.stack_pinned_tools()
+  - name: diagnostics
+    type: script
+    interpreter: starlark
+    script: |
+      diagnostics = module.load("scripts/diagnostics.star")
+      diagnostics.diagnostics()
+  - name: settings-repair
+    type: script
+    interpreter: starlark
+    script: |
+      diagnostics = module.load("scripts/diagnostics.star")
+      diagnostics.settings_repair()
+  - name: saved-plan-lifecycle
+    type: script
+    interpreter: starlark
+    script: |
+      hardening = module.load("scripts/hardening.star")
+      hardening.saved_plan_lifecycle()
+  - name: local-source-stability
+    type: script
+    interpreter: starlark
+    script: |
+      hardening = module.load("scripts/hardening.star")
+      hardening.local_source_stability()
+  - name: generation-lifecycle
+    type: script
+    interpreter: starlark
+    script: |
+      hardening = module.load("scripts/hardening.star")
+      hardening.generation_lifecycle()
+  - name: state-identity-warning
+    type: script
+    interpreter: starlark
+    script: |
+      hardening = module.load("scripts/hardening.star")
+      hardening.cache_state_warning()
+  - name: hook-semantics
+    type: script
+    interpreter: starlark
+    script: |
+      hardening = module.load("scripts/hardening.star")
+      hardening.hook_semantics()
+  - name: pinned-tools
+    type: script
+    interpreter: starlark
+    script: |
+      hardening = module.load("scripts/hardening.star")
+      hardening.pinned_tools()

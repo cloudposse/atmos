@@ -5,11 +5,11 @@ components:
   terraform:
     base_path: components/terraform
     command: tofu
+    # Settings for the Terragrunt configuration provider. The provider itself comes from
+    # plugins.packages.terragrunt; the `dev` profile supplies a local build (see profiles/dev).
     terragrunt:
       enabled: true
       mode: native
       discovery:
         enabled: true
         included_paths: [live/**]
-
-# Set plugins.packages.terragrunt.path to your built local package before running.

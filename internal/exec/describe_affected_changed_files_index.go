@@ -2,8 +2,11 @@ package exec
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
+
+	"golang.org/x/sync/singleflight"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -24,12 +27,19 @@ type changedFilesIndex struct {
 	// outside a component base path, such as native Helm values_files.
 	allFilesSet map[string]struct{}
 
-	resolvedOnce sync.Once
-	resolved     *changedFilesIndex
+	// directories holds every changed file and each of its ancestor directories, so a
+	// literal folder dependency is answered by one lookup instead of a scan of all files.
+	directories     map[string]struct{}
+	directoriesOnce sync.Once
+	resolvedOnce    sync.Once
+	resolved        *changedFilesIndex
 
 	// watchMu protects filtered views for this change set.
 	watchMu      sync.Mutex
 	watchIndexes map[string]*changedFilesIndex
+
+	// watchBuilds coalesces concurrent builds of the same exclusion set.
+	watchBuilds singleflight.Group
 
 	mu sync.RWMutex
 }
@@ -252,6 +262,40 @@ func (idx *changedFilesIndex) getAllFiles() []string {
 func (idx *changedFilesIndex) isChangedFile(path string) bool {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
+	if idx.allFilesSet == nil {
+		// An index assembled without newChangedFilesIndex has no lookup set.
+		return slices.Contains(idx.allFiles, filepath.Clean(path))
+	}
 	_, ok := idx.allFilesSet[filepath.Clean(path)]
 	return ok
+}
+
+// hasChangedUnder reports whether a changed file is the path itself or lives below it.
+// It answers literal folder dependencies in constant time.
+func (idx *changedFilesIndex) hasChangedUnder(path string) bool {
+	idx.directoriesOnce.Do(func() {
+		idx.mu.RLock()
+		defer idx.mu.RUnlock()
+		idx.directories = make(map[string]struct{}, len(idx.allFiles))
+		for _, file := range idx.allFiles {
+			// An ancestor already present means all of its own ancestors are present too.
+			for dir := file; ; dir = filepath.Dir(dir) {
+				if _, seen := idx.directories[dir]; seen {
+					break
+				}
+				idx.directories[dir] = struct{}{}
+				if filepath.Dir(dir) == dir {
+					break
+				}
+			}
+		}
+	})
+	_, ok := idx.directories[filepath.Clean(path)]
+	return ok
+}
+
+// hasGlobMeta reports whether a dependency path may contain pattern syntax. Literal paths
+// take the indexed fast path; anything else keeps glob matching.
+func hasGlobMeta(path string) bool {
+	return strings.ContainsAny(filepath.ToSlash(path), "*?[]{}\\")
 }

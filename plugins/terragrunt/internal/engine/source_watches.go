@@ -1,8 +1,10 @@
 package engine
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,122 +19,541 @@ import (
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
-var errTrackSources = errors.New("cannot track configuration sources in")
+// lockFileName is the provider lock file Terragrunt keeps beside a unit.
+const lockFileName = ".terraform.lock.hcl"
+
+const hclExtension = ".hcl"
+
+const readConfigFunction = "read_terragrunt_config"
+
+// fileScan is the evaluation scope of one HCL file being inspected.
+type fileScan struct {
+	// base resolves relative paths named by file functions in this file.
+	base string
+	// unit is the directory get_terragrunt_dir() reports while this file is evaluated.
+	unit string
+	ctx  *hcl.EvalContext
+}
+
+// queuedFile is an HCL file to inspect. Files recorded by unit evaluation keep
+// its scope; files reached through configuration reads establish their own scope.
+type queuedFile struct {
+	path     string
+	required bool
+	// unit overrides the evaluation directory of an optional file. A configuration included by a
+	// file read through read_terragrunt_config evaluates in the including file's scope.
+	unit string
+}
+
+// watchTracker collects everything a unit reads that partial discovery does not
+// evaluate: input expressions, generate blocks, extra arguments, and hooks.
+type watchTracker struct {
+	watchEvaluator
+	result  *model.Resolution
+	files   map[string]struct{}
+	folders map[string]struct{}
+	visited map[[2]string]struct{}
+	queue   []queuedFile
+	err     error
+}
 
 // trackInputSources inspects syntax, not values. Partial discovery intentionally
 // leaves inputs unevaluated; syntax watches include conditional and optional reads
-// without reading state, decrypting secrets, or invoking user commands.
-//
-// Configuration that inputs read (read_terragrunt_config) is scanned the same way, transitively,
-// so a change to its own inputs' sources affects the unit. Each file is scanned once.
+// without reading state, decrypting secrets, or invoking user commands. Paths are
+// resolved with a pure expression subset (see watchEvaluator) so the common
+// get_terragrunt_dir() idioms name exact files; only genuinely unresolvable
+// expressions watch the whole project.
 func trackInputSources(fs afero.Fs, root string, result *model.Resolution) error {
-	scanned := map[string]bool{}
-	for i := 0; i < len(result.Files); i++ {
-		path := result.Files[i]
-		if scanned[path] || !strings.HasSuffix(path, ".hcl") {
-			continue
-		}
-		scanned[path] = true
-		contents, err := afero.ReadFile(fs, path)
-		if err != nil {
-			// mark_as_read records paths without opening them, including absent files.
-			// Keep absent watches, but never hide permission or other I/O failures.
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			return fmt.Errorf("track configuration sources %s: %w", path, err)
-		}
-		if err := scanInputSources(fs, root, path, contents, result); err != nil {
-			return err
-		}
+	tracker := newWatchTracker(fs, root, result)
+	if err := tracker.scan(); err != nil {
+		return err
 	}
-	result.Files = slices.Compact(slices.Sorted(slices.Values(result.Files)))
-	result.Folders = slices.Compact(slices.Sorted(slices.Values(result.Folders)))
+	tracker.addStaticWatches()
+	tracker.merge()
 	return nil
 }
 
-// scanInputSources adds syntax-derived watches while retaining non-HCL data files.
-func scanInputSources(fs afero.Fs, root, path string, contents []byte, result *model.Resolution) error {
-	file, diagnostics := hclsyntax.ParseConfig(contents, path, hcl.InitialPos)
+func newWatchTracker(fs afero.Fs, root string, result *model.Resolution) *watchTracker {
+	tracker := &watchTracker{
+		watchEvaluator: watchEvaluator{fs: fs, root: root, unit: unitDirectory(result), original: unitDirectory(result)},
+		result:         result,
+		files:          map[string]struct{}{},
+		folders:        map[string]struct{}{},
+		visited:        map[[2]string]struct{}{},
+	}
+	if contents, err := afero.ReadFile(fs, tracker.unitFile()); err == nil {
+		if file, diagnostics := hclsyntax.ParseConfig(contents, tracker.unitFile(), hcl.InitialPos); !diagnostics.HasErrors() {
+			tracker.parent = tracker.includeParent(file.Body.(*hclsyntax.Body))
+		}
+	}
+	return tracker
+}
+
+// unitDirectory is the directory get_terragrunt_dir() reports.
+func unitDirectory(result *model.Resolution) string {
+	if result.Path != "" {
+		return filepath.Dir(result.Path)
+	}
+	for _, path := range result.Files {
+		if strings.HasSuffix(path, hclExtension) {
+			return filepath.Dir(path)
+		}
+	}
+	return "."
+}
+
+func (t *watchTracker) unitFile() string {
+	if t.result.Path != "" {
+		return t.result.Path
+	}
+	return filepath.Join(t.unit, "terragrunt.hcl")
+}
+
+func (t *watchTracker) scan() error {
+	for _, path := range t.result.Files {
+		// Lock files are watched, never inspected: they hold no expressions.
+		if strings.HasSuffix(path, hclExtension) && filepath.Base(path) != lockFileName {
+			t.queue = append(t.queue, queuedFile{path: path, required: true})
+		}
+	}
+	for len(t.queue) > 0 {
+		next := t.queue[0]
+		t.queue = t.queue[1:]
+		scope := t.unit
+		if !next.required {
+			scope = cmp.Or(next.unit, filepath.Dir(next.path))
+		}
+		key := [2]string{next.path, scope}
+		if _, seen := t.visited[key]; seen {
+			continue
+		}
+		t.visited[key] = struct{}{}
+		if err := t.scanFile(next); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *watchTracker) scanFile(next queuedFile) error {
+	contents, err := afero.ReadFile(t.fs, next.path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("track configuration sources %s: %w", next.path, err)
+	}
+	file, diagnostics := hclsyntax.ParseConfig(contents, next.path, hcl.InitialPos)
 	if diagnostics.HasErrors() {
 		// Files also lists data files that functions read, and a data file may be named
 		// *.hcl without being HCL. Every configuration file already parsed during
 		// evaluation, so one that does not parse is data: it stays a file watch.
 		return nil
 	}
-	inputs := file.Body.(*hclsyntax.Body).Attributes["inputs"]
-	if inputs == nil {
-		return nil
+	body := file.Body.(*hclsyntax.Body)
+	// Terragrunt evaluates a file read with read_terragrunt_config as that file's own
+	// configuration, so get_terragrunt_dir() there names the read file's directory.
+	// The unit's own files and includes keep the unit's directory.
+	evaluator := t.watchEvaluator
+	if !next.required {
+		evaluator.unit = cmp.Or(next.unit, filepath.Dir(next.path))
+		evaluator.parent = evaluator.includeParent(body)
 	}
-	var scanErr error
-	walk := hclsyntax.VisitAll(inputs.Expr, func(node hclsyntax.Node) hcl.Diagnostics {
+	scan := fileScan{base: filepath.Dir(next.path), unit: evaluator.unit, ctx: evaluator.context(evaluator.locals(body))}
+	if inputs := body.Attributes["inputs"]; inputs != nil {
+		t.visit(scan, inputs.Expr)
+	}
+	for _, block := range body.Blocks {
+		t.scanBlock(scan, block, next.required)
+	}
+	return t.err
+}
+
+func (t *watchTracker) scanBlock(scan fileScan, block *hclsyntax.Block, required bool) {
+	switch block.Type {
+	case "generate", "remote_state":
+		t.visit(scan, block)
+	case "terraform":
+		t.scanTerraform(scan, block)
+	case "include":
+		// Discovery already followed the unit's own includes; the includes of a file reached
+		// through read_terragrunt_config are followed here.
+		if !required {
+			t.followInclude(scan, block)
+		}
+	case "locals":
+		// Discovery already evaluated the unit's own locals; files reached through
+		// read_terragrunt_config are only inspected here.
+		if !required {
+			t.visit(scan, block)
+		}
+	}
+}
+
+func (t *watchTracker) visit(scan fileScan, node hclsyntax.Node) {
+	_ = hclsyntax.VisitAll(node, func(node hclsyntax.Node) hcl.Diagnostics {
 		if call, ok := node.(*hclsyntax.FunctionCallExpr); ok {
-			if scanErr == nil {
-				scanErr = trackSourceCall(fs, root, filepath.Dir(path), call, result)
-			}
+			t.trackCall(scan, call)
 		}
 		return nil
 	})
-	if walk.HasErrors() {
-		return fmt.Errorf("%w %s", errTrackSources, path)
-	}
-	return scanErr
 }
 
-func trackSourceCall(fs afero.Fs, root, directory string, call *hclsyntax.FunctionCallExpr, result *model.Resolution) error {
+// trackCall names the files one function call reads.
+func (t *watchTracker) trackCall(scan fileScan, call *hclsyntax.FunctionCallExpr) {
 	switch call.Name {
 	case "file", "fileexists", "filebase64", "filemd5", "filesha1", "filesha256", "filesha512",
-		"filebase64sha256", "filebase64sha512", "templatefile", "read_tfvars_file", "read_terragrunt_config",
-		"sops_decrypt_file", "mark_as_read", "fileset", "find_in_parent_folders":
-	default:
-		return nil
-	}
-	name, known := literalSourcePath(call)
-	if !known {
-		result.Folders = append(result.Folders, root)
-		return nil
-	}
-	path := localPath(directory, name)
-	if call.Name == "read_terragrunt_config" {
-		var err error
-		path, err = watchedConfigPath(fs, path, result)
-		if err != nil {
-			return err
+		"filebase64sha256", "filebase64sha512", "templatefile", "read_tfvars_file", readConfigFunction,
+		"sops_decrypt_file", "mark_as_read":
+		t.trackFile(scan, call)
+	case "fileset":
+		if path, ok := t.firstPath(scan, call); ok {
+			t.add(t.folders, path)
+		} else {
+			t.fallback()
 		}
+	case "find_in_parent_folders":
+		value, diagnostics := call.Value(scan.ctx)
+		if diagnostics.HasErrors() || value.IsNull() || !value.IsKnown() || value.Type() != cty.String {
+			t.fallback()
+			return
+		}
+		t.addDetected(value.AsString())
 	}
-	if call.Name == "fileset" {
-		result.Folders = append(result.Folders, path)
-	} else {
-		result.Files = append(result.Files, path)
-	}
-	return nil
 }
 
-// watchedConfigPath retains directory creation watches and scans the selected configuration.
-func watchedConfigPath(fs afero.Fs, path string, result *model.Resolution) (string, error) {
-	info, err := fs.Stat(path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return "", err
+// trackFile watches the file a read function names and follows configuration files it reads.
+func (t *watchTracker) trackFile(scan fileScan, call *hclsyntax.FunctionCallExpr) {
+	path, ok := t.firstPath(scan, call)
+	if !ok {
+		t.fallback()
+		return
 	}
+	if call.Name == readConfigFunction && t.followConfigurationDirectory(path) {
+		return
+	}
+	t.add(t.files, path)
+	if call.Name != readConfigFunction {
+		return
+	}
+	if strings.HasSuffix(path, ".json") {
+		// JSON expressions need conservative watches; every other suffix is native HCL.
+		t.fallback()
+	} else {
+		t.queue = append(t.queue, queuedFile{path: path})
+	}
+}
+
+// followConfigurationDirectory handles a directory passed to read_terragrunt_config. Terragrunt
+// reads the default configuration inside it, so the directory is watched, which also covers a
+// configuration created later, and the default configuration is inspected when it exists.
+func (t *watchTracker) followConfigurationDirectory(path string) bool {
+	info, err := t.fs.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		result.Folders = append(result.Folders, path)
-		return path, nil
+		// A currently absent config target may later be created as a directory.
+		t.add(t.folders, path)
+		return false
+	}
+	if err != nil {
+		t.err = err
+		return true
 	}
 	if !info.IsDir() {
-		return path, nil
+		return false
 	}
-	result.Folders = append(result.Folders, path)
-	return config.GetDefaultConfigPath(fs, path), nil
+	t.add(t.folders, path)
+	selected := config.GetDefaultConfigPath(t.fs, path)
+	t.add(t.files, selected)
+	if strings.HasSuffix(selected, ".json") {
+		t.fallback()
+	} else {
+		t.queue = append(t.queue, queuedFile{path: selected})
+	}
+	return true
 }
 
-// literalSourcePath leaves dynamic and parent-search expressions as conservative directory watches.
-func literalSourcePath(call *hclsyntax.FunctionCallExpr) (string, bool) {
-	if len(call.Args) == 0 || call.Name == "find_in_parent_folders" {
+// followInclude watches the configuration an include block names and inspects it in the scope of
+// the file that includes it. An include whose path cannot be resolved may name any file, so the
+// watch widens to the project.
+func (t *watchTracker) followInclude(scan fileScan, block *hclsyntax.Block) {
+	attribute := block.Body.Attributes["path"]
+	if attribute == nil {
+		t.fallback()
+		return
+	}
+	value, ok := stringOf(attribute.Expr, scan.ctx)
+	if !ok {
+		t.fallback()
+		return
+	}
+	path := localPath(scan.unit, value)
+	t.add(t.files, path)
+	if strings.HasSuffix(path, ".json") {
+		t.fallback()
+	} else {
+		t.queue = append(t.queue, queuedFile{path: path, unit: scan.unit})
+	}
+}
+
+// firstPath uses the evaluation directory for configuration reads and the authored
+// file directory for ordinary file functions, matching their different upstream bases.
+func (t *watchTracker) firstPath(scan fileScan, call *hclsyntax.FunctionCallExpr) (string, bool) {
+	if len(call.Args) == 0 {
 		return "", false
 	}
-	value, diagnostics := call.Args[0].Value(nil)
-	if diagnostics.HasErrors() || !value.IsKnown() || value.IsNull() || value.Type() != cty.String {
+	path, ok := stringOf(call.Args[0], scan.ctx)
+	if !ok {
 		return "", false
 	}
-	return value.AsString(), true
+	if call.Name == readConfigFunction {
+		return localPath(scan.unit, path), true
+	}
+	return localPath(scan.base, path), true
+}
+
+// scanTerraform watches var files and hook scripts. Hooks and extra arguments
+// run later under the host; only the files they name matter for selection.
+func (t *watchTracker) scanTerraform(scan fileScan, block *hclsyntax.Block) {
+	t.visit(scan, block)
+	for _, child := range block.Body.Blocks {
+		switch child.Type {
+		case "extra_arguments":
+			for _, name := range []string{"required_var_files", "optional_var_files"} {
+				if attribute := child.Body.Attributes[name]; attribute != nil {
+					t.watchList(scan, attribute.Expr)
+				}
+			}
+			if attribute := child.Body.Attributes["arguments"]; attribute != nil {
+				t.watchVarFileArguments(scan, attribute.Expr)
+			}
+		case "before_hook", "after_hook", "error_hook":
+			t.watchHook(scan, child.Body)
+		}
+	}
+}
+
+// watchVarFileArguments finds explicit Terraform var files in extra_arguments.
+// An unresolved word could itself be a var-file flag or its path, so it must
+// conservatively watch the project even when other arguments are known.
+func (t *watchTracker) watchVarFileArguments(scan fileScan, expression hclsyntax.Expression) {
+	words, resolved := hookWords(scan, expression)
+	if !resolved {
+		t.fallback()
+	}
+	for index := 0; index < len(words); index++ {
+		word := words[index]
+		if word == "-var-file" {
+			if index+1 == len(words) || words[index+1] == "" {
+				t.fallback()
+				continue
+			}
+			index++
+			t.add(t.files, localPath(t.unit, words[index]))
+		} else if path, found := strings.CutPrefix(word, "-var-file="); found {
+			if path == "" {
+				t.fallback()
+				continue
+			}
+			t.add(t.files, localPath(t.unit, path))
+		}
+	}
+}
+
+// listElements returns the element expressions of a literal list. A computed
+// list is one element: its whole value is evaluated at once.
+func listElements(expression hclsyntax.Expression) []hclsyntax.Expression {
+	if tuple, ok := expression.(*hclsyntax.TupleConsExpr); ok {
+		return tuple.Exprs
+	}
+	return []hclsyntax.Expression{expression}
+}
+
+// watchList watches each string in a list. Elements that cannot be resolved
+// widen the watch to the project root.
+func (t *watchTracker) watchList(scan fileScan, expression hclsyntax.Expression) {
+	for _, element := range listElements(expression) {
+		if path, ok := stringOf(element, scan.ctx); ok {
+			t.add(t.files, localPath(t.unit, path))
+			continue
+		}
+		if values, diagnostics := element.Value(scan.ctx); !diagnostics.HasErrors() && values.IsWhollyKnown() && !values.IsNull() && values.CanIterateElements() {
+			for _, value := range values.AsValueSlice() {
+				if value.Type() == cty.String && !value.IsNull() {
+					t.add(t.files, localPath(t.unit, value.AsString()))
+				}
+			}
+			continue
+		}
+		t.fallback()
+	}
+}
+
+// watchHook watches the hook program (and script arguments) when they live in
+// the project, plus the hook working directory. Resolution is best effort: a
+// program found on PATH is not a project file.
+func (t *watchTracker) watchHook(scan fileScan, body *hclsyntax.Body) {
+	// Relative script paths resolve against the hook's working directory when it names one.
+	// The whole directory is watched, which also covers slashless script arguments in it.
+	base := t.unit
+	if attribute := body.Attributes["working_dir"]; attribute != nil {
+		directory, ok := stringOf(attribute.Expr, scan.ctx)
+		if !ok {
+			// A script may live anywhere the unresolved directory points, so widen the watch.
+			t.fallback()
+			return
+		}
+		base = localPath(t.unit, directory)
+		t.add(t.folders, base)
+	}
+	execute := body.Attributes["execute"]
+	if execute == nil {
+		return
+	}
+	words, resolved := hookWords(scan, execute.Expr)
+	if !resolved {
+		// An unresolved word may name a project script, so widen the watch.
+		t.fallback()
+	}
+	for index, word := range words {
+		if !strings.ContainsAny(word, `/\`) {
+			continue
+		}
+		path := localPath(base, word)
+		if info, err := t.fs.Stat(path); index == 0 || (err == nil && !info.IsDir()) {
+			t.add(t.files, path)
+		}
+	}
+}
+
+// hookWords returns the words of a hook's `execute` list, evaluating a computed list such as
+// `execute = local.command` as a whole. It reports false when any word cannot be resolved.
+func hookWords(scan fileScan, expression hclsyntax.Expression) ([]string, bool) {
+	var words []string
+	resolved := true
+	for _, element := range listElements(expression) {
+		if word, ok := stringOf(element, scan.ctx); ok {
+			words = append(words, word)
+			continue
+		}
+		values, diagnostics := element.Value(scan.ctx)
+		if diagnostics.HasErrors() || !values.IsWhollyKnown() || values.IsNull() || !values.CanIterateElements() {
+			resolved = false
+			continue
+		}
+		for _, value := range values.AsValueSlice() {
+			if value.Type() == cty.String && !value.IsNull() {
+				words = append(words, value.AsString())
+			}
+		}
+	}
+	return words, resolved
+}
+
+// add records a watch inside the project; paths outside it cannot appear in the
+// project's change set and would make the whole inventory unreportable, unless a symlink leads back in.
+func (t *watchTracker) add(set map[string]struct{}, path string) {
+	if within(path, t.root) {
+		set[path] = struct{}{}
+		return
+	}
+	// A link outside the project can lead into it. Git reports changes by the target's path, so the
+	// canonical target is the watch.
+	if resolved, err := canonicalPath(path); err == nil && resolved != path && within(resolved, t.root) {
+		set[resolved] = struct{}{}
+	}
+}
+
+func (t *watchTracker) addDetected(path string) {
+	if info, err := t.fs.Stat(path); err == nil && info.IsDir() {
+		t.add(t.folders, path)
+		return
+	}
+	t.add(t.files, path)
+}
+
+// fallback watches the whole project for expressions that cannot be resolved.
+// Unknown paths can refer anywhere; a root directory watch is deliberately
+// conservative and catches new files as well as changed files.
+func (t *watchTracker) fallback() {
+	t.folders[t.root] = struct{}{}
+}
+
+// addStaticWatches adds inputs to every unit that appear in no expression: the
+// lock file beside the unit, and the whole directory Terragrunt copies when the
+// source selects a subdirectory with `//`.
+func (t *watchTracker) addStaticWatches() {
+	t.add(t.files, filepath.Join(t.unit, lockFileName))
+	if source := t.result.Source; source != "" && !plainLocalSource(source) {
+		if copied, ok := copiedSourceRoot(t.unit, source); ok {
+			t.add(t.folders, copied)
+		} else if repository, ok := gitFileRepository(source); ok {
+			t.add(t.folders, repository)
+		}
+	}
+}
+
+// gitFileRepository returns the local repository a `git::file://` source clones. When it lies in
+// the project it is watched whole, so the module and the relative var files copied with it select
+// the unit. The add method drops a repository outside the project, whose changes the project cannot contain.
+func gitFileRepository(source string) (string, bool) {
+	rest, found := strings.CutPrefix(source, "git::file://")
+	if !found {
+		return "", false
+	}
+	rest, _, _ = strings.Cut(rest, "?")
+	if index := strings.Index(rest, "//"); index > 0 {
+		rest = rest[:index]
+	}
+	// A file URL can name a Windows volume after the leading slash.
+	if len(rest) > 2 && rest[0] == '/' && rest[2] == ':' {
+		rest = rest[1:]
+	}
+	if rest == "" {
+		return "", false
+	}
+	return filepath.Clean(filepath.FromSlash(rest)), true
+}
+
+// copiedSourceRoot returns the directory a local `dir//subdir` source copies: the
+// whole tree before `//`, so sibling modules referenced by relative path count.
+func copiedSourceRoot(unit, source string) (string, bool) {
+	volume := filepath.VolumeName(source)
+	rest := source[len(volume):]
+	if strings.ContainsAny(rest, "?:") {
+		return "", false
+	}
+	index := strings.Index(filepath.ToSlash(rest), "//")
+	if index <= 0 {
+		return "", false
+	}
+	return localPath(unit, volume+rest[:index]), true
+}
+
+// merge folds the collected watches into the resolution. Symlinked paths watch
+// the resolved target as well as the link, because Git reports changes by the
+// target's path. Files already covered by a watched folder are dropped: they add
+// nothing, and they differ between checkouts when a folder is a submodule that
+// one revision has not populated.
+func (t *watchTracker) merge() {
+	files := slices.Concat(t.result.Files, slices.Collect(maps.Keys(t.files)))
+	folders := slices.Concat(t.result.Folders, slices.Collect(maps.Keys(t.folders)))
+	files = append(files, t.symlinkTargets(files)...)
+	folders = append(folders, t.symlinkTargets(folders)...)
+	folders = slices.Compact(slices.Sorted(slices.Values(folders)))
+	files = slices.DeleteFunc(files, func(path string) bool {
+		return path != t.result.Path && slices.ContainsFunc(folders, func(folder string) bool { return within(path, folder) })
+	})
+	t.result.Files = slices.Compact(slices.Sorted(slices.Values(files)))
+	t.result.Folders = folders
+}
+
+func (t *watchTracker) symlinkTargets(paths []string) []string {
+	var targets []string
+	for _, path := range paths {
+		resolved, err := canonicalPath(path)
+		if err == nil && resolved != path && within(resolved, t.root) {
+			targets = append(targets, resolved)
+		}
+	}
+	return targets
 }

@@ -21,13 +21,6 @@ import (
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
-var (
-	errModuleSourceTransport = errors.New("native adapter does not support this module source transport")
-	errTerraformSource       = errors.New("native adapter requires terraform.source")
-	errTerraformBinary       = errors.New("native adaptation of terraform_binary is not implemented")
-	errUnsupportedSettings   = errors.New("native adaptation of errors, exclude, feature flags, or IAM settings is not implemented")
-)
-
 // ErrVersionRejected reports a terraform or terragrunt version that violates a
 // declared version constraint.
 var ErrVersionRejected = errors.New("version constraint rejected")
@@ -92,23 +85,23 @@ func checkVersions(ctx context.Context, request *model.Request, terraform, terra
 // checkUnitPolicies rejects Terragrunt semantics that the native adapter cannot
 // represent faithfully. Backend reads skip the version probe, which may execute
 // the selected binary.
-func checkUnitPolicies(ctx context.Context, request *model.Request, cfg *config.TerragruntConfig) error {
+func checkUnitPolicies(ctx context.Context, request *model.Request, cfg *config.TerragruntConfig, path string) error {
 	if missingTerraformSource(cfg) {
-		return errTerraformSource
+		return missingSourceProblem(path)
 	}
 	if request.Phase != "backend" {
 		if err := checkVersions(ctx, request, cfg.TerraformVersionConstraint, cfg.TerragruntVersionConstraint); err != nil {
 			return err
 		}
 	}
-	if cfg.TerraformBinary != "" {
-		return errTerraformBinary
+	if err := rejectUnsupported(cfg, path); err != nil {
+		return err
 	}
 	// Hooks and extra arguments are adapted as execution data by unitExecution.
 	if err := checkPreventDestroy(request, cfg); err != nil {
 		return err
 	}
-	return checkUnsupportedSettings(cfg)
+	return nil
 }
 
 // checkPreventDestroy evaluates the same effective arguments as the engine.
@@ -126,25 +119,44 @@ func checkPreventDestroy(request *model.Request, cfg *config.TerragruntConfig) e
 	return nil
 }
 
-// checkUnsupportedSettings rejects error handling, exclusion, feature flag and
-// IAM settings, which have no native equivalent.
-func checkUnsupportedSettings(cfg *config.TerragruntConfig) error {
-	if cfg.Errors != nil || cfg.Exclude != nil || len(cfg.FeatureFlags) > 0 || cfg.IamRole != "" || cfg.IamWebIdentityToken != "" {
-		return errUnsupportedSettings
+// localSubdirSource reports a local module path that selects a subdirectory with `//`, such as
+// `../modules/sub//app`. Terragrunt copies the tree before `//`, so it is no remote transport. Only an
+// explicit local spelling counts: a bare `host/org/repo//dir` is a remote shorthand.
+func localSubdirSource(source string) bool {
+	if _, ok := copiedSourceRoot("", source); !ok {
+		return false
 	}
-	return nil
+	return filepath.IsAbs(source) || strings.HasPrefix(source, ".")
+}
+
+// absoluteSubdirSource rebuilds a local `dir//subdir` source on its resolved root, so the root no
+// longer depends on the host's working directory and the `//` root/subdirectory split survives.
+func absoluteSubdirSource(root, source string) string {
+	_, subdirectory, _ := strings.Cut(filepath.ToSlash(source), "//")
+	if subdirectory == "" {
+		return root
+	}
+	return root + "//" + subdirectory
 }
 
 // validateRemoteSource preserves the getter URI for Atmos's source provisioner.
 // Registry sources need Terragrunt version selection and are not interchangeable
 // with direct archive or Git sources.
 func validateRemoteSource(source string) error {
+	if localSubdirSource(source) {
+		return nil
+	}
 	for _, prefix := range []string{"git::https://", "git::http://", "git::ssh://", "git::file://", "https://", "http://"} {
 		if strings.HasPrefix(source, prefix) {
 			return nil
 		}
 	}
-	return errModuleSourceTransport
+	return &model.Problem{
+		Code: model.CodeInvalidSource, Summary: "Unsupported module source transport",
+		Detail: "The module source transport is not supported. Registry sources such as `tfr://` need Terragrunt's version selection and are not interchangeable with Git or archive sources.",
+		Hints:  []string{"Use a local path, a `git::https://`, `git::ssh://`, or `https://` source, or a Git source pinned with `?ref=`."},
+		Key:    "terraform.source", Safe: true, Err: ErrUnsupportedExecution,
+	}
 }
 
 // effectivePolicyArguments matches engine insertion order: command environment,

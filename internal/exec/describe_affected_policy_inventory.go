@@ -70,6 +70,13 @@ func affectedPolicyConfig(config *schema.AtmosConfiguration, root, checkout stri
 		*path = rebased
 	}
 	copyConfig.BasePath = copyConfig.BasePathAbsolute
+	// BASE resolves provider imports in its own checkout with its own session; the HEAD session
+	// caches imports against HEAD's root and would hide changed units from input.changes.
+	if filepath.Clean(checkout) != filepath.Clean(root) {
+		if err := rebaseConfigurationDiscovery(&copyConfig); err != nil {
+			return nil, err
+		}
+	}
 	includeEmpty := true
 	copyConfig.Describe.Settings.IncludeEmpty = &includeEmpty
 	include, err := u.JoinPaths(copyConfig.StacksBaseAbsolutePath, copyConfig.Stacks.IncludedPaths)

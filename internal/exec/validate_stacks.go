@@ -121,6 +121,14 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	validationErrorMessages = append(validationErrorMessages, errorList...)
 
+	// Additional manifests may contain imports absent from the selected stacks. Give
+	// those reads a validation view so they cannot alter the discovered inventory.
+	if runtime, ok := atmosConfig.ComponentConfigurations.(schema.ComponentConfigurationValidationRuntime); ok {
+		validationConfig := *atmosConfig
+		validationConfig.ComponentConfigurations = runtime.ForValidation()
+		atmosConfig = &validationConfig
+	}
+
 	// 2. Check all YAML stack manifests defined in the infrastructure
 	// It will check YAML syntax and all the Atmos sections defined in the manifests
 
