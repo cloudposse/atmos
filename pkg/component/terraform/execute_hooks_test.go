@@ -1219,6 +1219,51 @@ func TestInitRecoveryRetriesInsideOneHookLifecycle(t *testing.T) {
 	require.Equal(t, "Apply complete!", info.ExecMetadataRawOutput, "exec metadata must reflect only the retry")
 }
 
+// TestInitRecoveryRetryMatchesErrorPoliciesAgainstItsOwnOutput verifies that a retry after the forced
+// init is matched against its own standard error only. The first attempt's diagnostic, which the init
+// already handled, must not make an ignore policy swallow a different failure of the retry.
+func TestInitRecoveryRetryMatchesErrorPoliciesAgainstItsOwnOutput(t *testing.T) {
+	run := func(t *testing.T, retryStderr string) error {
+		t.Helper()
+		attempts := 0
+		shell := newShellFixture(t, func(call *shellCall) error {
+			if call.command != "terraform" {
+				return nil
+			}
+			attempts++
+			text := retryStderr
+			if attempts == 1 {
+				text = "Error: Backend configuration changed"
+				_, _ = io.WriteString(call.options.ExecMetadataStderrCapture, text)
+			}
+			if call.options.StderrCapture != nil {
+				_, _ = io.WriteString(call.options.StderrCapture, text)
+			}
+			return errUtils.ExitCodeError{Code: 1}
+		})
+		executor := testExecutor(t)
+		executor.services.ExecuteShellCommand = shell.mock.Execute
+		executor.executeTerraformInitForcedFn = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string, bool, bool, ...ShellCommandOption) error {
+			return nil
+		}
+		config := &schema.AtmosConfiguration{}
+		config.Components.Terraform.Init.Reconfigure = schema.TerraformInitReconfigureAuto
+		info := hookInfo("apply", &schema.ComponentExecution{
+			AfterHooks: []schema.ComponentHook{execHook("after", "apply")},
+			Errors:     &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "stale", Patterns: []string{"Backend configuration changed"}}}},
+		})
+		execCtx := &componentExecContext{componentPath: t.TempDir()}
+		return executor.runMainCommandPhase(config, info, execCtx, []string{"apply"}, execCtx.componentPath, false)
+	}
+
+	t.Run("an unrelated retry failure is not ignored by the first diagnostic", func(t *testing.T) {
+		require.Error(t, run(t, "Error: quota exceeded"))
+	})
+	t.Run("a retry that fails with the matching text is still ignored", func(t *testing.T) {
+		require.NoError(t, run(t, "Error: Backend configuration changed"))
+	})
+}
+
 // TestInitRecoveryWithoutHooksStillRetriesOnce verifies that a component without provider
 // hooks keeps the existing recovery path and retries the main command exactly once.
 func TestInitRecoveryWithoutHooksStillRetriesOnce(t *testing.T) {

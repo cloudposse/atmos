@@ -2290,6 +2290,10 @@ type ConfigAndStacksInfo struct {
 	// reviewed one. A directory accepted only as a verified rebuild never sets it: the rebuild digest
 	// leaves the variable files out.
 	ConfigurationPlanWorkdirExact bool `yaml:"-" json:"-" mapstructure:"-"`
+	// ConfigurationPlanVarfile holds the bytes of that variable file as they were read around the
+	// digest comparison. A hook binds these bytes, never a later read of the file, so what it consumes is
+	// what the verification covered.
+	ConfigurationPlanVarfile []byte `yaml:"-" json:"-" mapstructure:"-"`
 	// VerifyPlanMode carries the explicit CLI planfile-verify override for `deploy`
 	// (--verify-plan => fail, --verify-plan=false => off; empty when the flag is unset).
 	// It is resolved against config + CI mode via planfile.ResolveVerifyMode at the

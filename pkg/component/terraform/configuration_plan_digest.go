@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -461,13 +462,8 @@ func effectiveDataDir(config *schema.AtmosConfiguration, info *schema.ConfigAndS
 		entries = envpkg.MergeGlobalEnv(entries, config.Env)
 	}
 	entries = append(entries, info.ComponentEnvList...)
-	for i := len(entries) - 1; i >= 0; i-- {
-		if value, found := strings.CutPrefix(entries[i], tfDataDirEnv+"="); found {
-			if value == "" {
-				break
-			}
-			return value
-		}
+	if value, found := lastEnvListValue(entries, tfDataDirEnv, runtime.GOOS); found && value != "" {
+		return value
 	}
 	return defaultDataDir
 }

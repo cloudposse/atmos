@@ -112,10 +112,13 @@ func configurationPlanPath(config *schema.AtmosConfiguration, info *schema.Confi
 // which re-provisions the directory.
 func restoreConfigurationPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
 	// The mark on the invocation is sticky, so this call's own result is read from a cleared mark.
-	marked := info.ConfigurationPlanWorkdirExact
-	info.ConfigurationPlanWorkdirExact = false
+	marked, markedVarfile := info.ConfigurationPlanWorkdirExact, info.ConfigurationPlanVarfile
+	info.ConfigurationPlanWorkdirExact, info.ConfigurationPlanVarfile = false, nil
 	prepared, err := restoreSettledConfigurationPlan(ctx, config, info)
 	exact := info.ConfigurationPlanWorkdirExact
+	if !exact {
+		info.ConfigurationPlanVarfile = markedVarfile
+	}
 	info.ConfigurationPlanWorkdirExact = marked || exact
 	if err != nil {
 		return nil, err
@@ -218,10 +221,17 @@ func restoreReviewedWorkdir(info *schema.ConfigAndStacksInfo, plan *configuratio
 // reviewedWorkdirRetained reports whether the working directory still equals the reviewed one, either
 // as the workdir the plan ran in or as a verified rebuild of it.
 func reviewedWorkdirRetained(info *schema.ConfigAndStacksInfo, plan *configurationPlan, path, dataDir string) (bool, error) {
+	varfile := filepath.Join(plan.WorkingDirectory, ConstructTerraformComponentVarfileName(info))
+	before, _ := os.ReadFile(varfile)
 	retained, err := workdirMatches(plan, path, dataDir)
-	// Only the full digest covers the variable file, so only then are its inputs the reviewed ones.
+	// Only the full digest covers the variable file, so only then are its inputs the reviewed ones. The
+	// bytes are read on both sides of the comparison: a file that changed while it was digested is not
+	// the one the digest describes, so the workdir is then not accepted as exact.
 	if err == nil && retained {
-		info.ConfigurationPlanWorkdirExact = true
+		after, _ := os.ReadFile(varfile)
+		if bytes.Equal(before, after) {
+			info.ConfigurationPlanWorkdirExact, info.ConfigurationPlanVarfile = true, after
+		}
 	}
 	if err != nil || retained {
 		return retained, err
