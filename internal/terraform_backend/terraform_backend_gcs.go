@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -109,13 +111,12 @@ func getCachedGCSClient(backend *map[string]any, authContext *schema.AuthContext
 	// Create a proper hash to avoid collisions. Append the identity endpoint only when
 	// present so an emulator-backed read and a real-GCS read (same credentials) never
 	// alias to the same cached client; the real-cloud key format is preserved unchanged.
-	h := sha256.Sum256([]byte(credentials))
-	cacheKey := fmt.Sprintf("credentials_hash=%s;impersonate=%s",
-		hex.EncodeToString(h[:8]), // Use first 8 bytes for brevity.
-		impersonateServiceAccount)
-	if endpoint != "" {
-		cacheKey += ";endpoint=" + endpoint
+	opts, err := authOptions(credentials, authContext)
+	if err != nil && endpoint == "" {
+		// An emulator-backed read never authenticates, so only a real-GCS read must fail here.
+		return nil, err
 	}
+	cacheKey := gcsClientCacheKey(opts, impersonateServiceAccount, endpoint)
 
 	// Check the cache.
 	if cached, ok := gcsClientCache.Load(cacheKey); ok {
@@ -134,6 +135,78 @@ func getCachedGCSClient(backend *map[string]any, authContext *schema.AuthContext
 
 	gcsClientCache.Store(cacheKey, gcsClient)
 	return gcsClient, nil
+}
+
+// gcsAuthOptions selects the credentials the GCS reader authenticates with. Explicit backend
+// credentials win. Otherwise the target identity's unexpired access token is used, then its
+// credentials file, so a state read uses the target's credentials instead of the ambient ones.
+// Nothing is read from or written to the process environment. An expired identity token is an
+// error unless the credentials file can mint a new token on its own (service account key,
+// external account, or a refresh token), so the read never runs as the ambient identity or with
+// a file that only replays the expired token.
+func gcsAuthOptions(credentials string, authContext *schema.AuthContext, now time.Time) (gcp.AuthOptions, error) {
+	opts := gcp.AuthOptions{Credentials: credentials}
+	if credentials != "" || authContext == nil || authContext.GCP == nil {
+		return opts, nil
+	}
+	identity := authContext.GCP
+	if identity.AccessToken != "" {
+		if identity.TokenExpiry.IsZero() || identity.TokenExpiry.After(now) {
+			opts.AccessToken, opts.TokenExpiry = identity.AccessToken, identity.TokenExpiry
+			return opts, nil
+		}
+		if !gcsCredentialsFileCanRefresh(identity.CredentialsFile) {
+			return gcp.AuthOptions{}, fmt.Errorf("%w: expired at %s", errUtils.ErrGCSIdentityTokenExpired, identity.TokenExpiry.Format(time.RFC3339))
+		}
+	}
+	opts.Credentials = identity.CredentialsFile
+	return opts, nil
+}
+
+// gcsCredentialsFileCanRefresh reports whether the credentials file can obtain a fresh access
+// token without the identity's stored one. An unreadable or unrecognized file cannot.
+func gcsCredentialsFileCanRefresh(path string) bool {
+	if path == "" {
+		return false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var content struct {
+		Type         string `json:"type"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.Unmarshal(data, &content); err != nil {
+		return false
+	}
+	switch content.Type {
+	case "service_account", "external_account", "impersonated_service_account":
+		return true
+	}
+	return content.RefreshToken != ""
+}
+
+// gcsClientCacheKey builds a deterministic cache key. Credentials and tokens are hashed so no
+// secret appears in the key, and the token key part is added only when a token is in use so the
+// real-cloud key format is preserved unchanged.
+func gcsClientCacheKey(opts *gcp.AuthOptions, impersonateServiceAccount, endpoint string) string {
+	h := sha256.Sum256([]byte(opts.Credentials))
+	key := fmt.Sprintf("credentials_hash=%s;impersonate=%s", hex.EncodeToString(h[:8]), impersonateServiceAccount)
+	if opts.AccessToken != "" {
+		t := sha256.Sum256([]byte(opts.AccessToken))
+		key += ";token_hash=" + hex.EncodeToString(t[:8])
+	}
+	if endpoint != "" {
+		key += ";endpoint=" + endpoint
+	}
+	return key
+}
+
+// authOptions resolves the effective credentials at the current time.
+func authOptions(credentials string, authContext *schema.AuthContext) (*gcp.AuthOptions, error) {
+	opts, err := gcsAuthOptions(credentials, authContext, time.Now())
+	return &opts, err
 }
 
 // identityGCSEndpoint returns the active GCP identity's GCS emulator endpoint
@@ -204,7 +277,11 @@ func createGCSClient(ctx context.Context, backend *map[string]any, authContext *
 		opts = append(opts, option.WithoutAuthentication())
 	} else {
 		// Use unified GCP authentication.
-		opts = gcp.GetClientOptions(gcp.AuthOptions{Credentials: credentials})
+		authOpts, err := gcsAuthOptions(credentials, authContext, time.Now())
+		if err != nil {
+			return nil, err
+		}
+		opts = gcp.GetClientOptions(authOpts)
 	}
 
 	if credentials != "" {

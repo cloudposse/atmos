@@ -1,0 +1,9 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata: {name: field-test}
+spec:
+  policies:
+    no-delete:
+      on: terraform.plan
+      action: deny
+      rule: "has(input.resource_changes) && input.resource_changes.exists(r, 'delete' in r.change.actions)"
