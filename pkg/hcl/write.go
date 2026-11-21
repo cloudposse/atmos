@@ -57,8 +57,8 @@ func EncodeAttributes(data any) ([]byte, error) {
 }
 
 // quoteLeadingForKeys quotes a `for` key written right after the opening brace
-// of an object. hclwrite leaves it bare because it is a valid identifier, but
-// HCL parses `{ for` as the start of a for expression.
+// of an object. The hclwrite encoder leaves it bare because it is a valid
+// identifier, but HCL parses `{ for` as the start of a for expression.
 func quoteLeadingForKeys(tokens hclwrite.Tokens) hclwrite.Tokens {
 	out := make(hclwrite.Tokens, 0, len(tokens))
 	afterBrace := false
