@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"slices"
 	"sync"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -161,7 +162,10 @@ func processStackAffected(
 	// Process the simple (non-Terraform) component types that share processSimpleComponentsIndexed:
 	// helmfile, packer, ansible, container, and emulator. Terraform, Kubernetes, and Helm have
 	// dedicated processors with type-specific logic and are handled separately. See #3203.
-	for _, componentType := range simpleAffectedComponentTypes {
+	// Registered custom component types (for example kinds declared by custom commands) have no
+	// type-specific logic either, so they share the same processor. See #3208.
+	simpleTypes := append(slices.Clone(simpleAffectedComponentTypes), customAffectedComponentTypes(componentsSection)...)
+	for _, componentType := range simpleTypes {
 		section, ok := componentsSection[componentType].(map[string]any)
 		if !ok {
 			continue
