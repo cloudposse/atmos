@@ -180,7 +180,9 @@ func GetEnvironmentVariablesForIdentity(realm, providerName, identityName string
 	}
 
 	env["CLOUDSDK_CONFIG"] = configDir
-	env["CLOUDSDK_ACTIVE_CONFIG_NAME"] = "config_atmos"
+	// The configuration NAME (gcloud adds the "config_" file prefix itself), so gcloud
+	// loads the properties WritePropertiesFile writes to configurations/config_atmos.
+	env["CLOUDSDK_ACTIVE_CONFIG_NAME"] = ActiveConfigName
 
 	// Determine if we have an access token available.
 	hasAccessToken := gcpAuth != nil && gcpAuth.AccessToken != ""
