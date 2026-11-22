@@ -84,10 +84,8 @@ func (s *keyringCredentialStore) RetrieveWithConfigDigest(alias, realm string) (
 func (s *keyringCredentialStore) StoreExternalConfigDigest(alias, realm string, record ExternalConfigDigest) error {
 	defer perf.Track(nil, "credentials.keyringCredentialStore.StoreExternalConfigDigest")()
 
-	data, err := json.Marshal(record)
-	if err != nil {
-		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal configuration digest: %w", err))
-	}
+	// A struct of two strings always marshals.
+	data, _ := json.Marshal(record)
 	if err := s.kr.Set(buildConfigDigestKey(alias, realm), string(data)); err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to store configuration digest: %w", err))
 	}
