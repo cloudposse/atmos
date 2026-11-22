@@ -434,3 +434,11 @@ var (
 	// a different effective configuration (or cannot be shown to match it), so they are not reused.
 	ErrChainStepConfigChanged = errors.New("cached credentials do not match the chain step's current configuration")
 )
+
+// Ambiguous legacy keyring entry errors (#3720).
+var (
+	// ErrAwsUserLegacyKeyringEntryNotAdopted reports that aws/user long-lived credentials may be
+	// stored under an ambiguous previous-layout keyring key that was not adopted for the identity,
+	// because the user declined or no interactive prompt could confirm it.
+	ErrAwsUserLegacyKeyringEntryNotAdopted = errors.New("AWS user credentials may be stored under an older keyring key that was not adopted")
+)
