@@ -43,6 +43,8 @@ type ConfigManager struct {
 	mu         sync.Mutex
 	// helper runs Docker credential helpers. Nil means the default PATH-based runner.
 	helper CredentialHelper
+	// warn emits user-facing warnings. Nil means ui.Warning (stderr).
+	warn func(string)
 }
 
 // NewConfigManager creates a new Docker config manager using the default Docker config path.
@@ -93,41 +95,56 @@ func getDockerConfigDir() string {
 // entry is written to auths, matching `docker login`. A helper failure is returned
 // as ErrDockerCredentialHelper and leaves config.json unchanged. If config.json
 // cannot be saved after a successful helper store, the stored credential is
-// erased again so it is not orphaned in the helper.
+// erased again so it is not orphaned in the helper. After a successful write it
+// warns (without failing) when DOCKER_AUTH_CONFIG is set, because Docker reads
+// credentials from that variable before config.json.
 func (m *ConfigManager) WriteAuth(registry, username, password string) error {
 	defer perf.Track(nil, "docker.ConfigManager.WriteAuth")()
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	return m.withConfigLock(func() error {
-		// Load existing config or create new one.
-		config, err := m.loadConfig()
-		if err != nil {
-			return err
+	if err := m.withConfigLock(func() error {
+		return m.writeAuthLocked(registry, username, password)
+	}); err != nil {
+		return err
+	}
+
+	// The login succeeded, but Docker may still not use it in this shell.
+	if msg := dockerAuthConfigWarning(registry); msg != "" {
+		m.warner()(msg)
+	}
+	return nil
+}
+
+// writeAuthLocked is the body of WriteAuth; the caller holds the config lock.
+func (m *ConfigManager) writeAuthLocked(registry, username, password string) error {
+	// Load existing config or create new one.
+	config, err := m.loadConfig()
+	if err != nil {
+		return err
+	}
+
+	if helper := config.credentialHelperFor(registry); helper != "" {
+		// Docker ignores inline auths for this registry, so writing them would
+		// make the login silently ineffective. Store through the helper.
+		if err := m.credentialHelper().Store(helper, registry, username, password); err != nil {
+			return withHelperHint(err, helper)
 		}
-
-		if helper := config.credentialHelperFor(registry); helper != "" {
-			// Docker ignores inline auths for this registry, so writing them would
-			// make the login silently ineffective. Store through the helper.
-			if err := m.credentialHelper().Store(helper, registry, username, password); err != nil {
-				return withHelperHint(err, helper)
-			}
-			config.setAuth(registry, helperPlaceholderEntry)
-			if err := m.saveConfig(config); err != nil {
-				return m.rollbackHelperStore(err, helper, registry)
-			}
-			return nil
+		config.setAuth(registry, helperPlaceholderEntry)
+		if err := m.saveConfig(config); err != nil {
+			return m.rollbackHelperStore(err, helper, registry)
 		}
+		return nil
+	}
 
-		// Encode credentials as base64(username:password).
-		authValue := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+	// Encode credentials as base64(username:password).
+	authValue := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
 
-		// Set auth for the registry.
-		config.setAuth(registry, inlineAuthEntry(authValue))
+	// Set auth for the registry.
+	config.setAuth(registry, inlineAuthEntry(authValue))
 
-		return m.saveConfig(config)
-	})
+	return m.saveConfig(config)
 }
 
 // RemoveAuth removes ECR authorization from Docker config.
