@@ -65,7 +65,7 @@ func TestExecuteExplicitRegistries_EcrLoginHelperManagesRegistry(t *testing.T) {
 // TestExecuteExplicitRegistries_FailingHelperStillFails is the negative path:
 // a helper whose store genuinely fails still fails the login.
 func TestExecuteExplicitRegistries_FailingHelperStillFails(t *testing.T) {
-	const content = `{"credHelpers":{"` + helperTestRegistry + `":"broken"}}`
+	const content = `{"credHelpers":{"` + helperTestRegistry + `":"broken","public.ecr.aws":"broken"}}`
 	path := writeDockerConfig(t, content)
 	installFakeECRCredentialHelper(t, "broken", fakeECRHelperFail)
 	stubECRTokens(t)
@@ -74,6 +74,11 @@ func TestExecuteExplicitRegistries_FailingHelperStillFails(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrDockerCredentialHelper)
 	assert.Contains(t, err.Error(), "keychain is locked")
+
+	err = publicLogin(context.Background(), &authTypes.AWSCredentials{Region: "us-east-1"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDockerConfigWrite)
+	assert.ErrorIs(t, err, errUtils.ErrDockerCredentialHelper)
 
 	data, readErr := os.ReadFile(path)
 	require.NoError(t, readErr)
