@@ -167,12 +167,12 @@ func (g *GKEIntegration) Cleanup(_ context.Context) error {
 	if contextName == "" {
 		contextName = clusterID
 	}
-	userName := kube.UserName(gcpCloud.BuildKubeClusterInfo(&gcpCloud.GKEClusterInfo{
-		Name:      g.cluster.Name,
-		ProjectID: g.cluster.ProjectID,
-		Location:  g.cluster.Location,
-	}, g.identity))
-	if err := mgr.RemoveClusterConfig(clusterID, contextName, userName); err != nil {
+	// The username includes the identity (see gcpCloud.BuildKubeClusterInfo).
+	// Also remove the user without the identity that older versions wrote;
+	// RemoveClusterConfig keeps either user while another context still references it.
+	userName := gcpCloud.GKEKubeUserName(g.cluster.ProjectID, g.cluster.Location, g.cluster.Name, g.identity)
+	legacyUserName := gcpCloud.LegacyGKEKubeUserName(g.cluster.ProjectID, g.cluster.Location, g.cluster.Name)
+	if err := mgr.RemoveClusterConfig(clusterID, contextName, userName, legacyUserName); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
 	gkeExpectedServers.Delete(g.expectedServerKey(mgr.GetPath()))

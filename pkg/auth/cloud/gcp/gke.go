@@ -114,6 +114,9 @@ func DescribeCluster(ctx context.Context, client GKEClient, projectID, location,
 	}, nil
 }
 
+// gkeUserPrefix distinguishes GKE exec-plugin usernames in a kubeconfig.
+const gkeUserPrefix = "gke"
+
 // ClusterResourceName returns the canonical fully-qualified GKE cluster name.
 func ClusterResourceName(projectID, location, name string) string {
 	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s", projectID, location, name)
@@ -138,11 +141,41 @@ func BuildKubeClusterInfo(info *GKEClusterInfo, identityName string) *kube.Clust
 		Endpoint:                 info.Endpoint,
 		CertificateAuthorityData: info.CertificateAuthorityData,
 		ID:                       info.ID,
-		Region:                   info.ProjectID + "-" + info.Location,
-		UserPrefix:               "gke",
+		Region:                   gkeUserRegion(info.ProjectID, info.Location),
+		UserPrefix:               gkeUserPrefix,
+		Identity:                 identityName,
 		ExecArgs:                 execArgs,
 		ExecEnv:                  execEnv,
 	}
+}
+
+// GKEKubeUserName returns the kubeconfig exec-plugin username that
+// BuildKubeClusterInfo produces for a cluster when authenticating as
+// identityName: atmos-gke-<name>-<project>-<location>[-<identity>]. The
+// identity keeps contexts for different identities from sharing one user.
+func GKEKubeUserName(projectID, location, clusterName, identityName string) string {
+	defer perf.Track(nil, "gcp.GKEKubeUserName")()
+
+	return kube.UserName(&kube.ClusterInfo{
+		Name:       clusterName,
+		Region:     gkeUserRegion(projectID, location),
+		UserPrefix: gkeUserPrefix,
+		Identity:   identityName,
+	})
+}
+
+// LegacyGKEKubeUserName returns the atmos-gke-<name>-<project>-<location>
+// username that versions before the identity was added wrote, so cleanup can
+// still remove entries those versions left in a kubeconfig.
+func LegacyGKEKubeUserName(projectID, location, clusterName string) string {
+	defer perf.Track(nil, "gcp.LegacyGKEKubeUserName")()
+
+	return GKEKubeUserName(projectID, location, clusterName, "")
+}
+
+// gkeUserRegion is the location part of a GKE exec-plugin username.
+func gkeUserRegion(projectID, location string) string {
+	return projectID + "-" + location
 }
 
 // GetToken returns a GCP OAuth2 access token for Kubernetes ExecCredential output.

@@ -221,12 +221,18 @@ func (a *AKSIntegration) Cleanup(_ context.Context) error {
 	// so same-named clusters in different subscriptions get distinct kubeconfig
 	// users. Parse it from the resolved ARM resource ID rather than
 	// a.cluster.SubscriptionID, which is an optional override and may be unset.
-	userName := "atmos-aks-" + a.cluster.Name + "-" + a.cluster.ResourceGroup
-	if resourceID, err := arm.ParseResourceID(clusterID); err == nil && resourceID.SubscriptionID != "" {
-		userName += "-" + resourceID.SubscriptionID
+	subscriptionID := ""
+	if resourceID, err := arm.ParseResourceID(clusterID); err == nil {
+		subscriptionID = resourceID.SubscriptionID
 	}
 
-	if err := mgr.RemoveClusterConfig(clusterID, contextName, userName); err != nil {
+	// The username also includes the identity (see azureCloud.BuildKubeClusterInfo).
+	// Also remove the user without the identity that older versions wrote;
+	// RemoveClusterConfig keeps either user while another context still references it.
+	userName := azureCloud.AKSKubeUserName(a.cluster.Name, a.cluster.ResourceGroup, subscriptionID, a.identity)
+	legacyUserName := azureCloud.LegacyAKSKubeUserName(a.cluster.Name, a.cluster.ResourceGroup, subscriptionID)
+
+	if err := mgr.RemoveClusterConfig(clusterID, contextName, userName, legacyUserName); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
 	}
 

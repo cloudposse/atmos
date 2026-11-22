@@ -17,6 +17,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// aksUserPrefix distinguishes AKS exec-plugin usernames in a kubeconfig.
+const aksUserPrefix = "aks"
+
 // AKSClusterInfo contains cluster data needed for kubeconfig generation.
 type AKSClusterInfo struct {
 	Name          string
@@ -258,11 +261,37 @@ func BuildKubeClusterInfo(info *AKSClusterInfo, identityName string) *kube.Clust
 		CertificateAuthorityData: info.CertificateAuthorityData,
 		ID:                       info.ID,
 		Region:                   info.ResourceGroup,
-		UserPrefix:               "aks",
+		UserPrefix:               aksUserPrefix,
 		AccountID:                info.SubscriptionID,
+		Identity:                 identityName,
 		ExecArgs:                 execArgs,
 		ExecEnv:                  execEnv,
 	}
+}
+
+// AKSKubeUserName returns the kubeconfig exec-plugin username that
+// BuildKubeClusterInfo produces for a cluster when authenticating as
+// identityName: atmos-aks-<name>-<resource-group>[-<subscription>][-<identity>].
+// The identity keeps contexts for different identities from sharing one user.
+func AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName string) string {
+	defer perf.Track(nil, "azure.AKSKubeUserName")()
+
+	return kube.UserName(&kube.ClusterInfo{
+		Name:       clusterName,
+		Region:     resourceGroup,
+		UserPrefix: aksUserPrefix,
+		AccountID:  subscriptionID,
+		Identity:   identityName,
+	})
+}
+
+// LegacyAKSKubeUserName returns the atmos-aks-<name>-<resource-group>[-<subscription>]
+// username that versions before the identity was added wrote, so cleanup can
+// still remove entries those versions left in a kubeconfig.
+func LegacyAKSKubeUserName(clusterName, resourceGroup, subscriptionID string) string {
+	defer perf.Track(nil, "azure.LegacyAKSKubeUserName")()
+
+	return AKSKubeUserName(clusterName, resourceGroup, subscriptionID, "")
 }
 
 // GetToken returns the AKS-scoped bearer token for kubectl. The token itself
