@@ -149,3 +149,38 @@ func TestCredentialStreamRejectsUnrenderableOrRepeatedInteractions(t *testing.T)
 		assert.Nil(t, actual)
 	}
 }
+
+// TestPresentDeviceCodePrintsVerificationURIVerbatim guards against the URI being
+// rendered as Markdown, which would turn `a*b*c` into emphasis and show the user a
+// different URL than the one the plugin sent.
+func TestPresentDeviceCodePrintsVerificationURIVerbatim(t *testing.T) {
+	t.Setenv("ATMOS_FORCE_TTY", "false")
+	t.Setenv("ATMOS_FORCE_COLOR", "false")
+	t.Setenv("NO_COLOR", "1")
+	var stdout, stderr bytes.Buffer
+	previous := iolib.GetContext()
+	streams := NewMockStreams(gomock.NewController(t))
+	streams.EXPECT().RawOutput().Return(&stdout).AnyTimes()
+	streams.EXPECT().RawError().Return(&stderr).AnyTimes()
+	ctx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	data.InitWriter(ctx)
+	ui.InitFormatter(ctx)
+	t.Cleanup(func() {
+		data.InitWriter(previous)
+		ui.InitFormatter(previous)
+	})
+
+	for _, uri := range []string{
+		"https://issuer.example/a*b*c/device",
+		"https://issuer.example/a_b_c_/device",
+		"https://issuer.example/`x`/[y](z)/device",
+	} {
+		stderr.Reset()
+		require.True(t, publicVerificationURI(uri), "fixture must pass URI validation: %s", uri)
+		presentDeviceCode(uri, "ABCD-EFGH")
+		assert.Contains(t, stderr.String(), uri, "the verification URI must be shown exactly as the plugin sent it")
+		assert.Contains(t, stderr.String(), "ABCD-EFGH")
+	}
+	assert.Empty(t, stdout.String(), "the device prompt must leave the data channel empty")
+}
