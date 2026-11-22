@@ -17,6 +17,7 @@ import (
 	authregistry "github.com/cloudposse/atmos/pkg/auth/registry"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 // Compile-time sentinels for the schema fields referenced by these tests.
@@ -316,6 +317,20 @@ func TestWithIsolatedIdentityAcquisitionGraceStartsOnCallerCancellation(t *testi
 func TestOperationAcquisitionContextStopsWithoutCallerCancellation(t *testing.T) {
 	acquire, release := operationAcquisitionContext(t.Context(), time.Hour, time.Hour)
 	require.NoError(t, acquire.Err())
+	release()
+	require.ErrorIs(t, acquire.Err(), context.Canceled)
+}
+
+// TestOperationAcquisitionContextReleaseDuringGrace verifies a caller cancellation does
+// not end the acquisition before the grace period, and releasing it during the grace
+// period ends it immediately.
+func TestOperationAcquisitionContextReleaseDuringGrace(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	acquire, release := operationAcquisitionContext(ctx, time.Hour, time.Hour)
+	assert.True(t, signals.OwnsCleanup(acquire), "acquisition retains cleanup custody")
+	cancel()
+	<-ctx.Done()
+	require.NoError(t, acquire.Err(), "the grace period keeps the acquisition alive after caller cancellation")
 	release()
 	require.ErrorIs(t, acquire.Err(), context.Canceled)
 }

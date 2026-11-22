@@ -6,8 +6,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/keyring"
 )
 
 // TestKeyringKeys_DoNotCollideAcrossRealms reproduces #3720 finding 3.4: realm "acme"
@@ -113,6 +115,40 @@ func TestFilterRealmKeys_SeparatesRealms(t *testing.T) {
 	}
 	assert.Equal(t, []string{"prod_admin", "reader"}, filterRealmKeys(keys, "acme"))
 	assert.Equal(t, []string{"admin"}, filterRealmKeys(keys, "acme_prod"))
+}
+
+// TestKeyringStore_DeleteReportsLegacyDeleteFailure verifies a backend failure while
+// removing the previous-layout entry is reported, not silently ignored, since the entry
+// would otherwise resurface through the read fallback.
+func TestKeyringStore_DeleteReportsLegacyDeleteFailure(t *testing.T) {
+	kr := keyring.NewMockKeyring(gomock.NewController(t))
+	store := &keyringCredentialStore{kr: kr, storeType: types.CredentialStoreTypeMemory}
+	kr.EXPECT().Delete(buildKeyringKey("admin", "acme")).Return(nil)
+	kr.EXPECT().Delete(legacyRealmKeyringKey("admin", "acme")).Return(assert.AnError)
+
+	err := store.Delete("admin", "acme")
+	require.ErrorIs(t, err, assert.AnError)
+	require.ErrorIs(t, err, ErrCredentialStore)
+}
+
+// TestEmptyRealmKeyIsUnambiguous pins which pre-realm keys realm-scoped callers may
+// delete as their own legacy entry.
+func TestEmptyRealmKeyIsUnambiguous(t *testing.T) {
+	tests := []struct {
+		alias string
+		want  bool
+	}{
+		{alias: "deployer", want: true},
+		{alias: "core-root/terraform", want: true},
+		{alias: "prod_admin", want: false},  // Previous layout of realm "prod" + "admin".
+		{alias: "prod__admin", want: false}, // Current layout of realm "prod" + "admin".
+		{alias: "", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.alias, func(t *testing.T) {
+			assert.Equal(t, tt.want, EmptyRealmKeyIsUnambiguous(tt.alias))
+		})
+	}
 }
 
 func writeLegacyRealmEntry(t *testing.T, store *keyringCredentialStore, alias, realm, token string) {
