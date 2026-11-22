@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsAuth "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
@@ -22,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -109,17 +112,23 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 		errUtils.CheckErrorPrintAndExit(addGCPReauthExplanation(err), "", "")
 	}
 
+	// Validate against the endpoint the identity authenticates with (spec.endpoint_url).
+	configureWhoamiValidation(authManager, whoami)
+
 	return reportWhoami(ctx, whoami, v.GetString(OutputFlagName))
 }
 
 // reportWhoami validates the credentials and prints the whoami status. It
 // fails when the credentials are expired or invalid, so scripts can rely on the
-// exit status (missing credentials already fail in authManager.Whoami).
+// exit status (missing credentials already fail in authManager.Whoami). When the
+// credentials cannot be validated (for example STS is unreachable), validity is
+// decided from the cached expiration time and a warning says so on stderr.
 func reportWhoami(ctx context.Context, whoami *authTypes.WhoamiInfo, format string) error {
 	defer perf.Track(nil, "auth.reportWhoami")()
 
 	// Validate credentials if available.
-	isValid := validateCredentials(ctx, whoami)
+	check := validateCredentials(ctx, whoami)
+	isValid := check.valid
 
 	// Output.
 	if format == "json" {
@@ -134,12 +143,59 @@ func reportWhoami(ctx context.Context, whoami *authTypes.WhoamiInfo, format stri
 		printWhoamiHuman(whoami, isValid)
 	}
 
+	if isValid && check.unverified != nil {
+		// Stderr only, so JSON on stdout stays valid.
+		ui.Warning(fmt.Sprintf("Could not validate the credentials, so the status is based on their cached expiration time: %v", check.unverified))
+	}
+
 	if !isValid {
 		// The status was already reported above, so exit non-zero without
 		// rendering an additional error box.
 		return errors.Join(errUtils.ErrExpiredCredentials, errUtils.ExitCodeError{Code: 1, Silent: true})
 	}
 	return nil
+}
+
+// configureWhoamiValidation points credential validation at the endpoint the identity
+// authenticates against: `spec.endpoint_url` on the identity, else on its provider (the
+// same precedence the AWS identities use). Credentials that cannot target a custom
+// endpoint, and identities without one, keep the default endpoint.
+func configureWhoamiValidation(authManager authTypes.AuthManager, whoami *authTypes.WhoamiInfo) {
+	defer perf.Track(nil, "auth.configureWhoamiValidation")()
+
+	if whoami == nil || authManager == nil {
+		return
+	}
+	setter, ok := whoami.Credentials.(validationEndpointSetter)
+	if !ok {
+		return
+	}
+
+	var identity *schema.Identity
+	if configured, found := authManager.GetIdentities()[whoami.Identity]; found {
+		identity = &configured
+	}
+	var provider *schema.Provider
+	if configured, found := authManager.GetProviders()[whoami.Provider]; found {
+		provider = &configured
+	}
+
+	option := awsAuth.GetBaseEndpointConfigOption(identity, provider)
+	if option == nil {
+		return
+	}
+	var loadOptions awsConfig.LoadOptions
+	if err := option(&loadOptions); err != nil || loadOptions.BaseEndpoint == "" {
+		return
+	}
+	log.Debug("Validating credentials against the configured endpoint", logKeyIdentity, whoami.Identity, "endpoint", loadOptions.BaseEndpoint)
+	setter.SetValidationEndpoint(loadOptions.BaseEndpoint)
+}
+
+// validationEndpointSetter is implemented by credentials whose validation call can
+// target a custom endpoint (AWS credentials and `spec.endpoint_url`).
+type validationEndpointSetter interface {
+	SetValidationEndpoint(endpointURL string)
 }
 
 func addGCPReauthExplanation(err error) error {
@@ -155,14 +211,26 @@ func addGCPReauthExplanation(err error) error {
 	return err
 }
 
-// validateCredentials attempts to validate the credentials and returns true if valid.
+// credentialCheck is the outcome of validating whoami credentials.
+type credentialCheck struct {
+	// Valid reports whether the credentials are usable.
+	valid bool
+	// Unverified is set when validation could not be performed (for example the
+	// validation endpoint was unreachable); valid then reflects the cached
+	// expiration time instead of a server-side check.
+	unverified error
+}
+
+// validateCredentials attempts to validate the credentials.
 // If validation succeeds, it populates whoami with additional info (principal, expiration, etc.).
-func validateCredentials(ctx context.Context, whoami *authTypes.WhoamiInfo) bool {
+// Only a definitive answer (expired, or rejected by the server) marks valid credentials invalid;
+// a validation that cannot be performed falls back to the cached expiration time.
+func validateCredentials(ctx context.Context, whoami *authTypes.WhoamiInfo) credentialCheck {
 	defer perf.Track(nil, "auth.validateCredentials")()
 
 	if whoami.Credentials == nil {
 		log.Debug("Validation failed: no credentials in WhoamiInfo", "identity", whoami.Identity)
-		return false
+		return credentialCheck{}
 	}
 
 	// Try to validate using the Validate method if available.
@@ -175,7 +243,7 @@ func validateCredentials(ctx context.Context, whoami *authTypes.WhoamiInfo) bool
 		// If no validator, check expiration as fallback.
 		expired := whoami.Credentials.IsExpired()
 		log.Debug("Credential validation using expiration check", logKeyIdentity, whoami.Identity, "expired", expired)
-		return !expired
+		return credentialCheck{valid: !expired}
 	}
 
 	validationInfo, err := v.Validate(ctx)
@@ -183,10 +251,15 @@ func validateCredentials(ctx context.Context, whoami *authTypes.WhoamiInfo) bool
 		if errors.Is(err, errUtils.ErrNotImplemented) {
 			expired := whoami.Credentials.IsExpired()
 			log.Debug("Credential validation not implemented; using expiration check", logKeyIdentity, whoami.Identity, "expired", expired)
-			return !expired
+			return credentialCheck{valid: !expired}
+		}
+		if errors.Is(err, errUtils.ErrCredentialValidationUnavailable) {
+			expired := whoami.Credentials.IsExpired()
+			log.Debug("Credential validation could not be performed; using expiration check", logKeyIdentity, whoami.Identity, "expired", expired, "error", err)
+			return credentialCheck{valid: !expired, unverified: err}
 		}
 		log.Debug("Credential validation failed", logKeyIdentity, whoami.Identity, "error", err)
-		return false
+		return credentialCheck{}
 	}
 
 	log.Debug("Credential validation succeeded", logKeyIdentity, whoami.Identity)
@@ -194,7 +267,7 @@ func validateCredentials(ctx context.Context, whoami *authTypes.WhoamiInfo) bool
 	// Populate whoami with validation info.
 	populateWhoamiFromValidation(whoami, validationInfo)
 
-	return true
+	return credentialCheck{valid: true}
 }
 
 // populateWhoamiFromValidation populates whoami info from validation results.

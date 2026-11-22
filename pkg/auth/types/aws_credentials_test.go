@@ -67,7 +67,9 @@ func TestAWSCredentials_ValidateCanceled(t *testing.T) {
 			cancel()
 			info, err := credentials.Validate(ctx)
 			require.Nil(t, info)
-			require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+			// A canceled call never reached STS, so the credentials were not rejected.
+			require.ErrorIs(t, err, errUtils.ErrCredentialValidationUnavailable)
+			require.NotErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 			require.ErrorIs(t, err, context.Canceled)
 		})
 	}

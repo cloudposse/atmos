@@ -449,3 +449,10 @@ var (
 	// but no interactive prompt can be shown (no TTY, CI, or --interactive=false).
 	ErrLogoutSelectionRequiresTTY = fmt.Errorf("interactive logout selection: %w", ErrTTYRequired)
 )
+
+// Credential validation errors.
+var (
+	// ErrCredentialValidationUnavailable reports that credentials could not be validated because the
+	// validation service could not be reached (network, proxy, timeout). The credentials may still be valid.
+	ErrCredentialValidationUnavailable = errors.New("credential validation could not be performed")
+)
