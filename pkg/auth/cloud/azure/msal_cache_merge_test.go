@@ -112,6 +112,22 @@ func TestReadMSALCacheState(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrAzureMSALCacheUnparseable)
 }
 
+// TestMSALCache_EmptyFileStartsEmptyCache verifies a whitespace-only cache file is
+// an empty cache: MSAL is given nothing to load, and Export writes its entries.
+func TestMSALCache_EmptyFileStartsEmptyCache(t *testing.T) {
+	cachePath := newRealmCacheFile(t, []byte(" \n"))
+	c, err := NewMSALCache(cachePath, "")
+	require.NoError(t, err)
+
+	unmarshaler := &mockUnmarshaler{}
+	require.NoError(t, c.Replace(context.Background(), unmarshaler, msalcache.ReplaceHints{}))
+	assert.False(t, unmarshaler.called)
+
+	marshaler := &mockMarshaler{data: []byte(`{"AccessToken":{"t":{"secret":"s"}}}`)}
+	require.NoError(t, c.Export(context.Background(), marshaler, msalcache.ExportHints{}))
+	assert.Contains(t, readCacheSections(t, cachePath)["AccessToken"], "t")
+}
+
 // TestMSALCache_ExportOursUnparseable verifies a marshaler output that is not a JSON
 // object is reported and nothing is written.
 func TestMSALCache_ExportOursUnparseable(t *testing.T) {

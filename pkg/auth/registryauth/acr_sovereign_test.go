@@ -29,6 +29,9 @@ func TestMatchingIntegrationACRSovereignHosts(t *testing.T) {
 		require.Equal(t, want, actual, host)
 	}
 
+	// A non-registry integration kind serves no host, even with a registry spec.
+	require.Empty(t, integrationHosts(schema.Integration{Kind: "azure/aks", Spec: &schema.IntegrationSpec{Registry: &schema.Registry{Name: "corporate"}}}))
+
 	// Two integrations for the same registry name are still ambiguous on a sovereign host.
 	config.Integrations["second"] = config.Integrations["acr"]
 	_, err := matchingIntegration(config, "corporate.azurecr.us")
