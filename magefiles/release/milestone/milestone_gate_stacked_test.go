@@ -92,9 +92,10 @@ func TestMilestoneGateStackedQueueEntries(t *testing.T) {
 			} else {
 				require.Contains(t, group.Description, tc.message)
 			}
-			if tc.mode == "open stacked layer" || tc.mode == "stacked layer fails policy" {
+			switch tc.mode {
+			case "open stacked layer", "stacked layer fails policy":
 				require.Equal(t, tc.state, statuses[stackedHead].State, "an open stacked PR's own head gets the same verdict")
-			} else if tc.mode == "closed stacked layer" {
+			case "closed stacked layer":
 				require.NotContains(t, statuses, stackedHead, "a closed PR is not evaluated")
 			}
 		})
