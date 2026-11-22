@@ -103,4 +103,5 @@ atmos auth exec --identity azure-prod -- az resource list --resource-group my-rg
 
 ## Notes
 
-- `--` is required to stop Atmos flag parsing; everything after is passed to the subcommand.
+- `--` is required to stop Atmos flag parsing; everything after is passed to the subcommand, including `-h` and `--help` (`atmos auth exec -- df -h` runs `df -h`).
+- The command must come after `--`. Arguments placed before it are rejected (for example `atmos auth exec aws -- s3 ls`); write `atmos auth exec -- aws s3 ls` instead.

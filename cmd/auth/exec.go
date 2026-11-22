@@ -75,6 +75,11 @@ func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "auth.executeAuthExecCommand")()
 
 	handleHelpRequest(cmd, args)
+
+	if err := validateAuthExecArgs(cmd, args); err != nil {
+		return err
+	}
+
 	// Skip stack validation since auth exec only needs auth configuration, not stack manifests.
 	if err := internal.ValidateAtmosConfig(internal.WithStackValidation(false)); err != nil {
 		return err
@@ -217,6 +222,26 @@ func resolveIdentityNameForExec(cmd *cobra.Command, v *viper.Viper, authManager 
 	}
 
 	return identityName, nil
+}
+
+// validateAuthExecArgs rejects positional args that aren't located strictly
+// after `--`. Cobra's ArgsLenAtDash returns -1 when no "--" appears, 0 when
+// "--" is the first non-flag token, and >0 when N positional args appeared
+// before "--".
+//
+// Without this guard, getSeparatedArgsForExec() returns args[dashIndex:] and
+// silently drops anything before "--": `atmos auth exec aws -- s3 ls` would run
+// `s3 ls`. This mirrors validateAuthShellArgs. The correct invocation is
+// `atmos auth exec -- aws s3 ls`.
+func validateAuthExecArgs(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "auth.exec.validateAuthExecArgs")()
+
+	dashIndex := cmd.ArgsLenAtDash()
+	if len(args) > 0 && (dashIndex == -1 || dashIndex > 0) {
+		return fmt.Errorf("%w: place the command and all of its arguments after `--`, e.g. `atmos auth exec -- aws s3 ls`",
+			errUtils.ErrInvalidArguments)
+	}
+	return nil
 }
 
 // getSeparatedArgsForExec returns args after "--" separator for the exec command.
