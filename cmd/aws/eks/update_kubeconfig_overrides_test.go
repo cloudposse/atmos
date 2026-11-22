@@ -204,15 +204,22 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 		unavailable  bool
 		writeFailure bool
 		realm        string
-		alias        string
-		wantUser     string
-		wantContext  string
-		wantErr      error
+		// realmSource is how pkg/config resolved the realm (AuthConfig.RealmSource).
+		realmSource   string
+		alias         string
+		wantUser      string
+		wantContext   string
+		wantExecRealm string
+		wantErr       error
 	}{
 		{name: "preserves auth context", alias: "bar-context", wantContext: "bar-context", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
-		{name: "realm scopes the user", realm: "acme", alias: "bar-context", wantContext: "bar-context", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo"},
+		{name: "realm scopes the user", realm: "acme", alias: "bar-context", wantContext: "bar-context", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo", wantExecRealm: "acme"},
 		{name: "default context without realm is the ARN", wantContext: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
-		{name: "realm prefixes the default context", realm: "acme", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo"},
+		{name: "realm prefixes the default context", realm: "acme", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo", wantExecRealm: "acme"},
+		{name: "explicit config realm prefixes the default context", realm: "acme", realmSource: "config", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo", wantExecRealm: "acme"},
+		{name: "env realm prefixes the default context", realm: "acme", realmSource: "env", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo", wantExecRealm: "acme"},
+		{name: "auto realm from the config path keeps the ARN context", realm: "462813558259d41c", realmSource: "config-path", wantContext: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
+		{name: "default realm keeps the ARN context", realm: "default", realmSource: "default", wantContext: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
 		{name: "working directory unavailable", unavailable: true, wantErr: errUtils.ErrWorkingDirAccessFailed},
 		{name: "kubeconfig parent is a file", writeFailure: true, wantErr: errUtils.ErrKubeconfigWrite},
 	} {
@@ -221,7 +228,9 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 				t.Skip("Only Linux reliably fails Getwd after removing the current directory")
 			}
 			restoreEKSSeams(t)
-			initCliConfig = okEKSInitConfig
+			initCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+				return schema.AtmosConfiguration{Auth: schema.AuthConfig{Realm: tt.realm, RealmSource: tt.realmSource}}, nil
+			}
 			fake := &fakeEKSAuthManager{realm: tt.realm, whoami: &types.WhoamiInfo{Credentials: &types.AWSCredentials{
 				AccessKeyID: "test-access-key", SecretAccessKey: "test-secret-key",
 			}}}
@@ -283,7 +292,7 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 			}
 			assert.Equal(t, workingDir, env["ATMOS_CHDIR"])
 			assert.Equal(t, "foo", env["ATMOS_IDENTITY"])
-			assert.Equal(t, tt.realm, env["ATMOS_AUTH_REALM"])
+			assert.Equal(t, tt.wantExecRealm, env["ATMOS_AUTH_REALM"])
 		})
 	}
 }

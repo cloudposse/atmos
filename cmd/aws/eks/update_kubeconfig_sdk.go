@@ -9,6 +9,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -110,8 +111,9 @@ func executeEKSUpdateKubeconfigDirect(clusterName, region, kubeconfigPath, alias
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEKSIntegrationFailed, err)
 	}
-	// Scope the kube user to the auth realm, as the aws/eks integration does.
-	clusterInfo.Realm = mgr.GetRealm().Value
+	// Scope the kube names to an explicitly configured auth realm, as the
+	// aws/eks integration does; a derived realm keeps the names unchanged.
+	clusterInfo.Realm, clusterInfo.LegacyRealms = kube.NameRealm(mgr.GetRealm().Value, realm.IsExplicit(mgr.GetRealm(), atmosConfig.Auth.RealmSource))
 
 	kubeMgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
 	if err != nil {

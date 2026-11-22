@@ -170,14 +170,18 @@ func GKEKubeUserName(projectID, location, clusterName, identityName, realm strin
 
 // GKEKubeUserNames returns GKEKubeUserName followed by the names older
 // versions wrote for the same entry, so cleanup can remove any of them: the
-// name without the realm (when realm is set) and the legacy name without the
-// identity.
-func GKEKubeUserNames(projectID, location, clusterName, identityName, realm string) []string {
+// name without the realm (when realm is set), the names under each of
+// legacyRealms (see kube.ClusterInfo.LegacyRealms) and the legacy name
+// without the identity.
+func GKEKubeUserNames(projectID, location, clusterName, identityName, realm string, legacyRealms ...string) []string {
 	defer perf.Track(nil, "gcp.GKEKubeUserNames")()
 
 	names := []string{GKEKubeUserName(projectID, location, clusterName, identityName, realm)}
 	if realm != "" {
 		names = append(names, GKEKubeUserName(projectID, location, clusterName, identityName, ""))
+	}
+	for _, legacyRealm := range legacyRealms {
+		names = append(names, GKEKubeUserName(projectID, location, clusterName, identityName, legacyRealm))
 	}
 	return append(names, LegacyGKEKubeUserName(projectID, location, clusterName))
 }

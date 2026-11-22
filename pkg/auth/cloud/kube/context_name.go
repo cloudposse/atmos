@@ -29,85 +29,130 @@ func ContextName(clusterID, alias, realm string) string {
 	return clusterID
 }
 
-// ContextNames returns ContextName followed by the context name older versions
-// wrote for the same entry: the unprefixed cluster ID, when the realm-prefixed
-// default name is in use. Cleanup uses it to also remove a context written
-// before default context names included the realm.
-func ContextNames(clusterID, alias, realm string) []string {
+// ContextNames returns ContextName followed by the default context names that
+// older versions wrote for the same entry: the unprefixed cluster ID, when the
+// realm-prefixed default name is in use, and <legacy-realm>/<cluster-id> for
+// each of legacyRealms (see ClusterInfo.LegacyRealms). With an alias, only the
+// alias is returned. Cleanup uses it to also remove contexts written under
+// those older names.
+func ContextNames(clusterID, alias, realm string, legacyRealms ...string) []string {
 	defer perf.Track(nil, "kube.ContextNames")()
 
 	name := ContextName(clusterID, alias, realm)
-	if name != clusterID && alias == "" {
-		return []string{name, clusterID}
+	names := []string{name}
+	if alias != "" {
+		return names
 	}
-	return []string{name}
-}
-
-// OwnedUserNames returns the exec-plugin user names that belong to the cluster
-// entry described by info: the current UserName, the name without the realm
-// (when a realm is set), and the info.LegacyUserNames older versions wrote.
-// Contexts that point at any other user belong to someone else.
-func OwnedUserNames(info *ClusterInfo) []string {
-	defer perf.Track(nil, "kube.OwnedUserNames")()
-
-	names := []string{UserName(info)}
-	if info.Realm != "" {
-		preRealm := *info
-		preRealm.Realm = ""
-		names = append(names, UserName(&preRealm))
+	if name != clusterID {
+		names = append(names, clusterID)
 	}
-	for _, name := range info.LegacyUserNames {
-		if name != "" && !slices.Contains(names, name) {
-			names = append(names, name)
+	for _, legacyRealm := range legacyRealms {
+		if legacyName := ContextName(clusterID, "", legacyRealm); !slices.Contains(names, legacyName) {
+			names = append(names, legacyName)
 		}
 	}
 	return names
 }
 
-// unprefixedContextMigration describes the unprefixed default context an older
-// version wrote for a cluster entry that now uses a realm-prefixed name.
-type unprefixedContextMigration struct {
-	// contextName is the old, unprefixed context name (the cluster ID).
+// OwnedUserNames returns the exec-plugin user names that belong to the cluster
+// entry described by info: the current UserName, the name without the realm
+// (when a realm is set), the names under each of info.LegacyRealms, and the
+// info.LegacyUserNames older versions wrote. Contexts that point at any other
+// user belong to someone else.
+func OwnedUserNames(info *ClusterInfo) []string {
+	defer perf.Track(nil, "kube.OwnedUserNames")()
+
+	names := []string{UserName(info)}
+	appendName := func(name string) {
+		if name != "" && !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	if info.Realm != "" {
+		appendName(userNameInRealm(info, ""))
+	}
+	for _, legacyRealm := range info.LegacyRealms {
+		appendName(userNameInRealm(info, legacyRealm))
+	}
+	for _, name := range info.LegacyUserNames {
+		appendName(name)
+	}
+	return names
+}
+
+// userNameInRealm returns the UserName info would have under realm.
+func userNameInRealm(info *ClusterInfo, realm string) string {
+	scoped := *info
+	scoped.Realm = realm
+	return UserName(&scoped)
+}
+
+// contextMigration describes the entries older versions wrote for a cluster
+// entry that a write replaces: default contexts under older names, and older
+// users that no context will reference once the entry is written.
+type contextMigration struct {
+	// contextName is the context being written; it is replaced by the merge.
 	contextName string
+	// oldContextNames are the default context names older versions wrote
+	// for this entry (see ContextNames), excluding contextName.
+	oldContextNames []string
 	// currentUser is the user the new context points at; it is never removed.
 	currentUser string
-	// ownedUsers are the user names that mark the old context as this entry's.
+	// ownedUsers are the user names that mark a context as this entry's.
 	ownedUsers []string
 }
 
-// newUnprefixedContextMigration returns the migration for writing info under
-// alias, or nil when the context name is not realm-prefixed (an alias is set or
-// the realm is empty), so there is no older unprefixed name to migrate.
-func newUnprefixedContextMigration(info *ClusterInfo, alias string) *unprefixedContextMigration {
-	if alias != "" || info.Realm == "" {
-		return nil
-	}
-	return &unprefixedContextMigration{
-		contextName: info.ID,
-		currentUser: UserName(info),
-		ownedUsers:  OwnedUserNames(info),
+// newContextMigration returns the migration for writing info under alias.
+func newContextMigration(info *ClusterInfo, alias string) *contextMigration {
+	names := ContextNames(info.ID, alias, info.Realm, info.LegacyRealms...)
+	return &contextMigration{
+		contextName:     names[0],
+		oldContextNames: names[1:],
+		currentUser:     UserName(info),
+		ownedUsers:      OwnedUserNames(info),
 	}
 }
 
-// apply removes the old unprefixed context from config when it points at one
-// of this entry's own users, then removes this entry's older users that no
-// context references any more. A context that points at another user is never
+// apply removes from config each old context name that points at one of this
+// entry's own users, then removes this entry's older users that no context
+// other than the one being written references (that context is repointed at
+// currentUser by the merge). A context or user of anyone else is never
 // touched. Returns true when config was changed. A nil migration is a no-op.
-func (u *unprefixedContextMigration) apply(config *clientcmdapi.Config) bool {
+func (u *contextMigration) apply(config *clientcmdapi.Config) bool {
 	if u == nil {
 		return false
 	}
-	if !contextOwnedBy(config, u.contextName, u.ownedUsers) {
-		return false
-	}
-	delete(config.Contexts, u.contextName)
-	if config.CurrentContext == u.contextName {
-		config.CurrentContext = ""
+	changed := false
+	for _, name := range u.oldContextNames {
+		if !contextOwnedBy(config, name, u.ownedUsers) {
+			continue
+		}
+		delete(config.Contexts, name)
+		if config.CurrentContext == name {
+			config.CurrentContext = ""
+		}
+		changed = true
 	}
 	for _, name := range u.ownedUsers {
-		if name != u.currentUser && !userReferenced(config, name) {
-			delete(config.AuthInfos, name)
+		if name == u.currentUser {
+			continue
+		}
+		if _, exists := config.AuthInfos[name]; !exists || userReferencedOutside(config, name, u.contextName) {
+			continue
+		}
+		delete(config.AuthInfos, name)
+		changed = true
+	}
+	return changed
+}
+
+// userReferencedOutside reports whether a context other than contextName uses
+// the user.
+func userReferencedOutside(config *clientcmdapi.Config, userName, contextName string) bool {
+	for name, kubeContext := range config.Contexts {
+		if name != contextName && kubeContext != nil && kubeContext.AuthInfo == userName {
+			return true
 		}
 	}
-	return true
+	return false
 }

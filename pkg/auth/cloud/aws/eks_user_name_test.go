@@ -89,3 +89,22 @@ func TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup(t *testing.T) {
 		})
 	}
 }
+
+// TestEKSKubeUserNames_LegacyRealms verifies that names an unreleased build
+// wrote under a derived realm are cleanup candidates, in the same order as
+// kube.OwnedUserNames.
+func TestEKSKubeUserNames_LegacyRealms(t *testing.T) {
+	const clusterARN = "arn:aws:eks:us-east-2:111111111111:cluster/prod"
+	const derived = "462813558259d41c"
+
+	assert.Equal(t, []string{
+		"atmos-eks-prod-us-east-2-111111111111-admin",
+		"atmos-" + derived + "-eks-prod-us-east-2-111111111111-admin",
+		"atmos-eks-prod-us-east-2",
+	}, EKSKubeUserNames(clusterARN, "prod", "us-east-2", "admin", "", derived))
+
+	written, err := BuildKubeClusterInfo(&EKSClusterInfo{Name: "prod", Region: "us-east-2", ARN: clusterARN}, "admin")
+	require.NoError(t, err)
+	written.Realm, written.LegacyRealms = kube.NameRealm(derived, false)
+	assert.Equal(t, EKSKubeUserNames(clusterARN, "prod", "us-east-2", "admin", written.Realm, written.LegacyRealms...), kube.OwnedUserNames(written))
+}

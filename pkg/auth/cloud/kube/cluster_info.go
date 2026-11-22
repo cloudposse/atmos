@@ -55,8 +55,17 @@ type ClusterInfo struct {
 	// different realms never share (and overwrite) one user in a shared
 	// kubeconfig, and it is passed to the exec plugin as ATMOS_AUTH_REALM so
 	// the token is resolved in that realm. It also prefixes the default
-	// context name (see ContextName). Leave empty to omit all three.
+	// context name (see ContextName). Leave empty to omit all three. Set it
+	// only for a realm the user configured explicitly (see NameRealm).
 	Realm string
+
+	// LegacyRealms are realms that unreleased builds prefixed this entry's
+	// user and default context names with although the user never configured
+	// them: the realm Atmos derives from the atmos.yaml path. Names under
+	// these realms count as this entry's own (see OwnedUserNames and
+	// ContextNames), so the next write or cleanup removes them. Leave empty
+	// when there are none.
+	LegacyRealms []string
 
 	// LegacyUserNames are exec-plugin user names that older versions wrote
 	// for this entry in formats UserName no longer produces, such as names

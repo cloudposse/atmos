@@ -69,3 +69,21 @@ func TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup(t *testing.T) {
 		})
 	}
 }
+
+// TestAKSKubeUserNames_LegacyRealms verifies that names an unreleased build
+// wrote under a derived realm are cleanup candidates, in the same order as
+// kube.OwnedUserNames.
+func TestAKSKubeUserNames_LegacyRealms(t *testing.T) {
+	const derived = "462813558259d41c"
+
+	written := BuildKubeClusterInfo(&AKSClusterInfo{Name: "dev-cluster", ResourceGroup: "dev-rg", SubscriptionID: "sub-123"}, "azure-admin")
+	written.Realm, written.LegacyRealms = kube.NameRealm(derived, false)
+	names := AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", written.Realm, written.LegacyRealms...)
+
+	assert.Equal(t, []string{
+		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin",
+		"atmos-" + derived + "-aks-dev-cluster-dev-rg-sub-123-azure-admin",
+		"atmos-aks-dev-cluster-dev-rg-sub-123",
+	}, names)
+	assert.Equal(t, names, kube.OwnedUserNames(written))
+}

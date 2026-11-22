@@ -214,9 +214,10 @@ func (m *manager) executeIntegration(ctx context.Context, integrationName string
 
 	// Create integration instance.
 	integration, err := integrations.Create(&integrations.IntegrationConfig{
-		Name:   integrationName,
-		Config: &integrationConfig,
-		Realm:  m.realm.Value,
+		Name:        integrationName,
+		Config:      &integrationConfig,
+		Realm:       m.realm.Value,
+		RealmSource: m.integrationRealmSource(),
 	})
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrIntegrationFailed, err)
@@ -278,9 +279,10 @@ func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string
 	// Create and execute the integration. CLI overrides are applied to a copy of
 	// the config so the shared integration config in m.config is never mutated.
 	integration, err := integrations.Create(&integrations.IntegrationConfig{
-		Name:   integrationName,
-		Config: applyIntegrationOverrides(integrationConfig, overrides),
-		Realm:  m.realm.Value,
+		Name:        integrationName,
+		Config:      applyIntegrationOverrides(integrationConfig, overrides),
+		Realm:       m.realm.Value,
+		RealmSource: m.integrationRealmSource(),
 	})
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrIntegrationFailed, err)
@@ -411,9 +413,10 @@ func (m *manager) RevokeEphemeralIntegrations(ctx context.Context, identityName 
 		}
 
 		integration, err := integrations.Create(&integrations.IntegrationConfig{
-			Name:   integrationName,
-			Config: &integrationConfig,
-			Realm:  m.realm.Value,
+			Name:        integrationName,
+			Config:      &integrationConfig,
+			Realm:       m.realm.Value,
+			RealmSource: m.integrationRealmSource(),
 		})
 		if err != nil {
 			log.Warn("Failed to create integration for revoke", logKeyIntegration, integrationName, "error", err)

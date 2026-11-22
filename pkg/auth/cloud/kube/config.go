@@ -128,7 +128,7 @@ func (m *KubeconfigManager) WriteClusterConfig(info *ClusterInfo, alias, updateM
 		return false, fmt.Errorf("%w: failed to create directory %s: %w", errUtils.ErrKubeconfigWrite, dir, err)
 	}
 
-	migration := newUnprefixedContextMigration(info, alias) // Migrates an older unprefixed context.
+	migration := newContextMigration(info, alias) // Migrates contexts and users older versions wrote.
 	switch updateMode {
 	case "replace":
 		return m.writeIfChanged(newConfig)
@@ -363,7 +363,7 @@ func (m *KubeconfigManager) writeIfChanged(newConfig *clientcmdapi.Config) (bool
 // mergeIfChanged merges newConfig into the existing file after applying
 // migration (nil for none). Returns changed=false when the result would equal
 // the existing on-disk content.
-func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config, migration *unprefixedContextMigration) (bool, error) {
+func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config, migration *contextMigration) (bool, error) {
 	// Load existing config if file exists.
 	existing := clientcmdapi.NewConfig()
 	fileExists := false
