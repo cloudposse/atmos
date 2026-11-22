@@ -5,6 +5,7 @@ go 1.27.3
 require (
 	github.com/gruntwork-io/terragrunt v1.2.1
 	github.com/spf13/afero v1.15.0
+	github.com/stretchr/testify v1.12.1
 )
 
 require (

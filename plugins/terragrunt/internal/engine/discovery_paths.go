@@ -280,6 +280,21 @@ func (w *discoveryWalker) record(path, rel, name string) {
 	}
 }
 
+// skipped reports whether path lies inside a catalog template directory.
+func (d *projectDiscovery) skipped(path string) bool {
+	for dir := range d.templates {
+		if within(path, dir) {
+			return true
+		}
+	}
+	return false
+}
+
+// independentStack excludes templates and materialized child stacks from root discovery.
+func (d *projectDiscovery) independentStack(path string) bool {
+	return !d.skipped(path) && !d.generated[path]
+}
+
 func checkIdentityCollisions(root string, inventory []model.DiscoveredUnit) error {
 	identities := map[string]string{}
 	paths := map[string]string{}

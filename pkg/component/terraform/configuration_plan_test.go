@@ -673,6 +673,98 @@ func TestDetailedExitCodePlanRecordsReviewedPlan(t *testing.T) {
 	}
 }
 
+// An ignored failure of the main command ends the run successfully, without a plan to bind. A plan
+// that completed is still bound when an errors policy is present but does not match.
+func TestIgnoredPlanFailureDoesNotRecordAPlanBinding(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		ignore string
+	}{
+		{name: "ignored failure", ignore: "backend unavailable"},
+		{name: "unmatched policy", ignore: "never matches"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config, info, execCtx, _, _ := planFixture(t)
+			info.ComponentExecution = &schema.ComponentExecution{Errors: &schema.ComponentErrors{
+				Ignore: []schema.ComponentIgnorePolicy{{Name: "ignored", Patterns: []string{test.ignore}}},
+			}}
+			// The failed plan writes no artifact.
+			shell := newShellFixture(t, func(call *shellCall) error {
+				if call.options.StderrCapture != nil {
+					_, _ = io.WriteString(call.options.StderrCapture, "Error: backend unavailable")
+				}
+				return errUtils.ExitCodeError{Code: 1}
+			})
+			executor := testExecutor(t)
+			executor.services.ExecuteShellCommand = shell.mock.Execute
+			path := filepath.Join(execCtx.componentPath, "failed.plan")
+
+			err := executor.runMainCommandPhase(config, info, execCtx, []string{"plan", "-out=" + path}, execCtx.componentPath, false)
+
+			if test.ignore == "backend unavailable" {
+				require.NoError(t, err, "the ignored failure completes the run")
+			} else {
+				// The plan itself ran, so the failure is the plan's own exit error and not an earlier one.
+				var exitErr errUtils.ExitCodeError
+				require.ErrorAs(t, err, &exitErr, "a failure that no policy ignores keeps the plan's exit error")
+				require.Equal(t, 1, exitErr.Code)
+			}
+			planRuns := 0
+			for i := range shell.calls {
+				if len(shell.calls[i].args) > 0 && shell.calls[i].args[0] == "plan" {
+					planRuns++
+				}
+			}
+			require.Equal(t, 1, planRuns, "the plan ran exactly once before the failure was classified")
+			require.NoFileExists(t, path+configurationPlanSuffix)
+		})
+	}
+}
+
+// An after hook that fails with an ignorable error does not undo a plan Terraform completed: the
+// plan is still bound, so a later saved-plan apply accepts it, and status 2 still reaches the caller.
+func TestIgnoredAfterHookFailureKeepsThePlanBinding(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		code int
+	}{
+		{name: "plan without changes", code: 0},
+		{name: "plan with changes", code: 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config, info, execCtx, _, _ := planFixture(t)
+			info.ComponentExecution = &schema.ComponentExecution{
+				AfterHooks: []schema.ComponentHook{execHook("after", "plan")},
+				Errors:     &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "ignored", Patterns: []string{"notify unavailable"}}}},
+			}
+			shell := newShellFixture(t, func(call *shellCall) error {
+				if call.command != info.Command {
+					if call.options.StderrCapture != nil {
+						_, _ = io.WriteString(call.options.StderrCapture, "Error: notify unavailable")
+					}
+					return errUtils.ExitCodeError{Code: 1}
+				}
+				if err := os.WriteFile(plannedOutputPath(execCtx.componentPath, call.args), []byte("reviewed plan"), 0o600); err != nil {
+					return err
+				}
+				if test.code != 0 {
+					return errUtils.ExitCodeError{Code: test.code}
+				}
+				return nil
+			})
+			executor := testExecutor(t)
+			executor.services.ExecuteShellCommand = shell.mock.Execute
+			path := filepath.Join(execCtx.componentPath, "kept.plan")
+			args := []string{"plan", "-detailed-exitcode", "-out=" + path}
+
+			err := executor.runMainCommandPhase(config, info, execCtx, args, execCtx.componentPath, false)
+
+			require.Equal(t, test.code, resolveExitCode(err), "the completed plan's status is preserved")
+			require.FileExists(t, path+configurationPlanSuffix, "the completed plan stays bound")
+		})
+	}
+}
+
 // newPlanShowRunner returns a generated runner whose plan show prints an empty JSON plan.
 func newPlanShowRunner(t *testing.T) process.Runner {
 	t.Helper()

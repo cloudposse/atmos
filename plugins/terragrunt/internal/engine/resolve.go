@@ -16,7 +16,6 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/log/format"
 	"github.com/gruntwork-io/terragrunt/pkg/options"
 	"github.com/hashicorp/hcl/v2"
-	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
@@ -82,8 +81,14 @@ type unitEvaluator struct {
 }
 
 func (e *unitEvaluator) resolve(ctx context.Context) (*model.Resolution, error) {
+	if e.request.Phase == "iam" {
+		return e.resolveIAM(ctx)
+	}
 	if filepath.Base(e.path) == stackFile {
 		return e.resolveStack(ctx)
+	}
+	if err := e.checkRequestFeatureOverrides(ctx); err != nil {
+		return nil, err
 	}
 	if discovering(e.request) {
 		return e.resolveUnitInventory(ctx)
@@ -106,13 +111,12 @@ func (e *unitEvaluator) resolveUnit(ctx context.Context) (*model.Resolution, err
 	if err != nil {
 		return nil, err
 	}
-	result, err := e.unitResolution(cfg)
+	result, err := e.unitResolution(ctx, cfg, execution)
 	if err != nil {
 		return nil, err
 	}
-	result.Execution = execution
 	result.Files = append(result.Files, applyFiles...)
-	if err := resolveBackend(cfg, result); err != nil {
+	if err := resolveBackend(cfg, result, e.request); err != nil {
 		return nil, err
 	}
 	if e.request.Phase != phaseBackend {
@@ -139,10 +143,11 @@ const (
 )
 
 // backendGenerationOverlay generates the owning stack into an invocation-local
-// copy-on-write overlay before a backend read of a stack-generated unit. The
-// returned filesystem is the one the unit is then parsed from.
+// copy-on-write overlay before a backend read or IAM probe of a stack-generated unit. The
+// host probes IAM before the provider generates the stack, so on a clean checkout the unit
+// exists only in this overlay. The returned filesystem is the one the unit is then parsed from.
 func backendGenerationOverlay(ctx context.Context, request *model.Request, filesystem afero.Fs) (afero.Fs, error) {
-	if request.Phase != phaseBackend || request.GenerationRoot == "" {
+	if (request.Phase != phaseBackend && request.Phase != "iam") || request.GenerationRoot == "" {
 		return filesystem, nil
 	}
 	filesystem = afero.NewCopyOnWriteFs(afero.NewReadOnlyFs(afero.NewOsFs()), afero.NewMemMapFs())
@@ -213,6 +218,8 @@ func requestParsingContext(request *model.Request, path string) *config.ParsingC
 	if configured := request.Environment[downloadDirEnv]; configured != "" {
 		pctx.DownloadDir = localPath(filepath.Dir(path), configured)
 	}
+	// Explicit feature overrides apply to every unit, as Terragrunt's --feature flag does.
+	pctx.FeatureFlags = request.Features
 	return pctx
 }
 
@@ -314,6 +321,7 @@ func (e *unitEvaluator) unitExecution(ctx context.Context, cfg *config.Terragrun
 	if err != nil {
 		return nil, nil, err
 	}
+	finalizeExecution(execution, e.path)
 	reparse := func(apply *config.ParsingContext) (*config.TerragruntConfig, error) {
 		return config.ParseConfigFile(ctx, e.logger, e.environment, apply, e.path, nil)
 	}
@@ -357,34 +365,6 @@ func downloadDir(ctx context.Context, logger log.Logger, environment *atmosbridg
 		return "", err
 	}
 	return full.DownloadDir, nil
-}
-
-// mentionsDownloadDir reports whether any parsed configuration file names download_dir. The probe
-// in downloadDir parses the whole unit, so a unit that never sets it skips the probe and its
-// inputs stay unevaluated during backend reads.
-func mentionsDownloadDir(filesystem afero.Fs, paths []string) bool {
-	for _, path := range paths {
-		data, err := afero.ReadFile(filesystem, path)
-		if err != nil {
-			continue
-		}
-		parser := hclparse.NewParser()
-		var file *hcl.File
-		var diagnostics hcl.Diagnostics
-		if strings.HasSuffix(path, ".json") {
-			file, diagnostics = parser.ParseJSON(data, path)
-		} else {
-			file, diagnostics = parser.ParseHCL(data, path)
-		}
-		if diagnostics.HasErrors() {
-			continue
-		}
-		content, _, _ := file.Body.PartialContent(&hcl.BodySchema{Attributes: []hcl.AttributeSchema{{Name: "download_dir"}}})
-		if content.Attributes["download_dir"] != nil {
-			return true
-		}
-	}
-	return false
 }
 
 // withoutInputsFS projects inputs to the keys referenced by the configuration.
@@ -439,25 +419,26 @@ func (f withoutInputsFS) projectFile(file afero.File, name string) (afero.File, 
 	return memory.Open(name)
 }
 
-// unitResolution preserves local directory identities and remote getter URIs.
-func (e *unitEvaluator) unitResolution(cfg *config.TerragruntConfig) (*model.Resolution, error) {
-	result := &model.Resolution{Path: e.path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(e.pctx.FilesRead.Paths(), e.path)}
-	if plainLocalSource(result.Source) {
-		result.Source = localPath(filepath.Dir(e.path), result.Source)
-		if problem := localSourceProblem(e.environment.FS, e.path, *cfg.Terraform.Source, result.Source); problem != nil {
-			return nil, problem
-		}
-		result.Folders = []string{result.Source}
-	} else if localSubdirSource(result.Source) {
-		// A local `dir//subdir` source copies the whole `dir` tree and selects `subdir` inside it.
-		if problem := localSubdirSourceProblem(e.environment.FS, e.path, result.Source); problem != nil {
-			return nil, problem
-		}
-		root, _ := copiedSourceRoot(filepath.Dir(e.path), result.Source)
-		result.Source = absoluteSubdirSource(root, result.Source)
-		result.Folders = []string{root}
-	} else if err := validateRemoteSource(result.Source); err != nil {
+// unitResolution preserves local directory identities and remote getter URIs. The execution is the
+// unit's hooks and extra arguments, which decide when a registry source is resolved.
+func (e *unitEvaluator) unitResolution(ctx context.Context, cfg *config.TerragruntConfig, execution *model.Execution) (*model.Resolution, error) {
+	result := &model.Resolution{Path: e.path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(e.pctx.FilesRead.Paths(), e.path), Execution: execution}
+	if err := unitSettings(ctx, cfg, e.request, e.path, result); err != nil {
 		return nil, err
+	}
+	// A remote source keeps the identity it was written with, exactly as Terragrunt names its working
+	// copy; resolving a registry source below only changes where the module is fetched from.
+	identity := result.Source
+	if local, problem := resolveLocalModuleSource(e.environment.FS, e.path, result.Source); problem != nil {
+		return nil, problem
+	} else if local != nil {
+		result.Source = local.source
+		identity, result.Folders = result.Source, []string{local.root}
+	} else if !PreventsRun(result.Exclude, OperationCommand(e.request.Command, e.request.Arguments)) {
+		// An operation the exclude block prevents never runs, so its registry source is not resolved.
+		if err := prepareRemoteSource(ctx, e.logger, e.request, cfg, result); err != nil {
+			return nil, err
+		}
 	}
 	download := e.pctx.DownloadDir
 	if cfg.DownloadDir != "" && e.request.Environment[downloadDirEnv] == "" {
@@ -466,7 +447,7 @@ func (e *unitEvaluator) unitResolution(cfg *config.TerragruntConfig) (*model.Res
 	if configured := e.request.Environment[downloadDirEnv]; configured != "" {
 		download = localPath(filepath.Dir(e.path), configured)
 	}
-	workingDir, err := atmosbridge.WorkingDir(e.logger, e.environment, result.Source, download, filepath.Dir(e.path))
+	workingDir, err := atmosbridge.WorkingDir(e.logger, e.environment, identity, download, filepath.Dir(e.path))
 	if err != nil {
 		return nil, err
 	}

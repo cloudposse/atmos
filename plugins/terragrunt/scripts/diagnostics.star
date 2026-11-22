@@ -65,13 +65,7 @@ def verify_rejections_name_file_unit_and_setting(root):
     expect(syntax, ["Missing argument separator", "live/dev/syntax/terragrunt.hcl", "Component syntax in stack live/dev"], "syntax error")
     fixtures.check(syntax.count("live/dev/syntax/terragrunt.hcl:") > 0, "syntax error has no line and column:\n" + syntax)
     for name, setting, hint in [
-        ("binary", "terraform_binary", "components.terraform.command"),
-        ("errors", "errors", "retry"),
-        ("exclude", "exclude", "excluded_paths"),
-        ("iam", "iam_role", "identity"),
-        ("feature", "feature", "stack variables"),
-        ("lint", "tflint", "wrapper script"),
-        ("lifecycle", "init-from-module", "Remove the lifecycle command"),
+        ("errors", "errors.retry", "max_attempts"),
         ("escape", "generate", "relative"),
     ]:
         output = plan(root, name)
@@ -114,7 +108,7 @@ def verify_bulk_runs_validate_before_running(root, invocations):
     for operation in ["plan", "apply", "destroy"]:
         arguments = ["terraform", operation, "--all", "-s", STACK, "--"] + (["-auto-approve"] if operation != "plan" else []) + ["-no-color"]
         output = output_of(fixtures.run_failing(root, arguments))
-        expect(output, ["no infrastructure command was run", "Component syntax", "Component binary"], operation + " --all")
+        expect(output, ["no infrastructure command was run", "Component syntax", "Component errors"], operation + " --all")
         ran = fs.read_file(invocations) if fs.exists(invocations) else ""
         fixtures.check(ran.strip() == "", operation + " --all ran the engine before rejecting the broken units:\n" + ran)
         fixtures.check(not fs.exists(root + "/live/dev/good/state/terraform.tfstate"), operation + " --all ran a healthy unit before rejecting the broken ones")
@@ -126,13 +120,7 @@ def diagnostics():
     units = {
         "good": GOOD,
         "syntax": 'terraform {\n  source = "../../../modules/unit"\n}\ninputs = {\n  a = find_in_parent_folders("x"\n}\n',
-        "binary": unit("") + 'terraform_binary = "terraform"\n',
-        "errors": unit("") + 'errors {\n  retry "x" {\n    retryable_errors = [".*"]\n    max_attempts = 2\n    sleep_interval_sec = 1\n  }\n}\n',
-        "exclude": unit("") + 'exclude {\n  if      = true\n  actions = ["plan"]\n}\n',
-        "iam": unit("") + 'iam_role = "arn:aws:iam::123456789012:role/x"\n',
-        "feature": unit("") + 'feature "flag" {\n  default = true\n}\n',
-        "lint": unit('  before_hook "lint" {\n    commands = ["plan"]\n    execute  = ["tflint"]\n  }\n'),
-        "lifecycle": unit('  before_hook "setup" {\n    commands = ["init-from-module"]\n    execute  = ["echo", "x"]\n  }\n'),
+        "errors": unit("") + 'errors {\n  retry "x" {\n    retryable_errors = [".*"]\n    max_attempts = 0\n    sleep_interval_sec = 1\n  }\n}\n',
         "escape": unit("") + 'generate "x" {\n  path      = "../escape.tf"\n  if_exists = "overwrite"\n  contents  = ""\n}\n',
         "secret": unit("") + 'inputs = {\n  a = tonumber("hunter2")\n}\n',
     }

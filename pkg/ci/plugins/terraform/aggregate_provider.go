@@ -107,7 +107,7 @@ func (p *Plugin) updateAggregateCheckRuns(ctx *plugin.HookContext, aggregate *te
 	for i := range aggregate.Components {
 		component := &aggregate.Components[i]
 		componentCtx := p.aggregateComponentContext(ctx, component)
-		if component.Skipped {
+		if component.Skipped && component.Result.Status != "succeeded" {
 			componentCtx.CommandError = aggregateCommandError(component.Summary)
 			componentCtx.ExitCode = 1
 		}

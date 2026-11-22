@@ -184,6 +184,8 @@ service Commands {
 // implement an executor or replace the built-in Terraform component provider.
 // Negotiate each service through Info using component.discovery,
 // component.validation, component.preparation, and component.state respectively.
+// component.preparation is version 2: it adds terraform_arguments,
+// backend_generated, and execution. A version-1 host must reject the plugin.
 
 // ComponentValue uses cty's JSON type encoding and MessagePack value encoding.
 // Unlike protobuf.Struct, it preserves exact numbers, nulls, unknowns, and
@@ -370,24 +372,44 @@ message PrepareComponentResponse {
   // its value, for provenance reporting. Missing entries mean unknown origin.
   map<string, SourceLocation> input_origins = 12;
 
-  // Fields 13-18 are reserved for Terragrunt parity. The host does not read
-  // them yet; a plugin that cannot honor a setting must reject it with an
-  // ErrorDetail instead of returning it, and must leave these fields unset.
-  // Engine executable selected by terraform_binary.
+  // Fields 13-18 carry Terragrunt settings that decide how the host runs the unit. The host reads
+  // terraform_binary, errors, exclude, iam, and feature_flags (13-16 and 18). It does not read
+  // encryption (17) yet. A plugin that cannot honor a setting must reject it with an ErrorDetail
+  // instead of returning a value the host would silently ignore.
+  // Engine executable selected by terraform_binary. Empty means the engine of the component.
   string terraform_binary = 13;
-  // errors block: retry and ignore policies.
+  // errors block: retry and ignore policies. The host applies them around the engine subprocess.
   ComponentErrorsConfiguration errors = 14;
-  // exclude block: conditional unit exclusion.
+  // exclude block, set only when its condition holds and it applies to the current operation.
+  // The host skips the operation for the component and runs nothing. See ComponentExclude.
   ComponentExclude exclude = 15;
   // iam_role, iam_assume_role_session_name, iam_assume_role_duration, iam_web_identity_token.
+  // The host assumes the role, never the plugin.
   ComponentIam iam = 16;
-  // encryption block as opaque, provider-defined data.
+  // encryption block as opaque, provider-defined data. The host ignores it.
   ComponentValue encryption = 17;
-  // feature flag name to its evaluated value rendered as a string.
+  // Feature flag name to its evaluated value rendered as a string. The plugin has already applied
+  // the flags while evaluating the unit, so they are reflected in every other field. The host
+  // keeps them with the prepared configuration.
   map<string, string> feature_flags = 18;
+  // Authorization for an archive returned by a module registry. This value is
+  // sensitive and may be sent only to module_source_auth_origin.
+  ComponentValue module_source_authorization = 19;
+  string module_source_auth_origin = 20;
+  // Time spent resolving a tfr:// source, including its bounded retries.
+  uint64 registry_resolution_nanos = 21;
+  // True when an errors-block ignore policy matched a failure the plugin hit while preparing the unit,
+  // for example a registry resolution failure, so no source could be resolved. The host ends the unit's
+  // run successfully without executing it, as it does for an ignored source fetch. The remaining fields
+  // describe the unit as written.
+  bool run_ignored = 23;
+  // Name of the ignore policy that matched. Set with run_ignored.
+  string ignored_policy = 24;
+  // Message of the ignore policy that matched. Set with run_ignored.
+  string ignored_message = 25;
 }
 
-// ComponentErrorsConfiguration mirrors the Terragrunt errors block. Reserved; not implemented.
+// ComponentErrorsConfiguration mirrors the Terragrunt errors block.
 message ComponentErrorsConfiguration {
   repeated ComponentRetryPolicy retry = 1;
   repeated ComponentIgnorePolicy ignore = 2;
@@ -407,7 +429,7 @@ message ComponentIgnorePolicy {
   // Extra signals written for the caller, keyed by name.
   map<string, ComponentValue> signals = 4;
 }
-// ComponentExclude mirrors the Terragrunt exclude block. Reserved; not implemented.
+// ComponentExclude mirrors the Terragrunt exclude block.
 message ComponentExclude {
   // Evaluated "if" condition.
   bool condition = 1;
@@ -415,7 +437,7 @@ message ComponentExclude {
   repeated string actions = 2;
   bool exclude_dependencies = 3;
 }
-// ComponentIam mirrors the Terragrunt IAM settings. Reserved; not implemented.
+// ComponentIam mirrors the Terragrunt IAM settings.
 // The web identity token is a secret and must be carried as a sensitive value.
 message ComponentIam {
   string role = 1;

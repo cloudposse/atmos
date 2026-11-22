@@ -6,6 +6,31 @@ import (
 	"time"
 )
 
+func TestObserveExternalCountsChildTime(t *testing.T) {
+	EnableTracking(true)
+	UseSimpleTracking(true)
+	ResetForTesting()
+	t.Cleanup(func() {
+		EnableTracking(false)
+		ResetForTesting()
+	})
+	finish := Track(nil, "host-parent")
+	time.Sleep(2 * time.Millisecond)
+	ObserveExternal("plugin-registry", time.Millisecond)
+	time.Sleep(2 * time.Millisecond)
+	finish()
+	reg.mu.Lock()
+	parent := *reg.data["host-parent"]
+	external := *reg.data["plugin-registry"]
+	reg.mu.Unlock()
+	if external.Count != 1 || external.SelfTime != time.Millisecond {
+		t.Fatalf("external duration was not recorded: %+v", external)
+	}
+	if parent.Total-parent.SelfTime < time.Millisecond {
+		t.Fatalf("external duration was counted in the parent self time: %+v", parent)
+	}
+}
+
 func TestTrack(t *testing.T) {
 	// Reset registry for clean test.
 	reg = &registry{

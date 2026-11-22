@@ -3,13 +3,8 @@ package terraform
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io/fs"
-	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -110,9 +105,12 @@ func (e *Executor) prepareComponentExecution(
 	if err != nil {
 		return nil, err
 	}
+	if err = e.beginPreparedConfiguration(ctx, atmosConfig, info, prepared); err != nil {
+		return nil, err
+	}
 	// A restored plugin plan was validated when it was created. Its binding omits
 	// variable values, so validating the reconstructed component would test empty vars.
-	restoredConfigurationPlan := prepared != nil && isRestoredConfigurationPlan(info)
+	restoredConfigurationPlan := isRestoredConfigurationPlan(info, prepared)
 
 	componentPath, err := e.resolvePreparedComponentPath(ctx, writers, atmosConfig, info, prepared)
 	if err != nil {
@@ -152,6 +150,37 @@ func (e *Executor) prepareComponentExecution(
 	}, nil
 }
 
+// beginPreparedConfiguration stops an excluded component, or one whose preparation an ignore policy
+// ended, before anything runs, then warns about
+// overlapping retries, clears stale signal files and runs the provider's read-configuration hooks.
+func (e *Executor) beginPreparedConfiguration(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	prepared *schema.PreparedComponentConfiguration,
+) error {
+	if excludedFromOperation(info, prepared) {
+		skipExcluded(info)
+		return errUtils.ErrComponentExcluded
+	}
+	if prepared != nil && prepared.IgnoredRun != nil {
+		if err := refreshIgnoredSignals(atmosConfig, info, prepared); err != nil {
+			return err
+		}
+		return endIgnoredRun(info, prepared.IgnoredRun)
+	}
+	// An ordinary component has no provider preparation, so it has no Terragrunt signals to clear and a
+	// file named like the signals file in its directory belongs to the user.
+	if prepared == nil {
+		return nil
+	}
+	warnOverlappingRetry(info, prepared)
+	if err := clearStaleSignals(atmosConfig, info); err != nil {
+		return err
+	}
+	return e.runReadConfigHooks(ctx, atmosConfig, info, prepared)
+}
+
 // terraformTestVarfileName returns the test var file name, or "" when the component has no test vars.
 func terraformTestVarfileName(info *schema.ConfigAndStacksInfo) string {
 	if !hasTerraformTestVars(info) {
@@ -161,8 +190,8 @@ func terraformTestVarfileName(info *schema.ConfigAndStacksInfo) string {
 }
 
 // isRestoredConfigurationPlan reports whether the invocation applies a provider-owned saved plan.
-func isRestoredConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
-	return ownsConfigurationPlan(info) && usesConfigurationPlan(info) && restoresConfigurationPlan(info)
+func isRestoredConfigurationPlan(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) bool {
+	return prepared != nil && ownsConfigurationPlan(info) && usesConfigurationPlan(info) && restoresConfigurationPlan(info)
 }
 
 // runPreExecutionSteps performs validation, auth pre-hook, config file generation,
@@ -331,6 +360,17 @@ func (e *Executor) executeCommandPipeline(
 	return nil
 }
 
+// runPreparedPipeline translates an ignored preparatory failure into the
+// successful end of this unit invocation, after the pipeline has stopped.
+func (e *Executor) runPreparedPipeline(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, opts ...component.ExecutionOption) error {
+	err := e.executeCommandPipeline(atmosConfig, info, execCtx, opts...)
+	if onlyRunIgnored(err) {
+		cleanupTerraformFiles(atmosConfig, info)
+		return nil
+	}
+	return err
+}
+
 // runMainCommandPhase runs the main plan/apply/destroy/… subcommand under its own CI phase
 // group, capturing scoped exec-metadata output (FR-006f), and — on failure — gives smart init
 // exactly one chance to recover via recoverFromInitRequired before propagating the error.
@@ -363,7 +403,8 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	defer restore()
 	var execMetadataStdoutBuf, execMetadataStderrBuf bytes.Buffer
 	var effectiveArgs []string
-	captureCtx := context.WithValue(component.ContextFromOptions(opts...), mainCommandArgsKey{}, &effectiveArgs)
+	var ignored bool
+	captureCtx := context.WithValue(context.WithValue(component.ContextFromOptions(opts...), mainCommandArgsKey{}, &effectiveArgs), mainCommandIgnoredKey{}, &ignored)
 	captureCtx = execCtx.observePlanSnapshots(captureCtx, atmosConfig, info, allArgsAndFlags)
 	captureArgs := component.WithProcessContext(captureCtx)
 	// A component with provider-supplied hooks recovers inside its main-command lifecycle, so
@@ -382,6 +423,7 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 		return e.executeGovernedTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, mainOpts...)
 	})
 	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
+	mainErr = withoutIgnoredPolicyFailure(mainErr, ignored)
 	// A completed -detailed-exitcode plan reports changes with status 2 after writing the plan, so
 	// it is neither recovered nor returned before the reviewed plan is recorded. A component with
 	// provider-supplied hooks already recovered inside its lifecycle.
@@ -391,6 +433,10 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	}
 	if mainErr != nil && !completedPlanWithChanges(mainErr) {
 		return mainErr
+	}
+	// An ignored failure produced no plan to bind, so the run ends without recording one.
+	if ignored {
+		return nil
 	}
 	// Policy plans run against a private artifact that is removed after the guard
 	// publishes it to the original output path. The effective arguments were
@@ -574,98 +620,4 @@ func addTerraformTestVarfileArg(info *schema.ConfigAndStacksInfo, testVarFile st
 		return
 	}
 	info.AdditionalArgsAndFlags = append([]string{varFileFlag, testVarFile}, info.AdditionalArgsAndFlags...)
-}
-
-// withoutContent copies files, dropping the bytes of every one.
-func withoutContent(files []schema.ComponentConfigurationFile) []schema.ComponentConfigurationFile {
-	stored := slices.Clone(files)
-	for i := range stored {
-		stored[i].Content = nil
-	}
-	return stored
-}
-
-// restoreSensitiveContent reads the bytes of each sensitive file back from the working directory and
-// restores them only when they are the reviewed ones. The working directory digest excludes some
-// locations, so the reviewed bytes are verified here against the digest recorded with the plan.
-func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurationFile, reviewed string) error {
-	contents, err := readSensitiveFiles(workdir, files)
-	if err != nil {
-		return err
-	}
-	if contents == nil {
-		return nil
-	}
-	// The digest binds absence as well as bytes: a file that was already absent when the plan was
-	// reviewed and is still absent matches, while one that disappeared or appeared since does not.
-	if digestSensitiveContents(contents) != reviewed {
-		for i := range files {
-			// A file the entry removes is absent by design, so only other policies report it as missing.
-			if files[i].Sensitive && contents[files[i].Path] == nil && !slices.Contains([]string{"remove", "remove_terragrunt"}, files[i].IfExists) {
-				return fmt.Errorf("%w: reviewed generated file %s is missing: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, fs.ErrNotExist)
-			}
-		}
-		return fmt.Errorf("%w: reviewed generated file changed", errUtils.ErrPlanVerificationFailed)
-	}
-	for i := range files {
-		if files[i].Sensitive {
-			files[i].Content = contents[files[i].Path]
-		}
-	}
-	return nil
-}
-
-// sensitiveDigest fingerprints the sensitive generated files as they are in the working directory.
-// It is empty when no file is sensitive.
-func sensitiveDigest(workdir string, files []schema.ComponentConfigurationFile) (string, error) {
-	contents, err := readSensitiveFiles(workdir, files)
-	if err != nil || contents == nil {
-		return "", err
-	}
-	return digestSensitiveContents(contents), nil
-}
-
-// readSensitiveFiles reads every sensitive file below workdir, keyed by path. A missing file maps
-// to nil content. It returns nil when no file is sensitive.
-func readSensitiveFiles(workdir string, files []schema.ComponentConfigurationFile) (map[string][]byte, error) {
-	if !slices.ContainsFunc(files, func(file schema.ComponentConfigurationFile) bool { return file.Sensitive }) {
-		return nil, nil
-	}
-	root, err := os.OpenRoot(workdir)
-	if err != nil {
-		return nil, planIOError(err)
-	}
-	defer root.Close()
-	contents := make(map[string][]byte)
-	for i := range files {
-		if !files[i].Sensitive {
-			continue
-		}
-		content, err := root.ReadFile(files[i].Path)
-		if errors.Is(err, fs.ErrNotExist) {
-			contents[files[i].Path] = nil
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("%w: reviewed generated file %s cannot be read: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, err)
-		}
-		if content == nil {
-			content = []byte{}
-		}
-		contents[files[i].Path] = content
-	}
-	return contents, nil
-}
-
-// digestSensitiveContents hashes the paths and bytes of the sensitive files in a stable order.
-func digestSensitiveContents(contents map[string][]byte) string {
-	hash := sha256.New()
-	for _, path := range slices.Sorted(maps.Keys(contents)) {
-		if contents[path] == nil {
-			fmt.Fprintf(hash, "%s\x00absent\n", path)
-			continue
-		}
-		fmt.Fprintf(hash, "%s\x00%x\n", path, sha256.Sum256(contents[path]))
-	}
-	return hex.EncodeToString(hash.Sum(nil))
 }

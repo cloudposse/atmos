@@ -32,7 +32,7 @@ func description() *pluginv1.DescribeResponse {
 	return &pluginv1.DescribeResponse{
 		PluginName: manifest.Metadata.Name, PluginVersion: manifest.Metadata.Version,
 		ManifestDigest: "sha256:" + hex.EncodeToString(digest[:]),
-		Services:       []*pluginv1.ServiceVersionRange{{Service: "component.discovery", Min: 1, Max: 1}, {Service: "component.validation", Min: 1, Max: 1}, {Service: "component.preparation", Min: 1, Max: 1}, {Service: "component.state", Min: 1, Max: 1}},
+		Services:       []*pluginv1.ServiceVersionRange{{Service: "component.discovery", Min: 1, Max: 1}, {Service: "component.validation", Min: 1, Max: 1}, {Service: "component.preparation", Min: 2, Max: 2}, {Service: "component.state", Min: 1, Max: 1}},
 		Exports:        []*pluginv1.Export{{Service: "component.discovery", Kind: providerKind}, {Service: "component.validation", Kind: providerKind}, {Service: "component.preparation", Kind: providerKind}, {Service: "component.state", Kind: providerKind}},
 	}
 }

@@ -84,6 +84,50 @@ func TestObjectSensitivePaths(t *testing.T) {
 	}
 }
 
+func TestDecodeValueHandlesAnyKnownValue(t *testing.T) {
+	text, err := DecodeValue(objectWireValue(t, cty.StringVal("plain")))
+	require.NoError(t, err)
+	require.Equal(t, "plain", text)
+
+	object, err := DecodeValue(objectWireValue(t, cty.ObjectVal(map[string]cty.Value{"a": cty.True})))
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"a": true}, object)
+
+	null, err := DecodeValue(objectWireValue(t, cty.NullVal(cty.String)))
+	require.NoError(t, err)
+	require.Nil(t, null)
+
+	_, err = DecodeValue(objectWireValue(t, cty.UnknownVal(cty.String)))
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+	_, err = DecodeValue(nil)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+}
+
+func TestDecodeStringReadsStringsAndRejectsEverythingElse(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
+	text, err := DecodeString(nil)
+	require.NoError(t, err)
+	require.Empty(t, text)
+
+	secret := objectWireValue(t, cty.StringVal("token-value"))
+	secret.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	text, err = DecodeString(secret)
+	require.NoError(t, err)
+	require.Equal(t, "token-value", text)
+	require.NotContains(t, atmosio.GetContext().Masker().Mask("token-value"), "token-value")
+
+	_, err = DecodeString(objectWireValue(t, cty.NumberIntVal(1)))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	_, err = DecodeString(objectWireValue(t, cty.NullVal(cty.String)))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	_, err = DecodeString(objectWireValue(t, cty.UnknownVal(cty.String)))
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+	_, err = DecodeString(&pluginv1.ComponentValue{TypeJson: []byte("{")})
+	require.Error(t, err)
+}
+
 func TestObjectStructuredSensitivity(t *testing.T) {
 	atmosio.Reset()
 	t.Cleanup(atmosio.Reset)

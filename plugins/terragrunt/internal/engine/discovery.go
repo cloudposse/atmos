@@ -122,6 +122,7 @@ func discoverProjectWithResolver(ctx context.Context, request *model.Request, ev
 		return nil, err
 	}
 	slices.SortFunc(d.result.Inventory, func(a, b model.DiscoveredUnit) int { return strings.Compare(a.Stack+"/"+a.Name, b.Stack+"/"+b.Name) })
+	d.result.Warnings = append(d.result.Warnings, featureOverrideWarnings(request.Features, d.result.Inventory)...)
 	if err := checkIdentityCollisions(d.root, d.result.Inventory); err != nil {
 		return nil, err
 	}
@@ -130,16 +131,6 @@ func discoverProjectWithResolver(ctx context.Context, request *model.Request, ev
 
 func isDiscoveryCancellation(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
-}
-
-// skipped reports whether path lies inside a catalog template directory.
-func (d *projectDiscovery) skipped(path string) bool {
-	for dir := range d.templates {
-		if within(path, dir) {
-			return true
-		}
-	}
-	return false
 }
 
 func (d *projectDiscovery) nameFor(dir string) string {
@@ -198,11 +189,6 @@ func (d *projectDiscovery) discoverStacks(stacks []string) error {
 		}
 	}
 	return nil
-}
-
-// independentStack excludes templates and materialized child stacks from root discovery.
-func (d *projectDiscovery) independentStack(path string) bool {
-	return !d.skipped(path) && !d.generated[path]
 }
 
 // discoverStandaloneUnits visits units that no stack owns. A unit already
@@ -449,22 +435,17 @@ func inventorySource(environment *atmosbridge.Venv, cfg *config.TerragruntConfig
 		return nil
 	}
 	result.Source = *cfg.Terraform.Source
-	if !plainLocalSource(result.Source) {
-		// A local `dir//subdir` source must exist, like a plain local source.
-		if localSubdirSource(result.Source) {
-			if problem := localSubdirSourceProblem(environment.FS, path, result.Source); problem != nil {
-				return problem
-			}
-		}
+	// The active filesystem also sees modules that a generated stack unit names in the overlay.
+	local, problem := resolveLocalModuleSource(environment.FS, path, result.Source)
+	if problem != nil {
+		return problem
+	}
+	if local == nil {
 		// An unsupported remote transport fails discovery too, before any unit runs.
 		return validateRemoteSource(result.Source)
 	}
-	result.Source = localPath(filepath.Dir(path), result.Source)
-	// The active filesystem also sees modules that a generated stack unit names in the overlay.
-	if problem := localSourceProblem(environment.FS, path, *cfg.Terraform.Source, result.Source); problem != nil {
-		return problem
-	}
-	result.Folders = []string{result.Source}
+	result.Source = local.source
+	result.Folders = []string{local.root}
 	return nil
 }
 
@@ -488,29 +469,57 @@ func (e *unitEvaluator) resolveUnitInventory(ctx context.Context) (*model.Resolu
 		return nil, err
 	}
 	result := &model.Resolution{Path: e.path, Files: append(e.pctx.FilesRead.Paths(), e.path)}
+	if err := applyParity(cfg, e.request, e.path, result); err != nil {
+		return nil, err
+	}
 	if err := inventoryWorkspaceProblem(e.request, cfg, e.path); err != nil {
 		return nil, err
 	}
-	if err := inventorySource(e.environment, cfg, e.path, result); err != nil {
+	if err := inventorySource(e.environment, cfg, e.path, result); err != nil && !e.operationExcluded(result) {
+		// A unit that cannot run this operation keeps its evaluated exclusion, so the bulk
+		// pre-flight skips it instead of rejecting the run; an active unit still fails.
 		return nil, err
 	}
-	if result.OutputDependencies, err = outputDependencies(e.environment, cfg, e.path); err != nil {
+	if err := e.populateInventoryDependencies(cfg, result); err != nil {
 		return nil, err
+	}
+	return result, nil
+}
+
+// operationExcluded reports whether the unit's exclude block makes the requested operation a no-op.
+func (e *unitEvaluator) operationExcluded(result *model.Resolution) bool {
+	return PreventsRun(result.Exclude, OperationCommand(e.request.Command, e.request.Arguments))
+}
+
+// populateInventoryDependencies keeps output reads in the scheduling dependency set. A unit that
+// cannot run the operation is not validated against its dependencies. When its block sets
+// exclude_dependencies the scheduler still needs the edges to exclude the targets, so the resolvable
+// ones are kept and unresolvable targets are tolerated.
+func (e *unitEvaluator) populateInventoryDependencies(cfg *config.TerragruntConfig, result *model.Resolution) error {
+	excluded := e.operationExcluded(result)
+	if excluded && !result.Exclude.ExcludeDependencies {
+		return nil
+	}
+	var err error
+	if result.OutputDependencies, err = outputDependencies(e.environment, cfg, e.path, excluded); err != nil {
+		return err
 	}
 	// Output reads also require a scheduling edge before preparation.
-	order, err := orderDependencies(e.environment, cfg, e.path)
+	order, err := orderDependencies(e.environment, cfg, e.path, excluded)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	for _, dependency := range append(slices.Clone(result.OutputDependencies), order...) {
 		if !slices.Contains(result.Dependencies, dependency) {
 			result.Dependencies = append(result.Dependencies, dependency)
 		}
 	}
-	return result, nil
+	return nil
 }
 
-func outputDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string) ([]string, error) {
+// outputDependencies lists the units whose outputs the unit reads. With tolerant set, a target that
+// cannot be resolved is skipped instead of failing the unit.
+func outputDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string, tolerant bool) ([]string, error) {
 	var result []string
 	for _, dep := range cfg.TerragruntDependencies {
 		if (dep.Enabled != nil && !*dep.Enabled) || (dep.SkipOutputs != nil && *dep.SkipOutputs) {
@@ -520,10 +529,16 @@ func outputDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntCon
 			continue
 		}
 		if dep.ConfigPath.Type() != cty.String {
+			if tolerant {
+				continue
+			}
 			return nil, fmt.Errorf("%w: unit %s, dependency %q", errDependencyConfigPath, path, dep.Name)
 		}
 		physical, err := dependencyConfigPath(environment, path, dep.ConfigPath.AsString())
 		if err != nil {
+			if tolerant {
+				continue
+			}
 			return nil, err
 		}
 		if !slices.Contains(result, physical) {
@@ -533,7 +548,8 @@ func outputDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntCon
 	return result, nil
 }
 
-func orderDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string) ([]string, error) {
+// orderDependencies lists the units the unit waits for, tolerating unresolvable targets as outputDependencies does.
+func orderDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string, tolerant bool) ([]string, error) {
 	if cfg.Dependencies == nil {
 		return nil, nil
 	}
@@ -541,6 +557,9 @@ func orderDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConf
 	for _, dependency := range cfg.Dependencies.Paths {
 		physical, err := dependencyConfigPath(environment, path, dependency)
 		if err != nil {
+			if tolerant {
+				continue
+			}
 			return nil, err
 		}
 		if !slices.Contains(result, physical) {

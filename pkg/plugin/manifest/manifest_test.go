@@ -37,6 +37,8 @@ func TestParseValidatesPackageAndRuntimeContracts(t *testing.T) {
 		{"protocol", "protocol: 1,", "protocol: 2,", errUtils.ErrPluginInvalidConfig},
 		{"executable", "bin/plugin", "../escape", errUtils.ErrPluginInvalidConfig},
 		{"unsupported contract", `auth.provider: ">=1 <2"`, `auth.provider: ">=2"`, errUtils.ErrPluginUnsupportedExtension},
+		{"earlier preparation contract", `auth.provider: ">=1 <2"`, `component.preparation: ">=1 <2"`, errUtils.ErrPluginUnsupportedExtension},
+		{"later preparation contract", `auth.provider: ">=1 <2"`, `component.preparation: ">=3"`, errUtils.ErrPluginUnsupportedExtension},
 		{"unsupported protocol", `protocol: ">=1 <2"`, `protocol: ">=2"`, errUtils.ErrPluginUnsupportedExtension},
 		{"empty protocol", `protocol: ">=1 <2"`, `protocol: ""`, errUtils.ErrPluginUnsupportedExtension},
 	}
@@ -48,6 +50,11 @@ func TestParseValidatesPackageAndRuntimeContracts(t *testing.T) {
 			require.Nil(t, value)
 		})
 	}
+	current, err := Parse([]byte(strings.Replace(validManifest, `auth.provider: ">=1 <2"`, `component.preparation: ">=2 <3"`, 1)))
+	require.NoError(t, err, "the current preparation contract must be accepted")
+	require.NotNil(t, current)
+	require.Equal(t, uint32(1), HostContractVersion("component.discovery"))
+	require.Equal(t, uint32(2), HostContractVersion("component.preparation"))
 	_, err = Parse([]byte("{invalid yaml"))
 	require.Error(t, err)
 }

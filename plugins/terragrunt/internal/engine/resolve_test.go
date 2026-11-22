@@ -57,8 +57,6 @@ inputs = { large = 9007199254740993, nested = { nullable = null, enabled = false
 
 func TestNativeRejectsUnsupportedSemantics(t *testing.T) {
 	for _, test := range []struct{ name, extra, message string }{
-		{"binary override", `terraform_binary = "another-tool"`, "terraform_binary"},
-		{"IAM role", `iam_role = "unsupported"`, "iam_role"},
 		{"generation escape", `generate "x" {
  path = "../x.tf"
  if_exists = "overwrite"
@@ -170,7 +168,7 @@ generate "disabled" {
 	require.NoError(t, os.WriteFile(request.Path, []byte("inputs = {}"), 0o644))
 	_, err = Resolve(t.Context(), request)
 	require.ErrorContains(t, err, "terraform.source")
-	for _, source := range []string{"tfr://example.invalid/repo", "./absent"} {
+	for _, source := range []string{"ftp://example.invalid/repo", "./absent"} {
 		encoded, err := json.Marshal(source)
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(encoded)+" }"), 0o644))
@@ -187,7 +185,10 @@ func TestDiscoveryValidatesRemoteModuleSources(t *testing.T) {
 		source  string
 		invalid bool
 	}{
-		{source: "tfr://example.invalid/repo", invalid: true},
+		{source: "ftp://example.invalid/repo", invalid: true},
+		{source: "s3://example-bucket/module.zip", invalid: true},
+		// A registry source is valid at discovery; it is resolved only when the unit is prepared.
+		{source: "tfr://example.invalid/modules/vpc/aws"},
 		{source: "git::https://example.invalid/modules.git//vpc?ref=v1.0.0"},
 		{source: "https://example.invalid/module.zip"},
 		// A local module with a `//` subdirectory is not a remote source: Terragrunt copies the tree before it.
@@ -206,6 +207,10 @@ func TestDiscoveryValidatesRemoteModuleSources(t *testing.T) {
 			encoded, err := json.Marshal(test.source)
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(encoded)+" }"), 0o644))
+			// A local source must name an existing directory, so create the one the case selects.
+			if strings.HasPrefix(test.source, ".") && !test.invalid {
+				require.NoError(t, os.MkdirAll(filepath.Join(filepath.Dir(request.Path), filepath.FromSlash(strings.ReplaceAll(test.source, "//", "/"))), 0o755))
+			}
 			request.Phase = "discover"
 			_, err = Resolve(t.Context(), request)
 			if !test.invalid {
@@ -258,16 +263,6 @@ func TestResolveUnitInDirectoryWithGlobMetacharacters(t *testing.T) {
 	result, err := Resolve(t.Context(), request)
 	require.NoError(t, err)
 	require.Equal(t, []byte("# lint"), result.Overlay[".tflint.hcl"])
-}
-
-func TestRejectRemoteStateEncryption(t *testing.T) {
-	request := nativeUnit(t, `remote_state {
- backend = "local"
- config = { path = "state.tfstate" }
- encryption = { key_provider = "pbkdf2" }
-}`)
-	_, err := Resolve(t.Context(), request)
-	require.ErrorContains(t, err, "remote_state.encryption")
 }
 
 func TestBackendResolutionHonorsConfiguredDownloadDirectory(t *testing.T) {
@@ -412,6 +407,16 @@ func TestOverlayRejectsLockFilesAndCarriesModes(t *testing.T) {
 	})
 }
 
+func TestValidateEngineProbesTheUnitsExecutable(t *testing.T) {
+	request := nativeUnit(t, "")
+	// request.Tofu is the host's command and must not be the executable that the probe runs.
+	err := validateEngine(t.Context(), &request, filepath.Join(t.TempDir(), "no-such-terraform-binary"), request.Path)
+
+	var problem *model.Problem
+	require.ErrorAs(t, err, &problem)
+	require.Equal(t, "terraform_binary", problem.Key)
+}
+
 func TestBackendDownloadDirectoryFromReadConfigInputs(t *testing.T) {
 	for name, expression := range map[string]string{
 		"directory": `download_dir = try(read_terragrunt_config("settings").inputs.cache, "fallback-cache")`,
@@ -539,6 +544,16 @@ func TestBackendRecognizesEscapedDownloadDirAttribute(t *testing.T) {
 	filesystem := afero.NewMemMapFs()
 	require.NoError(t, afero.WriteFile(filesystem, "parent.hcl.json", []byte(`{"download_\u0064ir":"custom-cache"}`), 0o600))
 	require.True(t, mentionsDownloadDir(filesystem, []string{"parent.hcl.json"}))
+}
+
+// Terragrunt merges the sibling automatic include into the unit, so a download_dir set only there
+// still moves the cache and must trigger the probe.
+func TestMentionsDownloadDirChecksAutomaticIncludes(t *testing.T) {
+	filesystem := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(filesystem, "unit.hcl", []byte(`inputs = {}`), 0o600))
+	require.False(t, mentionsDownloadDir(filesystem, []string{"unit.hcl"}))
+	require.NoError(t, afero.WriteFile(filesystem, automaticIncludeName, []byte(`download_dir = "cache"`), 0o600))
+	require.True(t, mentionsDownloadDir(filesystem, []string{"unit.hcl"}))
 }
 
 func TestDownloadDirDetectionUsesAttributeSyntax(t *testing.T) {

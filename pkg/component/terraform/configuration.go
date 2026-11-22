@@ -12,10 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 
-	"github.com/google/shlex"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
 
@@ -24,7 +22,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/component/configuration"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
-	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terraform/backend"
@@ -48,31 +45,72 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	if info.DryRun {
 		return nil, nil
 	}
-	if err := resolveHostExecutable(info); err != nil {
+	if err := resolveSelectedExecutable(info); err != nil {
 		return nil, err
 	}
-	prepared, execution, err := prepareOrRestore(ctx, config, info)
+	prepared, stagedIAM, err := restoreOrPrepareConfiguration(ctx, config, info)
 	if err != nil || prepared == nil {
 		return prepared, err
 	}
-	if err = applyStackOverrides(config, info, prepared); err != nil {
+	if err = finalizePreparedConfiguration(ctx, config, info, prepared, stagedIAM); err != nil {
 		return nil, err
 	}
-	applyPreparedConfiguration(config, info, prepared, execution)
-	warnOnCacheLocalState(info, prepared)
+	applyPreparedConfiguration(config, info, prepared)
 	return prepared, nil
 }
 
-// applyPreparedConfiguration projects the prepared configuration onto the invocation.
-func applyPreparedConfiguration(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, execution *schema.ComponentExecution) {
+func finalizePreparedConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, stagedIAM *schema.ComponentIAM) error {
+	if err := applyStackOverrides(config, info, prepared); err != nil {
+		return err
+	}
+	return finishIAM(ctx, info, prepared, stagedIAM)
+}
+
+// Plugins do not inherit PATH. Resolve the selected host executable before
+// Terragrunt evaluates version constraints or dependency outputs.
+func resolveSelectedExecutable(info *schema.ConfigAndStacksInfo) error {
+	binary, err := exec.LookPath(info.Command)
+	if err != nil {
+		return errUtils.Build(fmt.Errorf("%w: Terraform executable of component %q in stack %q: %w", errUtils.ErrPluginInvalidConfig, info.ComponentFromArg, info.Stack, err)).
+			WithContext("component", info.ComponentFromArg).
+			WithContext("stack", info.Stack).
+			WithContext("executable", info.Command).
+			WithHint("The unit's `terraform_binary` or the component's `command` must name an installed executable, a toolchain tool from `dependencies.tools`, or an absolute path").
+			Err()
+	}
+	binary, err = filepath.Abs(binary)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
+	}
+	info.Command = binary
+	return nil
+}
+
+func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
 	info.ComponentVarsSection = prepared.Inputs
+	// The inputs were replaced, so any earlier classification of them no longer describes them.
+	info.TerraformSecretVarKeysComputed = false
 	// The stack's env section wins over provider environment in the metadata this invocation runs,
 	// including the apply-time metadata of a restored saved plan.
-	info.ComponentExecution = withoutStackEnvironment(execution, info.ComponentEnvSection)
+	info.ComponentExecution = withoutStackEnvironment(invocationExecution(info, prepared), info.ComponentEnvSection)
 	info.ConfigurationSensitiveInputKeys = maps.Clone(prepared.SensitiveInputKeys)
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
 	info.TerraformWorkspace = prepared.Workspace
 	info.ComponentSection["vars"] = prepared.Inputs
+	applyPreparedSource(info, prepared)
+	info.ComponentSection["backend_type"] = prepared.BackendType
+	info.ComponentSection["backend"] = prepared.Backend
+	// Only a provider that owns the backend overrides generation. Otherwise the project setting decides.
+	if prepared.BackendGenerated {
+		info.SetBackendFileGeneration(false)
+	}
+	warnOnCacheLocalState(info, prepared)
+}
+
+// applyPreparedSource points the component at the module the provider prepared, with the
+// invocation-only authorization for fetching it.
+func applyPreparedSource(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
+	info.SourceAuthorization = prepared.SourceAuthorization
 	source, _ := info.ComponentSection["source"].(map[string]any)
 	source = maps.Clone(source)
 	if source == nil {
@@ -82,9 +120,22 @@ func applyPreparedConfiguration(config *schema.AtmosConfiguration, info *schema.
 	// A local module changes without its location changing. The source provisioner stamps a local
 	// directory and refreshes the retained workdir only when that stamp changes, so no TTL is set.
 	info.ComponentSection["source"] = source
-	info.ComponentSection["backend_type"] = prepared.BackendType
-	info.ComponentSection["backend"] = prepared.Backend
-	config.Components.Terraform.AutoGenerateBackendFile = !prepared.BackendGenerated
+}
+
+func restoreOrPrepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *schema.ComponentIAM, error) {
+	if usesConfigurationPlan(info) {
+		if err := useRetainedWorkdir(config, info); err != nil {
+			return nil, nil, err
+		}
+		prepared, err := restoreConfigurationPlan(ctx, config, info)
+		return prepared, nil, err
+	}
+	staged, err := probeAndApplyIAM(ctx, config.ComponentConfigurations, info)
+	if err != nil {
+		return nil, nil, err
+	}
+	prepared, err := config.ComponentConfigurations.Prepare(ctx, info)
+	return prepared, staged, err
 }
 
 // terragruntCacheDirectory is where Terragrunt keeps its working copies of a unit.
@@ -119,41 +170,13 @@ func warnOnCacheLocalState(info *schema.ConfigAndStacksInfo, prepared *schema.Pr
 		"`path = \"${get_terragrunt_dir()}/terraform.tfstate\"`, and move the existing state file there.")
 }
 
-// resolveHostExecutable makes info.Command the absolute path of the selected executable.
-func resolveHostExecutable(info *schema.ConfigAndStacksInfo) error {
-	// Plugins do not inherit PATH. Resolve the selected host executable before
-	// Terragrunt evaluates version constraints or dependency outputs.
-	binary, err := exec.LookPath(info.Command)
-	if err != nil {
-		return fmt.Errorf("%w: Terraform executable: %w", errUtils.ErrPluginInvalidConfig, err)
+// invocationExecution returns the hooks and extra arguments the invocation runs. A saved plan was
+// prepared for plan, so applying it runs the apply-time metadata recorded with it.
+func invocationExecution(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) *schema.ComponentExecution {
+	if usesConfigurationPlan(info) {
+		return prepared.Execution.ForSavedPlanApply()
 	}
-	binary, err = filepath.Abs(binary)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrPluginInvalidConfig, err)
-	}
-	info.Command = binary
-	return nil
-}
-
-// prepareOrRestore prepares the component, or restores the reviewed preparation of a saved
-// plan. It also returns the hooks and extra arguments the invocation runs: a saved plan was
-// prepared for plan, so it runs the apply-time metadata recorded with it.
-func prepareOrRestore(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *schema.ComponentExecution, error) {
-	if !usesConfigurationPlan(info) {
-		prepared, err := config.ComponentConfigurations.Prepare(ctx, info)
-		if err != nil || prepared == nil {
-			return prepared, nil, err
-		}
-		return prepared, prepared.Execution, nil
-	}
-	if err := useRetainedWorkdir(config, info); err != nil {
-		return nil, nil, err
-	}
-	prepared, err := restoreConfigurationPlan(ctx, config, info)
-	if err != nil || prepared == nil {
-		return prepared, nil, err
-	}
-	return prepared, prepared.Execution.ForSavedPlanApply(), nil
+	return prepared.Execution
 }
 
 // useRetainedWorkdir points the invocation at the directory the reviewed plan was created in.
@@ -390,119 +413,6 @@ func isAdjacentLockFileCopy(file schema.ComponentConfigurationFile) bool {
 
 func isRuntimeArtifact(path string) bool {
 	return configuration.IsRuntimeArtifact(path)
-}
-
-// validatePlanOutputFlags rejects ambiguous plan destinations before hooks or Terraform run.
-func validatePlanOutputFlags(command string, args []string) error {
-	if command != "plan" {
-		return nil
-	}
-	count := 0
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "-out" || arg == "--out" {
-			count++
-			i++
-		} else if strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=") {
-			count++
-		}
-		if count > 1 {
-			return fmt.Errorf("%w: multiple plan output flags", errUtils.ErrPlanVerificationFailed)
-		}
-	}
-	return nil
-}
-
-// validateEnvironmentPlanOutput rejects plan output flags in TF_CLI_ARGS or
-// TF_CLI_ARGS_plan for a configuration-owned plan. Terraform reads these
-// variables itself, so a flag there could choose a plan file that Atmos does not
-// see and therefore does not bind. The check inspects the effective value of each
-// variable in the subprocess environment: the sanitized process environment (or
-// the inherited one when auth did not sanitize it), the global atmos.yaml
-// environment, the component environment, and provider extra-argument
-// environment, with later layers overriding earlier ones. Hooks run as child
-// processes and cannot change it.
-func validateEnvironmentPlanOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, opts ...component.ExecutionOption) error {
-	if execCtx.preparedConfiguration == nil || info.DryRun || info.SubCommand != subcommandPlan {
-		return nil
-	}
-	return rejectEnvironmentPlanOutput(planEnvironment(atmosConfig, info, opts), runtime.GOOS)
-}
-
-// rejectEnvironmentPlanOutput rejects a plan output flag in the effective TF_CLI_ARGS or
-// TF_CLI_ARGS_plan of an environment listed in precedence order. Variable names are
-// case-insensitive on Windows only, where the last matching entry is the effective value.
-func rejectEnvironmentPlanOutput(entries []string, goos string) error {
-	for _, name := range []string{tfCliArgsEnvVar, tfCliArgsEnvVar + "_" + subcommandPlan} {
-		value, _ := lastEnvListValue(entries, name, goos)
-		args, err := tokenizeEnvironmentArgs(value)
-		if err != nil {
-			return fmt.Errorf("%w: %s cannot be parsed: %w", errUtils.ErrPlanVerificationFailed, name, err)
-		}
-		if containsOutputFlag(args) {
-			return fmt.Errorf("%w: %s sets a plan output flag; pass -out as a command argument instead", errUtils.ErrPlanVerificationFailed, name)
-		}
-	}
-	return nil
-}
-
-// tokenizeEnvironmentArgs splits a TF_CLI_ARGS value the way the engine does:
-// spaces, tabs, and newlines separate tokens outside quotes, and a malformed
-// value (for example an unterminated quote) is an error because the engine
-// refuses to run with it. The shared parseArgs only splits on spaces, so a tab
-// before -out would hide the flag from the check.
-func tokenizeEnvironmentArgs(value string) ([]string, error) {
-	return shlex.Split(value)
-}
-
-// planEnvironment lists the environment layers a plan subprocess receives, in precedence order.
-func planEnvironment(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, opts []component.ExecutionOption) []string {
-	entries := slices.Clone(planBaseEnvironment(info, opts))
-	if atmosConfig != nil {
-		entries = envpkg.MergeGlobalEnv(entries, atmosConfig.Env)
-	}
-	entries = append(entries, info.ComponentEnvList...)
-	if info.ComponentExecution == nil {
-		return entries
-	}
-	for i := range info.ComponentExecution.ExtraArguments {
-		item := &info.ComponentExecution.ExtraArguments[i]
-		if !slices.Contains(item.Commands, subcommandPlan) {
-			continue
-		}
-		for name, value := range item.Environment {
-			entries = append(entries, name+"="+value)
-		}
-	}
-	return entries
-}
-
-// containsOutputFlag reports any plan output flag, with or without a value.
-func containsOutputFlag(args []string) bool {
-	return slices.ContainsFunc(args, func(arg string) bool {
-		return arg == "-out" || arg == "--out" || strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=")
-	})
-}
-
-func plannedOutputPath(directory string, args []string) string {
-	for i, arg := range args {
-		path := ""
-		switch {
-		case (arg == "-out" || arg == "--out") && i+1 < len(args):
-			path = args[i+1]
-		case strings.HasPrefix(arg, "-out="):
-			path = strings.TrimPrefix(arg, "-out=")
-		case strings.HasPrefix(arg, "--out="):
-			path = strings.TrimPrefix(arg, "--out=")
-		}
-		if path != "" {
-			if filepath.IsAbs(path) {
-				return path
-			}
-			return filepath.Join(directory, path)
-		}
-	}
-	return ""
 }
 
 // planSnapshot is the configuration a saved plan is bound to: the provider identity and the

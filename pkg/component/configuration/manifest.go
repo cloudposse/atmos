@@ -85,7 +85,16 @@ func manifestReadFailure(err error) (map[string]string, error) {
 	return nil, err
 }
 
+// writeManifest records the generated files. A failure keeps its filesystem cause and carries the
+// configuration sentinel, so every caller reports it the same way as the other generated-file errors.
 func writeManifest(root *os.Root, files map[string]string) error {
+	if err := storeManifest(root, files); err != nil {
+		return fmt.Errorf("%w: write %s: %w", errUtils.ErrPluginInvalidConfig, manifestName, err)
+	}
+	return nil
+}
+
+func storeManifest(root *os.Root, files map[string]string) error {
 	directory, err := destinationDirectory(root, filepath.Dir(manifestName), len(files) != 0)
 	if len(files) == 0 && errors.Is(err, os.ErrNotExist) {
 		return nil

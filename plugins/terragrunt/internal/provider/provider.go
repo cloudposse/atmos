@@ -84,9 +84,9 @@ func settings(value *pluginv1.ComponentValue) error {
 	}
 	for _, key := range slices.Sorted(maps.Keys(config)) {
 		switch key {
-		case "enabled", "provider", "mode", "discovery":
+		case "enabled", "provider", "mode", "discovery", "features":
 		default:
-			return settingProblem(key, fmt.Sprintf("Unknown setting `components.terraform.terragrunt.%s`", key), "Valid keys are `enabled`, `provider`, `mode`, and `discovery`. Check the spelling.")
+			return settingProblem(key, fmt.Sprintf("Unknown setting `components.terraform.terragrunt.%s`", key), "Valid keys are `enabled`, `provider`, `mode`, `discovery`, and `features`. Check the spelling.")
 		}
 	}
 	if mode, _ := config["mode"].(string); mode != "" && mode != "native" {
@@ -95,9 +95,30 @@ func settings(value *pluginv1.ComponentValue) error {
 	return nil
 }
 
+// optionSourceHooksCompleted is the only operation option. The host sets it to true when it prepares
+// a unit again after running the unit's read-config after hooks, so that the registry source that the
+// first preparation left as written is resolved. The host and the plugin share the name.
+const optionSourceHooksCompleted = "source_hooks_completed"
+
+// sourceHooksCompleted reads the operation options. Any other option, or a value that is not a
+// boolean, is rejected, so the host never believes an option was honored when it was not.
+func sourceHooksCompleted(options map[string]*pluginv1.ComponentValue) (bool, error) {
+	completed := false
+	for name, value := range options {
+		if name != optionSourceHooksCompleted || decode(value, &completed) != nil {
+			return false, ErrUnsupported
+		}
+	}
+	return completed, nil
+}
+
 func operation(root, name string, op *pluginv1.ComponentOperation, invocation *pluginv1.Invocation) (model.Request, error) {
-	if name != "terragrunt" || !filepath.IsAbs(root) || op == nil || op.Mode != "native" || len(op.Options) != 0 {
+	if name != "terragrunt" || !filepath.IsAbs(root) || op == nil || (op.Mode != "native" && op.Mode != "iam-probe") {
 		return model.Request{}, ErrUnsupported
+	}
+	completed, err := sourceHooksCompleted(op.Options)
+	if err != nil {
+		return model.Request{}, err
 	}
 	env := maps.Clone(invocation.GetEnvironment())
 	if env == nil {
@@ -107,13 +128,16 @@ func operation(root, name string, op *pluginv1.ComponentOperation, invocation *p
 	if binary == "" {
 		binary = "terraform"
 	}
-	return model.Request{BasePath: root, Mode: "native", Command: op.Command, Arguments: slices.Clone(op.TerraformArguments), Tofu: binary, Environment: env}, nil
+	request := model.Request{BasePath: root, Mode: "native", Command: op.Command, Arguments: slices.Clone(op.TerraformArguments), Tofu: binary, Environment: env, SourceHooksCompleted: completed}
+	if op.Mode == "iam-probe" {
+		request.Phase = "iam"
+	}
+	return request, nil
 }
 
+// engineName names the engine of an executable with the rule the engine package shares with the host.
 func engineName(binary string) string {
-	// Match the host's executable-name detection, which treats any basename containing
-	// "tofu", case-insensitively, as OpenTofu.
-	if strings.Contains(strings.ToLower(filepath.Base(binary)), "tofu") {
+	if engine.IsOpenTofu(binary) {
 		return "opentofu"
 	}
 	return "terraform"

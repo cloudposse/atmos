@@ -11,13 +11,16 @@ import (
 // preflightTerraformGraph rejects selected components that their configuration provider could not
 // evaluate, before any component runs. Without it a bulk run would apply the healthy components
 // that sort first and only then fail on the broken one. Every broken component is reported.
-func preflightTerraformGraph(ctx context.Context, atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph) error {
+func preflightTerraformGraph(ctx context.Context, atmosConfig *schema.AtmosConfiguration, graph *dependency.Graph, excluded map[string]string) error {
 	checker, ok := atmosConfig.ComponentConfigurations.(schema.ComponentConfigurationFailureRuntime)
 	if !ok {
 		return nil
 	}
 	var failures []error
 	for _, id := range sortedGraphNodeIDs(graph) {
+		if _, skip := excluded[id]; skip {
+			continue
+		}
 		node := graph.Nodes[id]
 		if node == nil {
 			continue

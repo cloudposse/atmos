@@ -278,6 +278,28 @@ func TestExplicitLockGenerationReplacesAdjacentCopy(t *testing.T) {
 	require.Equal(t, "# pinned\n", read(t, root, lockFileName))
 }
 
+// A manifest that cannot be written is reported with the configuration sentinel and keeps its
+// filesystem cause; the generated file written before it is rolled back, because nothing records it.
+func TestManifestWriteFailureCarriesSentinel(t *testing.T) {
+	root := t.TempDir()
+	// A readable but unwritable manifest reaches the write operation after safe path validation.
+	metadata := filepath.Join(root, filepath.FromSlash(manifestName))
+	require.NoError(t, os.Mkdir(filepath.Dir(metadata), 0o755))
+	require.NoError(t, os.WriteFile(metadata, []byte(`{"files":{}}`), 0o400))
+	t.Cleanup(func() { _ = os.Chmod(metadata, 0o600) })
+	if probe, err := os.OpenFile(metadata, os.O_WRONLY, 0); err == nil {
+		_ = probe.Close()
+		t.Skip("the process can write a read-only manifest")
+	}
+
+	err := WriteFiles(root, []schema.ComponentConfigurationFile{generated("main.tf", "locals {}\n", "overwrite")})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.Contains(t, err.Error(), manifestName)
+	var pathErr *os.PathError
+	require.ErrorAs(t, err, &pathErr, "the filesystem cause is preserved")
+	require.NoFileExists(t, filepath.Join(root, "main.tf"), "a run whose manifest cannot be written leaves no unowned file")
+}
+
 // requireEffectiveDirectoryPermissions skips a test when the process can still create files in a
 // read-only directory, as root with CAP_DAC_OVERRIDE can, or on Windows.
 func requireEffectiveDirectoryPermissions(t *testing.T, directory string) {
@@ -442,6 +464,19 @@ func TestStaleCleanupRollbackRestoresNestedFile(t *testing.T) {
 	require.NoError(t, os.Chmod(metadata, 0o700))
 	require.NoError(t, WriteFiles(directory, nil))
 	require.NoFileExists(t, path)
+}
+
+// A regular file in place of the metadata directory fails closed before generation.
+func TestManifestDirectoryBlockerFailsClosed(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".atmos"), []byte("blocker\n"), 0o600))
+	err := WriteFiles(root, []schema.ComponentConfigurationFile{generated("main.tf", "locals {}\n", "overwrite")})
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	// The batch lock lives in the same metadata directory and is taken first, so the error names
+	// that directory rather than the manifest itself.
+	require.Contains(t, err.Error(), filepath.Dir(manifestName))
+	require.NoFileExists(t, filepath.Join(root, "main.tf"))
+	require.Equal(t, "blocker\n", read(t, root, ".atmos"))
 }
 
 // A manifest that exists but cannot be read stops the run before any file or record changes, so

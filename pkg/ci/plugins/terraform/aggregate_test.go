@@ -845,3 +845,23 @@ func TestAggregateCommentKeyDoesNotCollideWithComponentNamedAggregate(t *testing
 		assert.NotEqual(t, buildCommentKey(command, "aggregate", "dev"), buildAggregateCommentKey(command, "dev"))
 	}
 }
+
+func TestAggregateChecksDistinguishIntentionalAndFailureSkips(t *testing.T) {
+	p := &Plugin{}
+	ctx := newAggregateHookContext()
+	ctx.Config.CI.Checks.Enabled = boolPtr(true)
+	mp := ctx.Provider.(*mockProvider)
+	results := schema.TerraformPlanCIResultSet{Results: []schema.TerraformPlanCIResult{
+		{Stack: "dev", Component: "excluded", Status: "succeeded", Processed: false},
+		{Stack: "dev", Component: "blocked", Status: "skipped", Processed: false},
+	}}
+	aggregate := p.buildPlanAggregate(ctx, results)
+	require.Len(t, aggregate.Components, 2)
+	for _, component := range aggregate.Components {
+		assert.True(t, component.Skipped)
+	}
+	p.updateAggregateCheckRuns(ctx, &aggregate)
+	require.Len(t, mp.updateRunCalls, 2)
+	assert.Equal(t, provider.CheckRunStateFailure, mp.updateRunCalls[0].Status) // blocked
+	assert.Equal(t, provider.CheckRunStateSuccess, mp.updateRunCalls[1].Status) // excluded
+}

@@ -69,6 +69,12 @@ func TestPreparedConfigurationRetainedBackend(t *testing.T) {
 		{"non backend", "provider.tf", `locals { enabled = true }`, `locals { enabled = false }`, "skip", false},
 		{"auxiliary", "data.json", `{"value":true}`, `{"value":false}`, "skip", false},
 		{"overwrite", "remote.tf", expected, `locals { enabled = true }`, "overwrite", false},
+		{"OpenTofu missing backend", "remote.tofu", expected, `locals { enabled = true }`, "skip", true},
+		{"OpenTofu json backend", "remote.tofu.json", `{"terraform":{"backend":{"local":{"path":"expected"}}}}`, `{"terraform":{"backend":{"local":{"path":"other"}}}}`, "skip", true},
+		{"OpenTofu invalid retained", "remote.tofu", expected, `terraform {`, "skip", true},
+		{"OpenTofu non backend", "provider.tofu", `locals { enabled = true }`, `locals { enabled = false }`, "skip", false},
+		{"OpenTofu json non backend", "provider.tofu.json", `{"locals":{"enabled":true}}`, `{"locals":{"enabled":false}}`, "skip", false},
+		{"OpenTofu overwrite", "remote.tofu", expected, `locals { enabled = true }`, "overwrite", false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			directory := t.TempDir()
@@ -88,6 +94,56 @@ func TestPreparedConfigurationRetainedBackend(t *testing.T) {
 				want = test.generated
 			}
 			require.Equal(t, want, string(content))
+		})
+	}
+}
+
+// Terragrunt writes `remote_state.encryption` only into the file `remote_state.generate` produces,
+// together with the backend block. A different file kept by if_exists = "skip" would drop the
+// encryption and let OpenTofu write plain state, so it is refused before anything is written.
+func TestPreparedConfigurationRetainedBackendKeepsEncryption(t *testing.T) {
+	const generated = `terraform {
+ backend "local" {
+  path = "expected.tfstate"
+ }
+ encryption {
+  key_provider "pbkdf2" "default" {
+   passphrase = "correct-horse-battery-staple"
+  }
+ }
+}`
+	const generatedJSON = `{"terraform":{"backend":{"local":{"path":"expected.tfstate"}},` +
+		`"encryption":{"key_provider":{"pbkdf2":{"default":{"passphrase":"correct-horse-battery-staple"}}}}}}`
+	const unencrypted = "terraform {\n backend \"local\" {\n  path = \"expected.tfstate\"\n }\n}"
+	for _, test := range []struct {
+		name, path, generated, retained string
+		blocked                         bool
+	}{
+		{"same backend without encryption", "backend.tf", generated, unencrypted, true},
+		{"no backend and no encryption", "backend.tf", generated, "locals { enabled = true }", true},
+		{"identical encrypted backend", "backend.tf", generated, generated, false},
+		{"OpenTofu same backend without encryption", "backend.tofu", generated, unencrypted, true},
+		{"OpenTofu no backend and no encryption", "backend.tofu", generated, "locals { enabled = true }", true},
+		{"OpenTofu identical encrypted backend", "backend.tofu", generated, generated, false},
+		{"OpenTofu json same backend without encryption", "backend.tofu.json", generatedJSON, `{"terraform":{"backend":{"local":{"path":"expected.tfstate"}}}}`, true},
+		{"OpenTofu json no backend and no encryption", "backend.tofu.json", generatedJSON, `{"locals":{"enabled":true}}`, true},
+		{"OpenTofu json identical encrypted backend", "backend.tofu.json", generatedJSON, generatedJSON, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			directory := t.TempDir()
+			path := filepath.Join(directory, test.path)
+			require.NoError(t, os.WriteFile(path, []byte(test.retained), 0o600))
+			prepared := &schema.PreparedComponentConfiguration{BackendGenerated: true, Files: []schema.ComponentConfigurationFile{{Path: test.path, Content: []byte(test.generated), IfExists: "skip"}}}
+			err := writePreparedConfiguration(directory, prepared)
+			if !test.blocked {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+			assert.NotContains(t, err.Error(), "correct-horse-battery-staple", "the error never shows the generated secrets")
+			content, readErr := os.ReadFile(path)
+			require.NoError(t, readErr)
+			assert.Equal(t, test.retained, string(content), "the retained file is left alone")
 		})
 	}
 }
@@ -187,6 +243,55 @@ func TestRestoreSensitiveContentAcceptsRemovedFiles(t *testing.T) {
 	err = restoreSensitiveContent(directory, files, reviewed)
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+// The provider owns the backend only when it says so. Otherwise the project setting still decides
+// whether the host writes backend.tf.json, so a project that disabled generation stays disabled.
+func TestPreparedBackendGenerationHonorsTheProjectSetting(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		project   bool
+		generated bool
+		want      bool
+	}{
+		{name: "project disabled, provider does not own the backend", project: false, generated: false, want: false},
+		{name: "project enabled, provider does not own the backend", project: true, generated: false, want: true},
+		{name: "project enabled, provider owns the backend", project: true, generated: true, want: false},
+		{name: "project disabled, provider owns the backend", project: false, generated: true, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{}
+			config.Components.Terraform.AutoGenerateBackendFile = test.project
+			info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}
+			prepared := &schema.PreparedComponentConfiguration{BackendGenerated: test.generated}
+
+			applyPreparedConfiguration(config, info, prepared)
+
+			require.Equal(t, test.want, schema.GenerateBackendFile(config, info))
+			require.Equal(t, test.want, schema.GenerateBackendFileForSection(config, info.ComponentSection))
+		})
+	}
+}
+
+// An unchanged absence is not the failure: when another sensitive file changed, the digest alone
+// cannot say which file moved, so the error names no file as missing.
+func TestRestoreSensitiveContentDoesNotBlameAnUnchangedAbsence(t *testing.T) {
+	directory := t.TempDir()
+	files := []schema.ComponentConfigurationFile{
+		{Path: "a.auto.tfvars", Sensitive: true, IfExists: "overwrite"},
+		{Path: "b.auto.tfvars", Sensitive: true, IfExists: "overwrite"},
+	}
+	b := filepath.Join(directory, "b.auto.tfvars")
+	require.NoError(t, os.WriteFile(b, []byte("token=1"), 0o600))
+	reviewed, err := sensitiveDigest(directory, files)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(b, []byte("token=2"), 0o600))
+
+	err = restoreSensitiveContent(directory, files, reviewed)
+
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+	require.NotErrorIs(t, err, os.ErrNotExist, "a.auto.tfvars was absent at review and still is")
+	require.NotContains(t, err.Error(), "a.auto.tfvars")
 }
 
 // The retained-file check excludes backend.tf.json only when its receipt and bytes verify that the
