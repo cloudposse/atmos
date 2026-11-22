@@ -16,6 +16,7 @@ import (
 	authList "github.com/cloudposse/atmos/pkg/auth/list"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -259,9 +260,9 @@ func executeAuthListCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Print output (to stdout for data, stderr for UI messages is handled by formatters).
-	fmt.Print(output)
-	return nil
+	// Print output to the data channel (stdout) so it passes through secret
+	// masking; UI messages on stderr are handled by the formatters.
+	return data.Write(output)
 }
 
 // parseFilterFlags parses and validates filter flags.
@@ -463,44 +464,28 @@ func renderOutput(
 func renderJSON(providers map[string]schema.Provider, identities map[string]schema.Identity) (string, error) {
 	defer perf.Track(nil, "auth.renderJSON")()
 
-	output := map[string]interface{}{}
+	output := structuredListOutput(providers, identities)
 
-	if len(providers) > 0 {
-		output[providersKey] = providers
-	}
-
-	if len(identities) > 0 {
-		output[identitiesKey] = identities
-	}
-
-	data, err := json.MarshalIndent(output, "", "  ")
+	encoded, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to marshal JSON: %w", errUtils.ErrParseFile, err)
 	}
 
-	return string(data) + "\n", nil
+	return string(encoded) + "\n", nil
 }
 
 // renderYAML renders providers and identities as YAML.
 func renderYAML(providers map[string]schema.Provider, identities map[string]schema.Identity) (string, error) {
 	defer perf.Track(nil, "auth.renderYAML")()
 
-	output := map[string]interface{}{}
+	output := structuredListOutput(providers, identities)
 
-	if len(providers) > 0 {
-		output[providersKey] = providers
-	}
-
-	if len(identities) > 0 {
-		output[identitiesKey] = identities
-	}
-
-	data, err := yaml.Marshal(output)
+	encoded, err := yaml.Marshal(output)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to marshal YAML: %w", errUtils.ErrParseFile, err)
 	}
 
-	return string(data), nil
+	return string(encoded), nil
 }
 
 // suggestProfilesForAuth checks if profiles exist and returns a helpful error
