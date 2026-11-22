@@ -402,3 +402,8 @@ var (
 
 // Docker credential helper errors.
 var ErrDockerCredentialHelper = errors.New("docker credential helper failed")
+
+// ErrAzureMSALCacheUnparseable is returned when an MSAL token cache that Atmos
+// reads through MSAL (a realm cache under ~/.azure/atmos, or the shared Azure CLI
+// cache for the empty realm) is not valid JSON. The file is left unchanged.
+var ErrAzureMSALCacheUnparseable = errors.New("the MSAL token cache is not valid JSON; refusing to overwrite it")

@@ -223,8 +223,10 @@ func TestUpdateAzureCLIMSALCache(t *testing.T) {
 		skipIfCannotDenyDirWrite(t)
 		_, cachePath := newAzureDir(t)
 		azureDir := filepath.Dir(cachePath)
-		// Pre-create the lock file so locking succeeds, then deny writes so the cache write fails.
+		// Pre-create the lock files (msal-extensions and legacy Atmos) so locking
+		// succeeds, then deny writes so the cache write fails.
 		require.NoError(t, os.WriteFile(AzureCLIMSALCacheLockPath(cachePath), nil, 0o600))
+		require.NoError(t, os.WriteFile(cachePath+".lock", nil, 0o600))
 		require.NoError(t, os.Chmod(azureDir, 0o500))
 		t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })
 		err := UpdateAzureCLIMSALCache(cachePath, func(map[string]interface{}) error { return nil })

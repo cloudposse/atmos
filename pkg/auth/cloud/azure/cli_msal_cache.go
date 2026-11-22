@@ -26,10 +26,37 @@ func AzureCLIMSALCacheLockPath(cachePath string) string {
 	return cachePath + msalExtensionsLockSuffix
 }
 
+// withMSALCacheFileLock runs fn while holding the cross-process locks every writer
+// of an MSAL token cache file may take:
+//
+//   - `<cache>.lockfile`, the msal-extensions lock that az uses, so Atmos and az
+//     exclude each other.
+//   - `<cache>.lock`, the lock older Atmos releases used, so a newer and an older
+//     Atmos running at the same time do not interleave a read and a write either.
+//
+// The locks are always taken in this order, and az and older Atmos each take only
+// one of them, so no lock-order cycle (deadlock) is possible. Windows FileLock is a
+// no-op. A lock that cannot be acquired within fileLockTimeout (or before ctx is
+// done) returns ErrFileLockTimeout.
+func withMSALCacheFileLock(ctx context.Context, cachePath string, fn func() error) error {
+	lockCtx, cancel := context.WithTimeout(ctx, fileLockTimeout)
+	defer cancel()
+
+	err := cache.NewFileLockAtPath(AzureCLIMSALCacheLockPath(cachePath)).WithLockContext(lockCtx, func() error {
+		// cache.NewFileLock locks cachePath + ".lock", the legacy Atmos lock name.
+		return cache.NewFileLock(cachePath).WithLockContext(lockCtx, fn)
+	})
+	if errors.Is(err, errUtils.ErrCacheLocked) {
+		return fmt.Errorf("%w: %w", ErrFileLockTimeout, err)
+	}
+	return err
+}
+
 // UpdateAzureCLIMSALCache performs a read-modify-write of the Azure CLI MSAL token
-// cache (normally ~/.azure/msal_token_cache.json) while holding a single
-// msal-extensions-compatible lock, so a concurrent `az` (or another Atmos process)
-// cannot interleave its own write between the read and the write.
+// cache (normally ~/.azure/msal_token_cache.json) while holding the
+// msal-extensions-compatible lock (and the legacy Atmos lock, see
+// withMSALCacheFileLock) for the whole update, so a concurrent `az` (or another
+// Atmos process) cannot interleave its own write between the read and the write.
 //
 // The file is co-owned with the user's own `az login` session, so it is never
 // reset: a UTF-8 BOM is stripped, a missing or empty file starts an empty cache,
@@ -43,10 +70,7 @@ func UpdateAzureCLIMSALCache(cachePath string, mutate func(msalCache map[string]
 		return fmt.Errorf("%w: failed to create %s: %w", errUtils.ErrAzureCLIMSALCacheUpdate, filepath.Dir(cachePath), err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), fileLockTimeout)
-	defer cancel()
-
-	err := cache.NewFileLockAtPath(AzureCLIMSALCacheLockPath(cachePath)).WithLockContext(ctx, func() error {
+	return withMSALCacheFileLock(context.Background(), cachePath, func() error {
 		msalCache, err := loadMSALCache(cachePath)
 		if err != nil {
 			return err
@@ -63,10 +87,6 @@ func UpdateAzureCLIMSALCache(cachePath string, mutate func(msalCache map[string]
 		}
 		return nil
 	})
-	if errors.Is(err, errUtils.ErrCacheLocked) {
-		return fmt.Errorf("%w: %w", ErrFileLockTimeout, err)
-	}
-	return err
 }
 
 // loadMSALCache loads the Azure CLI MSAL cache for an update. A missing,
