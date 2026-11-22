@@ -108,3 +108,4 @@ Atmos never exposes sensitive credentials directly in environment variables. Ins
 - The shell can be nested; `ATMOS_SHLVL` tracks the nesting depth
 - Use `--` to separate Atmos flags from shell-specific arguments
 - Environment variables from authentication take precedence over existing values
+- `atmos auth shell` exits with the shell's exit status. On Linux and macOS, a shell terminated by a signal exits with `128+N`, like a POSIX shell (for example `137` for `SIGKILL`, `143` for `SIGTERM`)
