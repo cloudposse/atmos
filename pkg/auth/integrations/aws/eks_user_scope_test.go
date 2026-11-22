@@ -197,7 +197,8 @@ func TestEKSIntegration_Cleanup_PicksOwnAccount(t *testing.T) {
 // cleanup refuses to guess and removes neither.
 func TestEKSIntegration_FindClusterARN_AmbiguousAccounts(t *testing.T) {
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-	// Older entries without account or identity in the user name match no candidate.
+	// Older entries without account or identity in the user name share one
+	// legacy user, so both clusters match it and neither can be attributed.
 	writeLegacyEKSEntry(t, kubeconfigPath, prodClusterARN, "", "admin")
 	writeLegacyEKSEntry(t, kubeconfigPath, prodClusterARNOther, "", "admin")
 

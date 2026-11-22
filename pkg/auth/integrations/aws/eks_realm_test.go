@@ -172,3 +172,24 @@ func TestEKSIntegration_Cleanup_RemovesPreRealmUser(t *testing.T) {
 	assert.NotContains(t, after.Clusters, prodClusterARN)
 	assert.Contains(t, after.Contexts, "other")
 }
+
+// TestEKSIntegration_Cleanup_PicksOwnAccountByPreRealmUser verifies that, with
+// same-named clusters of two accounts written before realms were part of the
+// name, a realm's cleanup still attributes the cluster by its pre-realm user
+// and removes only that one.
+func TestEKSIntegration_Cleanup_PicksOwnAccountByPreRealmUser(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	writeEKSEntry(t, kubeconfigPath, prodClusterARN, "prod", "us-east-2", "", "prod-admin")
+	writeEKSEntry(t, kubeconfigPath, prodClusterARNOther, "prod", "us-east-2", "", "other-admin")
+
+	integration := newCleanupIntegration(kubeconfigPath, "prod", "us-east-2", "", "other-admin")
+	integration.realm = realmRepoA
+	require.NoError(t, integration.Cleanup(t.Context()))
+
+	after, err := loadKubeconfig(kubeconfigPath)
+	require.NoError(t, err)
+	assert.NotContains(t, after.Clusters, prodClusterARNOther)
+	assert.NotContains(t, after.Contexts, prodClusterARNOther)
+	assert.Contains(t, after.Clusters, prodClusterARN)
+	assert.Equal(t, "prod-admin", contextIdentity(t, after, prodClusterARN))
+}
