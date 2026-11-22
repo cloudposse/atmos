@@ -26,6 +26,9 @@ const (
 	helperActionErase = "erase"
 	// helperNotFoundMessage is the protocol's standard "no such credential" reply.
 	helperNotFoundMessage = "credentials not found in native keychain"
+	// helperNotImplementedMessage is the reply of a helper that does not
+	// implement an action, such as docker-credential-ecr-login's store.
+	helperNotImplementedMessage = "not implemented"
 )
 
 // CredentialHelper stores and erases registry credentials through a Docker
@@ -72,7 +75,13 @@ func (h *execCredentialHelper) Store(helper, serverURL, username, secret string)
 	if err != nil {
 		return fmt.Errorf("%w: %s%s store for %s: %w", errUtils.ErrDockerCredentialHelper, credentialHelperPrefix, helper, serverURL, err)
 	}
-	if _, err := h.run(helper, helperActionStore, payload); err != nil {
+	if stdout, stderr, err := h.run(helper, helperActionStore, payload); err != nil {
+		if isNotImplementedReply(stdout, stderr) {
+			// The helper cannot store at all (docker-credential-ecr-login, for
+			// one): it gets credentials itself, so the caller decides what to do.
+			return fmt.Errorf("%w: %w: %s%s store for %s: %w", errUtils.ErrDockerCredentialHelper,
+				errUtils.ErrDockerCredentialHelperStoreUnsupported, credentialHelperPrefix, helper, serverURL, err)
+		}
 		return fmt.Errorf("%w: %s%s store for %s: %w", errUtils.ErrDockerCredentialHelper, credentialHelperPrefix, helper, serverURL, err)
 	}
 	return nil
@@ -82,10 +91,11 @@ func (h *execCredentialHelper) Store(helper, serverURL, username, secret string)
 func (h *execCredentialHelper) Erase(helper, serverURL string) error {
 	defer perf.Track(nil, "docker.execCredentialHelper.Erase")()
 
-	out, err := h.run(helper, helperActionErase, []byte(serverURL))
+	out, errOut, err := h.run(helper, helperActionErase, []byte(serverURL))
 	if err != nil {
-		// Logging out of a registry the helper does not know about is a no-op.
-		if strings.TrimSpace(out) == helperNotFoundMessage {
+		// Logging out of a registry the helper does not know about is a no-op,
+		// and so is erasing from a helper that cannot store: it holds nothing.
+		if strings.TrimSpace(out) == helperNotFoundMessage || isNotImplementedReply(out, errOut) {
 			return nil
 		}
 		return fmt.Errorf("%w: %s%s erase for %s: %w", errUtils.ErrDockerCredentialHelper, credentialHelperPrefix, helper, serverURL, err)
@@ -93,14 +103,14 @@ func (h *execCredentialHelper) Erase(helper, serverURL string) error {
 	return nil
 }
 
-// run executes the helper with a timeout and returns its stdout. Helpers report
-// errors on stdout, so a non-empty stdout or stderr is included in the error
-// rather than printed to the terminal.
-func (h *execCredentialHelper) run(helper, action string, input []byte) (string, error) {
+// run executes the helper with a timeout and returns its stdout and stderr.
+// Helpers report errors on stdout, so a non-empty stdout or stderr is included
+// in the error rather than printed to the terminal.
+func (h *execCredentialHelper) run(helper, action string, input []byte) (string, string, error) {
 	// A helper name is a PATH lookup suffix, never a path: refuse separators so a
 	// crafted config.json cannot point exec at an arbitrary relative program.
 	if strings.ContainsAny(helper, `/\`) {
-		return "", fmt.Errorf("%w: helper name %q must not contain a path separator", errUtils.ErrDockerCredentialHelper, helper)
+		return "", "", fmt.Errorf("%w: helper name %q must not contain a path separator", errUtils.ErrDockerCredentialHelper, helper)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), h.timeout)
@@ -116,7 +126,7 @@ func (h *execCredentialHelper) run(helper, action string, input []byte) (string,
 
 	err := cmd.Run()
 	if err == nil {
-		return stdout.String(), nil
+		return stdout.String(), stderr.String(), nil
 	}
 	if ctx.Err() != nil {
 		err = fmt.Errorf("%w: %w", err, ctx.Err())
@@ -124,7 +134,22 @@ func (h *execCredentialHelper) run(helper, action string, input []byte) (string,
 	if msg := strings.TrimSpace(stdout.String() + " " + stderr.String()); msg != "" {
 		err = fmt.Errorf("%w: %s", err, msg)
 	}
-	return stdout.String(), err
+	return stdout.String(), stderr.String(), err
+}
+
+// isNotImplementedReply reports whether a failed helper replied that the
+// action is not implemented. Helpers built on docker-credential-helpers print
+// the error on stdout; amazon-ecr-credential-helper (docker-credential-ecr-login)
+// returns "not implemented" from store and erase because it gets credentials
+// from AWS itself. stderr is checked too, for helpers that report there.
+func isNotImplementedReply(stdout, stderr string) bool {
+	for _, reply := range []string{stdout, stderr} {
+		reply = strings.ToLower(strings.TrimSpace(reply))
+		if reply == helperNotImplementedMessage || strings.HasSuffix(reply, ": "+helperNotImplementedMessage) {
+			return true
+		}
+	}
+	return false
 }
 
 // Compile-time check that the default runner implements CredentialHelper.

@@ -90,7 +90,14 @@ func (e *ECRPublicIntegration) Execute(ctx context.Context, creds types.ICredent
 
 	// Write credentials to Docker config.
 	if err := writer.WriteAuth(awsCloud.ECRPublicRegistryURL, result.Username, result.Password); err != nil {
-		return fmt.Errorf(errWrapFmt, errUtils.ErrDockerConfigWrite, err)
+		notice, managed := docker.HelperManagedNotice(err)
+		if !managed {
+			return fmt.Errorf(errWrapFmt, errUtils.ErrDockerConfigWrite, err)
+		}
+		// config.json routes public.ecr.aws to a helper such as ecr-login that
+		// gets credentials itself, so there is nothing to write.
+		ui.Info("ECR Public login: " + notice)
+		return nil
 	}
 
 	// Log success with actual expiration time.

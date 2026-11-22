@@ -93,7 +93,11 @@ func getDockerConfigDir() string {
 // registry through a credential helper (credHelpers[registry] or credsStore), the
 // credentials are stored in that helper instead and only an empty placeholder
 // entry is written to auths, matching `docker login`. A helper failure is returned
-// as ErrDockerCredentialHelper and leaves config.json unchanged. If config.json
+// as ErrDockerCredentialHelper and leaves config.json unchanged; when the helper
+// does not implement store (it gets credentials itself, like
+// docker-credential-ecr-login), the error also matches
+// ErrDockerCredentialHelperStoreUnsupported and HelperManagedNotice returns the
+// message callers show instead of failing. If config.json
 // cannot be saved after a successful helper store, the stored credential is
 // erased again so it is not orphaned in the helper. After a successful write it
 // warns (without failing) when DOCKER_AUTH_CONFIG is set, because Docker reads
@@ -133,6 +137,10 @@ func (m *ConfigManager) writeAuthLocked(registry, username, password string) err
 		// Docker ignores inline auths for this registry, so writing them would
 		// make the login silently ineffective. Store through the helper.
 		if err := m.credentialHelper().Store(helper, registry, username, password); err != nil {
+			if errors.Is(err, errUtils.ErrDockerCredentialHelperStoreUnsupported) {
+				// The helper gets credentials itself; see HelperManagedNotice.
+				return &helperManagedError{registry: registry, helper: helper, err: err}
+			}
 			return withHelperHint(err, helper)
 		}
 		config.setAuth(registry, helperPlaceholderEntry)

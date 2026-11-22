@@ -108,7 +108,14 @@ func (a *ACRIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 
 	// Write credentials to Docker config.
 	if err := dockerConfig.WriteAuth(registryURL, result.Username, result.Password); err != nil {
-		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDockerConfigWrite, err)
+		notice, managed := docker.HelperManagedNotice(err)
+		if !managed {
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDockerConfigWrite, err)
+		}
+		// config.json routes the registry to a helper that gets ACR credentials
+		// itself and cannot store them, so there is nothing to write.
+		ui.Info("ACR login: " + notice)
+		return nil
 	}
 
 	// Log success with actual expiration time, when known.

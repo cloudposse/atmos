@@ -16,7 +16,8 @@ const (
 	// fakeHelperDirEnv turns the test binary into a fake docker-credential-* helper
 	// that records each invocation under the given directory.
 	fakeHelperDirEnv = "_ATMOS_TEST_FAKE_DOCKER_CRED_HELPER_DIR"
-	// fakeHelperModeEnv selects the fake helper's behavior: "ok" (default), "notfound", "fail" or "hang".
+	// fakeHelperModeEnv selects the fake helper's behavior: "ok" (default), "notfound", "fail",
+	// "notimplemented" (reply on stdout), "notimplemented-stderr" or "hang".
 	fakeHelperModeEnv = "_ATMOS_TEST_FAKE_DOCKER_CRED_HELPER_MODE"
 	// fakeHelperName is the credsStore/credHelpers value that routes to the fake helper.
 	fakeHelperName = "atmostest"
@@ -58,6 +59,13 @@ func runFakeCredentialHelper(dir, mode string, args []string) int {
 	case "fail":
 		_, _ = io.WriteString(os.Stdout, "fake helper failure\n")
 		_, _ = io.WriteString(os.Stderr, "fake helper diagnostics\n")
+		return 1
+	case "notimplemented":
+		// What docker-credential-ecr-login replies to store and erase.
+		_, _ = io.WriteString(os.Stdout, helperNotImplementedMessage+"\n")
+		return 1
+	case "notimplemented-stderr":
+		_, _ = io.WriteString(os.Stderr, helperNotImplementedMessage+"\n")
 		return 1
 	case "hang":
 		time.Sleep(30 * time.Second)
