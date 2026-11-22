@@ -122,10 +122,8 @@ func executeEKSUpdateKubeconfigDirect(clusterName, region, kubeconfigPath, alias
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 
-	displayName := alias
-	if displayName == "" {
-		displayName = info.ARN
-	}
+	// The display name is the context name written: the alias, else [<realm>/]<ARN>.
+	displayName := kube.ContextName(info.ARN, alias, clusterInfo.Realm)
 	ui.Success(fmt.Sprintf("EKS kubeconfig: %s → %s", displayName, kubeMgr.GetPath()))
 
 	return nil

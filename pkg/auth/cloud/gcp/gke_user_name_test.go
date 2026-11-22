@@ -52,3 +52,18 @@ func TestGKEKubeUserNames(t *testing.T) {
 		"atmos-gke-example-cluster-example-project-us-central1",
 	}, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", ""))
 }
+
+// TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup verifies that the users
+// the writer treats as its own when migrating an unprefixed context are the
+// same names cleanup removes, with and without a realm.
+func TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup(t *testing.T) {
+	for _, realm := range []string{"", "acme"} {
+		t.Run("realm="+realm, func(t *testing.T) {
+			written := BuildKubeClusterInfo(&GKEClusterInfo{Name: "example-cluster", ProjectID: "example-project", Location: "us-central1"}, "gcp-admin")
+			written.Realm = realm
+
+			assert.Equal(t, []string{LegacyGKEKubeUserName("example-project", "us-central1", "example-cluster")}, written.LegacyUserNames)
+			assert.Equal(t, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", realm), kube.OwnedUserNames(written))
+		})
+	}
+}

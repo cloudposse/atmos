@@ -146,10 +146,8 @@ func writeAKSKubeconfigDirect(ctx context.Context, creds types.ICredentials, p *
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
 	}
 
-	displayName := p.alias
-	if displayName == "" {
-		displayName = info.ID
-	}
+	// The display name is the context name written: the alias, else [<realm>/]<resource ID>.
+	displayName := kube.ContextName(info.ID, p.alias, p.realm)
 	ui.Success(fmt.Sprintf("AKS kubeconfig: %s → %s", displayName, kubeMgr.GetPath()))
 
 	return nil

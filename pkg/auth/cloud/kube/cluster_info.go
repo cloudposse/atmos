@@ -23,7 +23,9 @@ type ClusterInfo struct {
 
 	// ID uniquely identifies the cluster and is used as the kubeconfig
 	// cluster map key and default context name: the ARN for EKS, the ARM
-	// resource ID for AKS, or the canonical GKE resource name.
+	// resource ID for AKS, or the canonical GKE resource name. With a
+	// non-empty Realm, the default context name is <realm>/<ID> (see
+	// ContextName).
 	ID string
 
 	// Region disambiguates the generated exec-plugin username when the same
@@ -52,8 +54,16 @@ type ClusterInfo struct {
 	// realm is part of the exec-plugin username, so repositories with
 	// different realms never share (and overwrite) one user in a shared
 	// kubeconfig, and it is passed to the exec plugin as ATMOS_AUTH_REALM so
-	// the token is resolved in that realm. Leave empty to omit both.
+	// the token is resolved in that realm. It also prefixes the default
+	// context name (see ContextName). Leave empty to omit all three.
 	Realm string
+
+	// LegacyUserNames are exec-plugin user names that older versions wrote
+	// for this entry in formats UserName no longer produces, such as names
+	// without the account ID or identity. They count as this entry's own
+	// users (see OwnedUserNames) when an older unprefixed context is
+	// migrated to the realm-prefixed name. Leave empty when there are none.
+	LegacyUserNames []string
 
 	// ExecArgs are the fully-built kubectl exec-credential-plugin arguments,
 	// e.g. [aws, eks, token, --cluster-name, X, --region, Y] or

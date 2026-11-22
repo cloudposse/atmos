@@ -128,6 +128,7 @@ func (m *KubeconfigManager) WriteClusterConfig(info *ClusterInfo, alias, updateM
 		return false, fmt.Errorf("%w: failed to create directory %s: %w", errUtils.ErrKubeconfigWrite, dir, err)
 	}
 
+	migration := newUnprefixedContextMigration(info, alias) // Migrates an older unprefixed context.
 	switch updateMode {
 	case "replace":
 		return m.writeIfChanged(newConfig)
@@ -136,10 +137,10 @@ func (m *KubeconfigManager) WriteClusterConfig(info *ClusterInfo, alias, updateM
 		if err := m.checkErrorModeCollisions(newConfig); err != nil {
 			return false, err
 		}
-		return m.mergeIfChanged(newConfig)
+		return m.mergeIfChanged(newConfig, migration)
 
 	case "merge":
-		return m.mergeIfChanged(newConfig)
+		return m.mergeIfChanged(newConfig, migration)
 
 	default:
 		return false, fmt.Errorf("%w: invalid update mode %q", errUtils.ErrKubeconfigMerge, updateMode)
@@ -174,11 +175,8 @@ func (m *KubeconfigManager) ListClusterIDs() ([]string, error) {
 func BuildClusterConfig(info *ClusterInfo, alias string) *clientcmdapi.Config {
 	defer perf.Track(nil, "kube.BuildClusterConfig")()
 
-	// Context name defaults to cluster ID, or alias if provided.
-	contextName := info.ID
-	if alias != "" {
-		contextName = alias
-	}
+	// Context name is the alias if provided, else [<realm>/]<cluster ID>.
+	contextName := ContextName(info.ID, alias, info.Realm)
 
 	// User name includes cluster name and region for uniqueness when multiple
 	// clusters share the same identity.
@@ -362,9 +360,10 @@ func (m *KubeconfigManager) writeIfChanged(newConfig *clientcmdapi.Config) (bool
 	return true, nil
 }
 
-// mergeIfChanged merges newConfig into the existing file. Returns changed=false
-// when the merge result would equal the existing on-disk content.
-func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config) (bool, error) {
+// mergeIfChanged merges newConfig into the existing file after applying
+// migration (nil for none). Returns changed=false when the result would equal
+// the existing on-disk content.
+func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config, migration *unprefixedContextMigration) (bool, error) {
 	// Load existing config if file exists.
 	existing := clientcmdapi.NewConfig()
 	fileExists := false
@@ -384,7 +383,8 @@ func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config) (bool
 	// CRLF handling, internal LocationOfOrigin paths populated during load) in
 	// ways that don't reflect actual content changes and would cause false
 	// positives on the no-op path.
-	if fileExists && !mergeWouldChange(existing, newConfig) {
+	migrated := migration.apply(existing)
+	if fileExists && !migrated && !mergeWouldChange(existing, newConfig) {
 		return m.reconcileMode()
 	}
 

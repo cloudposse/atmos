@@ -175,11 +175,8 @@ func (a *AKSIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
 	}
 
-	// Determine display name for success/debug message.
-	displayName := a.cluster.Alias
-	if displayName == "" {
-		displayName = info.ID
-	}
+	// The display name for success/debug messages is the context name written.
+	displayName := kube.ContextName(info.ID, a.cluster.Alias, a.realm)
 
 	// Only surface the success line when something actually changed.
 	// Auto-provisioned integrations re-run on every identity resolution, so
@@ -216,11 +213,10 @@ func (a *AKSIntegration) Cleanup(_ context.Context) error {
 		return nil
 	}
 
-	// Compute context name and user name to match BuildKubeClusterInfo output.
-	contextName := a.cluster.Alias
-	if contextName == "" {
-		contextName = clusterID
-	}
+	// Compute context names and user names to match BuildKubeClusterInfo
+	// output. The default context name is [<realm>/]<resource ID>; with a
+	// realm, the unprefixed resource ID that older versions wrote is checked too.
+	contextNames := kube.ContextNames(clusterID, a.cluster.Alias, a.realm)
 
 	// The username includes the subscription ID (see kube.ClusterInfo.AccountID)
 	// so same-named clusters in different subscriptions get distinct kubeconfig
@@ -233,15 +229,16 @@ func (a *AKSIntegration) Cleanup(_ context.Context) error {
 
 	// The username also includes the realm and identity (see
 	// azureCloud.BuildKubeClusterInfo). Also remove the names older versions
-	// wrote, without the realm or the identity; RemoveClusterConfig keeps any
-	// user while another context still references it.
+	// wrote, without the realm or the identity. A context is removed only when
+	// it points at one of these users, and a user is kept while another
+	// context still references it.
 	userNames := azureCloud.AKSKubeUserNames(a.cluster.Name, a.cluster.ResourceGroup, subscriptionID, a.identity, a.realm)
 
-	if err := mgr.RemoveClusterConfig(clusterID, contextName, userNames[0], userNames[1:]...); err != nil {
+	if err := mgr.RemoveOwnedClusterConfig(clusterID, contextNames, userNames); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
 	}
 
-	log.Debug("AKS cleanup: removed kubeconfig entries", logKeyCluster, a.cluster.Name, "context", contextName)
+	log.Debug("AKS cleanup: removed kubeconfig entries", logKeyCluster, a.cluster.Name, "context", contextNames[0])
 
 	return nil
 }

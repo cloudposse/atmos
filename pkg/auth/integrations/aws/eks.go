@@ -150,11 +150,8 @@ func (e *EKSIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 
-	// Determine display name for success/debug message.
-	displayName := e.cluster.Alias
-	if displayName == "" {
-		displayName = info.ARN
-	}
+	// The display name for success/debug messages is the context name written.
+	displayName := kube.ContextName(info.ARN, e.cluster.Alias, e.realm)
 
 	// Only surface the success line when something actually changed.
 	// Auto-provisioned integrations re-run on every identity resolution, so
@@ -190,24 +187,23 @@ func (e *EKSIntegration) Cleanup(_ context.Context) error {
 		return nil
 	}
 
-	// Compute context name and user name to match BuildClusterConfig output.
-	contextName := e.cluster.Alias
-	if contextName == "" {
-		// Use the ARN as context name (same default as BuildClusterConfig).
-		contextName = clusterARN
-	}
+	// Compute context names and user names to match BuildClusterConfig output.
+	// The default context name is [<realm>/]<ARN>; with a realm, the
+	// unprefixed ARN that older versions wrote is checked too.
+	contextNames := kube.ContextNames(clusterARN, e.cluster.Alias, e.realm)
 
 	// The user name includes the realm, account ID and identity (see
 	// awsCloud.BuildKubeClusterInfo). Also remove the names older versions
 	// wrote: without the realm, and the atmos-eks-<name>-<region> legacy name.
-	// RemoveClusterConfig keeps any user while another context still references it.
+	// A context is removed only when it points at one of these users, and a
+	// user is kept while another context still references it.
 	userNames := e.kubeUserNames(clusterARN)
 
-	if err := mgr.RemoveClusterConfig(clusterARN, contextName, userNames[0], userNames[1:]...); err != nil {
+	if err := mgr.RemoveOwnedClusterConfig(clusterARN, contextNames, userNames); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 
-	log.Debug("EKS cleanup: removed kubeconfig entries", "cluster", e.cluster.Name, "context", contextName)
+	log.Debug("EKS cleanup: removed kubeconfig entries", "cluster", e.cluster.Name, "context", contextNames[0])
 
 	return nil
 }
@@ -288,16 +284,11 @@ func (e *EKSIntegration) findClusterARN(mgr *kube.KubeconfigManager) (string, er
 func (e *EKSIntegration) selectOwnedClusterARN(mgr *kube.KubeconfigManager, candidates []string) (string, error) {
 	var owned []string
 	for _, clusterARN := range candidates {
-		contextName := e.cluster.Alias
-		if contextName == "" {
-			contextName = clusterARN
-		}
-		kubeContext, err := mgr.LookupContext(contextName)
+		isOwned, err := e.ownsClusterContext(mgr, clusterARN)
 		if err != nil {
 			return "", err
 		}
-		if kubeContext != nil && kubeContext.Cluster == clusterARN &&
-			slices.Contains(e.kubeUserNames(clusterARN), kubeContext.AuthInfo) {
+		if isOwned {
 			owned = append(owned, clusterARN)
 		}
 	}
@@ -307,6 +298,23 @@ func (e *EKSIntegration) selectOwnedClusterARN(mgr *kube.KubeconfigManager, cand
 	}
 	return "", fmt.Errorf("%w: %d clusters named %s in %s match and none can be attributed to identity %q",
 		errUtils.ErrEKSClusterAmbiguous, len(candidates), e.cluster.Name, e.cluster.Region, e.identity)
+}
+
+// ownsClusterContext reports whether one of the context names this integration
+// writes for clusterARN (see kube.ContextNames) exists, uses that cluster and
+// points at one of this integration's exec users.
+func (e *EKSIntegration) ownsClusterContext(mgr *kube.KubeconfigManager, clusterARN string) (bool, error) {
+	for _, contextName := range kube.ContextNames(clusterARN, e.cluster.Alias, e.realm) {
+		kubeContext, err := mgr.LookupContext(contextName)
+		if err != nil {
+			return false, err
+		}
+		if kubeContext != nil && kubeContext.Cluster == clusterARN &&
+			slices.Contains(e.kubeUserNames(clusterARN), kubeContext.AuthInfo) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // kubeUserNames returns the exec user name this integration writes for

@@ -196,6 +196,7 @@ func BuildKubeClusterInfo(info *EKSClusterInfo, identityName string) (*kube.Clus
 		UserPrefix:               eksUserPrefix,
 		AccountID:                clusterAccountID(info.ARN),
 		Identity:                 identityName,
+		LegacyUserNames:          []string{LegacyEKSKubeUserName(info.Name, info.Region)},
 		ExecArgs:                 execArgs,
 		ExecEnv:                  execEnv,
 	}, nil

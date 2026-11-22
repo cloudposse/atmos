@@ -264,6 +264,7 @@ func BuildKubeClusterInfo(info *AKSClusterInfo, identityName string) *kube.Clust
 		UserPrefix:               aksUserPrefix,
 		AccountID:                info.SubscriptionID,
 		Identity:                 identityName,
+		LegacyUserNames:          []string{LegacyAKSKubeUserName(info.Name, info.ResourceGroup, info.SubscriptionID)},
 		ExecArgs:                 execArgs,
 		ExecEnv:                  execEnv,
 	}

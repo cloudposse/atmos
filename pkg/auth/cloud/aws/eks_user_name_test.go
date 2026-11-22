@@ -72,3 +72,20 @@ func TestEKSKubeUserNames(t *testing.T) {
 		"atmos-eks-prod-us-east-2",
 	}, EKSKubeUserNames(arn, "prod", "us-east-2", "admin", ""))
 }
+
+// TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup verifies that the users
+// the writer treats as its own when migrating an unprefixed context are the
+// same names cleanup removes, with and without a realm.
+func TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup(t *testing.T) {
+	const clusterARN = "arn:aws:eks:us-east-2:111111111111:cluster/prod"
+	for _, realm := range []string{"", "acme"} {
+		t.Run("realm="+realm, func(t *testing.T) {
+			written, err := BuildKubeClusterInfo(&EKSClusterInfo{Name: "prod", Region: "us-east-2", ARN: clusterARN}, "prod-admin")
+			require.NoError(t, err)
+			written.Realm = realm
+
+			assert.Equal(t, []string{LegacyEKSKubeUserName("prod", "us-east-2")}, written.LegacyUserNames)
+			assert.Equal(t, EKSKubeUserNames(clusterARN, "prod", "us-east-2", "prod-admin", realm), kube.OwnedUserNames(written))
+		})
+	}
+}

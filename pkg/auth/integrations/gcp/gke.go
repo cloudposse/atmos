@@ -144,10 +144,7 @@ func (g *GKEIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	}
 	gkeExpectedServers.Store(expectedServerKey, info.Endpoint)
 
-	displayName := g.cluster.Alias
-	if displayName == "" {
-		displayName = info.ID
-	}
+	displayName := kube.ContextName(info.ID, g.cluster.Alias, g.realm)
 	if changed {
 		ui.Success(fmt.Sprintf("GKE kubeconfig: %s → %s", displayName, mgr.GetPath()))
 		log.Debug("GKE kubeconfig written", "cluster", g.cluster.Name, "context", displayName, "path", mgr.GetPath())
@@ -167,16 +164,16 @@ func (g *GKEIntegration) Cleanup(_ context.Context) error {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
 	clusterID := gcpCloud.ClusterResourceName(g.cluster.ProjectID, g.cluster.Location, g.cluster.Name)
-	contextName := g.cluster.Alias
-	if contextName == "" {
-		contextName = clusterID
-	}
+	// The default context name is [<realm>/]<resource name>; with a realm, the
+	// unprefixed resource name that older versions wrote is checked too.
+	contextNames := kube.ContextNames(clusterID, g.cluster.Alias, g.realm)
 	// The username includes the realm and identity (see
 	// gcpCloud.BuildKubeClusterInfo). Also remove the names older versions
-	// wrote, without the realm or the identity; RemoveClusterConfig keeps any
-	// user while another context still references it.
+	// wrote, without the realm or the identity. A context is removed only when
+	// it points at one of these users, and a user is kept while another
+	// context still references it.
 	userNames := gcpCloud.GKEKubeUserNames(g.cluster.ProjectID, g.cluster.Location, g.cluster.Name, g.identity, g.realm)
-	if err := mgr.RemoveClusterConfig(clusterID, contextName, userNames[0], userNames[1:]...); err != nil {
+	if err := mgr.RemoveOwnedClusterConfig(clusterID, contextNames, userNames); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
 	gkeExpectedServers.Delete(g.expectedServerKey(mgr.GetPath()))

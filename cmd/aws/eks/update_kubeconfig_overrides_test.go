@@ -204,11 +204,15 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 		unavailable  bool
 		writeFailure bool
 		realm        string
+		alias        string
 		wantUser     string
+		wantContext  string
 		wantErr      error
 	}{
-		{name: "preserves auth context", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
-		{name: "realm scopes the user", realm: "acme", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo"},
+		{name: "preserves auth context", alias: "bar-context", wantContext: "bar-context", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
+		{name: "realm scopes the user", realm: "acme", alias: "bar-context", wantContext: "bar-context", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo"},
+		{name: "default context without realm is the ARN", wantContext: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
+		{name: "realm prefixes the default context", realm: "acme", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo"},
 		{name: "working directory unavailable", unavailable: true, wantErr: errUtils.ErrWorkingDirAccessFailed},
 		{name: "kubeconfig parent is a file", writeFailure: true, wantErr: errUtils.ErrKubeconfigWrite},
 	} {
@@ -253,7 +257,7 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 				// The existing AWS config is a file, so it cannot contain a kubeconfig.
 				path = filepath.Join(configDir, "config", "kubeconfig")
 			}
-			err = executeEKSUpdateKubeconfigDirect("bar", "", path, "bar-context", "foo")
+			err = executeEKSUpdateKubeconfigDirect("bar", "", path, tt.alias, "foo")
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, errUtils.ErrEKSIntegrationFailed)
 				require.ErrorIs(t, err, tt.wantErr)
@@ -267,7 +271,9 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 			t.Chdir(t.TempDir())
 			config, err := clientcmd.LoadFromFile(path)
 			require.NoError(t, err)
-			assert.Equal(t, "bar-context", config.CurrentContext)
+			assert.Equal(t, tt.wantContext, config.CurrentContext)
+			require.Contains(t, config.Contexts, tt.wantContext)
+			assert.Equal(t, tt.wantUser, config.Contexts[tt.wantContext].AuthInfo)
 			user := config.AuthInfos[tt.wantUser]
 			require.NotNil(t, user)
 			assert.Equal(t, []string{"aws", "eks", "token", "--cluster-name", "bar", "--region", "eu-central-1", "--identity=foo"}, user.Exec.Args)

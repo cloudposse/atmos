@@ -3,6 +3,7 @@ package kube
 import (
 	"fmt"
 	"os"
+	"slices"
 
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -14,6 +15,10 @@ import (
 // RemoveClusterConfig removes a context from the kubeconfig together with the
 // cluster and users it wrote. Idempotent: returns nil if entries do not exist.
 //
+// The context is removed only when it points at userName or one of
+// extraUserNames, so cleaning up one integration never removes a context of
+// the same name that another realm, identity or tool pointed at its own user.
+//
 // The cluster and each user are removed only when no remaining context still
 // references them, so cleaning up one integration never breaks another context
 // that shares the cluster entry (for example, two identities for one cluster)
@@ -21,7 +26,17 @@ import (
 // users to remove under the same rule, such as a user name in a format that
 // older versions wrote.
 func (m *KubeconfigManager) RemoveClusterConfig(clusterARN, contextName, userName string, extraUserNames ...string) error {
-	defer perf.Track(nil, "kube.KubeconfigManager.RemoveClusterConfig")()
+	return m.RemoveOwnedClusterConfig(clusterARN, []string{contextName}, append([]string{userName}, extraUserNames...))
+}
+
+// RemoveOwnedClusterConfig removes each of contextNames that points at one of
+// userNames, then the cluster and each of userNames that no remaining context
+// references. A context that points at any other user is left alone, together
+// with its cluster and user. Pass ContextNames as contextNames so a context
+// written under the older, unprefixed default name is cleaned up too.
+// Idempotent: returns nil if entries do not exist. Empty names are ignored.
+func (m *KubeconfigManager) RemoveOwnedClusterConfig(clusterID string, contextNames, userNames []string) error {
+	defer perf.Track(nil, "kube.KubeconfigManager.RemoveOwnedClusterConfig")()
 
 	// If the file doesn't exist, nothing to clean up.
 	if _, err := os.Stat(m.path); os.IsNotExist(err) {
@@ -33,20 +48,24 @@ func (m *KubeconfigManager) RemoveClusterConfig(clusterARN, contextName, userNam
 		return fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, err)
 	}
 
-	// Remove the context first, so references are counted without it.
-	delete(existing.Contexts, contextName)
-	if !clusterReferenced(existing, clusterARN) {
-		delete(existing.Clusters, clusterARN)
+	// Remove the owned contexts first, so references are counted without them.
+	for _, contextName := range contextNames {
+		if !contextOwnedBy(existing, contextName, userNames) {
+			continue
+		}
+		delete(existing.Contexts, contextName)
+		// If current-context points to the removed context, clear it.
+		if existing.CurrentContext == contextName {
+			existing.CurrentContext = ""
+		}
 	}
-	for _, name := range append([]string{userName}, extraUserNames...) {
+	if !clusterReferenced(existing, clusterID) {
+		delete(existing.Clusters, clusterID)
+	}
+	for _, name := range userNames {
 		if name != "" && !userReferenced(existing, name) {
 			delete(existing.AuthInfos, name)
 		}
-	}
-
-	// If current-context points to the removed context, clear it.
-	if existing.CurrentContext == contextName {
-		existing.CurrentContext = ""
 	}
 
 	// If the config is now empty, remove the file.
@@ -72,6 +91,13 @@ func (m *KubeconfigManager) LookupContext(contextName string) (*clientcmdapi.Con
 	}
 
 	return existing.Contexts[contextName], nil
+}
+
+// contextOwnedBy reports whether the named context exists in config and points
+// at one of userNames.
+func contextOwnedBy(config *clientcmdapi.Config, contextName string, userNames []string) bool {
+	kubeContext, ok := config.Contexts[contextName]
+	return ok && kubeContext != nil && kubeContext.AuthInfo != "" && slices.Contains(userNames, kubeContext.AuthInfo)
 }
 
 // clusterReferenced reports whether any context in config uses the cluster.

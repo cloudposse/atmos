@@ -144,6 +144,7 @@ func BuildKubeClusterInfo(info *GKEClusterInfo, identityName string) *kube.Clust
 		Region:                   gkeUserRegion(info.ProjectID, info.Location),
 		UserPrefix:               gkeUserPrefix,
 		Identity:                 identityName,
+		LegacyUserNames:          []string{LegacyGKEKubeUserName(info.ProjectID, info.Location, info.Name)},
 		ExecArgs:                 execArgs,
 		ExecEnv:                  execEnv,
 	}

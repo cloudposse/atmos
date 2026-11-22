@@ -54,3 +54,18 @@ func TestAKSKubeUserNames(t *testing.T) {
 		"atmos-aks-dev-cluster-dev-rg-sub-123",
 	}, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", ""))
 }
+
+// TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup verifies that the users
+// the writer treats as its own when migrating an unprefixed context are the
+// same names cleanup removes, with and without a realm.
+func TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup(t *testing.T) {
+	for _, realm := range []string{"", "acme"} {
+		t.Run("realm="+realm, func(t *testing.T) {
+			written := BuildKubeClusterInfo(&AKSClusterInfo{Name: "dev-cluster", ResourceGroup: "dev-rg", SubscriptionID: "sub-123"}, "azure-admin")
+			written.Realm = realm
+
+			assert.Equal(t, []string{LegacyAKSKubeUserName("dev-cluster", "dev-rg", "sub-123")}, written.LegacyUserNames)
+			assert.Equal(t, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", realm), kube.OwnedUserNames(written))
+		})
+	}
+}
