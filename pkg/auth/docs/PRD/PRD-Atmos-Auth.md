@@ -487,13 +487,13 @@ Atmos Auth provides a unified, cloud-agnostic authentication and authorization s
 1. Engineer runs `atmos auth login -i prod-cross-account-admin`
 2. System resolves identity chain: AWS SSO → Permission Set → Assume Role
 3. **Step 1**: AWS SSO provider authenticates user via device flow
-   - Returns SSO session credentials with temporary access token
+    - Returns SSO session credentials with temporary access token
 4. **Step 2**: Permission Set identity receives SSO credentials
-   - Uses SSO credentials to assume `IdentityManagersTeamAccess` permission set
-   - Returns permission set role credentials (AccessKeyID, SecretAccessKey, SessionToken)
+    - Uses SSO credentials to assume `IdentityManagersTeamAccess` permission set
+    - Returns permission set role credentials (AccessKeyID, SecretAccessKey, SessionToken)
 5. **Step 3**: Assume Role identity receives permission set credentials
-   - Uses permission set credentials (not original SSO credentials) to assume cross-account role
-   - Returns final cross-account role credentials
+    - Uses permission set credentials (not original SSO credentials) to assume cross-account role
+    - Returns final cross-account role credentials
 6. Engineer now has access to production cross-account resources
 
 **Identity Configuration Example**:
@@ -694,39 +694,42 @@ For identity chains (e.g., AWS SSO → Permission Set → Assume Role):
 
 1. **Chain Resolution**: Recursively resolve the provider source for the target identity
 
-   - `prod-admin` chains to `managers-base` identity
-   - `managers-base` chains to `company-sso` provider
-   - Source provider identified: `company-sso`
+    - `prod-admin` chains to `managers-base` identity
+    - `managers-base` chains to `company-sso` provider
+    - Source provider identified: `company-sso`
 
 2. **Sequential Authentication**: Authenticate through the chain step by step
 
-   - **Step 1**: Authenticate with source provider (`company-sso`)
-     - Returns base credentials (SSO session tokens)
-   - **Step 2**: First identity (`managers-base`) authenticates using base credentials
-     - Permission Set identity receives SSO credentials
-     - Uses SSO credentials to assume permission set role
-     - Returns permission set credentials (AWS access keys)
-   - **Step 3**: Final identity (`prod-admin`) authenticates using previous credentials
-     - Assume Role identity receives permission set credentials
-     - Uses permission set credentials to assume cross-account role
-     - Returns final role credentials
+    - **Step 1**: Authenticate with source provider (`company-sso`)
+      - Returns base credentials (SSO session tokens)
+    - **Step 2**: First identity (`managers-base`) authenticates using base credentials
+      - Permission Set identity receives SSO credentials
+      - Uses SSO credentials to assume permission set role
+      - Returns permission set credentials (AWS access keys)
+    - **Step 3**: Final identity (`prod-admin`) authenticates using previous credentials
+      - Assume Role identity receives permission set credentials
+      - Uses permission set credentials to assume cross-account role
+      - Returns final role credentials
 
 3. **Credential Transformation**: Each step transforms credentials for the next
 
-   - Provider credentials → Identity credentials → Final credentials
-   - Metadata (region, account, session info) preserved through chain
-   - Each identity validates incoming credentials are appropriate
+    - Provider credentials → Identity credentials → Final credentials
+    - Metadata (region, account, session info) preserved through chain
+    - Each identity validates incoming credentials are appropriate
 
 4. **Error Handling**: Chain stops at first failure with clear error context
 
-   - Indicates which step in the chain failed
-   - Provides actionable error messages
-   - Maintains audit trail of successful steps
+    - Indicates which step in the chain failed
+    - Provides actionable error messages
+    - Maintains audit trail of successful steps
 
 5. **Caching Strategy**: Cache credentials at each step for performance
-   - Provider credentials cached separately from identity credentials
-   - Each identity's credentials cached with appropriate expiration
-   - Cache keys include full chain context to avoid conflicts
+    - Provider credentials cached separately from identity credentials
+    - Each identity's credentials cached with appropriate expiration
+    - Identity credential cache keys include full chain context to avoid conflicts
+    - The AWS IAM Identity Center (SSO) session token is cached separately, keyed by the portal start URL and
+      region only. Two SSO providers with the same start URL and region intentionally share one session entry,
+      even when their names or identity chains differ
 
 ### 4.3 Security Model
 
@@ -800,7 +803,7 @@ AWS IAM Identity Center uses the OAuth 2.0 device authorization flow. During aut
 
 #### AWS SAML
 
-The AWS SAML provider uses the `github.com/versent/saml2aws/v2` package with Playwright for browser automation to authenticate against SAML identity providers and assume AWS roles.
+The AWS SAML provider uses a vendored copy of the `saml2aws` library (`pkg/auth/providers/aws/saml2aws/`) with Playwright for browser automation to authenticate against SAML identity providers and assume AWS roles.
 
 **Basic Configuration:**
 
@@ -811,7 +814,7 @@ providers:
     url: https://accounts.google.com/o/saml2/initsso?idpid=C01abc23&spid=123456789&forceauthn=false
     region: us-east-1
     username: user@company.com
-    provider_type: GoogleApps # Optional: auto-detected if not specified
+    driver: GoogleApps # Optional: auto-detected if not specified
     download_browser_driver: true # Optional: auto-download Playwright drivers
 ```
 
@@ -825,7 +828,7 @@ providers:
     region: us-west-2
     username: john.doe@company.com
     password: "${SAML_PASSWORD}" # Optional: will prompt if not provided
-    provider_type: Okta
+    driver: Okta
     download_browser_driver: true
     session:
       duration: 1h
@@ -836,22 +839,33 @@ providers:
 - `GoogleApps` - Google Workspace SAML
 - `Okta` - Okta SAML
 - `ADFS` - Active Directory Federation Services
-- `ADFS2` - ADFS 2.0
-- `AzureAD` - Azure Active Directory
-- `PingFed` - PingFederate
-- `KeyCloak` - Keycloak
-- `Auth0` - Auth0
-- `OneLogin` - OneLogin
-- `Browser` - Generic browser-based SAML (auto-detected)
+- `Browser` - Generic browser-based SAML (auto-detected); use it for any other IdP
+  (for example Azure AD, PingFederate, Keycloak, Auth0, OneLogin)
+
+The vendored SAML client supports only these four drivers, set with the `driver` field (case-sensitive).
+Other driver names are rejected with an "unsupported SAML driver" error when the provider logs in, even though
+configuration validation succeeds. Migrate a removed driver to `driver: Browser`, for example replace
+`driver: KeyCloak` with:
+
+```yaml
+providers:
+  keycloak-saml:
+    kind: aws/saml
+    url: https://sso.example.com/realms/example/protocol/saml/clients/aws
+    driver: Browser # Was: KeyCloak.
+```
 
 **Environment Variables:**
 
-- `SAML2AWS_AUTO_BROWSER_DOWNLOAD=true` - Auto-download Playwright browser drivers
 - `SAML_PASSWORD` - SAML password (if not provided in config)
 
 **Usage Notes:**
 
-- First run will download Playwright browser drivers automatically if `download_browser_driver: true`
+- Downloads are behavior of the `Browser` driver. With `driver: Browser`, the first run downloads the Playwright
+  browser drivers automatically if `download_browser_driver: true`, and also when the required Playwright-managed
+  browser revision is missing, even without the flag. An explicit `GoogleApps`, `Okta` or `ADFS` driver skips
+  Playwright setup even when the flag is set
+  (`SAML2AWS_AUTO_BROWSER_DOWNLOAD` is not read by Atmos and does not force a download)
 - Browser automation handles MFA challenges automatically
 - Supports headless browser operation for CI/CD environments
 - SAML assertions are cached for session duration to reduce authentication frequency
@@ -1125,15 +1139,15 @@ identities:
 Atmos uses per-field precedence with deep merge:
 
 1. **If YAML has complete credentials** (both `access_key_id` and `secret_access_key`):
-   - Use YAML entirely (including `mfa_arn` from YAML)
-   - Keyring is ignored
+    - Use YAML entirely (including `mfa_arn` from YAML)
+    - Keyring is ignored
 
 2. **If YAML has no credentials** (both keys empty or omitted):
-   - Use keyring credentials (access keys + MFA ARN)
-   - **Override MFA ARN from YAML if present** (allows version-controlled MFA config)
+    - Use keyring credentials (access keys + MFA ARN)
+    - **Override MFA ARN from YAML if present** (allows version-controlled MFA config)
 
 3. **If YAML has partial credentials** (only one key):
-   - Error: Both keys must be provided or both must be empty
+    - Error: Both keys must be provided or both must be empty
 
 This allows flexible configuration:
 - **Store sensitive credentials in keyring** (local, secure)
@@ -1143,31 +1157,31 @@ This allows flexible configuration:
 **Authentication Flow with MFA:**
 
 1. **Credential Resolution:**
-   - Atmos retrieves long-lived credentials (access key + secret) from YAML config or keychain
-   - MFA ARN is retrieved from YAML config, environment variable, or keychain
+    - Atmos retrieves long-lived credentials (access key + secret) from YAML config or keychain
+    - MFA ARN is retrieved from YAML config, environment variable, or keychain
 
 2. **Interactive TOTP Prompt:**
-   - If MFA ARN is configured, Atmos displays an interactive form
-   - User enters 6-digit TOTP code from authenticator app (Google Authenticator, Authy, etc.)
-   - TOTP is validated (must be exactly 6 digits, cannot be empty)
+    - If MFA ARN is configured, Atmos displays an interactive form
+    - User enters 6-digit TOTP code from authenticator app (Google Authenticator, Authy, etc.)
+    - TOTP is validated (must be exactly 6 digits, cannot be empty)
 
 3. **Session Token Generation:**
-   - Atmos calls AWS STS `GetSessionToken` with:
-     - Long-lived credentials (access key + secret)
-     - MFA device ARN (`SerialNumber` parameter)
-     - TOTP code (`TokenCode` parameter)
-     - Session duration (configurable, default: 12 hours)
-   - AWS validates MFA and returns temporary session credentials
+    - Atmos calls AWS STS `GetSessionToken` with:
+      - Long-lived credentials (access key + secret)
+      - MFA device ARN (`SerialNumber` parameter)
+      - TOTP code (`TokenCode` parameter)
+      - Session duration (configurable, default: 12 hours)
+    - AWS validates MFA and returns temporary session credentials
 
 4. **Credential Storage:**
-   - Temporary session credentials (access key + secret + session token) are written to AWS files
-   - Long-lived credentials remain unchanged in keychain
-   - Session credentials are valid for configured duration
+    - Temporary session credentials (access key + secret + session token) are written to AWS files
+    - Long-lived credentials remain unchanged in keychain
+    - Session credentials are valid for configured duration
 
 5. **Subsequent Operations:**
-   - All AWS API calls use temporary session credentials
-   - Session credentials expire after configured duration
-   - Re-authentication required after expiration (prompts for new TOTP)
+    - All AWS API calls use temporary session credentials
+    - Session credentials expire after configured duration
+    - Re-authentication required after expiration (prompts for new TOTP)
 
 **Session Duration Configuration:**
 
@@ -1345,7 +1359,7 @@ components:
 **Component Auth Merging Rules**:
 
 1. **Identity Property Overrides**: Component identity properties override global identity properties with same name
-   - Example: `managers.default: true` in component overrides `managers.default: false` in global config
+    - Example: `managers.default: true` in component overrides `managers.default: false` in global config
 2. **New Identities**: New identities defined in components are added to available options
 3. **Provider Overrides**: Component providers override global providers with same name
 4. **Environment Variable Merging**: Component environment variables are merged with identity environment variables
@@ -1432,7 +1446,7 @@ providers:
     url: https://company.okta.com/app/amazon_aws/exk1234567890/sso/saml
     region: us-west-2
     username: john.doe@company.com
-    provider_type: Okta
+    driver: Okta
     download_browser_driver: true
     session:
       duration: 1h
@@ -1502,9 +1516,9 @@ identities:
 3. **Cache Check**: Check `aws-iam-identity-center/cplive-sso/managers` cache key
 4. **If Valid**: Use cached credentials, skip authentication
 5. **If Invalid**:
-   - Check `sso/cplive-sso/managers` for SSO tokens
-   - If SSO tokens valid, refresh permission set credentials
-   - If SSO tokens invalid, prompt for SSO authentication, then get permission set
+    - Check `sso/cplive-sso/managers` for SSO tokens
+    - If SSO tokens valid, refresh permission set credentials
+    - If SSO tokens invalid, prompt for SSO authentication, then get permission set
 
 #### Scenario 2: Complex Chain (SSO → Permission Set → Assume Role)
 
@@ -1536,12 +1550,12 @@ identities:
 1. **Target**: `sandbox-admin` identity
 2. **Chain**: `cplive-sso` → `managers` → `sandbox-admin`
 3. **Bottom-Up Validation**:
-   - Check `aws-assume-role/managers/sandbox-admin` (assume role credentials)
-   - If valid (>5min), use cached credentials ✅
-   - If invalid, check `aws-iam-identity-center/cplive-sso/managers` (permission set credentials)
-   - If permission set valid, use it to refresh assume role credentials
-   - If permission set invalid, check `sso/cplive-sso/managers` (SSO tokens)
-   - Re-authenticate from first invalid point down to target
+    - Check `aws-assume-role/managers/sandbox-admin` (assume role credentials)
+    - If valid (>5min), use cached credentials ✅
+    - If invalid, check `aws-iam-identity-center/cplive-sso/managers` (permission set credentials)
+    - If permission set valid, use it to refresh assume role credentials
+    - If permission set invalid, check `sso/cplive-sso/managers` (SSO tokens)
+    - Re-authenticate from first invalid point down to target
 
 #### Scenario 3: Deep Chain (SSO → Permission Set → Assume Role → Nested Assume Role)
 
@@ -1571,10 +1585,10 @@ identities:
 1. **Target**: `production-admin` identity
 2. **Chain**: `cplive-sso` → `managers` → `cross-account-admin` → `production-admin`
 3. **Optimization Strategy**:
-   - Check each level from bottom to top
-   - Find first valid cached credentials
-   - Re-authenticate only from first invalid point downward
-   - Cache all newly obtained credentials
+    - Check each level from bottom to top
+    - Find first valid cached credentials
+    - Re-authenticate only from first invalid point downward
+    - Cache all newly obtained credentials
 
 ### 5.2 Cache Key Strategy
 

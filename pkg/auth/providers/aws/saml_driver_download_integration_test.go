@@ -1,22 +1,18 @@
 package aws
 
 import (
-	"context"
-	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/mxschmitt/playwright-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/versent/saml2aws/v2/pkg/cfg"
-	"github.com/versent/saml2aws/v2/pkg/creds"
 
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/cfg"
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -29,11 +25,11 @@ import (
 func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 	// Skip unless explicitly opted in via environment variable.
 	if os.Getenv("RUN_PLAYWRIGHT_INTEGRATION") != "1" {
-		t.Skip("Skipping Playwright integration test (set RUN_PLAYWRIGHT_INTEGRATION=1 to run)")
+		t.Skipf("Skipping Playwright integration test (set RUN_PLAYWRIGHT_INTEGRATION=1 to run)")
 	}
 
 	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
+		t.Skipf("Skipping integration test in short mode")
 	}
 
 	// Create isolated test environment.
@@ -66,6 +62,12 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 		t.Skipf("Unsupported platform: %s", runtime.GOOS)
 	}
 
+	// Pin Playwright's registry and driver to this test, so a developer's PLAYWRIGHT_* settings
+	// cannot redirect the install (the assertions below read cacheDir) or the pre-seeding and patching.
+	t.Setenv("PLAYWRIGHT_BROWSERS_PATH", cacheDir)
+	t.Setenv("PLAYWRIGHT_DRIVER_PATH", t.TempDir())
+	t.Setenv("PLAYWRIGHT_CLI_PATH", "")
+
 	// Verify cache directory doesn't exist initially.
 	_, err := os.Stat(cacheDir)
 	require.True(t, os.IsNotExist(err), "Cache directory should not exist initially")
@@ -84,15 +86,11 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 	sp := provider.(*samlProvider)
 
 	// Verify shouldDownloadBrowser returns true.
-	shouldDownload := sp.shouldDownloadBrowser()
+	shouldDownload := sp.shouldDownloadBrowser(sp.getDriver())
 	assert.True(t, shouldDownload, "shouldDownloadBrowser should return true when DownloadBrowserDriver is enabled")
 
-	// Create SAML config.
-	samlConfig := sp.createSAMLConfig()
-	assert.True(t, samlConfig.DownloadBrowser, "SAML config should have DownloadBrowser enabled")
-
-	// Create LoginDetails.
-	loginDetails := sp.createLoginDetails()
+	// Create LoginDetails (the browser driver installs browsers when LoginDetails.DownloadBrowser is set).
+	loginDetails := sp.createLoginDetails(sp.getDriver())
 	assert.True(t, loginDetails.DownloadBrowser, "LoginDetails should have DownloadBrowser enabled")
 
 	// Test the actual Playwright driver installation.
@@ -109,12 +107,9 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 		Browsers:            []string{"chromium"}, // Only download Chromium to save time.
 	}
 
-	skipIfPlaywrightDriverUnavailable(t, &runOptions)
-
+	// The seeded driver makes playwright.Install skip its own driver download, so a failure here comes
+	// from the browser download and is reported instead of being skipped.
 	err = playwright.Install(&runOptions)
-	if isMissingPlaywrightDriverArtifact(err) {
-		t.Skipf("Skipping Playwright integration test because the upstream driver artifact is unavailable: %v", err)
-	}
 	require.NoError(t, err, "Playwright driver installation should succeed")
 
 	t.Log("Playwright drivers downloaded successfully")
@@ -208,7 +203,7 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 
 	// Note: shouldDownloadBrowser still returns true because DownloadBrowserDriver: true is explicitly set.
 	// This is correct behavior - explicit config always takes precedence.
-	shouldDownloadAfter := sp.shouldDownloadBrowser()
+	shouldDownloadAfter := sp.shouldDownloadBrowser(sp.getDriver())
 	assert.True(t, shouldDownloadAfter, "shouldDownloadBrowser returns true when explicitly configured")
 
 	// Test with a new provider without explicit download flag to verify auto-detection works.
@@ -223,54 +218,10 @@ func TestPlaywrightDriverDownload_Integration(t *testing.T) {
 	spAuto := providerAutoDetect.(*samlProvider)
 
 	// Now with drivers installed, auto-detection should disable download.
-	shouldDownloadAuto := spAuto.shouldDownloadBrowser()
+	shouldDownloadAuto := spAuto.shouldDownloadBrowser(spAuto.getDriver())
 	assert.False(t, shouldDownloadAuto, "shouldDownloadBrowser should return false when drivers exist and not explicitly configured")
 
 	t.Log("All driver detection checks passed")
-}
-
-// skipIfPlaywrightDriverUnavailable skips the test when the Playwright driver artifact pinned by
-// playwright-go is missing from the upstream CDN. Individual version+platform artifacts can
-// disappear upstream (e.g. playwright-1.57.0-linux.zip vanished in July 2026 while every other
-// version and platform stayed available); that is an upstream outage, not an Atmos regression,
-// so the test skips instead of failing. Genuine installation bugs still fail the test because
-// this pre-flight only checks that the artifact exists.
-func skipIfPlaywrightDriverUnavailable(t *testing.T, runOptions *playwright.RunOptions) {
-	t.Helper()
-
-	driver, err := playwright.NewDriver(runOptions)
-	require.NoError(t, err, "should be able to construct the Playwright driver")
-
-	// Mirror the platform suffix mapping from playwright-go's getDriverURLs.
-	var driverPlatform string
-	switch {
-	case runtime.GOOS == "windows":
-		driverPlatform = "win32_x64"
-	case runtime.GOOS == "darwin" && runtime.GOARCH == "arm64":
-		driverPlatform = "mac-arm64"
-	case runtime.GOOS == "darwin":
-		driverPlatform = "mac"
-	case runtime.GOOS == "linux" && runtime.GOARCH == "arm64":
-		driverPlatform = "linux-arm64"
-	default:
-		driverPlatform = "linux"
-	}
-
-	url := fmt.Sprintf("https://cdn.playwright.dev/builds/driver/playwright-%s-%s.zip", driver.Version, driverPlatform)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
-	require.NoError(t, err)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Skipf("Skipping: cannot reach Playwright CDN (%s): %v", url, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Skipf("Skipping: Playwright driver artifact unavailable upstream (%s returned %d)", url, resp.StatusCode)
-	}
 }
 
 // TestPlaywrightDriverDownload_WithSAML2AWS validates that saml2aws actually uses LoginDetails.DownloadBrowser.
@@ -278,11 +229,11 @@ func skipIfPlaywrightDriverUnavailable(t *testing.T, runOptions *playwright.RunO
 func TestPlaywrightDriverDownload_WithSAML2AWS(t *testing.T) {
 	// Skip unless explicitly opted in via environment variable.
 	if os.Getenv("RUN_PLAYWRIGHT_INTEGRATION") != "1" {
-		t.Skip("Skipping Playwright integration test (set RUN_PLAYWRIGHT_INTEGRATION=1 to run)")
+		t.Skipf("Skipping Playwright integration test (set RUN_PLAYWRIGHT_INTEGRATION=1 to run)")
 	}
 
 	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
+		t.Skipf("Skipping integration test in short mode")
 	}
 
 	// Create isolated test environment.
@@ -309,11 +260,10 @@ func TestPlaywrightDriverDownload_WithSAML2AWS(t *testing.T) {
 	sp := provider.(*samlProvider)
 
 	// Create configurations that would be passed to saml2aws.
-	samlConfig := sp.createSAMLConfig()
-	loginDetails := sp.createLoginDetails()
+	samlConfig := sp.createSAMLConfig(sp.getDriver())
+	loginDetails := sp.createLoginDetails(sp.getDriver())
 
-	// Verify both have DownloadBrowser set.
-	assert.True(t, samlConfig.DownloadBrowser, "IDPAccount config should have DownloadBrowser enabled")
+	// The browser driver installs browsers when LoginDetails.DownloadBrowser is set.
 	assert.True(t, loginDetails.DownloadBrowser, "LoginDetails should have DownloadBrowser enabled")
 
 	// Verify the config matches what saml2aws expects.
@@ -329,8 +279,8 @@ func TestPlaywrightDriverDownload_WithSAML2AWS(t *testing.T) {
 	t.Log("saml2aws configuration validated successfully")
 }
 
-// TestPlaywrightDriverDownload_ConsistentBehavior validates that DownloadBrowser is consistently
-// set across IDPAccount config and LoginDetails.
+// TestPlaywrightDriverDownload_ConsistentBehavior validates that LoginDetails.DownloadBrowser, which
+// the browser driver reads, follows the configuration and the installed browsers.
 func TestPlaywrightDriverDownload_ConsistentBehavior(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -378,35 +328,15 @@ func TestPlaywrightDriverDownload_ConsistentBehavior(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			testHomeDir := t.TempDir()
-			t.Setenv("HOME", testHomeDir)
-			t.Setenv("USERPROFILE", testHomeDir)
-			homedir.Reset()
-
-			// Windows: playwright-go checks LOCALAPPDATA for cache directory.
-			if runtime.GOOS == "windows" {
-				t.Setenv("LOCALAPPDATA", filepath.Join(testHomeDir, "AppData", "Local"))
-			}
+			// Isolate HOME and the Playwright browser directory for the current OS.
+			_, cacheDir := isolatedBrowserCacheDir(t)
 
 			// Optionally pre-install drivers.
 			if tt.setupDrivers {
-				var cacheDir string
-				switch runtime.GOOS {
-				case "darwin":
-					cacheDir = filepath.Join(testHomeDir, "Library", "Caches", "ms-playwright")
-				case "linux":
-					cacheDir = filepath.Join(testHomeDir, ".cache", "ms-playwright")
-				default:
-					cacheDir = filepath.Join(testHomeDir, "AppData", "Local", "ms-playwright")
-				}
-
-				versionDir := filepath.Join(cacheDir, "1.47.2")
-				require.NoError(t, os.MkdirAll(versionDir, 0o755))
-				// Create a realistic browser directory with a nested binary file
-				// so hasValidPlaywrightDrivers treats this as a complete install.
-				browserDir := filepath.Join(versionDir, "chromium-1234")
-				require.NoError(t, os.MkdirAll(browserDir, 0o755))
-				require.NoError(t, os.WriteFile(filepath.Join(browserDir, "chrome"), []byte("fake"), 0o755))
+				// Create a realistic, fully installed browser directory (Playwright's
+				// <cache>/chromium-<revision> layout), matching the revision the driver requires.
+				stubRequiredChromiumRevision(t, "1234")
+				installFakeBrowser(t, cacheDir, "chromium-1234")
 			}
 
 			// Create provider.
@@ -420,17 +350,9 @@ func TestPlaywrightDriverDownload_ConsistentBehavior(t *testing.T) {
 			require.NoError(t, err)
 			sp := provider.(*samlProvider)
 
-			// Get configurations.
-			samlConfig := sp.createSAMLConfig()
-			loginDetails := sp.createLoginDetails()
-
-			// Both should have consistent DownloadBrowser value.
-			assert.Equal(t, tt.expectedDownload, samlConfig.DownloadBrowser,
-				"IDPAccount.DownloadBrowser mismatch")
+			loginDetails := sp.createLoginDetails(sp.getDriver())
 			assert.Equal(t, tt.expectedDownload, loginDetails.DownloadBrowser,
 				"LoginDetails.DownloadBrowser mismatch")
-			assert.Equal(t, samlConfig.DownloadBrowser, loginDetails.DownloadBrowser,
-				"IDPAccount and LoginDetails should have same DownloadBrowser value")
 		})
 	}
 }
@@ -454,8 +376,8 @@ func TestPlaywrightDriverDownload_ConfigMapping(t *testing.T) {
 	sp := provider.(*samlProvider)
 
 	// Create saml2aws structures.
-	samlConfig := sp.createSAMLConfig()
-	loginDetails := sp.createLoginDetails()
+	samlConfig := sp.createSAMLConfig(sp.getDriver())
+	loginDetails := sp.createLoginDetails(sp.getDriver())
 
 	// Validate IDPAccount config.
 	assert.Equal(t, "https://sso.example.com/saml", samlConfig.URL)
@@ -463,7 +385,6 @@ func TestPlaywrightDriverDownload_ConfigMapping(t *testing.T) {
 	assert.Equal(t, "Browser", samlConfig.Provider)
 	assert.Equal(t, "prod-saml", samlConfig.Profile)
 	assert.Equal(t, "eu-west-1", samlConfig.Region)
-	assert.True(t, samlConfig.DownloadBrowser)
 	assert.False(t, samlConfig.Headless)              // Should always be false for interactive auth.
 	assert.Equal(t, 3600, samlConfig.SessionDuration) // Always 1 hour (samlDefaultSessionSec).
 
@@ -478,14 +399,4 @@ func TestPlaywrightDriverDownload_ConfigMapping(t *testing.T) {
 	assert.IsType(t, &creds.LoginDetails{}, loginDetails, "loginDetails should be *creds.LoginDetails")
 
 	t.Log("Config mapping validated successfully")
-}
-
-func isMissingPlaywrightDriverArtifact(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	msg := err.Error()
-	return strings.Contains(msg, "got non 200 status code: 404") &&
-		strings.Contains(msg, "/builds/driver/")
 }
