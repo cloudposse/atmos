@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -32,7 +31,7 @@ const (
 // guaranteed to be correct. This avoids redundant AssumeRole API calls when multiple
 // components in the same command share the same authentication chain (e.g., during
 // `atmos describe affected` which resolves many `!terraform.state` YAML functions).
-var processCredentialCache sync.Map // key: "realm:chain" string, value: *processCachedCreds
+var processCredentialCache sync.Map // key: "realm:chain#config-fingerprint" string (see chainCacheKey), value: *processCachedCreds
 
 // processCachedCreds holds credentials cached in-memory for the current process.
 type processCachedCreds struct {
@@ -48,14 +47,6 @@ func resetProcessCredentialCache() {
 	})
 }
 
-// chainCacheKey returns a unique cache key for the current chain and realm.
-func (m *manager) chainCacheKey() string {
-	if m.operationScope != nil {
-		return m.realm.Value + ":" + m.operationScope.realm + ":" + strings.Join(m.chain, "->")
-	}
-	return m.realm.Value + ":" + strings.Join(m.chain, "->")
-}
-
 // authenticateChain performs credential chain authentication with bottom-up validation.
 func (m *manager) authenticateChain(ctx context.Context, identityName string) (types.ICredentials, error) {
 	if err := m.enforceAuthPolicy(ctx, identityName, m.chain); err != nil {
@@ -69,8 +60,11 @@ func (m *manager) authenticateChain(ctx context.Context, identityName string) (t
 	// aws/credential-process) bypasses this cache: helper credentials may carry no expiration,
 	// so isCredentialValid would treat them as valid and skip the helper for the whole process.
 	// Multi-step chains still cache their final downstream credentials.
-	skipProcessCache := (len(m.chain) == 1 && m.chainRootIsStandalone()) || m.chainRootHasPrivateCache()
+	//
+	// The key includes a fingerprint of each step's effective configuration; a chain whose
+	// configuration cannot be fingerprinted (empty key) also bypasses the cache.
 	cacheKey := m.chainCacheKey()
+	skipProcessCache := (len(m.chain) == 1 && m.chainRootIsStandalone()) || m.chainRootHasPrivateCache() || cacheKey == ""
 	if !skipProcessCache {
 		if cached := m.cachedChainCredentials(cacheKey); cached != nil {
 			return cached, nil
