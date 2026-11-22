@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -822,6 +823,7 @@ func TestLoadAndInitializeCLICache(t *testing.T) {
 		name       string
 		setup      func(path string)
 		checkCache func(*testing.T, map[string]interface{}, map[string]interface{}, map[string]interface{})
+		wantErr    error
 	}{
 		{
 			name: "load existing cache with all sections",
@@ -901,18 +903,13 @@ func TestLoadAndInitializeCLICache(t *testing.T) {
 			},
 		},
 		{
-			name: "handle invalid JSON gracefully",
+			// The shared az cache is co-owned with `az login`; an unparseable file is
+			// reported, never reset to an empty cache and written back.
+			name: "refuse invalid JSON",
 			setup: func(path string) {
 				os.WriteFile(path, []byte("not valid json"), 0o600)
 			},
-			checkCache: func(t *testing.T, cache, accessTokenSection, accountSection map[string]interface{}) {
-				// Should create new empty cache on JSON parse error.
-				require.NotNil(t, cache)
-				require.NotNil(t, accessTokenSection)
-				require.NotNil(t, accountSection)
-				assert.Empty(t, accessTokenSection)
-				assert.Empty(t, accountSection)
-			},
+			wantErr: errUtils.ErrAzureCLIMSALCacheUnparseable,
 		},
 		{
 			name: "handle wrong type for sections",
@@ -937,18 +934,24 @@ func TestLoadAndInitializeCLICache(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			provider := &deviceCodeProvider{
-				name:     "test-provider",
-				tenantID: "tenant-123",
-			}
-
 			cachePath := filepath.Join(tmpDir, tt.name, "msal_token_cache.json")
 			os.MkdirAll(filepath.Dir(cachePath), 0o755)
 
 			tt.setup(cachePath)
 
-			cache, accessTokenSection, accountSection := provider.loadAndInitializeCLICache(cachePath)
+			var cache, accessTokenSection, accountSection map[string]interface{}
+			err := azureCloud.UpdateAzureCLIMSALCache(cachePath, func(loaded map[string]interface{}) error {
+				cache = loaded
+				accessTokenSection, accountSection = initializeCLICacheSections(loaded)
+				return nil
+			})
 
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				assert.Nil(t, cache, "the update callback must not run for an unparseable cache")
+				return
+			}
+			require.NoError(t, err)
 			if tt.checkCache != nil {
 				tt.checkCache(t, cache, accessTokenSection, accountSection)
 			}
@@ -1038,20 +1041,6 @@ func TestWithAzureFileLock_WrapsErrCacheLocked(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, azureCloud.ErrFileLockTimeout)
 	assert.False(t, executed, "fn must not run when the lock cannot be acquired")
-}
-
-// TestWriteCacheFileWithLocking_LockFailure verifies that writeCacheFileWithLocking returns false without overwriting existing data when the lock-protected write fails, exercising the withAzureFileLock error branch at its call site.
-// The function always creates the cache directory before locking, so an absent-parent-directory trick can't reach this call site; instead cachePath itself is pre-created as a directory so the write performed inside the lock fails cross-platform with "is a directory".
-func TestWriteCacheFileWithLocking_LockFailure(t *testing.T) {
-	cachePath := filepath.Join(t.TempDir(), "cache", "msal_token_cache.json")
-	require.NoError(t, os.MkdirAll(cachePath, 0o755))
-
-	ok := writeCacheFileWithLocking(cachePath, []byte("data"), "test cache")
-
-	assert.False(t, ok)
-	info, err := os.Stat(cachePath)
-	require.NoError(t, err)
-	assert.True(t, info.IsDir(), "cache path must remain untouched (still a directory) when the write fails")
 }
 
 // TestDeviceCodeProvider_updateAzureProfile_LockFailure verifies that updateAzureProfile

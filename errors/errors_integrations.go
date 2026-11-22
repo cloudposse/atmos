@@ -391,6 +391,10 @@ var (
 	ErrLSPNoServerForFile       = errors.New("no LSP server found for file")
 	ErrLSPRPCError              = errors.New("RPC error")
 	ErrLSPNoContentLengthHeader = errors.New("no Content-Length header found")
+
+	// Azure CLI MSAL token cache (~/.azure/msal_token_cache.json) errors.
+	ErrAzureCLIMSALCacheUpdate      = errors.New("failed to update the Azure CLI MSAL token cache")
+	ErrAzureCLIMSALCacheUnparseable = errors.New("the Azure CLI MSAL token cache is not valid JSON; refusing to overwrite it")
 )
 
 // Docker credential helper errors.
