@@ -158,7 +158,8 @@ func (m *ConfigManager) RemoveAuth(registries ...string) error {
 					continue
 				}
 			}
-			changed = config.removeAuth(registry) || changed
+			config.removeAuth(registry)
+			changed = true
 		}
 
 		if changed {

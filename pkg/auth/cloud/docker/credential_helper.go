@@ -97,11 +97,19 @@ func (h *execCredentialHelper) Erase(helper, serverURL string) error {
 // errors on stdout, so a non-empty stdout or stderr is included in the error
 // rather than printed to the terminal.
 func (h *execCredentialHelper) run(helper, action string, input []byte) (string, error) {
+	// A helper name is a PATH lookup suffix, never a path: refuse separators so a
+	// crafted config.json cannot point exec at an arbitrary relative program.
+	if strings.ContainsAny(helper, `/\`) {
+		return "", fmt.Errorf("%w: helper name %q must not contain a path separator", errUtils.ErrDockerCredentialHelper, helper)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), h.timeout)
 	defer cancel()
 
 	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, h.command(helper), action)
+	// The helper name comes from the user's own config.json (credsStore/credHelpers);
+	// docker/cli executes the same docker-credential-<name> program from PATH.
+	cmd := exec.CommandContext(ctx, h.command(helper), action) //nolint:gosec // G204: see comment above.
 	cmd.Stdin = bytes.NewReader(input)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

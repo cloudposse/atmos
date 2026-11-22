@@ -75,9 +75,8 @@ func parseRawConfig(data []byte) (*rawConfig, error) {
 		}
 	}
 
-	if cfg.auths == nil {
-		cfg.auths = make(map[string]json.RawMessage)
-	}
+	// cfg.auths stays non-nil: newRawConfig allocates it, decoding an object
+	// merges into it, and decodeOptional skips JSON null.
 	return cfg, nil
 }
 
@@ -105,13 +104,9 @@ func (c *rawConfig) setAuth(registry string, entry json.RawMessage) {
 	c.auths[registry] = entry
 }
 
-// removeAuth deletes the auths entry for registry and reports whether it existed.
-func (c *rawConfig) removeAuth(registry string) bool {
-	if _, ok := c.auths[registry]; !ok {
-		return false
-	}
+// removeAuth deletes the auths entry for registry.
+func (c *rawConfig) removeAuth(registry string) {
 	delete(c.auths, registry)
-	return true
 }
 
 // hasAuth reports whether config.json has an auths entry for registry.
