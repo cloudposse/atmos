@@ -18,14 +18,14 @@ func TestResolveLogoutTarget(t *testing.T) {
 		{name: "nothing selected prompts", sel: logoutSelection{}, want: logoutTarget{kind: logoutTargetInteractive}},
 		{
 			name: "--identity without a value prompts instead of looking up the sentinel",
-			sel:  logoutSelection{identity: IdentityFlagSelectValue},
+			sel:  logoutSelection{identityFlag: IdentityFlagSelectValue},
 			want: logoutTarget{kind: logoutTargetInteractive},
 		},
-		{name: "--identity with a value", sel: logoutSelection{identity: "prod"}, want: logoutTarget{kind: logoutTargetIdentity, identity: "prod"}},
-		{name: "positional identity wins over --identity", sel: logoutSelection{args: []string{"dev"}, identity: "prod"}, want: logoutTarget{kind: logoutTargetIdentity, identity: "dev"}},
-		{name: "positional identity wins over a bare --identity", sel: logoutSelection{args: []string{"dev"}, identity: IdentityFlagSelectValue}, want: logoutTarget{kind: logoutTargetIdentity, identity: "dev"}},
-		{name: "--all", sel: logoutSelection{all: true, identity: "prod"}, want: logoutTarget{kind: logoutTargetAll}},
-		{name: "--provider", sel: logoutSelection{provider: "sso", identity: "prod"}, want: logoutTarget{kind: logoutTargetProvider}},
+		{name: "--identity with a value", sel: logoutSelection{identityFlag: "prod"}, want: logoutTarget{kind: logoutTargetIdentity, identity: "prod"}},
+		{name: "positional identity wins over --identity", sel: logoutSelection{args: []string{"dev"}, identityFlag: "prod"}, want: logoutTarget{kind: logoutTargetIdentity, identity: "dev"}},
+		{name: "positional identity wins over a bare --identity", sel: logoutSelection{args: []string{"dev"}, identityFlag: IdentityFlagSelectValue}, want: logoutTarget{kind: logoutTargetIdentity, identity: "dev"}},
+		{name: "--all", sel: logoutSelection{all: true, identityFlag: "prod"}, want: logoutTarget{kind: logoutTargetAll}},
+		{name: "--provider", sel: logoutSelection{provider: "sso", identityFlag: "prod"}, want: logoutTarget{kind: logoutTargetProvider}},
 		{name: "--tags", sel: logoutSelection{tags: []string{"production"}}, want: logoutTarget{kind: logoutTargetTags}},
 	}
 	for _, tt := range tests {
@@ -41,7 +41,7 @@ func TestResolveLogoutTarget_TagsAreExclusive(t *testing.T) {
 	for name, sel := range map[string]logoutSelection{
 		"with --provider":          {tags: []string{"production"}, provider: "sso"},
 		"with --all":               {tags: []string{"production"}, all: true},
-		"with --identity":          {tags: []string{"production"}, identity: "prod"},
+		"with --identity":          {tags: []string{"production"}, identityFlag: "prod"},
 		"with positional identity": {tags: []string{"production"}, args: []string{"prod"}},
 	} {
 		t.Run(name, func(t *testing.T) {

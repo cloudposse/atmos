@@ -134,17 +134,17 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 
 	// Get identity from flag or positional argument.
 	// Note: "identity" is a persistent flag on parent authCmd, so it's automatically available.
-	identityFlag := GetIdentityFromFlags(cmd)
-	if identityFlag == "" {
-		identityFlag = v.GetString(IdentityFlagName)
-	}
+	// The explicit flag and ATMOS_IDENTITY are kept apart: ATMOS_IDENTITY is
+	// exported inside `atmos auth shell` and must not conflict with --tags.
+	identityReq := resolveIdentityRequest(cmd, v)
 
 	target, err := resolveLogoutTarget(&logoutSelection{
-		args:     args,
-		identity: identityFlag,
-		provider: providerFlag,
-		tags:     tagsFlag,
-		all:      allFlag,
+		args:         args,
+		identityFlag: identityReq.flag,
+		identityEnv:  identityReq.env,
+		provider:     providerFlag,
+		tags:         tagsFlag,
+		all:          allFlag,
 	})
 	if err != nil {
 		return err

@@ -326,6 +326,8 @@ All logout commands preserve your `atmos.yaml` configuration. Run `atmos auth lo
   <dd>
     Logout from every provider and identity matching any of the given tags (comma-separated): `--tags=production`. Providers and identities are tagged via an optional `tags: [...]` list in `atmos.yaml`. Uses the same confirmation flow as `--all`. Combine with `--keychain` to also remove stored credentials.
 
+    `--tags` cannot be combined with `--identity`, `--provider`, `--all`, or a positional identity. `ATMOS_IDENTITY` (which `atmos auth shell` exports) does not count as a selection, so `--tags` still works inside an Atmos auth shell.
+
     Environment variable: `ATMOS_AUTH_TAGS`
   </dd>
 

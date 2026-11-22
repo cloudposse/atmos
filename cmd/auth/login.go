@@ -148,40 +148,47 @@ func validateWebflowProviderMode(forceWebflow bool, providerName string) error {
 	return nil
 }
 
+// requestedLoginIdentity returns the identity `atmos auth login` was asked for,
+// in the order: explicit --identity flag (including IdentityFlagSelectValue for a
+// bare --identity), --tags match, ATMOS_IDENTITY. It returns "" when none applies,
+// so the caller falls back to the default identity.
+//
+// The explicit flag and the ATMOS_IDENTITY fallback are read separately so that
+// --tags beats ATMOS_IDENTITY, which `atmos auth shell` exports into the shell.
+func requestedLoginIdentity(cmd *cobra.Command, authManager auth.AuthManager) (string, error) {
+	// Use centralized function that handles Cobra's NoOptDefVal quirk correctly.
+	identityReq := resolveIdentityRequest(cmd, viper.GetViper())
+	if identityReq.flag != "" {
+		return identityReq.flag, nil
+	}
+
+	// If --tags was provided (and no explicit --identity), select by tag match instead
+	// of falling through to ATMOS_IDENTITY or the default-identity resolution.
+	if filterTags := parseCommaSeparatedNames(viper.GetString(authTagsViperKey)); len(filterTags) > 0 {
+		return selectIdentityByTags(authManager, filterTags)
+	}
+
+	return identityReq.env, nil
+}
+
 // authenticateIdentity handles identity-level authentication with default and interactive selection.
 // Returns (WhoamiInfo, needsProviderFallback, error) where needsProviderFallback indicates whether
 // to fall back to provider-level authentication (when no identities are available).
 func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager auth.AuthManager) (*authTypes.WhoamiInfo, bool, error) {
 	defer perf.Track(nil, "auth.authenticateIdentity")()
 
-	// Get identity from flag or use default.
-	// Use centralized function that handles Cobra's NoOptDefVal quirk correctly.
-	identityName := GetIdentityFromFlags(cmd)
-
-	// If flag wasn't provided, check Viper for env var fallback.
-	if identityName == "" {
-		identityName = viper.GetString(IdentityFlagName)
+	// Get identity from flag, --tags, or ATMOS_IDENTITY; otherwise use default.
+	identityName, err := requestedLoginIdentity(cmd, authManager)
+	if err != nil {
+		return nil, false, err
 	}
 
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue
 
-	// If --tags was provided (and no explicit --identity), select by tag match instead
-	// of falling through to the default-identity resolution below.
-	if identityName == "" {
-		if filterTags := parseCommaSeparatedNames(viper.GetString(authTagsViperKey)); len(filterTags) > 0 {
-			selected, err := selectIdentityByTags(authManager, filterTags)
-			if err != nil {
-				return nil, false, err
-			}
-			identityName = selected
-		}
-	}
-
 	// If no identity specified, get the default identity (which prompts if needed).
 	// If --identity flag was used without value, forceSelect will be true.
 	if identityName == "" || forceSelect {
-		var err error
 		identityName, err = authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
 			// Check if we should fall back to provider-based auth.
