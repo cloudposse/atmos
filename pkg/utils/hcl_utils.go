@@ -26,7 +26,8 @@ func WriteToFileAsHcl(
 		return err
 	}
 
-	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, fileMode)
+	// O_TRUNC replaces an existing file; without it, shorter content left the old tail behind (invalid HCL).
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMode)
 	if err != nil {
 		return err
 	}
@@ -98,7 +99,8 @@ func WriteTerraformBackendConfigToFileAsHcl(
 		backendBlockBody.SetAttributeValue(name, ctyVal)
 	}
 
-	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0o644)
+	// O_TRUNC replaces an existing file; without it, shorter content left the old tail behind (invalid HCL).
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}
