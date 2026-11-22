@@ -175,14 +175,9 @@ func (v versionExec) GetLatestVersion(forceCheck bool) (string, bool) {
 		return "", false
 	}
 
-	// Trim "v" prefix to compare versions.
-	latestVersion := strings.TrimPrefix(latestReleaseTag, "v")
-	currentVersion := strings.TrimPrefix(version.Version, "v")
-
-	if latestVersion != currentVersion {
-		return latestVersion, true
-	}
-	return "", false
+	// Compare semantically (accepting a "v" prefix) so a newer build or prerelease is never
+	// told to "update" to an older release.
+	return upgrade.NewerRelease(version.Version, latestReleaseTag)
 }
 
 func (v versionExec) displayVersionInFormat(forceCheck bool, format string) error {
@@ -231,15 +226,17 @@ func (v versionExec) checkRelease() {
 		log.Debug("Did not get release tag", "err", err, "latestReleaseTag", latestReleaseTag)
 		return
 	}
-	latestRelease := strings.TrimPrefix(latestReleaseTag, "v")
-	currentRelease := strings.TrimPrefix(version.Version, "v")
-
-	if latestRelease == currentRelease {
+	order, ok := upgrade.CompareVersions(version.Version, latestReleaseTag)
+	switch {
+	case !ok:
+		// An unparsable version (such as a development build) cannot be ordered, so suggest nothing.
+		log.Debug("Skipped version check", "version", version.Version, "latestReleaseTag", latestReleaseTag)
+	case order < 0:
+		v.printMessageToUpgradeToAtmosLatestRelease(strings.TrimPrefix(latestReleaseTag, "v"))
+	default:
 		ui.Writeln("")
 		ui.Success("You are running the latest version of Atmos")
 		ui.Writeln("")
-		log.Debug("Version check completed", "version", latestRelease)
-	} else {
-		v.printMessageToUpgradeToAtmosLatestRelease(latestRelease)
+		log.Debug("Version check completed", "version", version.Version, "latestReleaseTag", latestReleaseTag)
 	}
 }
