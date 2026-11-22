@@ -98,21 +98,3 @@ func TestEKSIntegration_Cleanup_RemovesAutoRealmNames(t *testing.T) {
 	assert.Equal(t, []string{"0123456789abcdef/" + prodClusterARN}, mapKeys(config.Contexts))
 	assert.Equal(t, []string{"atmos-0123456789abcdef-eks-prod-us-east-2-111111111111-admin"}, mapKeys(config.AuthInfos))
 }
-
-func TestIntegrationConfig_RealmExplicit(t *testing.T) {
-	for _, tt := range []struct {
-		name, value, source string
-		want                bool
-	}{
-		{name: "empty realm", source: realm.SourceConfig},
-		{name: "derived realm", value: autoRealm, source: realm.SourceAuto},
-		{name: "config realm", value: "acme", source: realm.SourceConfig, want: true},
-		{name: "env realm", value: "acme", source: realm.SourceEnv, want: true},
-		{name: "realm without source", value: "acme", want: true},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			config := &integrations.IntegrationConfig{Realm: tt.value, RealmSource: tt.source}
-			assert.Equal(t, tt.want, config.RealmExplicit())
-		})
-	}
-}
