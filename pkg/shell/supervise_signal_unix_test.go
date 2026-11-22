@@ -188,6 +188,24 @@ func TestRunCommand_TerminationGivesUpAfterGrace(t *testing.T) {
 	requireSignalExit(t, child, child.wait(t), syscall.SIGINT)
 }
 
+// TestStartInteractive_TerminationGraceEndsEscalation verifies that the grace period
+// also bounds the escalation: a shell ignoring every termination signal does not hold
+// Atmos for the full escalation schedule.
+func TestStartInteractive_TerminationGraceEndsEscalation(t *testing.T) {
+	forceTerminalDeliversInterrupt(t, false)
+	setSupervisionTimings(t, 5*time.Second, 200*time.Millisecond)
+	child := startAwaitingChild(t, startInteractiveChild, syscall.SIGTERM, syscall.SIGHUP)
+
+	start := time.Now()
+	signals.RunExitCleanups()
+	assert.Less(t, time.Since(start), 3*time.Second, "the grace period must cut the escalation short")
+	assert.Equal(t, awaitSignalReady, child.reportContent(), "the child ignored the termination signals")
+
+	// End the child with a forwarded SIGINT.
+	require.NoError(t, syscall.Kill(os.Getpid(), syscall.SIGINT))
+	requireSignalExit(t, child, child.wait(t), syscall.SIGINT)
+}
+
 // TestTerminalDeliversInterrupt exercises the real foreground-process-group check. Its
 // result depends on how the tests are run (terminal or not), so only stability is checked.
 func TestTerminalDeliversInterrupt(t *testing.T) {
