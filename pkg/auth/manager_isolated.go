@@ -44,6 +44,12 @@ func (m *manager) WithIsolatedIdentity(ctx context.Context, identityName string,
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// Resolve the name case-insensitively, like Authenticate and AuthenticateIsolated,
+	// so a store configured with the YAML spelling ("Automation") finds its identity.
+	// An unknown name is kept as-is so the chain builder reports it.
+	if resolved, found := m.resolveIdentityName(identityName); found {
+		identityName = resolved
+	}
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
 		return err

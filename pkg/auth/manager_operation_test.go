@@ -248,3 +248,30 @@ func TestWithIsolatedIdentityRealmScopesOnlyTarget(t *testing.T) {
 	require.NotEmpty(t, realms)
 	assert.True(t, strings.HasPrefix(realms[len(realms)-1], "operation-"), "the last realm assigned to the target must be its operation realm")
 }
+
+// TestWithIsolatedIdentityResolvesCaseInsensitiveNames reproduces #3720 finding 1.1: a
+// store configured with the YAML spelling of an identity ("Automation") must resolve
+// through IdentityCaseMap the same way Authenticate and AuthenticateIsolated do.
+func TestWithIsolatedIdentityResolvesCaseInsensitiveNames(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+	parent := isolatedTestManager(t).(*manager)
+	parent.config.IdentityCaseMap = map[string]string{"deployer": "deployer", "automation": "Automation"}
+
+	called := false
+	err := parent.WithIsolatedIdentity(t.Context(), "Automation", func(_ context.Context, auth *schema.AuthContext) error {
+		called = true
+		if auth == nil || auth.AWS == nil {
+			return errUtils.ErrNilParam
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	assert.True(t, called, "the operation must run for a case-insensitive identity name")
+
+	err = parent.WithIsolatedIdentity(t.Context(), "Missing", func(context.Context, *schema.AuthContext) error {
+		t.Fatal("the operation must not run for an unknown identity")
+		return nil
+	})
+	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+}
