@@ -377,7 +377,9 @@ func TestWriteClusterConfig_ErrorMode(t *testing.T) {
 	_, err = mgr.WriteClusterConfig(info, "dev-eks", "error")
 	require.NoError(t, err)
 
-	// Second write with same cluster should fail.
+	// A second write of the same cluster with a different endpoint should fail.
+	// (An identical re-run is a no-op; see config_error_mode_test.go.)
+	info.Endpoint = "https://changed.eks.amazonaws.com"
 	_, err = mgr.WriteClusterConfig(info, "dev-eks", "error")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)

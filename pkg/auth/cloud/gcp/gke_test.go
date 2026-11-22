@@ -173,7 +173,13 @@ func TestGKEKubeconfigUpdateModesAndNoOp(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, changed)
 
-	_, err = mgr.WriteClusterConfig(info, "example", "error")
+	// Error mode accepts an identical re-run and rejects a real difference.
+	changed, err = mgr.WriteClusterConfig(info, "example", "error")
+	require.NoError(t, err)
+	assert.False(t, changed)
+	conflicting := *info
+	conflicting.Endpoint = "https://changed.example.invalid"
+	_, err = mgr.WriteClusterConfig(&conflicting, "example", "error")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
 

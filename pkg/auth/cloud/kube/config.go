@@ -133,7 +133,7 @@ func (m *KubeconfigManager) WriteClusterConfig(info *ClusterInfo, alias, updateM
 		return m.writeIfChanged(newConfig)
 
 	case "error":
-		if err := m.checkErrorModeCollisions(info, alias); err != nil {
+		if err := m.checkErrorModeCollisions(newConfig); err != nil {
 			return false, err
 		}
 		return m.mergeIfChanged(newConfig)
@@ -144,37 +144,6 @@ func (m *KubeconfigManager) WriteClusterConfig(info *ClusterInfo, alias, updateM
 	default:
 		return false, fmt.Errorf("%w: invalid update mode %q", errUtils.ErrKubeconfigMerge, updateMode)
 	}
-}
-
-// checkErrorModeCollisions checks the on-disk kubeconfig (if any) for
-// cluster and context name collisions, used by WriteClusterConfig in
-// "error" update mode before merging. Returns nil when the file doesn't
-// exist, can't be loaded, or has no colliding entries.
-func (m *KubeconfigManager) checkErrorModeCollisions(info *ClusterInfo, alias string) error {
-	if _, err := os.Stat(m.path); err != nil {
-		return nil //nolint:nilerr // No file yet means no collisions; nothing to check.
-	}
-
-	// File exists, check for cluster, context, and auth info collisions.
-	existing, loadErr := clientcmd.LoadFromFile(m.path)
-	if loadErr != nil {
-		return nil //nolint:nilerr // Unreadable existing file: best-effort check, fall through to merge.
-	}
-
-	if _, exists := existing.Clusters[info.ID]; exists {
-		return fmt.Errorf("%w: cluster %s already exists in %s", errUtils.ErrKubeconfigMerge, info.ID, m.path)
-	}
-
-	// Check context name collision.
-	contextName := info.ID
-	if alias != "" {
-		contextName = alias
-	}
-	if _, exists := existing.Contexts[contextName]; exists {
-		return fmt.Errorf("%w: context %s already exists in %s", errUtils.ErrKubeconfigMerge, contextName, m.path)
-	}
-
-	return nil
 }
 
 // ListClusterIDs returns all cluster ARN keys from the kubeconfig file.
