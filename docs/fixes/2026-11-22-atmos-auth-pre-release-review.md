@@ -7,8 +7,8 @@
 A pre-release review of Atmos Auth (#3720) reported 27 confirmed bugs and 9 suspected ones. Every item
 was re-checked against `main` at `2d7822f214`, where all 27 confirmed bugs still reproduced. This change
 fixes all 27, plus 8 of the 9 suspected items, which turned out to be real; the remaining one is not a
-bug. It also fixes the follow-up problems the first round found or left partial (section 6). Every fix
-has a test that fails without it.
+bug. It also fixes the follow-up problems the first round found or left partial (section 6), and the four
+items that were still open after that (section 7). Every fix has a test that fails without it.
 
 ## Context
 
@@ -204,10 +204,59 @@ The first round left these problems open or partial. Each fix has a test that fa
   "Sovereign Clouds" section. The plugin pages describe the new timeout behavior. The ACR agent-skill
   reference and the AKS/ACR PRD are updated.
 
+### 7. Remaining items
+
+These are the four items section 6 left open. Each fix has a test that fails without it.
+
+- **`spec.registry.tenant_id` on `azure/acr` integrations is honored**
+  (`pkg/auth/cloud/azure/acr_tenant.go`).
+  - ACR's `tenant` exchange field names the tenant that issued the Azure AD token; it does not select
+    one. So when `tenant_id` differs from the identity's tenant, Atmos gets a token issued by that
+    tenant. This matches how the `az` CLI handles cross-tenant registries.
+  - The token comes silently from the existing MSAL cache, using the provider's cloud, so sovereign
+    clouds keep working.
+  - This works for `azure/device-code` and `azure/interactive` identities. `azure/oidc` and `azure/cli`
+    fail with `ErrACRTenantOverrideUnsupported` and a hint instead of silently ignoring the override.
+  - `tenant_id` must be a GUID or a domain name (`ErrACRInvalidTenant`). The docs gained a "Registries
+    in Another Tenant" section.
+- **Kube context names are realm-scoped** (`pkg/auth/cloud/kube/context_name.go`).
+  - With a realm set and no alias, the default context name is `<realm>/<cluster-id>`. Realms cannot
+    contain `/`, so the prefix is unambiguous. With no realm or an explicit alias, names are unchanged.
+  - Cleanup removes a context only when it points at one of the integration's own users (current,
+    pre-realm or legacy name), so one realm's logout keeps another realm's context
+    (`RemoveOwnedClusterConfig`).
+  - On login, an old bare-ID context is removed only if it points at one of the integration's own
+    users. One pointing at any other user is never touched.
+  - This applies to the EKS, AKS and GKE integrations and to the `update-kubeconfig` commands' SDK paths.
+    `update: error` mode allows this migration and still errors on a real conflict.
+- **`plugins.packages.<alias>.interaction_timeout` configures the sign-in limit.**
+  - It is a duration like `timeout`, and unset keeps the 15-minute default.
+  - It must be greater than zero and at most 24 hours, and it requires `timeout`.
+  - The limit-reached hint names the key with the package alias.
+  - The config schema is regenerated (`pkg/datafetcher/schema/atmos/config/1.0.json`).
+  - Also fixed: the interactive hard deadline adds the interaction limit to `timeout`, which has no upper
+    bound. A very large `timeout` made that sum wrap negative, which dropped the deadline entirely. The
+    sum is now capped (`saturatingDurationAdd`).
+- **Ambiguous legacy `aws/user` keys are adopted after confirmation**
+  (`pkg/auth/identities/aws/user_legacy_keyring.go`).
+  - The prompt appears when an `aws/user` identity has no credentials under the current key and an
+    ambiguous legacy key holds complete long-lived AWS keys.
+  - It only appears in an interactive terminal (not CI, prompts allowed). It names the other realm and
+    identity the key could belong to, and defaults to No.
+  - Yes copies the entry to the current key (only if still absent), deletes the legacy key, and
+    continues.
+  - No, or a non-interactive session, returns the not-configured error with hints naming the legacy key.
+    A No is not asked again in the same invocation.
+  - Legacy keys containing `__` are never offered, because they are also another realm's current key.
+- **Docs.** The kubeconfig pages describe the new context names and owner-aware cleanup. The
+  `auth user configure` page has a "Credentials Stored by Older Versions" section. The plugin pages and
+  the `atmos-plugins` skill describe `interaction_timeout`.
+
 New sentinels: `ErrDockerCredentialHelper`, `ErrAzureCLIMSALCacheUpdate`,
-`ErrAzureCLIMSALCacheUnparseable`, `ErrAzureMSALCacheUnparseable`, `ErrEKSClusterAmbiguous`
-(`errors/errors_integrations.go`), plus `ErrAuthDisabledIdentityRequired` and `ErrChainStepConfigChanged`
-(`errors/errors_execution.go`).
+`ErrAzureCLIMSALCacheUnparseable`, `ErrAzureMSALCacheUnparseable`, `ErrEKSClusterAmbiguous`,
+`ErrACRInvalidTenant`, `ErrACRTenantOverrideUnsupported` (`errors/errors_integrations.go`), plus
+`ErrAuthDisabledIdentityRequired`, `ErrChainStepConfigChanged` and
+`ErrAwsUserLegacyKeyringEntryNotAdopted` (`errors/errors_execution.go`).
 
 ## Validation
 
@@ -295,6 +344,39 @@ Follow-up fixes (section 6), run on the combined branch:
 | `pkg/plugin/bridge` | 94.1% | 94.2% |
 | `pkg/plugin/runtime/native` | 91.2% | 93.1% |
 
+Remaining items (section 7), run on the combined branch:
+
+- `go build ./...` passed. `go vet` passed on the touched packages with the host OS, `GOOS=windows` and
+  `GOOS=linux`. `gofumpt -l` reported no files, and `go mod tidy -diff` is clean.
+- `go test -race -count=1` passed for 132 packages, with no failures and no data races. The scope was
+  the section 6 scope plus `pkg/schema`, `pkg/config` and `pkg/datafetcher`.
+- `go test -race -count=1 -timeout 45m ./cmd/` passed in 922 seconds.
+- `go test ./tests -run 'TestCLICommands/(atmos_auth|auth|atmos_aws|atmos_azure|atmos_gcp)'`: 29
+  snapshot tests passed, with no regeneration needed.
+- The config schema change was produced by `go generate ./pkg/config/schema`, and its drift test passes.
+- Patch coverage of new and changed statement lines, relative to section 6, is 96.1% (467/486), measured
+  without the root `cmd` package. The uncovered lines are the `huh` confirmation form body, which needs a
+  real terminal. A test added afterwards covers the failed-lookup branch that was also listed.
+- Package coverage, section 6 to this branch:
+
+| Package | Before | After |
+|---|---|---|
+| `cmd/aws/eks` | 87.9% | 88.4% |
+| `cmd/azure/aks` | 95.4% | 96.0% |
+| `pkg/auth/cloud/azure` | 96.2% | 96.5% |
+| `pkg/auth/cloud/kube` | 94.5% | 95.1% |
+| `pkg/auth/credentials` | 91.9% | 93.5% |
+| `pkg/auth/identities/aws` | 90.9% | 91.1% |
+| `pkg/auth/integrations/aws` | 94.9% | 95.3% |
+| `pkg/auth/integrations/azure` | 94.4% | 95.7% |
+| `pkg/auth/integrations/gcp` | 90.2% | 92.0% |
+| `pkg/plugin/bootstrap` | 91.0% | 91.1% |
+| `pkg/plugin/config` | 92.0% | 92.2% |
+| `pkg/plugin/runtime/native` | 93.1% | 93.3% |
+
+The other touched packages (`errors`, `pkg/auth/cloud/aws`, `pkg/auth/cloud/gcp`, `pkg/plugin/adapter/auth`,
+`pkg/plugin/extension`, `pkg/schema`) are unchanged.
+
 Not run:
 
 - `golangci-lint` was permission-denied in this environment, and git hooks are disabled in this clone,
@@ -304,29 +386,32 @@ Not run:
 
 ## Follow-ups
 
-The follow-up problems from the first round are fixed in section 6. These items remain open and need a
-decision before they become fixes or issues:
+Everything sections 6 and 7 set out to fix is fixed. These choices were made along the way and can
+be revisited:
 
-- **`spec.registry.tenant_id` is documented but unused.** `acr-login.mdx` says it overrides the token
-  exchange tenant, but no code reads it; the exchange always uses the credentials' tenant. This
-  predates this change.
-- **Default kube context names are shared across realms.** The default context name is the cluster ID,
-  so two realms that write the same cluster without an alias share one context, and the last writer
-  picks which (realm-correct) user it points to. Cleanup in one realm also deletes that context by name.
-  Options: realm-qualified context names (breaking), or removing a context only when it points at one of
-  this integration's users.
-- **Plugin interaction limit.** The 15-minute sign-in limit is a `Definition` field and a Go option,
-  not configuration. Letting plugins report the device-code expiry would need a protocol change.
-- **Ambiguous legacy keyring entries.** `aws/user` long-lived keys stored with a realm by an older
-  version, where the realm or identity name contains `_`, are not migrated (the legacy key could belong
-  to another realm). Those users must re-run `atmos auth user configure`.
+- **`tenant_id` override scope.** It works only for `azure/device-code` and `azure/interactive`
+  identities. Supporting `azure/oidc` and `azure/cli` would need provider changes: Atmos keeps no
+  credential those providers could use to get a token from another tenant.
+- **Kube ownership is broad.** Pre-realm and legacy user names count as an integration's own. So a
+  realm checkout migrates, and its logout removes, the bare-ID context that a no-realm checkout wrote for
+  the same identity and cluster. The legacy EKS name `atmos-eks-<name>-<region>` has no account or
+  identity, so it is broader still.
+- **Plugin `interaction_timeout` bounds.** At most 24 hours, and it requires `timeout`. Letting plugins
+  report the device-code expiry would need a protocol change.
+- **Legacy `aws/user` key prompt.** After a No, browser sign-in still runs when it is enabled (the
+  default). A No lasts only for the current invocation, so a user who does not own the entry is asked
+  again on later runs until they configure keys.
 
 Compatibility notes for users:
 
 - Kubeconfig user names change: AKS and GKE names gain `-<identity>`, and every name gains `<realm>-`
-  after `atmos-` when a realm is set. Context names are unchanged, so `kubectl --context` keeps working.
-  The next login repoints each context to its new user, and the old user is removed at the next logout.
-  Scripts that hardcode `atmos-aks-...` or `atmos-gke-...` user names must be updated.
+  after `atmos-` when a realm is set. Scripts that hardcode `atmos-aks-...` or `atmos-gke-...` user names
+  must be updated.
+- Kubeconfig context names change only when a realm is set and no alias is configured: the default
+  context becomes `<realm>/<cluster-id>`, so `kubectl --context <cluster-id>` must switch to the prefixed
+  name or set an alias. With no realm or with an alias, context names are unchanged. The next login
+  moves each own context to its new name and user, and logout removes only this integration's own
+  contexts.
 - Realm-scoped keyring keys change to `atmos_<realm>__<alias>`; unambiguous legacy entries migrate on
   first read.
 - After upgrading, each intermediate chain step re-authenticates once, because entries written by older
