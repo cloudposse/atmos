@@ -104,6 +104,10 @@ func (m *ConfigManager) WriteAuth(registry, username, password string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Store under the bare hostname, as `docker login https://host/` does, so a
+	// scheme or trailing slash cannot create a key Docker never looks up.
+	registry = convertToHostname(registry)
+
 	if err := m.withConfigLock(func() error {
 		return m.writeAuthLocked(registry, username, password)
 	}); err != nil {
@@ -153,7 +157,10 @@ func (m *ConfigManager) writeAuthLocked(registry, username, password string) err
 // from that helper. Registries without an auths entry are left alone, so the
 // helper is never asked to erase credentials Atmos (or `docker login`) did not
 // record. If a helper erase fails, that registry's entry is kept so the logout
-// can be retried, and the error is returned.
+// can be retried, and the error is returned. Like `docker logout`, a registry is
+// normalized to its hostname and every auths key Docker reads for that host is
+// removed, including legacy "https://host" or "host/v2/" keys; each key is erased
+// from the helper Docker resolves for that exact key.
 func (m *ConfigManager) RemoveAuth(registries ...string) error {
 	defer perf.Track(nil, "docker.ConfigManager.RemoveAuth")()
 
@@ -171,17 +178,17 @@ func (m *ConfigManager) RemoveAuth(registries ...string) error {
 		var helperErrs []error
 		changed := false
 		for _, registry := range registries {
-			if !config.hasAuth(registry) {
-				continue
-			}
-			if helper := config.credentialHelperFor(registry); helper != "" {
-				if err := m.credentialHelper().Erase(helper, registry); err != nil {
-					helperErrs = append(helperErrs, withHelperHint(err, helper))
-					continue
+			// Match every key Docker reads for this host, legacy variants included.
+			for _, key := range config.authKeysFor(convertToHostname(registry)) {
+				if helper := config.credentialHelperFor(key); helper != "" {
+					if err := m.credentialHelper().Erase(helper, key); err != nil {
+						helperErrs = append(helperErrs, withHelperHint(err, helper))
+						continue
+					}
 				}
+				config.removeAuth(key)
+				changed = true
 			}
-			config.removeAuth(registry)
-			changed = true
 		}
 
 		if changed {

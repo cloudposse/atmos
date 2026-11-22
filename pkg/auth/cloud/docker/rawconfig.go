@@ -109,10 +109,20 @@ func (c *rawConfig) removeAuth(registry string) {
 	delete(c.auths, registry)
 }
 
-// hasAuth reports whether config.json has an auths entry for registry.
-func (c *rawConfig) hasAuth(registry string) bool {
-	_, ok := c.auths[registry]
-	return ok
+// authKeysFor returns, sorted, every auths key Docker reads for host: the exact
+// key and any legacy key that normalizes to it ("https://host", "host/v2/").
+// docker/cli's file store falls back to such keys when the exact one is
+// missing (cli/config/credentials/file_store.go, fileStore.Get), so a logout
+// must remove them all for the registry to stay logged out.
+func (c *rawConfig) authKeysFor(host string) []string {
+	var keys []string
+	for key := range c.auths {
+		if key == host || convertToHostname(key) == host {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // registries returns the registries with an auths entry, sorted.
