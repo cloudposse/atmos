@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -189,6 +190,28 @@ func TestEKSIntegration_Cleanup_PicksOwnAccount(t *testing.T) {
 	assert.NotContains(t, after.Contexts, prodClusterARNOther)
 	assert.Contains(t, after.Clusters, prodClusterARN)
 	assert.Equal(t, "prod-admin", contextIdentity(t, after, prodClusterARN))
+}
+
+// TestEKSIntegration_FindClusterARN_AmbiguousAccounts verifies that when
+// same-named clusters of two accounts both use this integration's user name,
+// cleanup refuses to guess and removes neither.
+func TestEKSIntegration_FindClusterARN_AmbiguousAccounts(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	// Older entries without account or identity in the user name match no candidate.
+	writeLegacyEKSEntry(t, kubeconfigPath, prodClusterARN, "", "admin")
+	writeLegacyEKSEntry(t, kubeconfigPath, prodClusterARNOther, "", "admin")
+
+	integration := newCleanupIntegration(kubeconfigPath, "prod", "us-east-2", "", "admin")
+	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
+	require.NoError(t, err)
+	_, err = integration.findClusterARN(mgr)
+	require.ErrorIs(t, err, errUtils.ErrEKSClusterAmbiguous)
+
+	require.NoError(t, integration.Cleanup(t.Context()))
+	after, err := loadKubeconfig(kubeconfigPath)
+	require.NoError(t, err)
+	assert.Contains(t, after.Clusters, prodClusterARN)
+	assert.Contains(t, after.Clusters, prodClusterARNOther)
 }
 
 // Compile-time guard for the schema fields these tests rely on.
