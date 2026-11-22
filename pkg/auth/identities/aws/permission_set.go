@@ -101,8 +101,15 @@ func (i *permissionSetIdentity) Authenticate(ctx context.Context, baseCreds type
 		return nil, fmt.Errorf("%w: failed to get role credentials: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	// Convert to our credential format.
-	creds, err := i.buildCredsFromRole(roleCredsResp, awsBase.Region)
+	// Convert to our credential format. The base credentials carry the Identity
+	// Center region, which is only where the SSO portal lives; the role
+	// credentials get the identity's own region (principal.region, inherited
+	// through the chain) so AWS_REGION for components matches `atmos auth exec`.
+	region := i.resolveRegion()
+	if region == "" {
+		region = awsBase.Region
+	}
+	creds, err := i.buildCredsFromRole(roleCredsResp, region)
 	if err != nil {
 		return nil, err
 	}
