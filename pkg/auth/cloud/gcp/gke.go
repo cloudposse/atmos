@@ -131,6 +131,7 @@ func BuildKubeClusterInfo(info *GKEClusterInfo, identityName string) *kube.Clust
 			Value: identityName,
 		})
 	}
+	execEnv = appendWorkingDirExecEnv(execEnv)
 
 	return &kube.ClusterInfo{
 		Name:                     info.Name,

@@ -137,9 +137,11 @@ func TestBuildKubeClusterInfo(t *testing.T) {
 	assert.Equal(t, "example-project-us-central1", got.Region)
 	assert.Equal(t, "gke", got.UserPrefix)
 	assert.Equal(t, []string{"gcp", "gke", "token", "--identity=example-deployer"}, got.ExecArgs)
-	require.Len(t, got.ExecEnv, 1)
+	require.Len(t, got.ExecEnv, 2)
 	assert.Equal(t, "ATMOS_IDENTITY", got.ExecEnv[0].Name)
 	assert.Equal(t, "example-deployer", got.ExecEnv[0].Value)
+	assert.Equal(t, "ATMOS_CHDIR", got.ExecEnv[1].Name)
+	assert.True(t, filepath.IsAbs(got.ExecEnv[1].Value))
 
 	config := kube.BuildClusterConfig(got, "example")
 	authInfo := config.AuthInfos["atmos-gke-example-cluster-example-project-us-central1"]
