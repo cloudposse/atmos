@@ -132,15 +132,17 @@ The realm becomes the **top-level directory** under the atmos base path, with cl
 
 ### Keyring Storage
 
-Keyring keys include realm prefix using underscore separators (underscores instead of colons for Windows filesystem compatibility):
+Keyring keys include realm prefix using underscore separators (underscores instead of colons for Windows filesystem compatibility). The realm and identity are separated by a double underscore: realms cannot contain `__` or end with `_`, so the first `__` always ends the realm, and realm `acme` + identity `prod_admin` never shares a key with realm `acme_prod` + identity `admin`:
 
 | Without Realm | With Realm |
 |---------------|------------|
-| `atmos_{identity}` | `atmos_{realm}_{identity}` |
+| `atmos_{identity}` | `atmos_{realm}__{identity}` |
 
 **Examples:**
 - Without realm: `atmos_core-root/terraform`
-- With realm: `atmos_customer-a_core-root/terraform`
+- With realm: `atmos_customer-a__core-root/terraform`
+
+Entries written in the previous `atmos_{realm}_{identity}` layout are still read (and deleted on logout) when neither the realm nor the identity contains `_`, the only case in which the old key cannot belong to another realm. Other old entries are ignored and re-created on the next login. The pre-realm `atmos_{identity}` cleanup after a realm-scoped login likewise skips identities containing `_`, whose key another realm can share.
 
 ### Environment Variables
 
@@ -165,7 +167,7 @@ realm.GetRealm(config.Realm, cliConfigPath)
 manager.realm (stored in auth manager)
 │
 ├──► credentialStore.Retrieve(identity, realm)
-│         └──► keyring key: "atmos_customer-a_core-root/terraform"
+│         └──► keyring key: "atmos_customer-a__core-root/terraform"
 │
 ├──► awsFileManager (realm stored on struct at construction)
 │         └──► GetCredentialsPath(provider)

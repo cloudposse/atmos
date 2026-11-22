@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/keyring"
@@ -43,6 +44,11 @@ func (s *keyringCredentialStore) Retrieve(alias string, realm string) (types.ICr
 	defer perf.Track(nil, "credentials.keyringCredentialStore.Retrieve")()
 
 	data, err := s.kr.Get(buildKeyringKey(alias, realm))
+	// Read-fallback migration: entries written before the "__" realm separator are still
+	// found, but only when the old key cannot belong to another realm and alias split.
+	if errors.Is(err, keyring.ErrNotFound) && legacyRealmKeyIsUnambiguous(alias, realm) {
+		data, err = s.kr.Get(legacyRealmKeyringKey(alias, realm))
+	}
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			return nil, errors.Join(ErrCredentialStore, ErrCredentialsNotFound)
@@ -63,6 +69,13 @@ func (s *keyringCredentialStore) Delete(alias string, realm string) error {
 
 	if err := s.kr.Delete(buildKeyringKey(alias, realm)); err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials: %w", err))
+	}
+	// Also remove the previous-layout entry Retrieve would fall back to, so a deleted
+	// credential cannot resurface. An ambiguous old key may belong to another realm and is kept.
+	if legacyRealmKeyIsUnambiguous(alias, realm) {
+		if err := s.kr.Delete(legacyRealmKeyringKey(alias, realm)); err != nil {
+			return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete legacy credentials: %w", err))
+		}
 	}
 	return nil
 }
@@ -130,17 +143,32 @@ func (s *keyringCredentialStore) SetAny(key string, value interface{}) error {
 }
 
 // filterRealmKeys reduces a flat list of realm-scoped keyring keys to aliases. With a realm it
-// returns aliases under "atmos_<realm>_"; with an empty realm it strips only the "atmos_" prefix
-// (so callers see "realm_alias"), matching the historical List behavior.
+// returns aliases under "atmos_<realm>__" plus unambiguous previous-layout aliases under
+// "atmos_<realm>_" (see legacyRealmKeyIsUnambiguous), each once; with an empty realm it strips
+// only the "atmos_" prefix (so callers see "realm__alias"), matching the historical List behavior.
 func filterRealmKeys(keys []string, realm string) []string {
-	prefix := KeyringRealmPrefix + KeyringSeparator
-	if realm != "" {
-		prefix += realm + KeyringSeparator
-	}
+	base := KeyringRealmPrefix + KeyringSeparator
 	aliases := make([]string, 0, len(keys))
+	if realm == "" {
+		for _, key := range keys {
+			if alias, ok := strings.CutPrefix(key, base); ok && alias != "" {
+				aliases = append(aliases, alias)
+			}
+		}
+		return aliases
+	}
+	current := base + realm + KeyringRealmAliasSeparator
+	legacy := base + realm + KeyringSeparator
+	seen := make(map[string]bool, len(keys))
 	for _, key := range keys {
-		if len(key) > len(prefix) && key[:len(prefix)] == prefix {
-			aliases = append(aliases, key[len(prefix):])
+		alias, ok := strings.CutPrefix(key, current)
+		if !ok {
+			alias, ok = strings.CutPrefix(key, legacy)
+			ok = ok && legacyRealmKeyIsUnambiguous(alias, realm)
+		}
+		if ok && alias != "" && !seen[alias] {
+			seen[alias] = true
+			aliases = append(aliases, alias)
 		}
 	}
 	return aliases

@@ -138,7 +138,8 @@ func (m *manager) purgeCachedCredentials(name string) {
 		log.Debug("Purged stale ambient keyring entry", logKeyName, name, logKeyRealm, m.realm.Value)
 	}
 	// Also purge the legacy (pre-realm) entry so upgrades from older layouts self-heal.
-	if m.realm.Value != "" {
+	// A legacy key that another realm's entry can share is never deleted (see #3720).
+	if m.realm.Value != "" && credentials.EmptyRealmKeyIsUnambiguous(name) {
 		if err := m.credentialStore.Delete(name, ""); err != nil {
 			log.Debug("No legacy ambient keyring entry to purge", logKeyName, name)
 		} else {

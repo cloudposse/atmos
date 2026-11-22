@@ -53,9 +53,9 @@ func TestBuildKeyringKey_ExactFormat(t *testing.T) {
 		want  string
 	}{
 		{name: "empty realm falls back to atmos_alias", alias: "a", realm: "", want: "atmos_a"},
-		{name: "realm-scoped key", alias: "a", realm: "r", want: "atmos_r_a"},
-		{name: "alias containing underscores is preserved verbatim", alias: "a_b", realm: "r", want: "atmos_r_a_b"},
-		{name: "realm and alias with underscores", alias: "x_y", realm: "p_q", want: "atmos_p_q_x_y"},
+		{name: "realm-scoped key", alias: "a", realm: "r", want: "atmos_r__a"},
+		{name: "alias containing underscores is preserved verbatim", alias: "a_b", realm: "r", want: "atmos_r__a_b"},
+		{name: "realm and alias with underscores", alias: "x_y", realm: "p_q", want: "atmos_p_q__x_y"},
 		{name: "empty realm with underscore alias", alias: "_leading", realm: "", want: "atmos__leading"},
 	}
 
@@ -68,7 +68,11 @@ func TestBuildKeyringKey_ExactFormat(t *testing.T) {
 	// The constants that compose every key are themselves part of the contract.
 	assert.Equal(t, "atmos", KeyringRealmPrefix)
 	assert.Equal(t, "_", KeyringSeparator)
+	assert.Equal(t, "__", KeyringRealmAliasSeparator)
 	assert.Equal(t, "atmos-auth", KeyringUser)
+
+	// The previous realm-scoped layout stays readable through the read-fallback migration.
+	assert.Equal(t, "atmos_r_a", legacyRealmKeyringKey("a", "r"))
 
 	// A realm must produce a different key than the empty-realm fallback (isolation guarantee).
 	assert.NotEqual(t, buildKeyringKey("a", ""), buildKeyringKey("a", "r"))
@@ -93,7 +97,7 @@ func TestSystemKeyringStore_ExactServiceAndAccount(t *testing.T) {
 	require.NoError(t, store.Store(alias, creds, realm))
 
 	composedKey := buildKeyringKey(alias, realm)
-	require.Equal(t, "atmos_contract-realm_contract-aws", composedKey)
+	require.Equal(t, "atmos_contract-realm__contract-aws", composedKey)
 
 	// The entry must be readable at exactly (service=composedKey, account="atmos-auth").
 	raw, err := zkeyring.Get(composedKey, KeyringUser)

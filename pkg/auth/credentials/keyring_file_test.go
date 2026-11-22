@@ -299,10 +299,10 @@ func TestFileKeyring_ListEmptyRealm(t *testing.T) {
 	aliases, err := store.List("")
 	require.NoError(t, err)
 	assert.Len(t, aliases, 3)
-	// Verify prefix is stripped - should have format "realm_alias".
-	assert.Contains(t, aliases, "realm1_alias1")
-	assert.Contains(t, aliases, "realm2_alias2")
-	assert.Contains(t, aliases, "realm1_alias3")
+	// Verify prefix is stripped - should have format "realm__alias".
+	assert.Contains(t, aliases, "realm1__alias1")
+	assert.Contains(t, aliases, "realm2__alias2")
+	assert.Contains(t, aliases, "realm1__alias3")
 
 	// List with specific realm should only return that realm's aliases.
 	aliases, err = store.List("realm1")

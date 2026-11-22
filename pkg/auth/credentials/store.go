@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -31,17 +32,46 @@ const (
 	// KeyringSeparator is the separator used between key components.
 	// Uses underscore instead of colon for Windows compatibility (colons not allowed in filenames).
 	KeyringSeparator = "_"
+
+	// KeyringRealmAliasSeparator separates the realm from the alias in realm-scoped keys.
+	// Realms cannot contain "__" or end with "_" (see realm.Validate), so the first "__"
+	// after the prefix always ends the realm, whatever the alias contains.
+	KeyringRealmAliasSeparator = "__"
 )
 
 // buildKeyringKey creates a realm-scoped keyring key.
-// Format: "atmos_realm_alias" when realm is provided.
+// Format: "atmos_realm__alias" when realm is provided.
 // Falls back to "atmos_alias" for backward compatibility when realm is empty.
 func buildKeyringKey(alias, realm string) string {
 	log.Debug("Building keyring key", "alias", alias, "realm", realm)
 	if realm != "" {
-		return KeyringRealmPrefix + KeyringSeparator + realm + KeyringSeparator + alias
+		return KeyringRealmPrefix + KeyringSeparator + realm + KeyringRealmAliasSeparator + alias
 	}
 	return KeyringRealmPrefix + KeyringSeparator + alias
+}
+
+// legacyRealmKeyringKey returns the previous realm-scoped key "atmos_<realm>_<alias>". Both
+// parts may contain "_", so realm "acme" + alias "prod_admin" and realm "acme_prod" + alias
+// "admin" share one key; it is read only when legacyRealmKeyIsUnambiguous holds.
+func legacyRealmKeyringKey(alias, realm string) string {
+	return KeyringRealmPrefix + KeyringSeparator + realm + KeyringSeparator + alias
+}
+
+// legacyRealmKeyIsUnambiguous reports whether the previous-layout key for alias and realm
+// can only have been written for this exact realm and alias: neither contains "_", so no
+// other realm and alias split produces the same key, and the key contains no "__" of the
+// current layout.
+func legacyRealmKeyIsUnambiguous(alias, realm string) bool {
+	return realm != "" && alias != "" && !strings.Contains(realm, KeyringSeparator) && !strings.Contains(alias, KeyringSeparator)
+}
+
+// EmptyRealmKeyIsUnambiguous reports whether the empty-realm (pre-realm) key "atmos_<alias>"
+// can only belong to alias. An alias containing "_" shares its key with a realm-scoped entry
+// of another realm ("prod_admin" is realm "prod" + "admin" in the previous layout, and
+// "prod__admin" is realm "prod" + "admin" in the current one), so realm-scoped callers
+// must not delete that empty-realm key as their own legacy entry.
+func EmptyRealmKeyIsUnambiguous(alias string) bool {
+	return alias != "" && !strings.Contains(alias, KeyringSeparator)
 }
 
 // credentialEnvelope is used to persist interface credentials with type information.
