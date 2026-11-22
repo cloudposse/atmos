@@ -26,11 +26,13 @@ import (
 // convention uses this all-zero GUID).
 const acrLoginUsername = "00000000-0000-0000-0000-000000000000"
 
-// acrRegistrySuffix is the ACR login server suffix.
+// acrRegistrySuffix is the ACR login server suffix in the Azure public cloud.
 const acrRegistrySuffix = ".azurecr.io"
 
-// acrRegistryPattern matches ACR login server URLs, e.g. myregistry.azurecr.io.
-var acrRegistryPattern = regexp.MustCompile(`^([a-z0-9]+)\.azurecr\.io$`)
+// acrRegistryPattern matches normalized (lowercase) ACR login server URLs in every
+// Azure cloud: public (myregistry.azurecr.io), US Government (myregistry.azurecr.us),
+// and China (myregistry.azurecr.cn).
+var acrRegistryPattern = regexp.MustCompile(`^([a-z0-9]+)\.azurecr\.(?:io|us|cn)$`)
 
 // acrHTTPClient is the HTTP client used for the ACR OAuth2 token exchange.
 // Overridable in tests.
@@ -136,22 +138,42 @@ func BuildRegistryURL(name string) string {
 func ParseRegistryURL(registryURL string) (name string, err error) {
 	defer perf.Track(nil, "azure.ParseRegistryURL")()
 
-	registryURL = strings.TrimPrefix(registryURL, "https://")
+	name, _, err = parseLoginServer(registryURL)
+	return name, err
+}
 
-	matches := acrRegistryPattern.FindStringSubmatch(registryURL)
-	if len(matches) != 2 { //nolint:mnd
-		return "", fmt.Errorf("%w: %s", errUtils.ErrACRInvalidRegistry, registryURL)
-	}
+// NormalizeRegistryURL validates an ACR login server URL from any Azure cloud and
+// returns it in the form ACR and Docker expect: lowercase, without a scheme or a
+// trailing slash (e.g. "HTTPS://MyRegistry.azurecr.us/" -> "myregistry.azurecr.us").
+// Unlike BuildRegistryURL(ParseRegistryURL(u)), it keeps the cloud's suffix.
+func NormalizeRegistryURL(registryURL string) (string, error) {
+	defer perf.Track(nil, "azure.NormalizeRegistryURL")()
 
-	return matches[1], nil
+	_, loginServer, err := parseLoginServer(registryURL)
+	return loginServer, err
 }
 
 // IsACRRegistry checks if a URL is an ACR registry login server URL.
 func IsACRRegistry(registryURL string) bool {
 	defer perf.Track(nil, "azure.IsACRRegistry")()
 
-	registryURL = strings.TrimPrefix(registryURL, "https://")
-	return acrRegistryPattern.MatchString(registryURL)
+	_, _, err := parseLoginServer(registryURL)
+	return err == nil
+}
+
+// parseLoginServer normalizes an ACR login server URL (DNS names and ACR registry
+// names are case-insensitive) and returns the registry name and the login server.
+func parseLoginServer(registryURL string) (name, loginServer string, err error) {
+	normalized := strings.ToLower(strings.TrimSpace(registryURL))
+	normalized = strings.TrimPrefix(normalized, "https://")
+	normalized = strings.TrimSuffix(normalized, "/")
+
+	matches := acrRegistryPattern.FindStringSubmatch(normalized)
+	if len(matches) != 2 { //nolint:mnd
+		return "", "", fmt.Errorf("%w: %s", errUtils.ErrACRInvalidRegistry, registryURL)
+	}
+
+	return matches[1], normalized, nil
 }
 
 // LoadDefaultAzureCredentials loads Azure credentials from the ambient

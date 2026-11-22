@@ -146,11 +146,12 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 
 	// Login to each registry.
 	for _, registry := range registries {
-		name, err := azureCloud.ParseRegistryURL(registry)
+		// Keep the registry's own cloud suffix (azurecr.io/.us/.cn); rebuilding
+		// from the name alone would always target the public cloud.
+		loginServer, err := azureCloud.NormalizeRegistryURL(registry)
 		if err != nil {
-			return err // ParseRegistryURL already wraps with ErrACRInvalidRegistry.
+			return err // NormalizeRegistryURL already wraps with ErrACRInvalidRegistry.
 		}
-		loginServer := azureCloud.BuildRegistryURL(name)
 
 		result, err := getAuthorizationToken(ctx, creds, loginServer)
 		if err != nil {
