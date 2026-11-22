@@ -23,7 +23,9 @@ plugins:
     corporate:
       source: oci://registry.example.com/team/oidc
       version: "^0.1.0"
-      timeout: 5m          # Optional: bounds every call into the plugin.
+      timeout: 5m          # Optional: bounds the plugin's own work in every call.
+      interaction_timeout: 30m  # Optional: limits how long an interactive sign-in may wait for the
+                                # user, on top of timeout (default 15m, max 24h, needs timeout).
 auth:
   providers:
     corporate:
