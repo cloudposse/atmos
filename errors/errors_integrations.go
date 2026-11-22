@@ -392,3 +392,6 @@ var (
 	ErrLSPRPCError              = errors.New("RPC error")
 	ErrLSPNoContentLengthHeader = errors.New("no Content-Length header found")
 )
+
+// Docker credential helper errors.
+var ErrDockerCredentialHelper = errors.New("docker credential helper failed")
