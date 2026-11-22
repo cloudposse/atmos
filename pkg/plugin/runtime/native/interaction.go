@@ -24,6 +24,12 @@ func WithInteractionLimit(limit time.Duration) Option {
 	}
 }
 
+// WithPackageAlias names the package's key under plugins.packages so errors can point at the
+// configuration that controls them, such as plugins.packages.<alias>.interaction_timeout.
+//
+//nolint:lintroller // Trivial accessor, pure lookup, factory option, or delegation; exempt under repository tracking policy.
+func WithPackageAlias(alias string) Option { return func(o *options) { o.packageAlias = alias } }
+
 // AwaitUser marks the invocation as waiting for the user, such as after a device-code prompt
 // was shown, and returns the function that ends the wait. While any wait is open the call
 // timeout does not run; the hard deadline still applies. The returned function is idempotent,

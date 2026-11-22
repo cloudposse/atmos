@@ -141,7 +141,7 @@ func TestInteractiveCallTimeoutStopsHungPluginBeforeHardDeadline(t *testing.T) {
 
 func TestInteractiveUserWaitIsBoundedByInteractionLimit(t *testing.T) {
 	const timeout, limit = 300 * time.Millisecond, time.Second
-	handle, directory := startFake(t, t.Context(), fakeplugin.ModeHang, WithCallTimeout(timeout), WithInteractionLimit(limit))
+	handle, directory := startFake(t, t.Context(), fakeplugin.ModeHang, WithCallTimeout(timeout), WithInteractionLimit(limit), WithPackageAlias("corporate"))
 	started := time.Now()
 
 	_, err := runInteractiveHang(t, t.Context(), handle, true)
@@ -149,7 +149,9 @@ func TestInteractiveUserWaitIsBoundedByInteractionLimit(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPluginTimeout)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.GreaterOrEqual(t, time.Since(started), timeout+limit, "the user wait outlasts the timeout until the hard deadline")
-	require.Contains(t, strings.Join(errUtils.AllHints(err), "\n"), "sign-in", "the error explains the sign-in was not finished")
+	hints := strings.Join(errUtils.AllHints(err), "\n")
+	require.Contains(t, hints, "sign-in", "the error explains the sign-in was not finished")
+	require.Contains(t, hints, "`plugins.packages.corporate.interaction_timeout`", "the hint names the key that raises the limit")
 	pids, pidErr := fakeplugin.PIDs(directory)
 	require.NoError(t, pidErr)
 	requireGone(t, pids)
@@ -168,7 +170,8 @@ func TestInteractiveCallerDeadlineKeepsGenericTimeoutHint(t *testing.T) {
 }
 
 func TestNoninteractiveCallKeepsCallTimeoutDeadline(t *testing.T) {
-	handle, _ := startFake(t, t.Context(), fakeplugin.ModeEcho, WithCallTimeout(30*time.Minute))
+	// A configured interaction limit must not stretch a call that can never wait for a person.
+	handle, _ := startFake(t, t.Context(), fakeplugin.ModeEcho, WithCallTimeout(30*time.Minute), WithInteractionLimit(time.Hour))
 	var seen *pluginv1.Invocation
 	started := time.Now()
 	require.NoError(t, handle.Invoke(t.Context(), bridge.Invocation{Namespace: "test"}, func(_ context.Context, invocation *pluginv1.Invocation) error {
@@ -181,6 +184,73 @@ func TestNoninteractiveCallKeepsCallTimeoutDeadline(t *testing.T) {
 		"a noninteractive call cannot wait for a person, so its deadline stays the timeout")
 	_, tracked := handle.budgets.Load(seen.GetId())
 	require.False(t, tracked)
+}
+
+// TestConfiguredInteractionLimitAllowsSignInLongerThanDefault proves a larger limit lets a user
+// take longer than DefaultInteractionLimit, while the default still cuts the same wait off.
+func TestConfiguredInteractionLimitAllowsSignInLongerThanDefault(t *testing.T) {
+	const timeout = time.Minute
+	userWait := DefaultInteractionLimit + 10*time.Minute
+	cases := []struct {
+		name    string
+		limit   time.Duration
+		expired bool
+	}{
+		{"default limit ends the wait", DefaultInteractionLimit, true},
+		{"larger limit allows it", 45 * time.Minute, false},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				settings := options{interactionLimit: DefaultInteractionLimit}
+				WithInteractionLimit(testCase.limit)(&settings)
+				handle := &Handle{callTimeout: timeout, interactionLimit: settings.interactionLimit}
+				started := time.Now()
+				callCtx, work, cancel := handle.callContext(t.Context(), true)
+				defer cancel()
+				require.NotNil(t, work)
+				deadline, ok := callCtx.Deadline()
+				require.True(t, ok)
+				require.Equal(t, started.Add(timeout+testCase.limit), deadline, "the hard deadline is the timeout plus the limit")
+
+				resume := work.await()
+				time.Sleep(userWait)
+				synctest.Wait()
+				if testCase.expired {
+					require.ErrorIs(t, callCtx.Err(), context.DeadlineExceeded, "the default limit ends a 25-minute sign-in")
+					resume()
+					return
+				}
+				require.NoError(t, callCtx.Err(), "a 25-minute sign-in fits a 45-minute limit")
+				resume()
+				time.Sleep(timeout - time.Second)
+				synctest.Wait()
+				require.NoError(t, callCtx.Err(), "the plugin keeps its full work budget after the user finishes")
+				time.Sleep(time.Second)
+				synctest.Wait()
+				require.ErrorIs(t, context.Cause(callCtx), errUtils.ErrPluginTimeout, "the work budget still bounds the plugin")
+			})
+		})
+	}
+}
+
+func TestInteractionTimeoutErrorNamesTheConfigurationKey(t *testing.T) {
+	deadline := time.Date(2026, time.November, 22, 12, 0, 0, 0, time.UTC)
+	err := interactionTimeoutError(deadline, 15*time.Minute, "corporate")
+	require.ErrorIs(t, err, errUtils.ErrPluginTimeout)
+	hints := strings.Join(errUtils.AllHints(err), "\n")
+	require.Contains(t, hints, "15m0s")
+	require.Contains(t, hints, "`plugins.packages.corporate.interaction_timeout`")
+
+	// Without a known alias the hint still names the key, with a placeholder for the package.
+	hints = strings.Join(errUtils.AllHints(interactionTimeoutError(deadline, time.Minute, "")), "\n")
+	require.Contains(t, hints, "`plugins.packages.<alias>.interaction_timeout`")
+}
+
+func TestWithPackageAliasRecordsTheAlias(t *testing.T) {
+	var settings options
+	WithPackageAlias("corporate")(&settings)
+	require.Equal(t, "corporate", settings.packageAlias)
 }
 
 func TestWithInteractionLimitIgnoresNonPositive(t *testing.T) {

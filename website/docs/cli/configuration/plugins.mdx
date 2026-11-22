@@ -32,6 +32,7 @@ plugins:
       source: oci://registry.example.com/team/oidc
       version: "^0.1.0"
       timeout: 5m
+      interaction_timeout: 30m
   registries:
     team:
       host: registry.example.com
@@ -76,7 +77,9 @@ your comments and formatting. The selected release is recorded in `.atmos.plugin
   <dt><code>enabled</code></dt>
   <dd><code>false</code> keeps the declaration but skips installation and activation, including a configured <code>path</code>. Source and version are not required while disabled.</dd>
   <dt><code>timeout</code></dt>
-  <dd>Positive Go duration, such as <code>30s</code> or <code>5m</code>, that bounds every call into the plugin. Omit for no deadline. In an interactive login, the time Atmos spends waiting for the user to sign in (a device-code prompt or a browser callback) does not count against it; that wait is limited to 15 minutes instead.</dd>
+  <dd>Positive Go duration, such as <code>30s</code> or <code>5m</code>, that bounds every call into the plugin. Omit for no deadline. In an interactive login, the time Atmos spends waiting for the user to sign in (a device-code prompt or a browser callback) does not count against it; <code>interaction_timeout</code> limits that wait instead.</dd>
+  <dt><code>interaction_timeout</code></dt>
+  <dd>Positive Go duration, such as <code>30m</code>, that limits how long an interactive login may wait for the user to finish signing in. Omit it for the default of <code>15m</code>; the maximum is <code>24h</code>. It requires <code>timeout</code>, because without a timeout a call has no deadline to extend. An interactive call is stopped no later than <code>timeout</code> plus <code>interaction_timeout</code>. Noninteractive calls ignore it and keep the <code>timeout</code> deadline. Raise it when your identity provider gives users longer than 15 minutes to approve a sign-in. An invalid value fails configuration validation and names the package.</dd>
   <dt><code>command</code></dt>
   <dd>Command export that <code>plugin run</code> starts when the package exports several.</dd>
   <dt><code>config</code></dt>
@@ -237,7 +240,7 @@ Use the host Browser API to open a complete authorization URL with query paramet
 :::note Timeouts do not include the time the user spends signing in
 The package's `timeout` bounds the work the plugin does, not the time a person takes to sign in. In an interactive invocation, Atmos stops counting toward `timeout` from the moment it shows a `device_code` prompt until the plugin sends its credential result, and while the Browser API waits for the sign-in callback. A plugin that hangs without prompting is still stopped once `timeout` has passed.
 
-The wait for the user has its own limit of 15 minutes. An interactive call therefore receives a deadline of `timeout` plus 15 minutes, and that is the deadline the plugin sees in its invocation and RPC context. If the user has not finished signing in by then, Atmos stops the plugin and reports that the sign-in did not complete. Noninteractive invocations cannot prompt, so their deadline is `timeout`.
+The wait for the user has its own limit, `interaction_timeout`, which defaults to 15 minutes. An interactive call therefore receives a deadline of `timeout` plus `interaction_timeout`, and that is the deadline the plugin sees in its invocation and RPC context. If the user has not finished signing in by then, Atmos stops the plugin, reports that the sign-in did not complete, and names `plugins.packages.<alias>.interaction_timeout` as the setting to raise. Noninteractive invocations cannot prompt, so their deadline is `timeout`.
 :::
 
 ### Native identity schema selection

@@ -27,6 +27,12 @@ type PluginPackage struct {
 	Command string         `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
 	// Timeout bounds every call into the plugin as a Go duration such as 5m; empty means no deadline.
 	Timeout string `yaml:"timeout,omitempty" json:"timeout,omitempty" mapstructure:"timeout"`
+	// InteractionTimeout bounds how long an interactive call may wait for the user to finish a
+	// sign-in, such as a device-code prompt or browser callback, as a Go duration such as 30m.
+	// That wait does not count against timeout; the call's hard deadline is timeout plus this
+	// limit. Empty means 15m. It requires timeout, applies only to interactive calls, and is at
+	// most 24h.
+	InteractionTimeout string `yaml:"interaction_timeout,omitempty" json:"interaction_timeout,omitempty" mapstructure:"interaction_timeout"`
 }
 
 // PluginDiscoveryConfig controls the local metadata discovery cache.

@@ -33,7 +33,8 @@ func (d *Definition) invoke(ctx context.Context, name, realm string, settings ma
 		return err
 	}
 	return d.transaction(ctx, namespace, func(ctx context.Context) error {
-		handle, err := native.Start(ctx, d.Executable, native.WithDirectory(d.Directory), native.WithDescription(d.Expected), native.WithCallTimeout(d.Timeout), native.WithInteractionLimit(d.InteractionLimit))
+		handle, err := native.Start(ctx, d.Executable, native.WithDirectory(d.Directory), native.WithDescription(d.Expected),
+			native.WithCallTimeout(d.Timeout), native.WithInteractionLimit(d.InteractionLimit), native.WithPackageAlias(d.Alias))
 		if err != nil {
 			return err
 		}

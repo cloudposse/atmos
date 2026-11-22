@@ -43,6 +43,8 @@ type (
 		callTimeout      time.Duration
 		interactionLimit time.Duration
 		startTimeout     time.Duration
+		// packageAlias is the package's key under plugins.packages, used to name its configuration in errors.
+		packageAlias string
 	}
 )
 
@@ -95,6 +97,8 @@ type Handle struct {
 	forget           func()
 	callTimeout      time.Duration
 	interactionLimit time.Duration
+	// packageAlias is the package's key under plugins.packages; empty when the caller did not name it.
+	packageAlias string
 	// budgets holds the call-timeout budget of each active interactive invocation by its id.
 	budgets sync.Map
 }
@@ -133,7 +137,7 @@ func Start(ctx context.Context, executable string, opts ...Option) (*Handle, err
 	}
 	handle.process, handle.api, handle.command = client, settings.api, command
 	handle.interrupt, handle.forget, handle.callTimeout = stopped, forget, settings.callTimeout
-	handle.interactionLimit = settings.interactionLimit
+	handle.interactionLimit, handle.packageAlias = settings.interactionLimit, settings.packageAlias
 	startup, cancel := context.WithTimeout(stopped.ctx, settings.startTimeout)
 	defer cancel()
 	if err := handle.describe(startup, settings.expected); err != nil {

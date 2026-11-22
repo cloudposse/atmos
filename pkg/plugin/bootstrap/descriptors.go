@@ -152,6 +152,7 @@ func (c *ConstructorSet) authDefinition(activation *extension.Activation) (*adap
 	return &adapter.Definition{
 		Expected: activation.Description, Package: activation.Package, Directory: binding.Directory, Executable: activation.Executable,
 		Schema: schema.Validate, Outputs: outputs, Services: c.Services, Credentials: c.Credentials, Timeout: activation.Timeout,
+		InteractionLimit: activation.InteractionLimit, Alias: activation.Alias,
 	}, nil
 }
 

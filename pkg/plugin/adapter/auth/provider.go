@@ -46,8 +46,10 @@ type Definition struct {
 	// call, time spent waiting for the user to sign in does not count against it.
 	Timeout time.Duration
 	// InteractionLimit bounds that user wait when Timeout is set; zero means
-	// native.DefaultInteractionLimit.
+	// native.DefaultInteractionLimit. It comes from plugins.packages.<alias>.interaction_timeout.
 	InteractionLimit time.Duration
+	// Alias is the package's key under plugins.packages, so errors can name its configuration.
+	Alias string
 }
 
 // ProviderConstructor supplies the same full-configuration constructor used by built-in auth.

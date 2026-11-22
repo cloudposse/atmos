@@ -144,6 +144,7 @@ func TestStalledSignInIsCutOffByInteractionLimit(t *testing.T) {
 	const limit = 2 * interactiveCallTimeout
 	p, directory := interactiveProvider(t, stalledDeviceFixtureName)
 	p.definition.InteractionLimit = limit
+	p.definition.Alias = "corporate"
 
 	started := time.Now()
 	credentials, err := p.Authenticate(t.Context())
@@ -154,7 +155,9 @@ func TestStalledSignInIsCutOffByInteractionLimit(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.GreaterOrEqual(t, elapsed, limit, "the user wait must outlast the timeout before the ceiling applies")
 	require.Less(t, elapsed, stalledDeviceFallback, "the ceiling, not the fixture's own fallback, must end the wait")
-	require.Contains(t, strings.Join(errUtils.AllHints(err), "\n"), "sign-in")
+	hints := strings.Join(errUtils.AllHints(err), "\n")
+	require.Contains(t, hints, "sign-in")
+	require.Contains(t, hints, "`plugins.packages.corporate.interaction_timeout`", "the hint names the key of this package")
 	observed := readDeviceWait(t, directory)
 	require.WithinDuration(t, started.Add(interactiveCallTimeout+limit), observed.RPCDeadline, 5*time.Second,
 		"the plugin sees the hard deadline: the timeout plus the interaction limit")

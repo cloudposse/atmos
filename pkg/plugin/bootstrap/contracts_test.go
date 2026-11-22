@@ -151,5 +151,5 @@ func TestActivationRejectsMissingPackageAndExecutable(t *testing.T) {
 }
 
 func activatePackage(ctx context.Context, entry *config.Selection, registry *extension.Registry) error {
-	return activatePackageWithTimeout(ctx, "fixture", entry, registry, 0)
+	return activatePackageWithLimits(ctx, "fixture", entry, registry, packageLimits{})
 }

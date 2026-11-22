@@ -172,7 +172,7 @@ func (h *Handle) finishInvocation(callCtx context.Context, work *budget, err err
 		warn(omittedLogsNotice)
 		deadline, ok := callCtx.Deadline()
 		if work != nil && deadline.Equal(work.deadline) {
-			return interactionTimeoutError(deadline, h.interactionLimit)
+			return interactionTimeoutError(deadline, h.interactionLimit, h.packageAlias)
 		}
 		return timeoutError(deadline, ok)
 	}
@@ -205,9 +205,13 @@ func timeoutError(deadline time.Time, known bool) error {
 }
 
 // interactionTimeoutError reports an interactive call whose user wait outlasted the interaction limit.
-func interactionTimeoutError(deadline time.Time, limit time.Duration) error {
+// The hint names the key that raises the limit; alias is empty when the caller did not name the package.
+func interactionTimeoutError(deadline time.Time, limit time.Duration, alias string) error {
+	if alias == "" {
+		alias = "<alias>"
+	}
 	return errUtils.Build(errors.Join(errUtils.ErrPluginTimeout, context.DeadlineExceeded)).
-		WithHintf("Atmos waited %s for the sign-in to complete and then stopped the plugin. Run the command again and finish signing in before the limit.", limit).
+		WithHintf("Atmos waited %s for the sign-in to complete and then stopped the plugin. Run the command again and finish signing in before the limit, or raise `plugins.packages.%s.interaction_timeout` if the sign-in needs longer.", limit, alias).
 		WithContext("deadline", deadline.Format(time.RFC3339)).
 		Err()
 }

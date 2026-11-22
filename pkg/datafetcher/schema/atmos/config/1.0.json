@@ -9446,6 +9446,17 @@
             }
           ],
           "description": "Timeout bounds every call into the plugin as a Go duration such as 5m; empty means no deadline."
+        },
+        "interaction_timeout": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "InteractionTimeout bounds how long an interactive call may wait for the user to finish a\nsign-in, such as a device-code prompt or browser callback, as a Go duration such as 30m.\nThat wait does not count against timeout; the call's hard deadline is timeout plus this\nlimit. Empty means 15m. It requires timeout, applies only to interactive calls, and is at\nmost 24h."
         }
       },
       "type": "object",
