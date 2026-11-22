@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 
@@ -26,13 +27,34 @@ import (
 // convention uses this all-zero GUID).
 const acrLoginUsername = "00000000-0000-0000-0000-000000000000"
 
-// acrRegistrySuffix is the ACR login server suffix in the Azure public cloud.
-const acrRegistrySuffix = ".azurecr.io"
-
 // acrRegistryPattern matches normalized (lowercase) ACR login server URLs in every
 // Azure cloud: public (myregistry.azurecr.io), US Government (myregistry.azurecr.us),
-// and China (myregistry.azurecr.cn).
-var acrRegistryPattern = regexp.MustCompile(`^([a-z0-9]+)\.azurecr\.(?:io|us|cn)$`)
+// and China (myregistry.azurecr.cn). The second group is the cloud's
+// CloudEnvironment.ACRLoginServerSuffix; a test keeps the two in sync.
+var acrRegistryPattern = regexp.MustCompile(`^([a-z0-9]+)\.(azurecr\.(?:io|us|cn))$`)
+
+// acrRegistryPatternGroups is the number of submatches acrRegistryPattern returns
+// on a match: the whole login server, the registry name and the suffix.
+const acrRegistryPatternGroups = 3
+
+// acrCloudOrder lists the Azure clouds in a fixed order (public first) for
+// operations that must cover a registry name in every cloud.
+var acrCloudOrder = []string{"public", "usgovernment", "china"}
+
+//go:generate go run go.uber.org/mock/mockgen -destination=mock_acr_token_credential_test.go -package=azure -source=acr.go
+
+// ambientTokenCredential is the azcore.TokenCredential method the ambient ACR
+// login uses. It is declared here (rather than mocking azcore.TokenCredential
+// directly) because azcore's own declaration refers to an internal package.
+type ambientTokenCredential interface {
+	GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error)
+}
+
+// newDefaultAzureCredential builds the Azure SDK default (ambient) credential
+// chain. Overridable in tests so no real Azure endpoint is called.
+var newDefaultAzureCredential = func(options *azidentity.DefaultAzureCredentialOptions) (ambientTokenCredential, error) {
+	return azidentity.NewDefaultAzureCredential(options)
+}
 
 // acrHTTPClient is the HTTP client used for the ACR OAuth2 token exchange.
 // Overridable in tests.
@@ -126,11 +148,54 @@ func refreshTokenExpiry(refreshToken string) time.Time {
 	return time.Unix(int64(exp), 0)
 }
 
-// BuildRegistryURL constructs an ACR login server URL from a registry name.
+// BuildRegistryURL constructs an ACR login server URL in the Azure public cloud
+// from a registry name. Use BuildRegistryURLForCloud for a sovereign cloud.
 func BuildRegistryURL(name string) string {
 	defer perf.Track(nil, "azure.BuildRegistryURL")()
 
-	return name + acrRegistrySuffix
+	return BuildRegistryURLForCloud(name, PublicCloud)
+}
+
+// BuildRegistryURLForCloud constructs the ACR login server URL of a registry name
+// in the given Azure cloud (e.g. "myregistry" in usgovernment is
+// "myregistry.azurecr.us"). A nil cloud is the public cloud.
+func BuildRegistryURLForCloud(name string, cloudEnv *CloudEnvironment) string {
+	defer perf.Track(nil, "azure.BuildRegistryURLForCloud")()
+
+	if cloudEnv == nil || cloudEnv.ACRLoginServerSuffix == "" {
+		cloudEnv = PublicCloud
+	}
+	return name + "." + cloudEnv.ACRLoginServerSuffix
+}
+
+// RegistryURLsForAllClouds returns the ACR login server URL of a registry name in
+// every known Azure cloud, public first. Callers that cannot know which cloud a
+// registry was logged in to (logout runs without credentials) use it to cover all.
+func RegistryURLsForAllClouds(name string) []string {
+	defer perf.Track(nil, "azure.RegistryURLsForAllClouds")()
+
+	urls := make([]string, 0, len(acrCloudOrder))
+	for _, cloudName := range acrCloudOrder {
+		urls = append(urls, BuildRegistryURLForCloud(name, GetCloudEnvironment(cloudName)))
+	}
+	return urls
+}
+
+// CloudEnvironmentForRegistry returns the Azure cloud that serves an ACR login
+// server, from its DNS suffix: azurecr.io is public, azurecr.us is US Government
+// and azurecr.cn is China. Invalid registry URLs return ErrACRInvalidRegistry.
+func CloudEnvironmentForRegistry(registryURL string) (*CloudEnvironment, error) {
+	defer perf.Track(nil, "azure.CloudEnvironmentForRegistry")()
+
+	matches := acrRegistryPattern.FindStringSubmatch(normalizeLoginServerInput(registryURL))
+	if len(matches) == acrRegistryPatternGroups {
+		for _, cloudName := range acrCloudOrder {
+			if cloudEnv := GetCloudEnvironment(cloudName); cloudEnv.ACRLoginServerSuffix == matches[2] {
+				return cloudEnv, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("%w: %s", errUtils.ErrACRInvalidRegistry, registryURL)
 }
 
 // ParseRegistryURL extracts the registry name from an ACR login server URL.
@@ -164,16 +229,22 @@ func IsACRRegistry(registryURL string) bool {
 // parseLoginServer normalizes an ACR login server URL (DNS names and ACR registry
 // names are case-insensitive) and returns the registry name and the login server.
 func parseLoginServer(registryURL string) (name, loginServer string, err error) {
-	normalized := strings.ToLower(strings.TrimSpace(registryURL))
-	normalized = strings.TrimPrefix(normalized, "https://")
-	normalized = strings.TrimSuffix(normalized, "/")
+	normalized := normalizeLoginServerInput(registryURL)
 
 	matches := acrRegistryPattern.FindStringSubmatch(normalized)
-	if len(matches) != 2 { //nolint:mnd
+	if len(matches) != acrRegistryPatternGroups {
 		return "", "", fmt.Errorf("%w: %s", errUtils.ErrACRInvalidRegistry, registryURL)
 	}
 
 	return matches[1], normalized, nil
+}
+
+// normalizeLoginServerInput lowercases a registry URL and drops surrounding
+// whitespace, an "https://" scheme and a trailing slash.
+func normalizeLoginServerInput(registryURL string) string {
+	normalized := strings.ToLower(strings.TrimSpace(registryURL))
+	normalized = strings.TrimPrefix(normalized, "https://")
+	return strings.TrimSuffix(normalized, "/")
 }
 
 // LoadDefaultAzureCredentials loads Azure credentials from the ambient
@@ -181,18 +252,27 @@ func parseLoginServer(registryURL string) (name, loginServer string, err error) 
 // variables, managed identity, workload identity, Azure CLI). Used for
 // explicit-registry mode where the caller wants to use ambient Azure
 // credentials instead of Atmos identities.
-func LoadDefaultAzureCredentials(ctx context.Context) (*types.AzureCredentials, error) {
+//
+// The token is requested for the ARM management scope of cloudEnv, from that
+// cloud's AAD authority, because ACR only exchanges an AAD token issued for its
+// own cloud. A nil cloudEnv is the public cloud.
+func LoadDefaultAzureCredentials(ctx context.Context, cloudEnv *CloudEnvironment) (*types.AzureCredentials, error) {
 	defer perf.Track(nil, "azure.LoadDefaultAzureCredentials")()
 
-	cred, err := azidentity.NewDefaultAzureCredential(nil)
+	if cloudEnv == nil {
+		cloudEnv = PublicCloud
+	}
+
+	cred, err := newDefaultAzureCredential(ambientCredentialOptions(cloudEnv))
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create default Azure credential: %w", errUtils.ErrACRAuthFailed, err)
 	}
 
-	token, err := cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{PublicCloud.ManagementScope}})
+	token, err := cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{cloudEnv.ManagementScope}})
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrACRAuthFailed).
 			WithCause(err).
+			WithContext("cloud_environment", cloudEnv.Name).
 			WithExplanation("Failed to retrieve Azure credentials from the ambient environment (env vars, managed identity, workload identity, or Azure CLI).").
 			WithHint("If ambient credentials aren't available in this environment, configure an Atmos identity instead — run `atmos azure acr login --identity <name>`, or add `via.identity` under `auth.integrations` in atmos.yaml.").
 			Err()
@@ -210,5 +290,21 @@ func LoadDefaultAzureCredentials(ctx context.Context) (*types.AzureCredentials, 
 		TokenType:   "Bearer",
 		Expiration:  token.ExpiresOn.Format(time.RFC3339),
 		TenantID:    tenantID,
+		// Record the cloud so later steps pick the same cloud's endpoints.
+		CloudEnvironment: cloudEnv.Name,
 	}, nil
+}
+
+// ambientCredentialOptions returns the default credential chain options for a
+// cloud. The public cloud keeps azidentity's defaults (nil options), so an
+// AZURE_AUTHORITY_HOST override keeps working exactly as before. A sovereign
+// cloud sets its azcore cloud configuration, which points the chain's AAD-based
+// credentials (environment, workload identity) at that cloud's authority.
+func ambientCredentialOptions(cloudEnv *CloudEnvironment) *azidentity.DefaultAzureCredentialOptions {
+	if cloudEnv == nil || cloudEnv.Name == PublicCloud.Name {
+		return nil
+	}
+	return &azidentity.DefaultAzureCredentialOptions{
+		ClientOptions: BuildARMClientOptions(cloudEnv).ClientOptions,
+	}
 }

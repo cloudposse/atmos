@@ -15,6 +15,7 @@ import (
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/docker"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -132,8 +133,8 @@ func executeWithAuthManager(ctx context.Context, atmosConfig *schema.AtmosConfig
 func executeExplicitRegistries(ctx context.Context, registries []string) error {
 	defer perf.Track(nil, "azure.acr.executeExplicitRegistries")()
 
-	// Load Azure credentials from the ambient environment.
-	creds, err := loadDefaultAzureCredentials(ctx)
+	// Validate every registry before any login, so a typo never leaves a partial login.
+	loginServers, err := normalizeLoginServers(registries)
 	if err != nil {
 		return err
 	}
@@ -144,13 +145,16 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrIntegrationFailed, err)
 	}
 
+	// Ambient credentials, loaded once per Azure cloud: ACR only exchanges an AAD
+	// token issued by its own cloud, so azurecr.us and azurecr.cn registries need a
+	// US Government or China token.
+	credsByCloud := make(map[string]*authTypes.AzureCredentials)
+
 	// Login to each registry.
-	for _, registry := range registries {
-		// Keep the registry's own cloud suffix (azurecr.io/.us/.cn); rebuilding
-		// from the name alone would always target the public cloud.
-		loginServer, err := azureCloud.NormalizeRegistryURL(registry)
+	for _, loginServer := range loginServers {
+		creds, err := ambientCredentialsFor(ctx, loginServer, credsByCloud)
 		if err != nil {
-			return err // NormalizeRegistryURL already wraps with ErrACRInvalidRegistry.
+			return err
 		}
 
 		result, err := getAuthorizationToken(ctx, creds, loginServer)
@@ -176,6 +180,39 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 	_ = os.Setenv("DOCKER_CONFIG", dockerConfig.GetConfigDir())
 
 	return nil
+}
+
+// normalizeLoginServers validates explicit registry URLs and returns their login
+// servers. Each keeps its own cloud suffix (azurecr.io/.us/.cn); rebuilding from
+// the name alone would always target the public cloud.
+func normalizeLoginServers(registries []string) ([]string, error) {
+	loginServers := make([]string, 0, len(registries))
+	for _, registry := range registries {
+		loginServer, err := azureCloud.NormalizeRegistryURL(registry)
+		if err != nil {
+			return nil, err // NormalizeRegistryURL already wraps with ErrACRInvalidRegistry.
+		}
+		loginServers = append(loginServers, loginServer)
+	}
+	return loginServers, nil
+}
+
+// ambientCredentialsFor returns ambient Azure credentials for the cloud that serves
+// loginServer, loading them on first use and caching them in credsByCloud.
+func ambientCredentialsFor(ctx context.Context, loginServer string, credsByCloud map[string]*authTypes.AzureCredentials) (*authTypes.AzureCredentials, error) {
+	cloudEnv, err := azureCloud.CloudEnvironmentForRegistry(loginServer)
+	if err != nil {
+		return nil, err // Already wrapped with ErrACRInvalidRegistry.
+	}
+	if creds, ok := credsByCloud[cloudEnv.Name]; ok {
+		return creds, nil
+	}
+	creds, err := loadDefaultAzureCredentials(ctx, cloudEnv)
+	if err != nil {
+		return nil, err
+	}
+	credsByCloud[cloudEnv.Name] = creds
+	return creds, nil
 }
 
 // resolveSelectedIdentity resolves the interactive-selection sentinel ("__SELECT__",

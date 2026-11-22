@@ -31,7 +31,7 @@ func TestExecuteExplicitRegistries_SovereignAndUppercase(t *testing.T) {
 			var gotLoginServer string
 			stubAzureSeams(
 				t,
-				func(_ context.Context) (*authTypes.AzureCredentials, error) {
+				func(_ context.Context, _ *azureCloud.CloudEnvironment) (*authTypes.AzureCredentials, error) {
 					return &authTypes.AzureCredentials{TenantID: "tenant-123"}, nil
 				},
 				func(_ context.Context, _ authTypes.ICredentials, loginServer string) (*azureCloud.ACRAuthResult, error) {

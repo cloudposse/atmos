@@ -83,7 +83,7 @@ func (a *ACRIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrIntegrationFailed, err)
 	}
 
-	registryURL := azureCloud.BuildRegistryURL(a.registry.Name)
+	registryURL := a.loginServer(creds)
 
 	log.Debug("Logging in to ACR registry", "registry", registryURL)
 
@@ -113,7 +113,7 @@ func (a *ACRIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 func (a *ACRIntegration) ExchangeCredentials(ctx context.Context, creds types.ICredentials) (*types.OCICredentials, error) {
 	defer perf.Track(nil, "azure.ACRIntegration.ExchangeCredentials")()
 
-	registryURL := azureCloud.BuildRegistryURL(a.registry.Name)
+	registryURL := a.loginServer(creds)
 	result, err := acrGetAuthToken(ctx, creds, registryURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to get ACR token for %s: %w", errUtils.ErrACRAuthFailed, registryURL, err)
@@ -129,21 +129,24 @@ func (a *ACRIntegration) ExchangeCredentials(ctx context.Context, creds types.IC
 }
 
 // Cleanup removes ACR Docker config entries for this integration's registry.
+// Logout runs without credentials, so the provider's cloud is not known here: the
+// registry's login server is removed for every Azure cloud. RemoveAuth leaves
+// registries without an auths entry alone, so only entries that exist are touched.
 func (a *ACRIntegration) Cleanup(_ context.Context) error {
 	defer perf.Track(nil, "azure.ACRIntegration.Cleanup")()
 
-	registryURL := azureCloud.BuildRegistryURL(a.registry.Name)
+	registryURLs := azureCloud.RegistryURLsForAllClouds(a.registry.Name)
 
 	dockerConfig, err := acrDockerConfigFactory()
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDockerConfigWrite, err)
 	}
 
-	if err := dockerConfig.RemoveAuth(registryURL); err != nil {
+	if err := dockerConfig.RemoveAuth(registryURLs...); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDockerConfigWrite, err)
 	}
 
-	log.Debug("ACR cleanup: removed Docker auth", "registry", registryURL)
+	log.Debug("ACR cleanup: removed Docker auth", "registries", registryURLs)
 
 	return nil
 }
@@ -160,6 +163,17 @@ func (a *ACRIntegration) Environment() (map[string]string, error) {
 	return map[string]string{
 		"DOCKER_CONFIG": dockerConfig.GetConfigDir(),
 	}, nil
+}
+
+// loginServer returns the registry's login server in the Azure cloud of the
+// identity's provider (spec.cloud_environment, carried on the credentials as
+// CloudEnvironment). Without Azure credentials or a known cloud it is the public cloud.
+func (a *ACRIntegration) loginServer(creds types.ICredentials) string {
+	var cloudEnv *azureCloud.CloudEnvironment
+	if azureCreds, ok := creds.(*types.AzureCredentials); ok && azureCreds != nil {
+		cloudEnv = azureCloud.GetCloudEnvironment(azureCreds.CloudEnvironment)
+	}
+	return azureCloud.BuildRegistryURLForCloud(a.registry.Name, cloudEnv)
 }
 
 // GetIdentity returns the identity name this integration uses.
