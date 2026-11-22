@@ -112,7 +112,7 @@ auth:
 | `via.identity` | Yes | - | Name of identity providing Azure credentials |
 | `spec.auto_provision` | No | `true` | Auto-trigger on identity login |
 | `spec.registry.name` | Yes | - | ACR registry name. The login server is `{name}.azurecr.io`, or `{name}.azurecr.us` / `{name}.azurecr.cn` when the identity's provider sets `cloud_environment` (see [Sovereign Clouds](#sovereign-clouds)) |
-| `spec.registry.tenant_id` | No | identity's tenant | Override the AAD tenant used for the OAuth2 token exchange |
+| `spec.registry.tenant_id` | No | identity's tenant | Tenant ID (GUID) or verified domain of the Entra ID tenant the registry belongs to, when it differs from the identity's tenant. Atmos gets a token in that tenant for the token exchange (see [Registries in Another Tenant](#registries-in-another-tenant)) |
 
 ## How It Works
 
@@ -186,6 +186,33 @@ auth:
 ```
 
 Logging out of the identity removes the registry's Docker credentials for every cloud suffix, because logout runs without the provider's credentials.
+
+## Registries in Another Tenant
+
+A registry accepts only an Azure AD token issued by its own Entra ID tenant, and the token exchange sends that token together with the tenant that issued it (as `az acr login` does). When the registry lives in a different tenant than the identity's provider, for example when the signed-in user is a guest in the registry's tenant, set `spec.registry.tenant_id` to the registry's tenant:
+
+```yaml
+auth:
+  integrations:
+    partner/acr:
+      kind: azure/acr
+      via:
+        identity: azure-dev
+      spec:
+        registry:
+          name: partnerregistry
+          tenant_id: 22222222-2222-2222-2222-222222222222   # Or a verified domain, e.g. partner.onmicrosoft.com
+```
+
+With `tenant_id` set, Atmos:
+
+1. Validates the value when the integration is loaded. It must be a tenant ID (a GUID) or a domain name such as `partner.onmicrosoft.com`.
+2. Uses the identity's credentials unchanged when `tenant_id` is the identity's own tenant.
+3. Otherwise gets a new Azure Resource Manager token in that tenant from the identity's cached sign-in (the refresh token the provider stored at login), from the login endpoint of the provider's `cloud_environment`, and exchanges that token with the registry's tenant.
+
+Getting a token in another tenant without a new sign-in only works for identities whose provider is `azure/device-code` or `azure/interactive`, and only if the signed-in account is a member or guest of the registry's tenant. For `azure/cli` and `azure/oidc` providers, Atmos fails with an error instead of exchanging a token from the wrong tenant. In that case, use an identity whose provider `tenant_id` is the registry's tenant and leave `spec.registry.tenant_id` unset. If the registry's tenant requires its own sign-in (for example Conditional Access or MFA), the login also fails with a hint to configure a provider for that tenant.
+
+Explicit `--registry` mode has no tenant option. It always exchanges the ambient token with the tenant that issued it.
 
 ## Credential Storage
 

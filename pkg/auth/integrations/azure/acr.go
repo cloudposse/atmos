@@ -23,6 +23,10 @@ func init() {
 // acrGetAuthToken retrieves an ACR authorization token. Overridable in tests.
 var acrGetAuthToken = azureCloud.GetAuthorizationToken
 
+// acrCredentialsForTenant swaps the identity's credentials for credentials issued by
+// spec.registry.tenant_id. Overridable in tests.
+var acrCredentialsForTenant = azureCloud.CredentialsForACRTenant
+
 // acrDockerConfigFactory creates a Docker config manager. Overridable in tests.
 var acrDockerConfigFactory = docker.NewConfigManager
 
@@ -31,6 +35,9 @@ type ACRIntegration struct {
 	name     string
 	identity string
 	registry *schema.Registry
+	// realm is the credential isolation realm, whose MSAL cache holds the cached
+	// sign-in used to mint a token in spec.registry.tenant_id.
+	realm string
 }
 
 // NewACRIntegration creates an ACR integration from config.
@@ -61,10 +68,17 @@ func NewACRIntegration(config *integrations.IntegrationConfig) (integrations.Int
 		return nil, fmt.Errorf("%w: integration '%s' has no registry name configured", errUtils.ErrIntegrationFailed, config.Name)
 	}
 
+	if registry.TenantID != "" {
+		if err := azureCloud.ValidateACRTenantID(registry.TenantID); err != nil {
+			return nil, fmt.Errorf("%w: integration '%s': %w", errUtils.ErrIntegrationFailed, config.Name, err)
+		}
+	}
+
 	return &ACRIntegration{
 		name:     config.Name,
 		identity: identity,
 		registry: registry,
+		realm:    config.Realm,
 	}, nil
 }
 
@@ -114,6 +128,16 @@ func (a *ACRIntegration) ExchangeCredentials(ctx context.Context, creds types.IC
 	defer perf.Track(nil, "azure.ACRIntegration.ExchangeCredentials")()
 
 	registryURL := a.loginServer(creds)
+
+	// spec.registry.tenant_id: exchange a token issued by the registry's tenant.
+	if a.registry.TenantID != "" {
+		tenantCreds, err := acrCredentialsForTenant(ctx, creds, a.registry.TenantID, a.realm)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrACRAuthFailed, registryURL, err)
+		}
+		creds = tenantCreds
+	}
+
 	result, err := acrGetAuthToken(ctx, creds, registryURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to get ACR token for %s: %w", errUtils.ErrACRAuthFailed, registryURL, err)

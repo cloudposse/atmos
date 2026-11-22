@@ -74,6 +74,25 @@ A registry only accepts an Azure AD token from its own cloud, so the provider's
 `cloud_environment` must match the registry. Logout cannot know which cloud was used, so it removes
 the Docker login for `{name}.azurecr.io`, `{name}.azurecr.us` and `{name}.azurecr.cn`.
 
+### Registry in another tenant (`spec.registry.tenant_id`)
+
+A registry only accepts an Azure AD token issued by its own Entra ID tenant; the exchange sends
+the token and the tenant that issued it. `spec.registry.tenant_id` (a tenant GUID or a domain such
+as `partner.onmicrosoft.com`, validated when the integration loads) names the registry's tenant
+when it differs from the identity's:
+
+- Same tenant as the identity: the identity's credentials are used unchanged.
+- Another tenant: Atmos mints an ARM token in that tenant silently from the realm's MSAL cache
+  (the provider's cached refresh token, same client), at the provider cloud's login endpoint.
+  This needs an `azure/device-code` or `azure/interactive` provider and an account that is a
+  member or guest of the registry's tenant.
+- `azure/cli` and `azure/oidc` credentials fail with `ErrACRTenantOverrideUnsupported` (never a
+  silent fallback to the identity's tenant). Fix: use an identity whose provider `tenant_id` is the
+  registry's tenant and drop `spec.registry.tenant_id`.
+- A tenant that demands its own sign-in (Conditional Access, MFA) also fails, with a hint to
+  configure a provider for that tenant.
+- `--registry` mode has no tenant option.
+
 ## Guidance
 
 - Prefer named integrations for stable registries; they make the registry name and identity
