@@ -43,7 +43,9 @@ var aksDescribeCluster = azureCloud.DescribeCluster
 type AKSIntegration struct {
 	name     string
 	identity string
-	cluster  *schema.Cluster
+	// realm is the auth realm; a non-empty realm scopes the kubeconfig user.
+	realm   string
+	cluster *schema.Cluster
 }
 
 // NewAKSIntegration creates an AKS integration from config.
@@ -73,6 +75,7 @@ func NewAKSIntegration(config *integrations.IntegrationConfig) (integrations.Int
 	return &AKSIntegration{
 		name:     config.Name,
 		identity: identity,
+		realm:    config.Realm,
 		cluster:  cluster,
 	}, nil
 }
@@ -165,7 +168,9 @@ func (a *AKSIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	}
 
 	// Write cluster config.
-	changed, err := mgr.WriteClusterConfig(azureCloud.BuildKubeClusterInfo(info, a.identity), a.cluster.Alias, updateMode)
+	clusterInfo := azureCloud.BuildKubeClusterInfo(info, a.identity)
+	clusterInfo.Realm = a.realm
+	changed, err := mgr.WriteClusterConfig(clusterInfo, a.cluster.Alias, updateMode)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
 	}
@@ -226,13 +231,13 @@ func (a *AKSIntegration) Cleanup(_ context.Context) error {
 		subscriptionID = resourceID.SubscriptionID
 	}
 
-	// The username also includes the identity (see azureCloud.BuildKubeClusterInfo).
-	// Also remove the user without the identity that older versions wrote;
-	// RemoveClusterConfig keeps either user while another context still references it.
-	userName := azureCloud.AKSKubeUserName(a.cluster.Name, a.cluster.ResourceGroup, subscriptionID, a.identity)
-	legacyUserName := azureCloud.LegacyAKSKubeUserName(a.cluster.Name, a.cluster.ResourceGroup, subscriptionID)
+	// The username also includes the realm and identity (see
+	// azureCloud.BuildKubeClusterInfo). Also remove the names older versions
+	// wrote, without the realm or the identity; RemoveClusterConfig keeps any
+	// user while another context still references it.
+	userNames := azureCloud.AKSKubeUserNames(a.cluster.Name, a.cluster.ResourceGroup, subscriptionID, a.identity, a.realm)
 
-	if err := mgr.RemoveClusterConfig(clusterID, contextName, userName, legacyUserName); err != nil {
+	if err := mgr.RemoveClusterConfig(clusterID, contextName, userNames[0], userNames[1:]...); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
 	}
 

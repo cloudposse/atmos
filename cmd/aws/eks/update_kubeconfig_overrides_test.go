@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -43,6 +44,7 @@ type fakeEKSAuthManager struct {
 	execErr      error
 	whoami       *types.WhoamiInfo
 	authErr      error
+	realm        string
 }
 
 func (f *fakeEKSAuthManager) ExecuteIntegration(_ context.Context, name string, opts ...types.IntegrationOption) error {
@@ -56,6 +58,11 @@ func (f *fakeEKSAuthManager) ExecuteIntegration(_ context.Context, name string, 
 func (f *fakeEKSAuthManager) Authenticate(_ context.Context, name string) (*types.WhoamiInfo, error) {
 	f.gotName = name
 	return f.whoami, f.authErr
+}
+
+// GetRealm returns the configured auth realm.
+func (f *fakeEKSAuthManager) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{Value: f.realm}
 }
 
 // TestExecuteEKSUpdateKubeconfigViaIntegration_ForwardsOverrides is the
@@ -196,9 +203,12 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 		name         string
 		unavailable  bool
 		writeFailure bool
+		realm        string
+		wantUser     string
 		wantErr      error
 	}{
-		{name: "preserves auth context"},
+		{name: "preserves auth context", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
+		{name: "realm scopes the user", realm: "acme", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo"},
 		{name: "working directory unavailable", unavailable: true, wantErr: errUtils.ErrWorkingDirAccessFailed},
 		{name: "kubeconfig parent is a file", writeFailure: true, wantErr: errUtils.ErrKubeconfigWrite},
 	} {
@@ -208,7 +218,7 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 			}
 			restoreEKSSeams(t)
 			initCliConfig = okEKSInitConfig
-			fake := &fakeEKSAuthManager{whoami: &types.WhoamiInfo{Credentials: &types.AWSCredentials{
+			fake := &fakeEKSAuthManager{realm: tt.realm, whoami: &types.WhoamiInfo{Credentials: &types.AWSCredentials{
 				AccessKeyID: "test-access-key", SecretAccessKey: "test-secret-key",
 			}}}
 			newAuthManager = func(*schema.AuthConfig, types.CredentialStore, types.Validator, *schema.ConfigAndStacksInfo, string) (types.AuthManager, error) {
@@ -258,7 +268,7 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 			config, err := clientcmd.LoadFromFile(path)
 			require.NoError(t, err)
 			assert.Equal(t, "bar-context", config.CurrentContext)
-			user := config.AuthInfos["atmos-eks-bar-eu-central-1-123456789012-foo"]
+			user := config.AuthInfos[tt.wantUser]
 			require.NotNil(t, user)
 			assert.Equal(t, []string{"aws", "eks", "token", "--cluster-name", "bar", "--region", "eu-central-1", "--identity=foo"}, user.Exec.Args)
 			env := map[string]string{}
@@ -267,6 +277,7 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 			}
 			assert.Equal(t, workingDir, env["ATMOS_CHDIR"])
 			assert.Equal(t, "foo", env["ATMOS_IDENTITY"])
+			assert.Equal(t, tt.realm, env["ATMOS_AUTH_REALM"])
 		})
 	}
 }

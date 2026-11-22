@@ -110,6 +110,8 @@ func executeEKSUpdateKubeconfigDirect(clusterName, region, kubeconfigPath, alias
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEKSIntegrationFailed, err)
 	}
+	// Scope the kube user to the auth realm, as the aws/eks integration does.
+	clusterInfo.Realm = mgr.GetRealm().Value
 
 	kubeMgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
 	if err != nil {

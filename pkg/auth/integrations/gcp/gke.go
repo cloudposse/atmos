@@ -37,7 +37,9 @@ func init() {
 type GKEIntegration struct {
 	name     string
 	identity string
-	cluster  *schema.Cluster
+	// realm is the auth realm; a non-empty realm scopes the kubeconfig user.
+	realm   string
+	cluster *schema.Cluster
 }
 
 // NewGKEIntegration creates a GKE integration from config.
@@ -61,7 +63,7 @@ func NewGKEIntegration(config *integrations.IntegrationConfig) (integrations.Int
 		return nil, err
 	}
 
-	return &GKEIntegration{name: config.Name, identity: identity, cluster: cluster}, nil
+	return &GKEIntegration{name: config.Name, identity: identity, realm: config.Realm, cluster: cluster}, nil
 }
 
 // validateGKECluster validates the cluster and kubeconfig portions of an integration.
@@ -134,7 +136,9 @@ func (g *GKEIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
 
-	changed, err := mgr.WriteClusterConfig(gcpCloud.BuildKubeClusterInfo(info, g.identity), g.cluster.Alias, update)
+	clusterInfo := gcpCloud.BuildKubeClusterInfo(info, g.identity)
+	clusterInfo.Realm = g.realm
+	changed, err := mgr.WriteClusterConfig(clusterInfo, g.cluster.Alias, update)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
@@ -167,12 +171,12 @@ func (g *GKEIntegration) Cleanup(_ context.Context) error {
 	if contextName == "" {
 		contextName = clusterID
 	}
-	// The username includes the identity (see gcpCloud.BuildKubeClusterInfo).
-	// Also remove the user without the identity that older versions wrote;
-	// RemoveClusterConfig keeps either user while another context still references it.
-	userName := gcpCloud.GKEKubeUserName(g.cluster.ProjectID, g.cluster.Location, g.cluster.Name, g.identity)
-	legacyUserName := gcpCloud.LegacyGKEKubeUserName(g.cluster.ProjectID, g.cluster.Location, g.cluster.Name)
-	if err := mgr.RemoveClusterConfig(clusterID, contextName, userName, legacyUserName); err != nil {
+	// The username includes the realm and identity (see
+	// gcpCloud.BuildKubeClusterInfo). Also remove the names older versions
+	// wrote, without the realm or the identity; RemoveClusterConfig keeps any
+	// user while another context still references it.
+	userNames := gcpCloud.GKEKubeUserNames(g.cluster.ProjectID, g.cluster.Location, g.cluster.Name, g.identity, g.realm)
+	if err := mgr.RemoveClusterConfig(clusterID, contextName, userNames[0], userNames[1:]...); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
 	gkeExpectedServers.Delete(g.expectedServerKey(mgr.GetPath()))

@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 
@@ -42,7 +43,9 @@ var eksDescribeCluster = awsCloud.DescribeCluster
 type EKSIntegration struct {
 	name     string
 	identity string
-	cluster  *schema.Cluster
+	// realm is the auth realm; a non-empty realm scopes the kubeconfig user.
+	realm   string
+	cluster *schema.Cluster
 }
 
 // NewEKSIntegration creates an EKS integration from config.
@@ -98,6 +101,7 @@ func NewEKSIntegration(config *integrations.IntegrationConfig) (integrations.Int
 	return &EKSIntegration{
 		name:     config.Name,
 		identity: identity,
+		realm:    config.Realm,
 		cluster:  cluster,
 	}, nil
 }
@@ -139,6 +143,7 @@ func (e *EKSIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEKSIntegrationFailed, err)
 	}
+	clusterInfo.Realm = e.realm
 
 	changed, err := mgr.WriteClusterConfig(clusterInfo, e.cluster.Alias, updateMode)
 	if err != nil {
@@ -192,14 +197,13 @@ func (e *EKSIntegration) Cleanup(_ context.Context) error {
 		contextName = clusterARN
 	}
 
-	// The user name includes the account ID and identity (see
-	// awsCloud.BuildKubeClusterInfo). Also remove the atmos-eks-<name>-<region>
-	// user that older versions wrote; RemoveClusterConfig keeps either user while
-	// another context still references it.
-	userName := awsCloud.EKSKubeUserName(clusterARN, e.cluster.Name, e.cluster.Region, e.identity)
-	legacyUserName := awsCloud.LegacyEKSKubeUserName(e.cluster.Name, e.cluster.Region)
+	// The user name includes the realm, account ID and identity (see
+	// awsCloud.BuildKubeClusterInfo). Also remove the names older versions
+	// wrote: without the realm, and the atmos-eks-<name>-<region> legacy name.
+	// RemoveClusterConfig keeps any user while another context still references it.
+	userNames := e.kubeUserNames(clusterARN)
 
-	if err := mgr.RemoveClusterConfig(clusterARN, contextName, userName, legacyUserName); err != nil {
+	if err := mgr.RemoveClusterConfig(clusterARN, contextName, userNames[0], userNames[1:]...); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 
@@ -293,7 +297,7 @@ func (e *EKSIntegration) selectOwnedClusterARN(mgr *kube.KubeconfigManager, cand
 			return "", err
 		}
 		if kubeContext != nil && kubeContext.Cluster == clusterARN &&
-			kubeContext.AuthInfo == awsCloud.EKSKubeUserName(clusterARN, e.cluster.Name, e.cluster.Region, e.identity) {
+			slices.Contains(e.kubeUserNames(clusterARN), kubeContext.AuthInfo) {
 			owned = append(owned, clusterARN)
 		}
 	}
@@ -303,6 +307,12 @@ func (e *EKSIntegration) selectOwnedClusterARN(mgr *kube.KubeconfigManager, cand
 	}
 	return "", fmt.Errorf("%w: %d clusters named %s in %s match and none can be attributed to identity %q",
 		errUtils.ErrEKSClusterAmbiguous, len(candidates), e.cluster.Name, e.cluster.Region, e.identity)
+}
+
+// kubeUserNames returns the exec user name this integration writes for
+// clusterARN, followed by the names older versions wrote for it.
+func (e *EKSIntegration) kubeUserNames(clusterARN string) []string {
+	return awsCloud.EKSKubeUserNames(clusterARN, e.cluster.Name, e.cluster.Region, e.identity, e.realm)
 }
 
 // matchesClusterARN reports whether id is the ARN of this integration's EKS cluster.

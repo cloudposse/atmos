@@ -31,7 +31,7 @@ func TestAKSKubeUserName_MatchesWrittenUser(t *testing.T) {
 
 			assert.Equal(t, tt.identity, written.Identity)
 			assert.Equal(t, tt.want, kube.UserName(written))
-			assert.Equal(t, kube.UserName(written), AKSKubeUserName("dev-cluster", "dev-rg", tt.subscriptionID, tt.identity))
+			assert.Equal(t, kube.UserName(written), AKSKubeUserName("dev-cluster", "dev-rg", tt.subscriptionID, tt.identity, ""))
 		})
 	}
 }
@@ -39,4 +39,18 @@ func TestAKSKubeUserName_MatchesWrittenUser(t *testing.T) {
 // TestLegacyAKSKubeUserName verifies the name versions before the identity was added wrote.
 func TestLegacyAKSKubeUserName(t *testing.T) {
 	assert.Equal(t, "atmos-aks-dev-cluster-dev-rg-sub-123", LegacyAKSKubeUserName("dev-cluster", "dev-rg", "sub-123"))
+}
+
+// TestAKSKubeUserNames verifies the cleanup candidates: the current name first,
+// then the pre-realm name (only with a realm) and the legacy name.
+func TestAKSKubeUserNames(t *testing.T) {
+	assert.Equal(t, []string{
+		"atmos-acme-aks-dev-cluster-dev-rg-sub-123-azure-admin",
+		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin",
+		"atmos-aks-dev-cluster-dev-rg-sub-123",
+	}, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", "acme"))
+	assert.Equal(t, []string{
+		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin",
+		"atmos-aks-dev-cluster-dev-rg-sub-123",
+	}, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", ""))
 }

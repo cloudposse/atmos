@@ -271,9 +271,11 @@ func BuildKubeClusterInfo(info *AKSClusterInfo, identityName string) *kube.Clust
 
 // AKSKubeUserName returns the kubeconfig exec-plugin username that
 // BuildKubeClusterInfo produces for a cluster when authenticating as
-// identityName: atmos-aks-<name>-<resource-group>[-<subscription>][-<identity>].
-// The identity keeps contexts for different identities from sharing one user.
-func AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName string) string {
+// identityName from realm:
+// atmos-[<realm>-]aks-<name>-<resource-group>[-<subscription>][-<identity>].
+// The realm and identity keep contexts for different repositories or
+// identities from sharing one user.
+func AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, realm string) string {
 	defer perf.Track(nil, "azure.AKSKubeUserName")()
 
 	return kube.UserName(&kube.ClusterInfo{
@@ -282,7 +284,22 @@ func AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName st
 		UserPrefix: aksUserPrefix,
 		AccountID:  subscriptionID,
 		Identity:   identityName,
+		Realm:      realm,
 	})
+}
+
+// AKSKubeUserNames returns AKSKubeUserName followed by the names older
+// versions wrote for the same entry, so cleanup can remove any of them: the
+// name without the realm (when realm is set) and the legacy name without the
+// identity.
+func AKSKubeUserNames(clusterName, resourceGroup, subscriptionID, identityName, realm string) []string {
+	defer perf.Track(nil, "azure.AKSKubeUserNames")()
+
+	names := []string{AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, realm)}
+	if realm != "" {
+		names = append(names, AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, ""))
+	}
+	return append(names, LegacyAKSKubeUserName(clusterName, resourceGroup, subscriptionID))
 }
 
 // LegacyAKSKubeUserName returns the atmos-aks-<name>-<resource-group>[-<subscription>]
@@ -291,7 +308,7 @@ func AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName st
 func LegacyAKSKubeUserName(clusterName, resourceGroup, subscriptionID string) string {
 	defer perf.Track(nil, "azure.LegacyAKSKubeUserName")()
 
-	return AKSKubeUserName(clusterName, resourceGroup, subscriptionID, "")
+	return AKSKubeUserName(clusterName, resourceGroup, subscriptionID, "", "")
 }
 
 // GetToken returns the AKS-scoped bearer token for kubectl. The token itself

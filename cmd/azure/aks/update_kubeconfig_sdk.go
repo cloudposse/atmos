@@ -69,6 +69,8 @@ type aksKubeconfigDirectParams struct {
 	kubeconfigPath string
 	alias          string
 	identityName   string
+	// realm is the auth realm; a non-empty realm scopes the kubeconfig user.
+	realm string
 }
 
 // executeAKSUpdateKubeconfigDirect runs AKS kubeconfig update using the Go SDK with explicit parameters.
@@ -111,6 +113,9 @@ func executeAKSUpdateKubeconfigDirect(p *aksKubeconfigDirectParams) error {
 		}
 	}
 
+	// Scope the kube user to the auth realm, as the azure/aks integration does.
+	p.realm = mgr.GetRealm().Value
+
 	return writeAKSKubeconfigDirect(ctx, whoami.Credentials, p)
 }
 
@@ -135,7 +140,9 @@ func writeAKSKubeconfigDirect(ctx context.Context, creds types.ICredentials, p *
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
 	}
 
-	if _, err := kubeMgr.WriteClusterConfig(azureCloud.BuildKubeClusterInfo(info, p.identityName), p.alias, "merge"); err != nil {
+	clusterInfo := azureCloud.BuildKubeClusterInfo(info, p.identityName)
+	clusterInfo.Realm = p.realm
+	if _, err := kubeMgr.WriteClusterConfig(clusterInfo, p.alias, "merge"); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
 	}
 

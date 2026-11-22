@@ -203,10 +203,11 @@ func BuildKubeClusterInfo(info *EKSClusterInfo, identityName string) (*kube.Clus
 
 // EKSKubeUserName returns the kubeconfig exec-plugin username that
 // BuildKubeClusterInfo produces for the cluster with the given ARN, name and
-// region when authenticating as identityName:
-// atmos-eks-<name>-<region>-<account>-<identity>. The account ID and identity
-// keep contexts for different accounts or identities from sharing one user.
-func EKSKubeUserName(clusterARN, clusterName, region, identityName string) string {
+// region when authenticating as identityName from realm:
+// atmos-[<realm>-]eks-<name>-<region>-<account>-<identity>. The realm, account
+// ID and identity keep contexts for different repositories, accounts or
+// identities from sharing one user.
+func EKSKubeUserName(clusterARN, clusterName, region, identityName, realm string) string {
 	defer perf.Track(nil, "aws.EKSKubeUserName")()
 
 	return kube.UserName(&kube.ClusterInfo{
@@ -215,7 +216,22 @@ func EKSKubeUserName(clusterARN, clusterName, region, identityName string) strin
 		UserPrefix: eksUserPrefix,
 		AccountID:  clusterAccountID(clusterARN),
 		Identity:   identityName,
+		Realm:      realm,
 	})
+}
+
+// EKSKubeUserNames returns EKSKubeUserName followed by the names older
+// versions wrote for the same entry, so cleanup can remove any of them: the
+// name without the realm (when realm is set) and the legacy
+// atmos-eks-<name>-<region> name.
+func EKSKubeUserNames(clusterARN, clusterName, region, identityName, realm string) []string {
+	defer perf.Track(nil, "aws.EKSKubeUserNames")()
+
+	names := []string{EKSKubeUserName(clusterARN, clusterName, region, identityName, realm)}
+	if realm != "" {
+		names = append(names, EKSKubeUserName(clusterARN, clusterName, region, identityName, ""))
+	}
+	return append(names, LegacyEKSKubeUserName(clusterName, region))
 }
 
 // LegacyEKSKubeUserName returns the atmos-eks-<name>-<region> username that

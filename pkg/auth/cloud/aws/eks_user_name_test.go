@@ -46,7 +46,7 @@ func TestEKSKubeUserName_MatchesWrittenUser(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.want, kube.UserName(written))
-			assert.Equal(t, kube.UserName(written), EKSKubeUserName(tt.arn, "prod", "us-east-2", tt.identity))
+			assert.Equal(t, kube.UserName(written), EKSKubeUserName(tt.arn, "prod", "us-east-2", tt.identity, ""))
 		})
 	}
 }
@@ -55,4 +55,20 @@ func TestEKSKubeUserName_MatchesWrittenUser(t *testing.T) {
 // and identity were added wrote.
 func TestLegacyEKSKubeUserName(t *testing.T) {
 	assert.Equal(t, "atmos-eks-prod-us-east-2", LegacyEKSKubeUserName("prod", "us-east-2"))
+}
+
+// TestEKSKubeUserNames verifies the cleanup candidates: the current name first,
+// then the pre-realm name (only with a realm) and the legacy name.
+func TestEKSKubeUserNames(t *testing.T) {
+	const arn = "arn:aws:eks:us-east-2:111111111111:cluster/prod"
+
+	assert.Equal(t, []string{
+		"atmos-acme-eks-prod-us-east-2-111111111111-admin",
+		"atmos-eks-prod-us-east-2-111111111111-admin",
+		"atmos-eks-prod-us-east-2",
+	}, EKSKubeUserNames(arn, "prod", "us-east-2", "admin", "acme"))
+	assert.Equal(t, []string{
+		"atmos-eks-prod-us-east-2-111111111111-admin",
+		"atmos-eks-prod-us-east-2",
+	}, EKSKubeUserNames(arn, "prod", "us-east-2", "admin", ""))
 }

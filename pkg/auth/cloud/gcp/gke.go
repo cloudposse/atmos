@@ -151,9 +151,11 @@ func BuildKubeClusterInfo(info *GKEClusterInfo, identityName string) *kube.Clust
 
 // GKEKubeUserName returns the kubeconfig exec-plugin username that
 // BuildKubeClusterInfo produces for a cluster when authenticating as
-// identityName: atmos-gke-<name>-<project>-<location>[-<identity>]. The
-// identity keeps contexts for different identities from sharing one user.
-func GKEKubeUserName(projectID, location, clusterName, identityName string) string {
+// identityName from realm:
+// atmos-[<realm>-]gke-<name>-<project>-<location>[-<identity>]. The realm and
+// identity keep contexts for different repositories or identities from
+// sharing one user.
+func GKEKubeUserName(projectID, location, clusterName, identityName, realm string) string {
 	defer perf.Track(nil, "gcp.GKEKubeUserName")()
 
 	return kube.UserName(&kube.ClusterInfo{
@@ -161,7 +163,22 @@ func GKEKubeUserName(projectID, location, clusterName, identityName string) stri
 		Region:     gkeUserRegion(projectID, location),
 		UserPrefix: gkeUserPrefix,
 		Identity:   identityName,
+		Realm:      realm,
 	})
+}
+
+// GKEKubeUserNames returns GKEKubeUserName followed by the names older
+// versions wrote for the same entry, so cleanup can remove any of them: the
+// name without the realm (when realm is set) and the legacy name without the
+// identity.
+func GKEKubeUserNames(projectID, location, clusterName, identityName, realm string) []string {
+	defer perf.Track(nil, "gcp.GKEKubeUserNames")()
+
+	names := []string{GKEKubeUserName(projectID, location, clusterName, identityName, realm)}
+	if realm != "" {
+		names = append(names, GKEKubeUserName(projectID, location, clusterName, identityName, ""))
+	}
+	return append(names, LegacyGKEKubeUserName(projectID, location, clusterName))
 }
 
 // LegacyGKEKubeUserName returns the atmos-gke-<name>-<project>-<location>
@@ -170,7 +187,7 @@ func GKEKubeUserName(projectID, location, clusterName, identityName string) stri
 func LegacyGKEKubeUserName(projectID, location, clusterName string) string {
 	defer perf.Track(nil, "gcp.LegacyGKEKubeUserName")()
 
-	return GKEKubeUserName(projectID, location, clusterName, "")
+	return GKEKubeUserName(projectID, location, clusterName, "", "")
 }
 
 // gkeUserRegion is the location part of a GKE exec-plugin username.

@@ -29,7 +29,7 @@ func TestGKEKubeUserName_MatchesWrittenUser(t *testing.T) {
 
 			assert.Equal(t, tt.identity, written.Identity)
 			assert.Equal(t, tt.want, kube.UserName(written))
-			assert.Equal(t, kube.UserName(written), GKEKubeUserName("example-project", "us-central1", "example-cluster", tt.identity))
+			assert.Equal(t, kube.UserName(written), GKEKubeUserName("example-project", "us-central1", "example-cluster", tt.identity, ""))
 		})
 	}
 }
@@ -37,4 +37,18 @@ func TestGKEKubeUserName_MatchesWrittenUser(t *testing.T) {
 // TestLegacyGKEKubeUserName verifies the name versions before the identity was added wrote.
 func TestLegacyGKEKubeUserName(t *testing.T) {
 	assert.Equal(t, "atmos-gke-example-cluster-example-project-us-central1", LegacyGKEKubeUserName("example-project", "us-central1", "example-cluster"))
+}
+
+// TestGKEKubeUserNames verifies the cleanup candidates: the current name first,
+// then the pre-realm name (only with a realm) and the legacy name.
+func TestGKEKubeUserNames(t *testing.T) {
+	assert.Equal(t, []string{
+		"atmos-acme-gke-example-cluster-example-project-us-central1-gcp-admin",
+		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin",
+		"atmos-gke-example-cluster-example-project-us-central1",
+	}, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", "acme"))
+	assert.Equal(t, []string{
+		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin",
+		"atmos-gke-example-cluster-example-project-us-central1",
+	}, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", ""))
 }

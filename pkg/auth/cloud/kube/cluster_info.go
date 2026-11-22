@@ -1,0 +1,104 @@
+package kube
+
+import (
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+
+	"github.com/cloudposse/atmos/pkg/auth/realm"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// ClusterInfo is the cloud-agnostic cluster data needed to write a kubeconfig
+// entry. Each cloud package (aws, azure) builds one of these from its own
+// describe-cluster call before handing it to KubeconfigManager.
+type ClusterInfo struct {
+	// Name is the cluster's short name.
+	Name string
+
+	// Endpoint is the cluster's API server URL.
+	Endpoint string
+
+	// CertificateAuthorityData is the base64-encoded CA certificate, as
+	// returned by the cloud API. Decoded the same way for every cloud.
+	CertificateAuthorityData string
+
+	// ID uniquely identifies the cluster and is used as the kubeconfig
+	// cluster map key and default context name: the ARN for EKS, the ARM
+	// resource ID for AKS, or the canonical GKE resource name.
+	ID string
+
+	// Region disambiguates the generated exec-plugin username when the same
+	// cluster name exists in more than one place: the AWS region for EKS,
+	// the resource group for AKS, or the project and location for GKE.
+	Region string
+
+	// UserPrefix distinguishes the exec-plugin username by cloud, e.g. "eks"
+	// or "aks", reproducing the existing "atmos-eks-<name>-<region>" scheme.
+	UserPrefix string
+
+	// AccountID further disambiguates the exec-plugin username for clouds
+	// where Name+Region is not guaranteed unique: Azure resource groups are
+	// scoped per-subscription, so the same cluster name and resource group
+	// can exist in two subscriptions, and EKS clusters of the same name and
+	// region can exist in two AWS accounts. Leave empty to omit it.
+	AccountID string
+
+	// Identity is the Atmos identity the exec plugin authenticates as. It is
+	// part of the exec-plugin username so two contexts for the same cluster
+	// that use different identities never share (and overwrite) one user.
+	// Leave empty to omit it.
+	Identity string
+
+	// Realm is the Atmos auth realm the entry was written from. A non-empty
+	// realm is part of the exec-plugin username, so repositories with
+	// different realms never share (and overwrite) one user in a shared
+	// kubeconfig, and it is passed to the exec plugin as ATMOS_AUTH_REALM so
+	// the token is resolved in that realm. Leave empty to omit both.
+	Realm string
+
+	// ExecArgs are the fully-built kubectl exec-credential-plugin arguments,
+	// e.g. [aws, eks, token, --cluster-name, X, --region, Y] or
+	// [azure, aks, token, --cluster-name, X, --resource-group, Y]. Built by
+	// the caller so this package stays cloud-agnostic.
+	ExecArgs []string
+
+	// ExecEnv are additional environment variables for the exec plugin, e.g.
+	// ATMOS_IDENTITY.
+	ExecEnv []clientcmdapi.ExecEnvVar
+}
+
+// UserName returns the exec-plugin username for a cluster entry:
+// atmos-[<realm>-]<prefix>-<name>-<region>[-<account>][-<identity>].
+// The realm comes right after "atmos-" so an empty realm keeps the names
+// earlier versions wrote.
+func UserName(info *ClusterInfo) string {
+	defer perf.Track(nil, "kube.UserName")()
+
+	name := "atmos-"
+	if info.Realm != "" {
+		name += info.Realm + "-"
+	}
+	name += info.UserPrefix + "-" + info.Name + "-" + info.Region
+	if info.AccountID != "" {
+		name += "-" + info.AccountID
+	}
+	if info.Identity != "" {
+		name += "-" + info.Identity
+	}
+	return name
+}
+
+// execEnv returns the exec-plugin environment for info: its ExecEnv plus
+// ATMOS_AUTH_REALM when the entry has a realm that ExecEnv does not set.
+func execEnv(info *ClusterInfo) []clientcmdapi.ExecEnvVar {
+	if info.Realm == "" {
+		return info.ExecEnv
+	}
+	for _, env := range info.ExecEnv {
+		if env.Name == realm.EnvVarName {
+			return info.ExecEnv
+		}
+	}
+	env := make([]clientcmdapi.ExecEnvVar, 0, len(info.ExecEnv)+1)
+	env = append(env, info.ExecEnv...)
+	return append(env, clientcmdapi.ExecEnvVar{Name: realm.EnvVarName, Value: info.Realm})
+}

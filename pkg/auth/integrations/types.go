@@ -48,7 +48,9 @@ type IntegrationConfig struct {
 	// Realm is the credential isolation realm. Integrations that persist secret
 	// material to disk (e.g., github/sts) use it to scope their state paths so
 	// minted credentials are isolated per repository/customer environment.
-	// Integrations that don't need it (aws/ecr, aws/eks) may ignore it.
+	// Kubeconfig integrations (aws/eks, azure/aks, gcp/gke) use it to scope
+	// their kube user names. Integrations that don't need it (aws/ecr) may
+	// ignore it.
 	Realm string
 }
 

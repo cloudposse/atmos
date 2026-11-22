@@ -9,9 +9,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -24,6 +27,7 @@ type fakeAuthManager struct {
 	execErr      error
 	whoami       *types.WhoamiInfo
 	authErr      error
+	realm        string
 	gotName      string
 	gotOverrides types.IntegrationOverrides
 }
@@ -39,6 +43,11 @@ func (f *fakeAuthManager) ExecuteIntegration(_ context.Context, name string, opt
 func (f *fakeAuthManager) Authenticate(_ context.Context, name string) (*types.WhoamiInfo, error) {
 	f.gotName = name
 	return f.whoami, f.authErr
+}
+
+// GetRealm returns the configured auth realm.
+func (f *fakeAuthManager) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{Value: f.realm}
 }
 
 // restoreSeams snapshots the package seams and returns a func that restores them.
@@ -205,6 +214,43 @@ func TestExecuteAKSUpdateKubeconfigDirect_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "sub-from-creds", gotSub, "subscription should fall back to the identity's subscription")
 	assert.FileExists(t, kubeconfig)
+}
+
+// TestExecuteAKSUpdateKubeconfigDirect_RealmScopesUser verifies that the direct
+// path names the kube user after the auth realm and passes the realm to the
+// exec plugin, as the azure/aks integration does.
+func TestExecuteAKSUpdateKubeconfigDirect_RealmScopesUser(t *testing.T) {
+	restoreSeams(t)
+
+	initCliConfig = okInitConfig
+	newAuthManager = func(*schema.AuthConfig, types.CredentialStore, types.Validator, *schema.ConfigAndStacksInfo, string) (types.AuthManager, error) {
+		return &fakeAuthManager{realm: "acme", whoami: &types.WhoamiInfo{
+			Credentials: &types.AzureCredentials{SubscriptionID: "sub-123"},
+		}}, nil
+	}
+	newAKSClient = func(context.Context, types.ICredentials, string) (azureCloud.AKSClient, error) {
+		return nil, nil
+	}
+	describeCluster = func(_ context.Context, _ azureCloud.AKSClient, sub, rg, name string) (*azureCloud.AKSClusterInfo, error) {
+		return &azureCloud.AKSClusterInfo{
+			Name: name, ResourceGroup: rg, SubscriptionID: sub,
+			ID:       "/subscriptions/" + sub + "/resourceGroups/" + rg + "/providers/Microsoft.ContainerService/managedClusters/" + name,
+			Endpoint: "https://aks.example.test:443", CertificateAuthorityData: base64.StdEncoding.EncodeToString([]byte("test-ca")),
+		}, nil
+	}
+
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, executeAKSUpdateKubeconfigDirect(&aksKubeconfigDirectParams{
+		clusterName: "aks-dev", resourceGroup: "rg-aks-cus", kubeconfigPath: kubeconfig, alias: "dev-aks", identityName: "dev",
+	}))
+
+	config, err := clientcmd.LoadFromFile(kubeconfig)
+	require.NoError(t, err)
+	assert.Equal(t, "atmos-acme-aks-aks-dev-rg-aks-cus-sub-123-dev", config.Contexts["dev-aks"].AuthInfo)
+	user := config.AuthInfos["atmos-acme-aks-aks-dev-rg-aks-cus-sub-123-dev"]
+	require.NotNil(t, user)
+	require.NotNil(t, user.Exec)
+	assert.Contains(t, user.Exec.Env, clientcmdapi.ExecEnvVar{Name: "ATMOS_AUTH_REALM", Value: "acme"})
 }
 
 func TestWriteAKSKubeconfigDirect_ClientAndDescribeErrors(t *testing.T) {
