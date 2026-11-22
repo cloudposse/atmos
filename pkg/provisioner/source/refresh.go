@@ -39,6 +39,16 @@ var warnSourceRefreshLockWait = func(ctx context.Context, target string) {
 	ui.Warningf("Waiting for another Atmos process to finish refreshing the component source in %s", target)
 }
 
+// warnShippedBackendReplaced reports a module backend file that Atmos's generated backend replaces.
+// It is a seam for tests.
+var warnShippedBackendReplaced = func(ctx context.Context, path string) {
+	if workdir.OutputSuppressed(ctx) {
+		log.Debug("The component source ships a backend file; the backend Atmos generates replaces it", "file", path)
+		return
+	}
+	ui.Warningf("The component source ships `%s`; Atmos replaces it with the backend it generates because `components.terraform.auto_generate_backend_file` is enabled", path)
+}
+
 // sourceFiles records only downloaded files, never files created by Terraform or hooks.
 // An absent manifest is a legacy checkout: unrecognized files remain caller-owned.
 type sourceFiles struct {
@@ -112,7 +122,7 @@ func stageSourceRefresh(ctx context.Context, config *schema.AtmosConfiguration, 
 	if err := vendorSource(ctx, config, spec, stage, stagedOpts); err != nil {
 		return err
 	}
-	if err := rejectGeneratedBackendCollision(config, stage, target, opts.componentConfig); err != nil {
+	if err := yieldGeneratedBackend(ctx, config, stage, target, opts.componentConfig); err != nil {
 		return err
 	}
 	if opts.metadata != nil {
@@ -126,22 +136,40 @@ func stageSourceRefresh(ctx context.Context, config *schema.AtmosConfiguration, 
 // generatedBackendFile is the backend configuration Atmos writes into the module root.
 const generatedBackendFile = "backend.tf.json"
 
-// rejectGeneratedBackendCollision fails a refresh whose source ships the backend file Atmos generates.
-// Installing it would replace the generated backend, and the next generation would overwrite the
-// source's copy, so neither owner's version could be trusted.
-func rejectGeneratedBackendCollision(config *schema.AtmosConfiguration, stage, target string, componentConfig map[string]any) error {
+// yieldGeneratedBackend drops the backend file a source ships in a module root when Atmos generates
+// that file, so the stack's backend wins as it always has. The staged copy is removed before the
+// ownership inventory is taken: the path is never recorded as source-owned, a refresh neither
+// replaces nor removes the generated backend, and a copy recorded by an earlier refresh is removed as
+// obsolete. Every other source file keeps its ownership checks. A directory at that path cannot be
+// replaced by the generated file, so it still fails before publication.
+func yieldGeneratedBackend(ctx context.Context, config *schema.AtmosConfiguration, stage, target string, componentConfig map[string]any) error {
 	if config == nil || !schema.GenerateBackendFileForSection(config, componentConfig) {
 		return nil
 	}
+	seen := map[string]bool{}
 	for _, root := range moduleRoots(target, componentConfig) {
 		rel, err := filepath.Rel(target, root)
-		if err != nil {
+		if err != nil || seen[rel] {
 			continue
 		}
-		if _, err := os.Lstat(filepath.Join(stage, rel, generatedBackendFile)); err == nil {
-			return fmt.Errorf("%w: source ships %s, which Atmos generates because components.terraform.auto_generate_backend_file is enabled; exclude it with source.excluded_paths or disable backend generation",
-				errUtils.ErrSourceCopyFailed, filepath.ToSlash(filepath.Join(rel, generatedBackendFile)))
+		seen[rel] = true
+		shipped := filepath.Join(stage, rel, generatedBackendFile)
+		info, err := os.Lstat(shipped)
+		if os.IsNotExist(err) {
+			continue
 		}
+		name := filepath.ToSlash(filepath.Join(rel, generatedBackendFile))
+		if err != nil {
+			return fmt.Errorf("%w: inspect shipped %s: %w", errUtils.ErrSourceCopyFailed, name, err)
+		}
+		if info.IsDir() {
+			return fmt.Errorf("%w: source ships a directory at %s, where Atmos generates the backend file because components.terraform.auto_generate_backend_file is enabled; exclude it with source.excluded_paths or disable backend generation",
+				errUtils.ErrSourceCopyFailed, name)
+		}
+		if err := os.Remove(shipped); err != nil {
+			return fmt.Errorf("%w: drop shipped %s: %w", errUtils.ErrSourceCopyFailed, name, err)
+		}
+		warnShippedBackendReplaced(ctx, name)
 	}
 	return nil
 }
