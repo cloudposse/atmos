@@ -15,7 +15,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -160,4 +162,35 @@ func TestAKSIntegration_Cleanup_RemovesUnprefixedOwnContext(t *testing.T) {
 
 	_, err := os.Stat(kubeconfigPath)
 	assert.True(t, os.IsNotExist(err), "the only entry was this integration's, so the file is removed")
+}
+
+// TestAKSIntegration_Execute_ErrorModeRealmContext verifies that update: error
+// stays idempotent with the realm-prefixed context name and still fails when
+// that context points at another user.
+func TestAKSIntegration_Execute_ErrorModeRealmContext(t *testing.T) {
+	stubDevAKSCluster(t)
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	integration, ok := newScopedAKSIntegration(t, kubeconfigPath, "", "azure-dev", realmRepoA).(*AKSIntegration)
+	require.True(t, ok)
+	integration.cluster.Kubeconfig = &schema.KubeconfigSettings{Path: kubeconfigPath, Update: "error"}
+
+	require.NoError(t, integration.Execute(t.Context(), devCreds()))
+	before, err := os.ReadFile(kubeconfigPath)
+	require.NoError(t, err)
+	require.NoError(t, integration.Execute(t.Context(), devCreds()), "an identical re-run is not a conflict")
+	after, err := os.ReadFile(kubeconfigPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after))
+
+	// Repoint the realm context at another user; cluster and user stay identical.
+	config, err := clientcmd.LoadFromFile(kubeconfigPath)
+	require.NoError(t, err)
+	contextName := realmRepoA + "/" + devClusterResourceID
+	require.Contains(t, config.Contexts, contextName)
+	config.Contexts[contextName].AuthInfo = foreignAKSUser
+	require.NoError(t, clientcmd.WriteToFile(*config, kubeconfigPath))
+
+	err = integration.Execute(t.Context(), devCreds())
+	require.ErrorIs(t, err, errUtils.ErrAKSIntegrationFailed)
+	require.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
 }

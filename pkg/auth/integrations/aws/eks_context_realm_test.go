@@ -305,6 +305,21 @@ func TestEKSIntegration_Cleanup_PicksOwnAccountByRealmContext(t *testing.T) {
 	assert.Equal(t, "prod-admin", contextIdentity(t, config, realmRepoA+"/"+prodClusterARN))
 }
 
+// TestEKSIntegration_SelectOwnedClusterARN_UnreadableKubeconfig verifies that a
+// kubeconfig that cannot be read while attributing same-named clusters fails
+// the selection instead of guessing.
+func TestEKSIntegration_SelectOwnedClusterARN_UnreadableKubeconfig(t *testing.T) {
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	require.NoError(t, os.WriteFile(kubeconfigPath, []byte("{not: [valid"), 0o600))
+	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")
+	require.NoError(t, err)
+	integration := newCleanupIntegration(kubeconfigPath, "prod", "us-east-2", "", "admin")
+	integration.realm = realmRepoA
+
+	_, err = integration.selectOwnedClusterARN(mgr, []string{prodClusterARN, prodClusterARNOther})
+	require.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
+}
+
 // mapKeys returns the keys of m.
 func mapKeys[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))

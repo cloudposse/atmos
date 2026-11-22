@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -261,9 +262,11 @@ func TestExecuteAKSUpdateKubeconfigDirect_RealmPrefixesDefaultContext(t *testing
 	const resourceID = "/subscriptions/sub-123/resourceGroups/rg-aks-cus/providers/Microsoft.ContainerService/managedClusters/aks-dev"
 	for _, tt := range []struct {
 		name, realm, wantContext, wantUser string
+		writeFailure                       bool
 	}{
 		{name: "no realm", wantContext: resourceID, wantUser: "atmos-aks-aks-dev-rg-aks-cus-sub-123-dev"},
 		{name: "realm", realm: "acme", wantContext: "acme/" + resourceID, wantUser: "atmos-acme-aks-aks-dev-rg-aks-cus-sub-123-dev"},
+		{name: "kubeconfig parent is a file", writeFailure: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			restoreSeams(t)
@@ -284,9 +287,20 @@ func TestExecuteAKSUpdateKubeconfigDirect_RealmPrefixesDefaultContext(t *testing
 			}
 
 			kubeconfig := filepath.Join(t.TempDir(), "config")
-			require.NoError(t, executeAKSUpdateKubeconfigDirect(&aksKubeconfigDirectParams{
+			if tt.writeFailure {
+				// The kubeconfig's parent is a regular file, so it cannot be written.
+				require.NoError(t, os.WriteFile(kubeconfig, []byte("not a directory"), 0o600))
+				kubeconfig = filepath.Join(kubeconfig, "config")
+			}
+			err := executeAKSUpdateKubeconfigDirect(&aksKubeconfigDirectParams{
 				clusterName: "aks-dev", resourceGroup: "rg-aks-cus", kubeconfigPath: kubeconfig, identityName: "dev",
-			}))
+			})
+			if tt.writeFailure {
+				require.ErrorIs(t, err, errUtils.ErrAKSIntegrationFailed)
+				require.ErrorIs(t, err, errUtils.ErrKubeconfigWrite)
+				return
+			}
+			require.NoError(t, err)
 
 			config, err := clientcmd.LoadFromFile(kubeconfig)
 			require.NoError(t, err)
