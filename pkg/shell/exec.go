@@ -58,8 +58,14 @@ func RunCommand(args []string, env []string) error {
 	execCmd.Stdout = os.Stdout
 	execCmd.Stderr = os.Stderr
 
-	// Run the command and wait for completion.
-	err = execCmd.Run()
+	// Start the command, keep it in step with signals sent to Atmos (see
+	// superviseChild), and wait for completion.
+	if err = execCmd.Start(); err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrSubcommandFailed, err)
+	}
+	stopSupervision := superviseChild(execCmd.Process, commandTerminationSignals)
+	err = execCmd.Wait()
+	stopSupervision()
 	if err != nil {
 		// If it's an exit error, propagate as a typed error so the root can exit with the same code.
 		var exitError *exec.ExitError

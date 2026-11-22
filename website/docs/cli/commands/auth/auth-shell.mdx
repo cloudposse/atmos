@@ -109,3 +109,4 @@ Atmos never exposes sensitive credentials directly in environment variables. Ins
 - Use `--` to separate Atmos flags from shell-specific arguments
 - Environment variables from authentication take precedence over existing values
 - `atmos auth shell` exits with the shell's exit status. On Linux and macOS, a shell terminated by a signal exits with `128+N`, like a POSIX shell (for example `137` for `SIGKILL`, `143` for `SIGTERM`)
+- Ctrl-C belongs to the shell while it runs, so pressing it at the prompt does not end the Atmos session. When Atmos receives `SIGTERM`, it forwards `SIGTERM` to the shell and, because an interactive shell ignores `SIGTERM`, `SIGHUP` two seconds later. Atmos waits up to 30 seconds for the shell to exit before Atmos exits

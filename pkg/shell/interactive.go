@@ -104,8 +104,11 @@ func StartInteractive(shellCommand string, shellArgs []string, env []string) err
 		return err
 	}
 
-	// Wait until the user exits the shell.
+	// Wait until the user exits the shell, keeping it in step with signals sent to
+	// Atmos (see superviseChild).
+	stopSupervision := superviseChild(proc, shellTerminationSignals)
 	state, err := proc.Wait()
+	stopSupervision()
 	if err != nil {
 		return err
 	}
