@@ -141,6 +141,30 @@ func TestSourceRefreshStillRejectsOtherCollisions(t *testing.T) {
 	})
 }
 
+// TestYieldGeneratedBackendModuleRoots verifies every module root is inspected once, and that a
+// module root which is a file in the staged source ships nothing there.
+func TestYieldGeneratedBackendModuleRoots(t *testing.T) {
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	var warned []string
+	stubShippedBackendWarning(t, &warned)
+	stage, target := t.TempDir(), filepath.Join(t.TempDir(), "target")
+	refreshWrite(t, stage, generatedBackendFile, "{}")
+	refreshWrite(t, stage, "app", "# a file where a module root could be")
+	// The component name and metadata.component both resolve to "app"; target itself appears once.
+	section := map[string]any{"component": "app", "metadata": map[string]any{"component": "app"}, workdir.WorkdirPathKey: target}
+	require.NoError(t, yieldGeneratedBackend(t.Context(), config, stage, target, section))
+	assert.Equal(t, []string{generatedBackendFile}, warned)
+	assert.NoFileExists(t, filepath.Join(stage, generatedBackendFile))
+	assert.FileExists(t, filepath.Join(stage, "app"))
+}
+
+// TestShippedBackendWarning exercises the default reporter in both output modes.
+func TestShippedBackendWarning(t *testing.T) {
+	warnShippedBackendReplaced(t.Context(), generatedBackendFile)
+	warnShippedBackendReplaced(workdir.WithOutputSuppressed(t.Context()), generatedBackendFile)
+}
+
 // stubShippedBackendWarning records the shipped-backend warnings of one test.
 func stubShippedBackendWarning(t *testing.T, warned *[]string) {
 	t.Helper()

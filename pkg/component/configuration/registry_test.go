@@ -221,6 +221,13 @@ func TestCompileManifestSchemaWrapsFailures(t *testing.T) {
 	require.NotNil(t, compiled)
 }
 
+func TestOwnsComponentReadsTheOwnershipMarker(t *testing.T) {
+	require.True(t, OwnsComponent(map[string]any{"settings": map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}))
+	require.False(t, OwnsComponent(map[string]any{"settings": map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}}))
+	require.False(t, OwnsComponent(map[string]any{"settings": map[string]any{"configuration": map[string]any{"notes": "internal"}}}))
+	require.False(t, OwnsComponent(nil))
+}
+
 // Only a provider owns the backend; the user's own `settings.configuration` data, even one that names
 // a provider, leaves ordinary components alone. Each component-level layer, inherited or the
 // component's own, is checked.

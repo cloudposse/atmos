@@ -154,14 +154,13 @@ func yieldGeneratedBackend(ctx context.Context, config *schema.AtmosConfiguratio
 		}
 		seen[rel] = true
 		shipped := filepath.Join(stage, rel, generatedBackendFile)
+		// Only a path that exists in the staged source is shipped. A module root that is absent, or
+		// is a file in this source (ENOTDIR), ships nothing there.
 		info, err := os.Lstat(shipped)
-		if os.IsNotExist(err) {
+		if err != nil {
 			continue
 		}
 		name := filepath.ToSlash(filepath.Join(rel, generatedBackendFile))
-		if err != nil {
-			return fmt.Errorf("%w: inspect shipped %s: %w", errUtils.ErrSourceCopyFailed, name, err)
-		}
 		if info.IsDir() {
 			return fmt.Errorf("%w: source ships a directory at %s, where Atmos generates the backend file because components.terraform.auto_generate_backend_file is enabled; exclude it with source.excluded_paths or disable backend generation",
 				errUtils.ErrSourceCopyFailed, name)
