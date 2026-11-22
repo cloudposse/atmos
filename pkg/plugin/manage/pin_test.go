@@ -166,8 +166,9 @@ func TestDefaultAliasFollowsEdition(t *testing.T) {
 		pin, want, not string
 	}{
 		{"", "fixture", "example-fixture"},
-		{"2026-10-29", "fixture", "example-fixture"},
-		{"2026-10-28", "example-fixture", "fixture"},
+		{"2026-11-21", "fixture", "example-fixture"},
+		{"2026-11-20", "example-fixture", "fixture"},
+		{"2026-11-10", "example-fixture", "fixture"},
 	} {
 		t.Run("pin="+tc.pin, func(t *testing.T) {
 			manager, source, _ := setup(t)
@@ -189,7 +190,7 @@ func TestDefaultAliasRejectsInvalidEdition(t *testing.T) {
 
 func TestExplicitAliasIgnoresEdition(t *testing.T) {
 	manager, source, _ := setup(t)
-	manager.Config.Edition = "2026-10-28"
+	manager.Config.Edition = "2026-11-20"
 	require.NoError(t, manager.Add(t.Context(), manage.AddOptions{Alias: "custom", Source: source}))
 	locked, err := pluginlock.Load(manager.Project)
 	require.NoError(t, err)

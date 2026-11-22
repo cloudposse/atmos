@@ -88,6 +88,17 @@ workflow in `docs/prd/editions.md`:
 
 Historical candidates in the PRD remain ungated until their own code paths are wired and tested.
 
+## Dating an entry (release boundary)
+
+An entry's `date` is the day it merges into `main`, and it must be **after** the latest published
+release recorded in `pkg/edition/testdata/latest-release.yaml`. A pin date is inclusive, so an
+unshipped entry dated on or before a release date changes behavior for every project pinned while
+running that release. Re-check the date before merging a long-lived PR: the date it was opened is
+not the merge date. Entries listed in that file shipped and are frozen; never re-date or remove them.
+`TestJournalReleaseBoundary` enforces both rules. After a release is published, update the file from
+the release's commit, as described in "Release boundary" in `docs/prd/editions.md`:
+`ATMOS_REGENERATE_EDITION_RELEASE=<tag>@<YYYY-MM-DD> go test ./pkg/edition -run TestJournalReleaseBoundary`.
+
 ## What NOT to do
 
 - Do not add a behavior journal entry without wiring its caller: recording a transition alone
