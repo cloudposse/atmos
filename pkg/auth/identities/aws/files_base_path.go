@@ -22,3 +22,12 @@ func filesBasePath(manager types.AuthManager, identityName string) string {
 	}
 	return awsCloud.GetFilesBasePath(provider)
 }
+
+// FilesBasePath exposes filesBasePath to AWS identities implemented outside this package, such
+// as native plugin identities and the mock identity, so every AWS identity writes, reports and
+// removes its files under the same base path as its root provider.
+//
+//nolint:lintroller // Trivial accessor, pure lookup, factory option, or delegation; exempt under repository tracking policy.
+func FilesBasePath(manager types.AuthManager, identityName string) string {
+	return filesBasePath(manager, identityName)
+}
