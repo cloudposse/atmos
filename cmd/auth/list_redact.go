@@ -28,9 +28,6 @@ func structuredListOutput(providers map[string]schema.Provider, identities map[s
 // secrets (the SAML password) replaced by redactedValue. The input map and its
 // values are never modified.
 func redactProvidersForList(providers map[string]schema.Provider) map[string]schema.Provider {
-	if providers == nil {
-		return nil
-	}
 	redacted := make(map[string]schema.Provider, len(providers))
 	for name, provider := range providers {
 		if provider.Password != "" {
@@ -46,9 +43,6 @@ func redactProvidersForList(providers map[string]schema.Provider) map[string]sch
 // `!env`) replaced by redactedValue. Credential keys stay visible so the output
 // still shows which credentials are configured. The input maps are never modified.
 func redactIdentitiesForList(identities map[string]schema.Identity) map[string]schema.Identity {
-	if identities == nil {
-		return nil
-	}
 	redacted := make(map[string]schema.Identity, len(identities))
 	for name, identity := range identities {
 		if identity.Credentials != nil {

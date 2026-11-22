@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -78,6 +79,26 @@ func TestAuthenticateIdentity_TagsWinOverAmbientIdentityEnv(t *testing.T) {
 	assert.False(t, needsFallback)
 	require.NotNil(t, whoami)
 	assert.Equal(t, "prod-admin", whoami.Identity)
+}
+
+// TestAuthenticateIdentity_TagsWithoutMatchFailInsteadOfUsingAmbientIdentity
+// verifies that an unmatched --tags reports the mismatch rather than falling
+// back to ATMOS_IDENTITY, and that nothing is authenticated.
+func TestAuthenticateIdentity_TagsWithoutMatchFailInsteadOfUsingAmbientIdentity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	setAmbientIdentityEnv(t, "shell-identity")
+	viper.Set(authTagsViperKey, "nonexistent")
+	t.Cleanup(func() { viper.Set(authTagsViperKey, "") })
+
+	mockAuthManager := authTypes.NewMockAuthManager(ctrl)
+	mockAuthManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"shell-identity": {Kind: "aws/permission-set", Tags: []string{"admin"}},
+	}).AnyTimes()
+
+	whoami, _, err := authenticateIdentity(context.Background(), newIdentityFlagCmd(t), auth.AuthManager(mockAuthManager))
+	assert.ErrorIs(t, err, errUtils.ErrNoIdentitiesMatchTags)
+	assert.Nil(t, whoami)
 }
 
 // TestAuthenticateIdentity_ExplicitIdentityWinsOverTags keeps the existing
