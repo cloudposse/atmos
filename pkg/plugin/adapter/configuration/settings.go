@@ -6,7 +6,11 @@ import (
 	"slices"
 	"strings"
 
+	"google.golang.org/protobuf/proto"
+
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/provideroptions"
+	"github.com/cloudposse/atmos/pkg/merge"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -41,8 +45,8 @@ func invalidSetting(key, problem, hint string) error {
 
 // validateSettings checks one enabled provider section without starting a plugin.
 func validateSettings(section string, settings *schema.ComponentConfiguration) error {
-	if settings.Mode != "" && settings.Mode != "native" {
-		return invalidSetting(settingsKey(section, "mode"), "Unsupported mode", "The only supported mode is `native`. Remove `mode`, or fix it with `atmos config set "+settingsKey(section, "mode")+" native`.")
+	if settings.Mode != "" && settings.Mode != provideroptions.ModeNative && settings.Mode != provideroptions.ModeExecutable {
+		return invalidSetting(settingsKey(section, "mode"), "Unsupported mode", "The supported modes are `native` and `executable`. Remove `mode`, or fix it with `atmos config set "+settingsKey(section, "mode")+" native`.")
 	}
 	for _, field := range []struct {
 		name     string
@@ -73,6 +77,72 @@ func validateProviderOptions(section string, provider Provider, request *pluginv
 		return errUtils.Build(err).WithContext("config_section", settingsKey(section)).Err()
 	}
 	return nil
+}
+
+// operationMode is the mode a section runs in; an unset mode is native.
+func operationMode(settings *schema.ComponentConfiguration) string {
+	if settings.Mode == "" {
+		return provideroptions.ModeNative
+	}
+	return settings.Mode
+}
+
+// operationOptions encodes the options the user set explicitly. Only those are sent, so the provider
+// can tell an absent option from an explicit false, zero, or empty one. Sensitive values are marked so
+// every consumer masks them.
+func operationOptions(options map[string]schema.ComponentProviderOption, environment map[string]string) (map[string]*pluginv1.ComponentValue, error) {
+	if len(options) == 0 {
+		return nil, nil
+	}
+	result := make(map[string]*pluginv1.ComponentValue, len(options))
+	for name, option := range options {
+		resolved, present, err := provideroptions.InvocationValue(name, option, environment)
+		if err != nil {
+			return nil, err
+		}
+		if !present {
+			continue
+		}
+		value, err := adapter.EncodeObject(resolved)
+		if err != nil {
+			return nil, err
+		}
+		if option.Sensitive {
+			value.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+		}
+		result[name] = value
+	}
+	return result, nil
+}
+
+// providerOperation returns the mode and a copy of the options of the section that enabled a provider.
+func (s *Session) providerOperation(provider string, environment map[string]string) (string, map[string]*pluginv1.ComponentValue, error) {
+	for _, request := range s.importProviders {
+		if request.Provider != provider || request.Operation == nil {
+			continue
+		}
+		values, declared := s.providerOptionValues[provider]
+		if !declared {
+			// A revision session has no declarations of its own. It carries the explicit options its
+			// provider registration was sent with, so state requests match discovery.
+			return request.Operation.Mode, cloneOptions(request.Operation.Options), nil
+		}
+		options, err := operationOptions(values, environment)
+		return request.Operation.Mode, options, err
+	}
+	return provideroptions.ModeNative, nil, nil
+}
+
+// cloneOptions copies encoded operation options so a request never aliases the registration's.
+func cloneOptions(options map[string]*pluginv1.ComponentValue) map[string]*pluginv1.ComponentValue {
+	if options == nil {
+		return nil
+	}
+	cloned := make(map[string]*pluginv1.ComponentValue, len(options))
+	for name, value := range options {
+		cloned[name] = proto.Clone(value).(*pluginv1.ComponentValue)
+	}
+	return cloned
 }
 
 // sortedSections lists the configured provider sections in stable order.
@@ -111,4 +181,28 @@ func (s *Session) hasProviderOptions() bool {
 		}
 	}
 	return false
+}
+
+func (s *Session) providerSettings(name string) *pluginv1.ComponentValue {
+	var settings *pluginv1.ComponentValue
+	for _, request := range s.importProviders {
+		if request.Provider == name {
+			settings = request.ProviderConfiguration
+		}
+	}
+	return settings
+}
+
+func snapshotProviderOptions(options map[string]schema.ComponentProviderOption) (map[string]schema.ComponentProviderOption, error) {
+	result := make(map[string]schema.ComponentProviderOption, len(options))
+	for name, option := range options {
+		copied, err := merge.DeepCopyMap(map[string]any{"value": option.Value})
+		if err != nil {
+			return nil, err
+		}
+		option.Value = copied["value"]
+		option.EnvNames = slices.Clone(option.EnvNames)
+		result[name] = option
+	}
+	return result, nil
 }

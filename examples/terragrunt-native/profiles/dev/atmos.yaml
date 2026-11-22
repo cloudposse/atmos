@@ -4,8 +4,8 @@
 #   export ATMOS_PROFILE=dev
 #
 # A package with `path` is not fetched, locked, or signature-checked, and Atmos warns once per run.
-# Once the plugin is published, declare `source` and `version` under plugins.packages.terragrunt in
-# atmos.yaml and drop this profile.
+# This profile is for developing the plugin itself. Everyone else uses the registry package declared
+# by `source` and `version` in atmos.yaml; a `path` takes precedence over them while this profile is active.
 plugins:
   packages:
     terragrunt:

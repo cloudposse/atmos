@@ -81,3 +81,21 @@ func TestFailureProtoIsIndependent(t *testing.T) {
 		t.Fatalf("copy aliases the builder: %v", second)
 	}
 }
+
+func TestFailureCarriesLogsThroughTheStatus(t *testing.T) {
+	t.Parallel()
+	logs := []*pluginv1.LogEntry{
+		{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "first", Fields: map[string]string{"k": "v"}},
+		{Level: pluginv1.LogLevel_LOG_LEVEL_ERROR, Message: "last", Unit: "live/dev/app"},
+	}
+
+	err := component.NewFailure("c", "s").Logs(logs).Err(codes.InvalidArgument)
+
+	detail, ok := component.FailureDetail(err)
+	if !ok || len(detail.Logs) != 2 {
+		t.Fatalf("logs lost: %v", detail)
+	}
+	if detail.Logs[0].Message != "first" || detail.Logs[0].Fields["k"] != "v" || detail.Logs[1].Message != "last" || detail.Logs[1].Unit != "live/dev/app" {
+		t.Fatalf("logs corrupted: %v", detail.Logs)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -38,8 +39,14 @@ func TestSessionDiscoveryAndPreparation(t *testing.T) {
 	provider.EXPECT().ComponentType().Return("terraform")
 	network, app := unit(t, "network"), unit(t, "app")
 	app.Dependencies = []*pluginv1.ComponentDependency{{Target: network.Address, Kind: pluginv1.ComponentDependency_OUTPUT}}
+	discoveryCalls := 0
 	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
-		require.Equal(t, []string{"live/**"}, request.IncludePaths)
+		if discoveryCalls == 0 {
+			require.Equal(t, []string{"live/**"}, request.IncludePaths)
+		} else {
+			require.Equal(t, []string{"live/app/terragrunt.hcl", "live/network/terragrunt.hcl", "root.hcl"}, request.IncludePaths)
+		}
+		discoveryCalls++
 		require.Nil(t, request.Effects)
 		require.Equal(t, "tofu", request.Invocation.Environment["ATMOS_TERRAFORM_BINARY"])
 		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network, app}}, nil
@@ -84,7 +91,7 @@ func TestSessionDiscoveryAndPreparation(t *testing.T) {
 	}).Times(2)
 	prepared, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", Command: "tofu", SubCommand: "apply", TerraformWorkspace: "stage", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvList: []string{"FROM_COMPONENT=original", "FROM_COMPONENT=override"}, ComponentEnvSection: map[string]any{"FROM_COMPONENT": "override"}})
 	require.NoError(t, err)
-	require.Equal(t, int64(9007199254740993), prepared.Inputs["large"])
+	require.Equal(t, json.Number("9007199254740993"), prepared.Inputs["large"])
 	require.Equal(t, filepath.Join(config.BasePathAbsolute, "state.tfstate"), prepared.Backend["path"])
 	require.Equal(t, "{{ literal }}", string(prepared.Files[0].Content))
 }
@@ -221,7 +228,7 @@ func TestSessionRejectsConflictingDiscovery(t *testing.T) {
 		want      error
 	}{
 		{name: "unsafe stack", change: func(c *pluginv1.DiscoveredComponent) { c.Address.Stack = "../outside" }, want: errUtils.ErrPluginProtocol},
-		{name: "unsupported engine", change: func(c *pluginv1.DiscoveredComponent) { c.Engine = "terragrunt" }, want: errUtils.ErrPluginUnsupportedExtension},
+		{name: "unsupported engine", change: func(c *pluginv1.DiscoveredComponent) { c.Engine = "pulumi" }, want: errUtils.ErrPluginUnsupportedExtension},
 		{name: "invalid values", change: func(c *pluginv1.DiscoveredComponent) { c.Configuration = &pluginv1.ComponentValue{} }, want: errUtils.ErrPluginProtocol},
 		{name: "duplicate", duplicate: true, want: errUtils.ErrDuplicatePluginExtension},
 	} {
@@ -347,7 +354,7 @@ func TestPreparationRevalidatesDependencyPaths(t *testing.T) {
 				require.Equal(t, map[string]string{"DEPENDENCY": "component", "IDENTITY": "selected", "TF_WORKSPACE": "stage", "ATMOS_TERRAFORM_BINARY": "tofu"}, request.Invocation.Environment)
 				require.Equal(t, "apply", request.Operation.Command)
 				require.Nil(t, request.Effects)
-				require.Equal(t, []string{"live/**"}, request.IncludePaths)
+				require.Equal(t, []string{"live/app/terragrunt.hcl", "live/network/terragrunt.hcl", "live/other/terragrunt.hcl", "root.hcl"}, request.IncludePaths)
 				if change == "discovery error" {
 					return nil, context.Canceled
 				}
@@ -561,4 +568,148 @@ func TestDiscoveryConfiguredEnvironment(t *testing.T) {
 	require.Equal(t, "configured", request.Invocation.Environment["DISCOVERY_SETTING"])
 	require.Equal(t, "ambient", request.Invocation.Environment["DISCOVERY_AMBIENT"])
 	require.Equal(t, "tofu", request.Invocation.Environment["ATMOS_TERRAFORM_BINARY"])
+}
+
+// A provider may depend only on its own components: a target owned by another provider is a protocol violation.
+func TestDependencyOnAnotherProvidersUnitIsRejected(t *testing.T) {
+	foreign := unit(t, "network")
+	foreign.Provider = "other"
+	own := unit(t, "db")
+	tests := []struct {
+		name    string
+		target  *pluginv1.DiscoveredComponent
+		address *pluginv1.ComponentAddress
+		wantErr error
+		hints   []string
+		details []string
+	}{
+		{name: "foreign provider", target: foreign, address: foreign.Address, wantErr: errUtils.ErrPluginProtocol, hints: []string{"A provider may depend only on its own components."}, details: []string{"`terragrunt`", "`other`", "`live/network`", "`app`"}},
+		{name: "same provider", target: own, address: own.Address},
+		{name: "missing target", address: &pluginv1.ComponentAddress{Stack: "live", Component: "ghost", ComponentType: "terraform"}, wantErr: errUtils.ErrPluginInvalidConfig},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := unit(t, "app")
+			app.Dependencies = []*pluginv1.ComponentDependency{{Target: tt.address}}
+			instances := map[[3]string]*pluginv1.DiscoveredComponent{addressKey(app.Address): app}
+			if tt.target != nil {
+				instances[addressKey(tt.target.Address)] = tt.target
+			}
+			err := brokenDependency(app, instances, map[failedKey]*failedUnit{})
+			if tt.wantErr == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tt.wantErr)
+			if tt.target == nil {
+				return
+			}
+			require.Equal(t, tt.hints, errUtils.AllHints(err))
+			joined := strings.Join(errUtils.AllDetails(err), "\n")
+			for _, want := range tt.details {
+				require.Contains(t, joined, want)
+			}
+		})
+	}
+}
+
+// A state request on a revision window carries the explicit provider options of the invocation, as the
+// revision's discovery does, so a feature override reaches the unit the revision resolves.
+func TestRevisionStateRequestsCarryTheInvocationProviderOptions(t *testing.T) {
+	config := enabledConfig(t)
+	config.ComponentProviderOptions = map[string]map[string]schema.ComponentProviderOption{"terragrunt": {
+		"feature":      {Value: map[string]any{"alpha": "true"}, FromCLI: true},
+		"download_dir": {Value: "/job-cache", FromCLI: true, Type: "string", EnvNames: []string{"TG_DOWNLOAD_DIR"}},
+	}}
+	head, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) { return nil, nil })
+	require.NoError(t, err)
+	require.NoError(t, head.configErr)
+	_, headOptions, err := head.providerOperation("terragrunt", map[string]string{})
+	require.NoError(t, err)
+	require.Contains(t, headOptions, "feature")
+
+	runtime, err := head.ForRevision(t.TempDir())
+	require.NoError(t, err)
+	revision := runtime.(*Session)
+	_, options, err := revision.providerOperation("terragrunt", map[string]string{})
+	require.NoError(t, err)
+
+	require.Len(t, options, len(headOptions))
+	feature, err := adapter.DecodeValue(options["feature"])
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"alpha": "true"}, feature)
+	downloadDir, err := adapter.DecodeValue(options["download_dir"])
+	require.NoError(t, err)
+	require.Equal(t, "/job-cache", downloadDir)
+
+	// Neither session aliases the other's encoded options.
+	options["download_dir"].SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	_, again, err := head.providerOperation("terragrunt", map[string]string{})
+	require.NoError(t, err)
+	require.Empty(t, again["download_dir"].SensitivePaths)
+}
+
+// An uncached state reference resolved on a revision window reaches the provider with the explicit
+// provider options of the invocation, exactly as on the HEAD window, so a feature override applies to
+// the revision's state. A window with no explicit options sends none.
+func TestRevisionResolveStateSendsTheInvocationProviderOptionsToTheProvider(t *testing.T) {
+	tests := []struct {
+		name    string
+		options map[string]map[string]schema.ComponentProviderOption
+		want    map[string]any
+	}{
+		{
+			name: "explicit options",
+			options: map[string]map[string]schema.ComponentProviderOption{"terragrunt": {
+				"feature":      {Value: map[string]any{"alpha": "true"}, FromCLI: true},
+				"download_dir": {Value: "/job-cache", FromCLI: true, Type: "string", EnvNames: []string{"TG_DOWNLOAD_DIR"}},
+			}},
+			want: map[string]any{"feature": map[string]any{"alpha": "true"}, "download_dir": "/job-cache"},
+		},
+		{name: "no explicit options", want: map[string]any{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := enabledConfig(t)
+			config.ComponentProviderOptions = tt.options
+			provider := NewMockProvider(gomock.NewController(t))
+			provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+			network := unit(t, "network")
+			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{network}}, nil).AnyTimes()
+			roots := map[string]map[string]*pluginv1.ComponentValue{}
+			provider.EXPECT().ResolveState(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+				require.Equal(t, "network", request.Address.Component)
+				roots[request.RootDirectory] = request.Operation.Options
+				return &pluginv1.ResolveComponentStateResponse{State: &pluginv1.ComponentStateIdentity{BackendType: "local", Workspace: "default"}}, nil
+			}).Times(2)
+			head, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) {
+				return map[string]Provider{"terragrunt": provider}, nil
+			})
+			require.NoError(t, err)
+			revisionRoot := t.TempDir()
+			runtime, err := head.ForRevision(revisionRoot)
+			require.NoError(t, err)
+			info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "network", Command: "tofu", SubCommand: "output", TerraformWorkspace: "default", ComponentSettingsSection: map[string]any{"configuration": true}}
+
+			// Nothing is cached on either window, so each state reference reaches the provider.
+			_, err = head.ResolveState(t.Context(), info)
+			require.NoError(t, err)
+			_, err = runtime.(*Session).ResolveState(t.Context(), info)
+			require.NoError(t, err)
+
+			require.Len(t, roots, 2, "the head and the revision window each resolve their own state")
+			decode := func(options map[string]*pluginv1.ComponentValue) map[string]any {
+				decoded := make(map[string]any, len(options))
+				for name, value := range options {
+					decoded[name], err = adapter.DecodeValue(value)
+					require.NoError(t, err)
+				}
+				return decoded
+			}
+			require.Contains(t, roots, config.BasePathAbsolute)
+			require.Contains(t, roots, revisionRoot)
+			require.Equal(t, tt.want, decode(roots[config.BasePathAbsolute]), "the head window sends the explicit options")
+			require.Equal(t, tt.want, decode(roots[revisionRoot]), "the revision window sends the same explicit options")
+		})
+	}
 }

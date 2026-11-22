@@ -114,6 +114,8 @@ type ConfigMetadata struct {
 type AtmosConfiguration struct {
 	// ComponentConfigurations belongs to this invocation and is never serialized.
 	ComponentConfigurations ComponentConfigurationRuntime `yaml:"-" json:"-" mapstructure:"-"`
+	// ComponentProviderOptions are the provider options the user set for this invocation, by provider section.
+	ComponentProviderOptions map[string]map[string]ComponentProviderOption `yaml:"-" json:"-" mapstructure:"-"`
 
 	Scaffold *ScaffoldConfiguration `yaml:"scaffold,omitempty" json:"scaffold,omitempty" mapstructure:"scaffold"`
 	// ScaffoldConfigLoaded distinguishes an empty effective catalog from a
@@ -1797,6 +1799,19 @@ type Components struct {
 //
 // Returns the configuration and true if found, nil and false otherwise.
 func (c *Components) GetComponentConfig(componentType string) (any, bool) {
+	if config, ok := c.builtinComponentConfig(componentType); ok {
+		return config, true
+	}
+
+	// Check plugin types.
+	if config, ok := c.Plugins[componentType]; ok {
+		return config, true
+	}
+	return nil, false
+}
+
+// builtinComponentConfig returns the type-safe configuration for built-in component types.
+func (c *Components) builtinComponentConfig(componentType string) (any, bool) {
 	switch componentType {
 	case "terraform":
 		return c.Terraform, true
@@ -1815,9 +1830,7 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 	case "aws/cloudformation":
 		return c.CloudFormation, true
 	default:
-		// Check plugin types.
-		config, ok := c.Plugins[componentType]
-		return config, ok
+		return nil, false
 	}
 }
 
@@ -2170,6 +2183,8 @@ type ConfigAndStacksInfo struct {
 	// before auth credentials are registered) to keep the varfile-write and env-assembly
 	// steps consistent.
 	TerraformSecretVarKeys map[string]bool
+	// PreparedSensitiveInputKeys preserves plugin sensitivity even for empty input values.
+	PreparedSensitiveInputKeys map[string]bool
 	// TerraformSecretVarKeysComputed reports that TerraformSecretVarKeys was computed for the current
 	// ComponentVarsSection. An empty TerraformSecretVarKeys alone cannot tell "no secret inputs" from
 	// "not classified yet", and consumers that expose inputs must treat the latter as secret.
@@ -2270,6 +2285,15 @@ type ConfigAndStacksInfo struct {
 	StoredPlanFile          string
 	// ConfigurationPlanImplicit retains implicit selection after restoration fills PlanFile.
 	ConfigurationPlanImplicit bool `yaml:"-" json:"-" mapstructure:"-"`
+	// ConfigurationPlanWorkdirExact reports that the working directory of the restored saved plan
+	// matched the reviewed digest byte for byte during this invocation, so its variable file is the
+	// reviewed one. A directory accepted only as a verified rebuild never sets it: the rebuild digest
+	// leaves the variable files out.
+	ConfigurationPlanWorkdirExact bool `yaml:"-" json:"-" mapstructure:"-"`
+	// ConfigurationPlanVarfile holds the bytes of that variable file as they were read around the
+	// digest comparison. A hook binds these bytes, never a later read of the file, so what it consumes is
+	// what the verification covered.
+	ConfigurationPlanVarfile []byte `yaml:"-" json:"-" mapstructure:"-"`
 	// VerifyPlanMode carries the explicit CLI planfile-verify override for `deploy`
 	// (--verify-plan => fail, --verify-plan=false => off; empty when the flag is unset).
 	// It is resolved against config + CI mode via planfile.ResolveVerifyMode at the
@@ -2336,11 +2360,14 @@ type ConfigAndStacksInfo struct {
 	Identity                   string
 	// RequestedIdentity preserves the CLI/environment choice before authentication
 	// stores an auto-selected identity. Nil means Identity has not been rewritten.
-	RequestedIdentity   *string
-	ClusterName         string // EKS cluster name from --cluster-name flag.
-	NeedsPathResolution bool   // True if ComponentFromArg is a path that needs resolution.
-	UIEnabled           bool   // Enable streaming UI mode for terraform commands.
-	UIFlagExplicitlySet bool   // Whether --ui flag was explicitly set (vs. config/default).
+	RequestedIdentity *string
+	// ComponentProviderOptions are the configuration provider options set on the command line or in
+	// the environment, by provider section. Unset options are absent.
+	ComponentProviderOptions map[string]map[string]ComponentProviderOption
+	ClusterName              string // EKS cluster name from --cluster-name flag.
+	NeedsPathResolution      bool   // True if ComponentFromArg is a path that needs resolution.
+	UIEnabled                bool   // Enable streaming UI mode for terraform commands.
+	UIFlagExplicitlySet      bool   // Whether --ui flag was explicitly set (vs. config/default).
 
 	// NodeHooks fires lifecycle hooks around each component in bulk Terraform
 	// and single-component Helmfile runs. Single-component Terraform commands

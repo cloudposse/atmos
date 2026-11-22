@@ -81,6 +81,8 @@ func DetailError(detail *pluginv1.ErrorDetail, class codes.Code) error {
 	if detail == nil {
 		return errUtils.ErrPluginAPI
 	}
+	// The events that preceded the failure explain it; they show at the Atmos log level, never as the error.
+	RenderLogs(LogScope{Component: detail.GetUnit(), Stack: detail.GetStack()}, detail.GetLogs())
 	builder := errUtils.Build(&Failure{Detail: detail, sentinel: sentinelFor(class)})
 	if where := describeWhere(detail); where != "" {
 		builder.WithExplanation(where)
@@ -162,6 +164,17 @@ func DiagnosticError(diagnostic *pluginv1.Diagnostic) error {
 	return DetailError(detail, codes.InvalidArgument)
 }
 
+// errorDiagnostics keeps the diagnostics that fail a call and drops the warnings, which only print.
+func errorDiagnostics(diagnostics []*pluginv1.Diagnostic) []*pluginv1.Diagnostic {
+	kept := make([]*pluginv1.Diagnostic, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		if DiagnosticError(diagnostic) != nil {
+			kept = append(kept, diagnostic)
+		}
+	}
+	return kept
+}
+
 // firstDiagnosticError returns the first error-severity diagnostic as an error. Warnings are
 // shown on the UI channel and never fail the call.
 func firstDiagnosticError(diagnostics []*pluginv1.Diagnostic) error {
@@ -179,7 +192,7 @@ func firstDiagnosticError(diagnostics []*pluginv1.Diagnostic) error {
 }
 
 // WarnDiagnostic prints a warning-severity diagnostic on the UI channel with secrets masked.
-func WarnDiagnostic(diagnostic *pluginv1.Diagnostic) {
+func WarnDiagnostic(diagnostic *pluginv1.Diagnostic, warnings ...*WarningDeduper) {
 	defer perf.Track(nil, "componentadapter.WarnDiagnostic")()
 
 	detail := diagnostic.GetDetail()
@@ -192,6 +205,14 @@ func WarnDiagnostic(diagnostic *pluginv1.Diagnostic) {
 	}
 	if detail.UserSafe && detail.Detail != "" {
 		text += ": " + detail.Detail
+	}
+	// Preparation reruns before every step of a command, so the same warning would repeat.
+	var deduper *WarningDeduper
+	if len(warnings) > 0 {
+		deduper = warnings[0]
+	}
+	if !deduper.firstTime("diagnostic", detail.GetUnit(), detail.GetStack(), detail.GetCode(), mask(text)) {
+		return
 	}
 	ui.Warning(mask(text))
 	for _, hint := range detail.Hints {

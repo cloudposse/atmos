@@ -30,6 +30,19 @@ type ComponentDiscoveryConfig struct {
 	ExcludedPaths []string `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
 }
 
+// ComponentProviderOption is a provider option the user set explicitly on the command line or in the
+// environment. Options the user did not set are absent, so a provider can tell them from false, zero, and empty.
+type ComponentProviderOption struct {
+	Value any
+	// Sensitive values are masked and never logged.
+	Sensitive bool
+	// FromCLI distinguishes an explicit flag from an environment-derived value.
+	FromCLI bool
+	// Type and EnvNames retain the declaration for invocation-environment precedence before RPC.
+	Type     string
+	EnvNames []string
+}
+
 // ComponentConfigurationRuntime is an invocation-owned host service. It is not a wire contract.
 type ComponentConfigurationRuntime interface {
 	Discover(context.Context) (map[string]map[string]any, error)
@@ -71,15 +84,17 @@ type ComponentConfigurationValidationRuntime interface {
 
 // PreparedComponentConfiguration contains evaluated inputs and literal artifacts.
 type PreparedComponentConfiguration struct {
-	Sources          []ComponentConfigurationSource
-	Engine           string
-	Source           string
-	Inputs           map[string]any
-	BackendType      string
-	Backend          map[string]any
-	Workspace        string
-	Files            []ComponentConfigurationFile
-	BackendGenerated bool
+	Sources []ComponentConfigurationSource
+	Engine  string
+	Source  string
+	Inputs  map[string]any
+	// SensitiveInputKeys identifies prepared inputs whose values must stay out of generated varfiles.
+	SensitiveInputKeys map[string]bool
+	BackendType        string
+	Backend            map[string]any
+	Workspace          string
+	Files              []ComponentConfigurationFile
+	BackendGenerated   bool
 	// Execution is data the host runs; it is nil when the provider adds no hooks or arguments.
 	Execution *ComponentExecution
 	// TerraformBinary is the executable the unit selects, verified against the one it was discovered with.
@@ -95,8 +110,9 @@ type PreparedComponentConfiguration struct {
 	IAM *ComponentIAM
 	// SourceAuthorization is invocation-only registry auth for a same-origin archive.
 	SourceAuthorization *SourceAuthorization `json:"-"`
-	// SensitiveInputKeys projects provider sensitivity paths onto whole input variables.
-	SensitiveInputKeys map[string]bool
+	// PlanArguments are the arguments the reviewed plan operation was evaluated with, kept so a rebuild
+	// can evaluate the unit again with the same inputs. Variable values are never stored.
+	PlanArguments []string `json:",omitempty"`
 	// SourceDeferred is set when the provider left Source as written, because resolving it must wait
 	// until the host has run the unit's read-config hooks. The host then asks the provider's
 	// ComponentConfigurationDeferredSource for the resolved source. It is never part of a saved plan:

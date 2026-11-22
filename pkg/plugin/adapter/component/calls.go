@@ -86,9 +86,14 @@ func (p *Provider) Prepare(ctx context.Context, input *pluginv1.ComponentRequest
 		var err error
 		result, err = handle.Preparation.Prepare(call, request)
 		if err != nil {
+			// A failing call can still return the response it produced. Whatever it carries is registered
+			// for masking before the failure is rendered; the call's own error is the one reported.
+			if result != nil {
+				_ = registerResponseSecrets(result)
+			}
 			return err
 		}
-		return checkPreparation(result)
+		return checkPreparationResponse(result, request.GetOperation().GetMode())
 	})
 	if err != nil {
 		return nil, err
@@ -134,4 +139,66 @@ func (p *Provider) ResolveState(ctx context.Context, input *pluginv1.ComponentRe
 		return nil, err
 	}
 	return result, nil
+}
+
+// registerResponseInputs registers the sensitive inputs of a preparation response for masking. A response
+// without inputs registers nothing, and a missing response is reported by the checks that follow.
+func registerResponseInputs(result *pluginv1.PrepareComponentResponse) error {
+	if result.GetInputs() == nil {
+		return nil
+	}
+	_, err := DecodeInputs(result.GetInputs())
+	return err
+}
+
+// registerResponseSecrets registers everything a preparation response carries that must be masked, before any
+// diagnostic is rendered: the sensitive inputs, then the module source authorization, then the IAM web identity
+// token. A value that cannot be decoded is a protocol failure that takes precedence over the response's
+// diagnostics, which could otherwise print what was never registered; the inputs are checked first. A missing
+// IAM payload or token registers nothing and stays valid.
+func registerResponseSecrets(result *pluginv1.PrepareComponentResponse) error {
+	if err := registerResponseInputs(result); err != nil {
+		return err
+	}
+	if _, err := DecodeString(result.GetModuleSourceAuthorization()); err != nil {
+		return err
+	}
+	_, err := DecodeString(result.GetIam().GetWebIdentityToken())
+	return err
+}
+
+func checkPreparationResponse(result *pluginv1.PrepareComponentResponse, mode string) error {
+	if mode != "iam-probe" {
+		// The sensitive inputs are registered for masking before anything else touches the response.
+		// Warnings are not printed while the response is checked: the configuration session prints
+		// them once per invocation through its deduper, and printing them here as well would repeat
+		// every warning, on the first preparation and on each later one. Invalid inputs return
+		// their decode error before diagnostics can expose values that were not registered.
+		if result == nil {
+			return errUtils.ErrPluginProtocol
+		}
+		if err := registerResponseSecrets(result); err != nil {
+			return err
+		}
+		failures := proto.Clone(result).(*pluginv1.PrepareComponentResponse)
+		failures.Diagnostics = errorDiagnostics(failures.Diagnostics)
+		return checkPreparation(failures)
+	}
+	if result == nil {
+		return errUtils.ErrPluginProtocol
+	}
+	// IAM is resolved before module evaluation. This response may carry only the
+	// role settings and diagnostics/logs, never a prepared module or artifacts.
+	remaining := proto.Clone(result).(*pluginv1.PrepareComponentResponse)
+	remaining.Iam = nil
+	remaining.Diagnostics = nil
+	remaining.Logs = nil
+	if proto.Size(remaining) != 0 {
+		return errUtils.ErrPluginProtocol
+	}
+	// Validate and register the token before diagnostic details can reach the logger.
+	if _, err := DecodeString(result.GetIam().GetWebIdentityToken()); err != nil {
+		return err
+	}
+	return firstDiagnosticError(result.Diagnostics)
 }

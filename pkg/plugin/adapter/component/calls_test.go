@@ -73,7 +73,7 @@ func TestProviderCallsPreserveValuesAndIsolateInvocations(t *testing.T) {
 		RootDirectory: root, Address: fixtureAddress(),
 		Invocation:            &pluginv1.Invocation{Id: "caller-id", Interactive: true, Environment: map[string]string{"EXPLICIT": "value"}},
 		Operation:             &pluginv1.ComponentOperation{Command: "plan", Mode: "native"},
-		Configuration:         wireValue(t, cty.ObjectVal(map[string]cty.Value{"exact": number, "unknown": cty.UnknownVal(cty.String)})),
+		Configuration:         wireValue(t, cty.ObjectVal(map[string]cty.Value{"exact": number, "known": cty.StringVal("value")})),
 		ProviderConfiguration: wireValue(t, cty.ObjectVal(map[string]cty.Value{"limit": number})),
 	}
 	request.Configuration.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
@@ -105,6 +105,39 @@ func TestProviderCallsPreserveValuesAndIsolateInvocations(t *testing.T) {
 	require.False(t, seen.Invocation.Interactive)
 	require.Equal(t, map[string]string{"EXPLICIT": "value"}, seen.Invocation.Environment)
 	require.True(t, proto.Equal(request.ProviderConfiguration, seen.ProviderConfiguration))
+}
+
+func TestPreparationTransportsUnknownValuesButRejectsUnknownInputs(t *testing.T) {
+	p := fixtureProvider(t)
+	root := t.TempDir()
+	number, err := cty.ParseNumberVal("9007199254740993123456789.123456789")
+	require.NoError(t, err)
+	request := &pluginv1.ComponentRequest{
+		RootDirectory: root, Address: fixtureAddress(),
+		Operation:     &pluginv1.ComponentOperation{Command: "plan", Mode: "native"},
+		Configuration: wireValue(t, cty.ObjectVal(map[string]cty.Value{"exact": number, "unknown": cty.UnknownVal(cty.String)})),
+	}
+	request.Configuration.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	before := proto.Clone(request)
+	state, err := p.ResolveState(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, "development", state.State.Workspace)
+	validated, err := p.Validate(t.Context(), request)
+	require.NoError(t, err)
+	require.Empty(t, validated.Diagnostics)
+	require.NoFileExists(t, filepath.Join(root, "preparation.pb"))
+
+	// The fixture echoes the transported configuration as inputs, which must be fully known.
+	prepared, err := p.Prepare(t.Context(), request)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	require.Nil(t, prepared)
+	require.True(t, proto.Equal(before, request), "rejection must not mutate caller input")
+	seen := &pluginv1.ComponentRequest{}
+	raw, err := os.ReadFile(filepath.Join(root, "preparation.pb"))
+	require.NoError(t, err)
+	require.NoError(t, proto.Unmarshal(raw, seen))
+	require.True(t, proto.Equal(request.Configuration, seen.Configuration), "transport preserves unknown values and sensitive paths")
+	require.NoFileExists(t, filepath.Join(root, "backend.tf"), "rejected preparation must not materialize artifacts")
 }
 
 func TestValidationRejectsBeforeDiscoveryPreparationOrState(t *testing.T) {
@@ -446,6 +479,18 @@ func TestNonSchemaSettingsErrorStillNamesTheSection(t *testing.T) {
 	err := providerWithSchema(t).settingsError(assert.AnError)
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	assert.Contains(t, strings.Join(errUtils.AllDetails(err), "\n"), "components.terraform.terragrunt")
+}
+
+func TestPreparationIAMProbeResponse(t *testing.T) {
+	t.Parallel()
+	response := &pluginv1.PrepareComponentResponse{Iam: &pluginv1.ComponentIam{}}
+	require.NoError(t, checkPreparationResponse(response, "iam-probe"))
+	require.NoError(t, checkPreparationResponse(&pluginv1.PrepareComponentResponse{}, "iam-probe"))
+	require.ErrorIs(t, checkPreparationResponse(response, "native"), errUtils.ErrPluginProtocol)
+	require.ErrorIs(t, checkPreparationResponse(nil, "iam-probe"), errUtils.ErrPluginProtocol)
+	require.ErrorIs(t, checkPreparationResponse(&pluginv1.PrepareComponentResponse{Diagnostics: []*pluginv1.Diagnostic{{Message: "failure"}}}, "iam-probe"), errUtils.ErrPluginInvalidConfig)
+	response.Files = []*pluginv1.ComponentGeneratedFile{{Path: "backend.tf", IfExists: "overwrite"}}
+	require.ErrorIs(t, checkPreparationResponse(response, "iam-probe"), errUtils.ErrPluginProtocol)
 }
 
 func TestRegistryResolutionDurationIsAttributedInsideTheProviderSpan(t *testing.T) {

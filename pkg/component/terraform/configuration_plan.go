@@ -17,8 +17,12 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// freshPlanName is the file `deploy` writes the plan it generates for verification to.
+const freshPlanName = "new.plan"
 
 const configurationPlanSuffix = ".atmos.json"
 
@@ -35,10 +39,22 @@ const planBindingSuffix = ".planfile" + configurationPlanSuffix
 // exact preparation it was made from. Evaluated inputs and backend settings are not stored:
 // the plan file already embodies the inputs, and the backend is re-resolved at apply time and
 // compared by BackendDigest, so credentials in backend settings never reach this file.
+//
+// RebuildDigest and LockDigest let a runner that holds only the restored artifacts prove that a
+// workdir it re-provisioned from the checkout equals the reviewed one: RebuildDigest covers the
+// files restoration regenerates (module source and generated files, not the plan, its record,
+// variable files, state, or the lock file), and LockDigest the provider lock file ("" when absent).
 type configurationPlan struct {
 	Version                                                                               int
 	Stack, Component, Identity, EngineDigest, PlanDigest, WorkingDirectory, WorkingDigest string
-	BackendDigest                                                                         string
+	// WorkingIdentity binds a relative working_directory override to its checkout-relative location.
+	// Older records omit it and remain bound to their original absolute directory.
+	WorkingIdentity                          string
+	BackendDigest, RebuildDigest, LockDigest string
+	// Modules records that the reviewed workdir held downloaded child modules, which RebuildDigest covers.
+	// A rebuild downloads them again before verification. Older records omit it.
+	Modules  bool `json:",omitempty"`
+	Prepared *schema.PreparedComponentConfiguration
 	// SensitiveDigest binds the bytes of every sensitive generated file, including files the working
 	// directory digest excludes, such as those below a Terragrunt cache.
 	SensitiveDigest string
@@ -47,7 +63,6 @@ type configurationPlan struct {
 	// PublicFiles binds each non-sensitive generated file by presence and digest. Bytes are never
 	// stored, because a before-hook can write private values into a file the provider marked public.
 	PublicFiles map[string]publicFileRecord
-	Prepared    *schema.PreparedComponentConfiguration
 }
 
 // ownsConfigurationPlan reports whether a provider manages this component's saved plans.
@@ -57,8 +72,20 @@ func ownsConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
 	return owned
 }
 
+// usesConfigurationPlan reports whether the invocation applies a saved plan. A downloaded
+// StoredPlanFile alone does not: it is a reference that `deploy` compares a fresh plan against, and
+// the fresh plan is what gets applied.
 func usesConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
-	return info.UseTerraformPlan || info.PlanFile != "" || info.StoredPlanFile != ""
+	return info.UseTerraformPlan || info.PlanFile != ""
+}
+
+// dropCIPlanLocation forgets the plan path the CI download hook records while it fetches a stored
+// plan for `deploy`. An apply may have an explicitly supplied PlanFile even when
+// UseTerraformPlan is false, so only deploy's hook path is discarded.
+func dropCIPlanLocation(info *schema.ConfigAndStacksInfo) {
+	if info.SubCommand == "deploy" && info.PlanFile != "" && !info.UseTerraformPlan && info.StoredPlanFile != "" {
+		info.PlanFile = ""
+	}
 }
 
 func planRuntime(config *schema.AtmosConfiguration) (schema.ComponentConfigurationPlanRuntime, error) {
@@ -80,72 +107,144 @@ func configurationPlanPath(config *schema.AtmosConfiguration, info *schema.Confi
 }
 
 // restoreConfigurationPlan verifies the reviewed artifact before returning its original preparation.
-// The original execution directory is retained; transport to another runner requires an artifact adapter.
+// It requires the working directory the plan ran in, byte for byte, including its variable file; a
+// runner that holds only the restored artifacts goes through restoreOrRebuildConfigurationPlan instead,
+// which re-provisions the directory.
 func restoreConfigurationPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
-	if !restoresConfigurationPlan(info) {
-		return nil, fmt.Errorf("%w: plugin saved plans require direct apply of the original artifact", errUtils.ErrPluginUnsupportedExtension)
+	// The mark on the invocation is sticky, so this call's own result is read from a cleared mark.
+	marked, markedVarfile := info.ConfigurationPlanWorkdirExact, info.ConfigurationPlanVarfile
+	info.ConfigurationPlanWorkdirExact, info.ConfigurationPlanVarfile = false, nil
+	prepared, err := restoreSettledConfigurationPlan(ctx, config, info)
+	exact := info.ConfigurationPlanWorkdirExact
+	if !exact {
+		info.ConfigurationPlanVarfile = markedVarfile
 	}
-	runtime, err := planRuntime(config)
+	info.ConfigurationPlanWorkdirExact = marked || exact
 	if err != nil {
 		return nil, err
+	}
+	if !exact {
+		return nil, fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
+	}
+	return prepared, nil
+}
+
+// restoreSettledConfigurationPlan verifies the reviewed artifact against a working directory that needs
+// no rebuild: the one the plan ran in, or a rebuild of it that was already verified.
+func restoreSettledConfigurationPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
+	prepared, rebuild, err := restoreOrRebuildConfigurationPlan(ctx, config, info)
+	if err != nil {
+		return nil, err
+	}
+	if rebuild != nil {
+		return nil, fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
+	}
+	return prepared, nil
+}
+
+// restoreOrRebuildConfigurationPlan verifies everything about a reviewed plan that does not depend on
+// the working directory: the record's coordinates, the plan bytes, the engine, the provider, options
+// and watched sources, and the backend. The directory itself is then either the retained one (its
+// digest equals the reviewed digest), or it holds nothing but the restored artifacts and must be
+// re-provisioned (a non-nil rebuild), or it is unverifiable and the plan is rejected.
+func restoreOrRebuildConfigurationPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, *reviewedRebuild, error) {
+	if !restoresConfigurationPlan(info) {
+		return nil, nil, fmt.Errorf("%w: plugin saved plans require direct apply of the original artifact", errUtils.ErrPluginUnsupportedExtension)
+	}
+	if _, err := planRuntime(config); err != nil {
+		return nil, nil, err
 	}
 	path := configurationPlanPath(config, info)
 	plan, err := loadConfigurationPlan(path, info)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err := verifyReviewedPlan(ctx, config, info, runtime, plan); err != nil {
-		return nil, err
+	if err := bindReviewedWorkdirIdentity(config, info, plan); err != nil {
+		return nil, nil, err
+	}
+	if err := rejectExtraArgumentsDataDir(plan.Prepared.Execution); err != nil {
+		return nil, nil, err
+	}
+	if err := verifyReviewedArtifacts(ctx, config, info, plan, path); err != nil {
+		return nil, nil, err
+	}
+	rebuild, err := restoreReviewedWorkdir(info, plan, path, effectiveDataDir(config, info))
+	if err != nil {
+		return nil, nil, err
 	}
 	// Terraform runs inside the workdir, so a path relative to the project would not resolve there.
 	absolute, err := filepath.Abs(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	info.ConfigurationPlanImplicit = info.ConfigurationPlanImplicit || info.PlanFile == ""
 	info.UseTerraformPlan = true
 	info.PlanFile = absolute
-	return plan.Prepared, nil
+	return plan.Prepared, rebuild, nil
 }
 
-// verifyReviewedPlan rejects a plan whose identity, artifact, backend, or workdir changed since review,
-// then restores the sensitive content the reviewed plan depends on.
-func verifyReviewedPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, runtime schema.ComponentConfigurationPlanRuntime, plan *configurationPlan) error {
-	if err := verifyPlanStackEnvironment(info, plan); err != nil {
-		return err
+// bindReviewedWorkdirIdentity checks that the working directory is the one the plan ran in and records its
+// path. A plan saved without a working identity has nothing to check.
+func bindReviewedWorkdirIdentity(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, plan *configurationPlan) error {
+	if plan.WorkingIdentity == "" {
+		return nil
 	}
-	path := configurationPlanPath(config, info)
-	identity, err := runtime.PlanIdentity(ctx, info, plan.Prepared.Sources)
+	workdir := filepath.Clean(ConstructTerraformComponentWorkingDir(config, info))
+	if relativeWorkdirIdentity(config, info, workdir) != plan.WorkingIdentity {
+		return fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
+	}
+	plan.WorkingDirectory = workdir
+	return nil
+}
+
+// restoreReviewedWorkdir settles the reviewed plan's working directory. A retained workdir gets the
+// reviewed bytes of its sensitive files back and needs no rebuild; any other workdir must be rebuilt.
+func restoreReviewedWorkdir(info *schema.ConfigAndStacksInfo, plan *configurationPlan, path, dataDir string) (*reviewedRebuild, error) {
+	retained, err := reviewedWorkdirRetained(info, plan, path, dataDir)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	artifactMatches, err := configurationArtifactMatches(config, info, plan, path)
-	if err != nil {
-		return err
+	if !retained {
+		return newReviewedRebuild(info, plan, path, dataDir)
 	}
-	if identity != plan.Identity || !artifactMatches {
-		return fmt.Errorf("%w: plugin, source, engine, workdir, or reviewed artifact changed; create a new plan", errUtils.ErrPlanVerificationFailed)
-	}
-	if err := verifyReviewedBackendAndWorkdir(ctx, config, info, plan, path); err != nil {
-		return err
-	}
+	// The retained workdir is verified, so it holds the reviewed bytes of sensitive files. A rebuild
+	// instead writes them again from a fresh preparation.
 	if err := restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files, plan.SensitiveDigest); err != nil {
-		return err
+		return nil, err
 	}
-	return restorePublicContent(plan.WorkingDirectory, plan.Prepared.Files, plan.PublicFiles)
+	if err := restorePublicContent(plan.WorkingDirectory, plan.Prepared.Files, plan.PublicFiles); err != nil {
+		return nil, err
+	}
+	return nil, nil
 }
 
-// verifyReviewedBackendAndWorkdir rejects a changed backend identity or a changed retained working directory.
-func verifyReviewedBackendAndWorkdir(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, plan *configurationPlan, path string) error {
-	if err := verifyConfigurationPlanState(ctx, config, info, plan); err != nil {
-		return err
+// reviewedWorkdirRetained reports whether the working directory still equals the reviewed one, either
+// as the workdir the plan ran in or as a verified rebuild of it.
+func reviewedWorkdirRetained(info *schema.ConfigAndStacksInfo, plan *configurationPlan, path, dataDir string) (bool, error) {
+	varfile := filepath.Join(plan.WorkingDirectory, ConstructTerraformComponentVarfileName(info))
+	before, _ := os.ReadFile(varfile)
+	retained, err := workdirMatches(plan, path, dataDir)
+	// Only the full digest covers the variable file, so only then are its inputs the reviewed ones. The
+	// bytes are read on both sides of the comparison: a file that changed while it was digested is not
+	// the one the digest describes, so the workdir is then not accepted as exact.
+	if err == nil && retained {
+		after, _ := os.ReadFile(varfile)
+		if bytes.Equal(before, after) {
+			info.ConfigurationPlanWorkdirExact, info.ConfigurationPlanVarfile = true, after
+		}
 	}
-	return verifyConfigurationPlanWorkdir(plan, path)
+	if err != nil || retained {
+		return retained, err
+	}
+	// A rebuild that was verified and then failed in init or apply leaves a workdir that no longer
+	// holds only the restored artifacts. It still equals the reviewed rebuild, so a retry may use it.
+	return rebuiltWorkdirMatches(info, plan, path, dataDir)
 }
 
-// restoresConfigurationPlan reports whether the invocation applies the original, locally stored artifact.
+// restoresConfigurationPlan reports whether the invocation applies a reviewed artifact. The downloaded
+// stored plan that `deploy` verifies against is never applied itself, so it must not be the plan to apply.
 func restoresConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
-	return info.StoredPlanFile == "" && (info.SubCommand == "apply" || info.SubCommand == "deploy")
+	return (info.StoredPlanFile == "" || info.StoredPlanFile != info.PlanFile) && (info.SubCommand == "apply" || info.SubCommand == "deploy")
 }
 
 // loadConfigurationPlan reads the companion binding and checks it targets this component.
@@ -214,16 +313,41 @@ func configurationArtifactMatches(config *schema.AtmosConfiguration, info *schem
 	return digest == plan.PlanDigest && engine == plan.EngineDigest && workdir == plan.WorkingDirectory, nil
 }
 
-// verifyConfigurationPlanWorkdir rejects a working directory whose retained bytes changed since review.
-func verifyConfigurationPlanWorkdir(plan *configurationPlan, path string) error {
-	workingDigest, err := configurationWorkdirDigest(plan.WorkingDirectory, path)
+// verifyReviewedArtifacts checks everything about a reviewed plan that does not depend on the working
+// directory: provider identity and watched sources, plan bytes, engine, and backend.
+func verifyReviewedArtifacts(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, plan *configurationPlan, path string) error {
+	if err := verifyPlanStackEnvironment(info, plan); err != nil {
+		return err
+	}
+	runtime, err := planRuntime(config)
 	if err != nil {
 		return err
 	}
-	if workingDigest != plan.WorkingDigest {
-		return fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
+	identity, err := runtime.PlanIdentity(ctx, info, plan.Prepared.Sources)
+	if err != nil {
+		return err
 	}
-	return nil
+	artifactMatches, err := configurationArtifactMatches(config, info, plan, path)
+	if err != nil {
+		return err
+	}
+	if identity != plan.Identity || !artifactMatches {
+		return fmt.Errorf("%w: plugin, source, engine, workdir, or reviewed artifact changed; create a new plan", errUtils.ErrPlanVerificationFailed)
+	}
+	return verifyConfigurationPlanState(ctx, config, info, plan)
+}
+
+// workdirMatches reports whether the retained working directory still holds exactly the reviewed
+// bytes. A directory that no longer exists simply does not match.
+func workdirMatches(plan *configurationPlan, path, dataDir string) (bool, error) {
+	workingDigest, err := configurationWorkdirDigest(plan.WorkingDirectory, path, dataDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return workingDigest == plan.WorkingDigest, nil
 }
 
 // recordConfigurationPlan stores a private companion beside the completed plan. It binds the
@@ -237,7 +361,7 @@ func recordConfigurationPlan(ctx context.Context, config *schema.AtmosConfigurat
 	if err != nil {
 		return err
 	}
-	plan, err := newConfigurationPlan(info, execCtx, snapshot, path)
+	plan, err := newConfigurationPlan(config, info, execCtx, snapshot, path)
 	if err != nil {
 		return err
 	}
@@ -261,8 +385,8 @@ func bindsPlan(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext) 
 	return execCtx.preparedConfiguration != nil && !info.DryRun && info.SubCommand == subcommandPlan
 }
 
-// newConfigurationPlan binds the snapshot to the digests of the plan and engine.
-func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, snapshot *planSnapshot, path string) (*configurationPlan, error) {
+// newConfigurationPlan binds the snapshot to the digests of the plan, engine, and working directory.
+func newConfigurationPlan(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, snapshot *planSnapshot, path string) (*configurationPlan, error) {
 	if snapshot.planDigest == "" {
 		return nil, fmt.Errorf("%w: plan was not observed as written by this run", errUtils.ErrPlanVerificationFailed)
 	}
@@ -296,7 +420,7 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	if err != nil {
 		return nil, err
 	}
-	return &configurationPlan{StackEnvironmentDigest: environmentDigest, WorkingDigest: snapshot.workingDigest, SensitiveDigest: snapshot.sensitiveDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, PublicFiles: public, Prepared: stored}, nil
+	return &configurationPlan{StackEnvironmentDigest: environmentDigest, WorkingDigest: snapshot.workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), WorkingIdentity: relativeWorkdirIdentity(config, info, execCtx.workingDir), BackendDigest: backendDigest, RebuildDigest: snapshot.rebuildDigest, LockDigest: snapshot.lockDigest, Modules: snapshot.modules, SensitiveDigest: snapshot.sensitiveDigest, PublicFiles: public, Prepared: stored}, nil
 }
 
 // reviewedPlanConfiguration omits inputs and every generated file's bytes, and returns the digests of public files.
@@ -320,6 +444,57 @@ func reviewedPlanConfiguration(prepared *schema.PreparedComponentConfiguration, 
 		}
 	}
 	return &stored, observed, nil
+}
+
+// relativeWorkdirIdentity is set only when an explicit relative override actually resolves
+// beneath the checkout root. Absolute and legacy workdirs retain exact-path verification.
+func relativeWorkdirIdentity(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workdir string) string {
+	if config == nil || info == nil {
+		return ""
+	}
+	override := workingDirectoryOverride(info)
+	if override == "" || filepath.IsAbs(override) {
+		return ""
+	}
+	base, err := filepath.Abs(config.BasePath)
+	if err != nil {
+		return ""
+	}
+	actual, err := filepath.Abs(workdir)
+	if err != nil {
+		return ""
+	}
+	relative, err := filepath.Rel(base, actual)
+	if err != nil || !matchesRelativeWorkdir(relative, override, sourceSubdir(info)) {
+		return ""
+	}
+	return "relative:" + filepath.ToSlash(relative)
+}
+
+// sourceSubdir returns the explicit source subdirectory of the component, which plans run inside.
+func sourceSubdir(info *schema.ConfigAndStacksInfo) string {
+	metadata, _ := info.ComponentSection["metadata"].(map[string]any)
+	subdir, _ := metadata["source_subdir"].(string)
+	return subdir
+}
+
+func matchesRelativeWorkdir(relative, override, subdir string) bool {
+	if relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return false
+	}
+	clean := filepath.Clean(override)
+	// A plan with an explicit source subdirectory runs in the module directory below the override.
+	return relative == clean || (subdir != "" && relative == filepath.Join(clean, filepath.FromSlash(subdir)))
+}
+
+func workingDirectoryOverride(info *schema.ConfigAndStacksInfo) string {
+	for _, section := range []string{"metadata", "settings"} {
+		values, _ := info.ComponentSection[section].(map[string]any)
+		if value, ok := values["working_directory"].(string); ok && value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // backendIdentityDigest hashes the canonical JSON form of backend settings, which only ever need equality.
@@ -352,11 +527,11 @@ func fileDigest(path string) (string, error) {
 }
 
 func writePlanBinding(path string, data []byte) error {
-	file, err := os.CreateTemp(filepath.Dir(path), ".atmos-plan-*")
+	file, temporary, err := configuration.CreateSensitiveTemp(filepath.Dir(path))
 	if err != nil {
 		return planIOError(err)
 	}
-	defer os.Remove(file.Name())
+	defer os.Remove(temporary)
 	if _, err := file.Write(data); err != nil {
 		file.Close()
 		return planIOError(err)
@@ -364,7 +539,7 @@ func writePlanBinding(path string, data []byte) error {
 	if err := file.Close(); err != nil {
 		return planIOError(err)
 	}
-	if err := os.Rename(file.Name(), path); err != nil {
+	if err := os.Rename(temporary, path); err != nil {
 		return planIOError(err)
 	}
 	return nil
@@ -394,148 +569,6 @@ func verifyConfigurationPlanState(ctx context.Context, config *schema.AtmosConfi
 	}
 	// The verified current backend stands in for the one the record deliberately does not store.
 	plan.Prepared.Backend = state.Backend
-	return nil
-}
-
-// excludedWorkdirFile reports a file the working directory digest ignores: the plan and its
-// binding, Terraform's cache outside downloaded modules, and runtime files outside modules.
-func excludedWorkdirFile(root, path, planPath, name string) bool {
-	if path == planPath || path == planPath+configurationPlanSuffix || insideTerraformCacheOutsideModules(root, path) {
-		return true
-	}
-	return !insideTerraformModules(root, path) && ignoredWorkdirFile(path, planPath, name)
-}
-
-// configurationWorkdirDigest binds retained module/configuration bytes, excluding mutable execution data.
-// Root and a non-empty planPath are resolved to absolute paths first, so a relative root never
-// fails to exclude the plan file; an empty planPath stays empty and excludes nothing.
-func configurationWorkdirDigest(root, planPath string) (string, error) {
-	// An explicit plan path may be absolute while the directory is relative, or the reverse.
-	// Both must compare equal, or the plan file itself would be hashed into the directory digest.
-	root, planPath, err := absolutePaths(root, planPath)
-	if err != nil {
-		return "", err
-	}
-	files := make(map[string]string)
-	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			if skipWorkdirDirectory(root, path, entry.Name()) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if excludedWorkdirFile(root, path, planPath, entry.Name()) {
-			return nil
-		}
-		return recordWorkdirFile(root, path, entry, files)
-	})
-	if err != nil {
-		return "", err
-	}
-	data, err := json.Marshal(files)
-	if err != nil {
-		return "", err
-	}
-	digest := sha256.Sum256(data)
-	return hex.EncodeToString(digest[:]), nil
-}
-
-// absolutePaths returns both paths absolute and with symlinks resolved, so one file reached through
-// two spellings (for example /var and /private/var on macOS) compares equal.
-func absolutePaths(root, planPath string) (string, string, error) {
-	absoluteRoot, err := resolvedPath(root)
-	if err != nil {
-		return "", "", err
-	}
-	absolutePlan, err := resolvedPath(planPath)
-	if err != nil {
-		return "", "", err
-	}
-	return absoluteRoot, absolutePlan, nil
-}
-
-func resolvedPath(path string) (string, error) {
-	absolute, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-	if resolved, err := filepath.EvalSymlinks(absolute); err == nil {
-		return resolved, nil
-	}
-	return absolute, nil
-}
-
-// skipWorkdirDirectory reports whether a nested directory holds only mutable or cached data.
-// The .atmos directory is provisioner bookkeeping (access timestamps and metadata lock files
-// that even a read-only lookup of the retained directory creates), never executed content. The
-// private plan directory of a plan policy exists only while Terraform runs.
-// Name-based exclusions apply only outside downloaded modules: a module's own subdirectories
-// are content Terraform may execute during apply, whatever they are called.
-func skipWorkdirDirectory(root, path, name string) bool {
-	if path == root {
-		return false
-	}
-	if insideTerraformCacheOutsideModules(root, path) {
-		return true
-	}
-	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || strings.HasPrefix(name, ".atmos-policy-plan-") || strings.HasPrefix(name, stalePlanDirPrefix))
-}
-
-// Terraform's downloaded modules can contain scripts executed during apply. Other cache
-// content, including providers and state, remains mutable and is excluded.
-func insideTerraformCacheOutsideModules(root, path string) bool {
-	relative, err := filepath.Rel(root, path)
-	if err != nil {
-		return false
-	}
-	parts := strings.Split(relative, string(filepath.Separator))
-	for i, part := range parts {
-		if part == ".terraform" && i+1 < len(parts) && parts[i+1] != "modules" {
-			return true
-		}
-	}
-	return false
-}
-
-func insideTerraformModules(root, path string) bool {
-	relative, err := filepath.Rel(root, path)
-	if err != nil {
-		return false
-	}
-	parts := strings.Split(relative, string(filepath.Separator))
-	for i, part := range parts {
-		if part == ".terraform" && i+1 < len(parts) && parts[i+1] == "modules" {
-			return true
-		}
-	}
-	return false
-}
-
-// ignoredWorkdirFile reports whether a file is the plan itself, a plan binding, or mutable state.
-// Only actual bindings are skipped: this plan's own, or one beside a default ".planfile" plan.
-// An ordinary file such as settings.atmos.json is configuration and stays in the digest.
-func ignoredWorkdirFile(path, planPath, name string) bool {
-	return path == planPath || path == planPath+configurationPlanSuffix || strings.HasSuffix(name, planBindingSuffix) ||
-		strings.HasPrefix(name, ".atmos-plan-") || strings.HasPrefix(name, "terraform.tfstate")
-}
-
-// recordWorkdirFile digests one retained file by its slash-separated path relative to the root.
-func recordWorkdirFile(root, path string, entry fs.DirEntry, files map[string]string) error {
-	if entry.Type()&os.ModeSymlink != 0 {
-		return fmt.Errorf("%w: saved-plan workdir contains symlink", errUtils.ErrPluginUnsupportedExtension)
-	}
-	digest, err := fileDigest(path)
-	if err != nil {
-		return err
-	}
-	relative, err := filepath.Rel(root, path)
-	if err != nil {
-		return err
-	}
-	files[filepath.ToSlash(relative)] = digest
 	return nil
 }
 

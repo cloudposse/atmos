@@ -176,7 +176,8 @@ func (s *Session) resolveImport(ctx context.Context, template *pluginv1.Discover
 	if err != nil {
 		return nil, err
 	}
-	if err := importDiagnostics(discovered.Diagnostics); err != nil {
+	adapter.RenderLogs(adapter.LogScope{Provider: request.Provider, Warnings: &s.warnings}, discovered.GetLogs())
+	if err := importDiagnostics(discovered.Diagnostics, &s.warnings); err != nil {
 		return nil, err
 	}
 	if len(discovered.Components) == 0 {
@@ -210,12 +211,12 @@ func (s *Session) importProvider(ctx context.Context, name string) (Provider, er
 
 // importDiagnostics fails an import on a broken unit, naming the unit: the user asked for it by
 // name. Other diagnostics are shown as warnings.
-func importDiagnostics(diagnostics []*pluginv1.Diagnostic) error {
+func importDiagnostics(diagnostics []*pluginv1.Diagnostic, warnings *adapter.WarningDeduper) error {
 	for _, diagnostic := range diagnostics {
 		if err := adapter.DiagnosticError(diagnostic); err != nil {
 			return err
 		}
-		adapter.WarnDiagnostic(diagnostic)
+		adapter.WarnDiagnostic(diagnostic, warnings)
 	}
 	return nil
 }

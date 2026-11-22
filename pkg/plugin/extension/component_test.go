@@ -42,3 +42,43 @@ func TestComponentServicesAreIndependentOfExecution(t *testing.T) {
 		require.False(t, IsComponent(capability))
 	}
 }
+
+func TestComponentMetadataValidatesModesAndOptions(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "config.json"), []byte(`{"type":"object"}`), 0o600))
+	base := func(extra map[string]any) map[string]any {
+		metadata := map[string]any{"component_type": "terraform", "schema": "config.json"}
+		for key, value := range extra {
+			metadata[key] = value
+		}
+		return metadata
+	}
+	option := map[string]any{"name": "level", "type": "string", "description": "Level.", "commands": []any{"plan"}}
+	require.NoError(t, ValidateComponent(Binding{Name: "tool", Directory: directory, Metadata: base(map[string]any{
+		"modes": []any{"native", "executable"}, "options": []any{option},
+	})}))
+	for name, extra := range map[string]map[string]any{
+		"unknown mode":        {"modes": []any{"fast"}},
+		"empty modes":         {"modes": []any{}},
+		"modes not a list":    {"modes": "native"},
+		"options not a list":  {"options": "level"},
+		"option without help": {"options": []any{map[string]any{"name": "level", "type": "string", "commands": []any{"plan"}}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateComponent(Binding{Name: "tool", Directory: directory, Metadata: base(extra)})
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestComponentModesDefaultToNative(t *testing.T) {
+	t.Parallel()
+	modes, err := ComponentModes(map[string]any{})
+	require.NoError(t, err)
+	require.Equal(t, []string{"native"}, modes)
+	modes, err = ComponentModes(map[string]any{"modes": []any{"executable", "native"}})
+	require.NoError(t, err)
+	require.Equal(t, []string{"executable", "native"}, modes)
+}

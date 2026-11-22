@@ -1,6 +1,7 @@
 package source
 
 import (
+	"archive/zip"
 	"context"
 	"errors"
 	"fmt"
@@ -109,4 +110,18 @@ func (p *sourcePublication) backupFile(name string) (sourceJournalEntry, error) 
 	}
 	item.existed = true
 	return item, nil
+}
+
+func isTerraformPlan(path string) bool {
+	archive, err := zip.OpenReader(path)
+	if err != nil {
+		return false
+	}
+	defer archive.Close()
+	for _, file := range archive.File {
+		if file.Name == "tfplan" {
+			return true
+		}
+	}
+	return false
 }

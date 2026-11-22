@@ -9,7 +9,11 @@
       "const": "terragrunt"
     },
     "mode": {
-      "const": "native"
+      "enum": [
+        "native",
+        "executable"
+      ],
+      "description": "native adapts units to Atmos; executable runs each unit with the pinned terragrunt executable."
     },
     "features": {
       "type": "object",

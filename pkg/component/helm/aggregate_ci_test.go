@@ -81,8 +81,10 @@ func (p *helmBulkGraphTestProvider) Execute(ctx *component.ExecutionContext) err
 	}
 	return nil
 }
+
 func (p *helmBulkGraphTestProvider) GenerateArtifacts(*component.ExecutionContext) error { return nil }
-func (p *helmBulkGraphTestProvider) GetAvailableCommands() []string                      { return nil }
+
+func (p *helmBulkGraphTestProvider) GetAvailableCommands() []string { return nil }
 
 func TestHelmBulkCICollectorRecordsDependencyBlockedComponents(t *testing.T) {
 	collector := newHelmBulkCICollector("apply")

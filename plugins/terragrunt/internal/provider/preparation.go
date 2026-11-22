@@ -64,11 +64,23 @@ func (p *Provider) componentRequest(ctx context.Context, request *pluginv1.Compo
 //
 //nolint:lintroller // Standalone plugin code cannot import the host performance tracker.
 func (p *Provider) Prepare(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+	ctx, sink := withLogs(ctx, request.GetInvocation(), request.GetRootDirectory(), requestValues(request)...)
 	response, err := p.prepare(ctx, request)
-	return response, scoped(err, "prepare", request.GetRootDirectory(), request.GetAddress())
+	err = scoped(err, "prepare", request.GetRootDirectory(), request.GetAddress())
+	if response != nil {
+		response.Logs = logEntries(sink)
+	}
+	return response, withFailureLogs(err, sink)
 }
 
 func (p *Provider) prepare(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+	// Executable mode runs units with the terragrunt executable; native preparation must never mix in.
+	if request.GetOperation().GetMode() == ModeExecutable {
+		return nil, rpcError(&model.Problem{
+			Code: model.CodeUnsupportedSetting, Summary: "Units in executable mode are not prepared natively", Safe: true, Err: ErrUnsupported,
+			Hints: []string{"Executable mode runs each unit with the terragrunt executable. Set `components.terraform.terragrunt.mode` to `native` to adapt units to Atmos instead."},
+		})
+	}
 	req, err := p.componentRequest(ctx, request)
 	if err != nil {
 		return nil, rpcError(err)
@@ -154,7 +166,7 @@ func preparedResponse(req *model.Request, result *model.Resolution) (*pluginv1.P
 	if values == nil {
 		values = map[string]any{}
 	}
-	inputs, err := encode(values)
+	inputs, err := encodeSensitive(values, result.SensitiveInputs)
 	if err != nil {
 		return nil, err
 	}
@@ -280,8 +292,13 @@ func stateIdentity(req *model.Request, result *model.Resolution) (*pluginv1.Comp
 //
 //nolint:lintroller // Standalone plugin code cannot import the host performance tracker.
 func (p *Provider) Resolve(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+	ctx, sink := withLogs(ctx, request.GetInvocation(), request.GetRootDirectory(), requestValues(request)...)
 	response, err := p.resolveState(ctx, request)
-	return response, scoped(err, "resolve state", request.GetRootDirectory(), request.GetAddress())
+	err = scoped(err, "resolve state", request.GetRootDirectory(), request.GetAddress())
+	if response != nil {
+		response.Logs = logEntries(sink)
+	}
+	return response, withFailureLogs(err, sink)
 }
 
 func (p *Provider) resolveState(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
@@ -416,6 +433,13 @@ func withFeatures(req *model.Request, configuration *pluginv1.ComponentValue) er
 			features = map[string]string{}
 		}
 		maps.Copy(features, fromEnvironment)
+	}
+	// Options of the command line rank above the environment and the configuration, per name.
+	if len(req.Features) > 0 {
+		if features == nil {
+			features = map[string]string{}
+		}
+		maps.Copy(features, req.Features)
 	}
 	req.Features = features
 	return nil

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -11,10 +12,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/zclconf/go-cty/cty"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
+	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
@@ -469,6 +472,193 @@ func TestDiscoveryPublishesCommandAndExclude(t *testing.T) {
 	require.Equal(t, "opentofu", unitEngine(&model.Request{Tofu: "tofu"}, nil))
 }
 
+func TestPrepareReturnsExactInputsWithSensitivePaths(t *testing.T) {
+	request := componentRequest(t)
+	p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+		return &model.Resolution{
+			Source: filepath.Join(request.RootDirectory, "module"), WorkingDir: filepath.Join(request.RootDirectory, "cache"), BackendType: "local",
+			Inputs: map[string]any{
+				"large": json.Number("9007199254740993"), "ratio": json.Number("0.1"), "list": []any{"a", json.Number("2"), nil}, "nothing": nil,
+				"password": "hunter2", "nested": map[string]any{"token": "t", "open": true}, "empty": map[string]any{},
+			},
+			SensitiveInputs: [][]string{{"password"}, {"nested", "token"}, {"missing"}},
+		}, nil
+	})
+
+	result, err := p.Prepare(t.Context(), request)
+
+	require.NoError(t, err)
+	value, err := component.Decode(result.Inputs)
+	require.NoError(t, err)
+	plain, marks := value.UnmarkDeepWithPaths()
+	paths := []string{}
+	for _, mark := range marks {
+		paths = append(paths, fmt.Sprintf("%#v", mark.Path))
+	}
+	require.ElementsMatch(t, []string{
+		fmt.Sprintf("%#v", cty.GetAttrPath("password")),
+		fmt.Sprintf("%#v", cty.GetAttrPath("nested").GetAttr("token")),
+	}, paths, "only paths that exist are marked")
+	require.Equal(t, "9007199254740993", plain.GetAttr("large").AsBigFloat().Text('f', -1))
+	require.Equal(t, "0.1", plain.GetAttr("ratio").AsBigFloat().Text('f', -1))
+	require.True(t, plain.GetAttr("nothing").IsNull())
+	require.True(t, plain.GetAttr("list").Type().IsTupleType())
+	require.True(t, plain.GetAttr("list").Index(cty.NumberIntVal(2)).IsNull())
+	require.True(t, plain.GetAttr("empty").Type().IsObjectType())
+	require.True(t, plain.IsWhollyKnown())
+
+	whole, err := encodeSensitive(map[string]any{"a": "b"}, [][]string{nil})
+	require.NoError(t, err)
+	require.Len(t, whole.SensitivePaths, 1)
+	require.Empty(t, whole.SensitivePaths[0].Steps, "the empty path marks the whole value")
+}
+
+func encodedOption(t *testing.T, value any) *pluginv1.ComponentValue {
+	t.Helper()
+	encoded, err := encode(value)
+	require.NoError(t, err)
+	return encoded
+}
+
+func TestOptionsOverrideTheEnvironmentAndTheUnit(t *testing.T) {
+	env := map[string]string{"TG_IAM_ASSUME_ROLE": "arn:aws:iam::1:role/environment", "TG_DOWNLOAD_DIR": "/env-cache", "UNRELATED": "kept"}
+	features, err := applyOptions(env, map[string]*pluginv1.ComponentValue{
+		"feature":                            encodedOption(t, map[string]any{"alpha": "true", "tier": "gold"}),
+		"iam_assume_role":                    encodedOption(t, "arn:aws:iam::1:role/option"),
+		"iam_assume_role_duration":           encodedOption(t, 900),
+		"iam_assume_role_session_name":       encodedOption(t, "ci"),
+		"iam_assume_role_web_identity_token": encodedOption(t, "token"),
+		"download_dir":                       encodedOption(t, "/option-cache"),
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"alpha": "true", "tier": "gold"}, features)
+	require.Equal(t, "arn:aws:iam::1:role/option", env["TG_IAM_ASSUME_ROLE"])
+	require.Equal(t, "900", env["TG_IAM_ASSUME_ROLE_DURATION"])
+	require.Equal(t, "ci", env["TG_IAM_ASSUME_ROLE_SESSION_NAME"])
+	require.Equal(t, "token", env["TG_IAM_ASSUME_ROLE_WEB_IDENTITY_TOKEN"])
+	require.Equal(t, "/option-cache", env["TG_DOWNLOAD_DIR"])
+	require.Equal(t, "kept", env["UNRELATED"])
+
+	untouched := map[string]string{"A": "1"}
+	none, err := applyOptions(untouched, nil)
+	require.NoError(t, err)
+	require.Nil(t, none)
+	require.Equal(t, map[string]string{"A": "1"}, untouched, "absent options change nothing")
+}
+
+func TestOptionsRejectUnknownNamesAndWrongTypes(t *testing.T) {
+	_, err := applyOptions(map[string]string{}, map[string]*pluginv1.ComponentValue{"parallelism": encodedOption(t, 4)})
+	require.ErrorIs(t, err, ErrUnsupported)
+	_, err = applyOptions(map[string]string{}, map[string]*pluginv1.ComponentValue{"feature": encodedOption(t, "not-a-map")})
+	require.ErrorIs(t, err, ErrUnsupported)
+	_, err = applyOptions(map[string]string{}, map[string]*pluginv1.ComponentValue{"download_dir": {}})
+	require.ErrorIs(t, err, ErrUnsupported)
+	for name, values := range map[string][]any{
+		"download_dir":             {map[string]any{"path": "/cache"}, 42, true},
+		"iam_assume_role_duration": {"900", 1.5, map[string]any{"seconds": 900}},
+	} {
+		for _, value := range values {
+			t.Run(fmt.Sprintf("%s/%v", name, value), func(t *testing.T) {
+				env := map[string]string{}
+				_, err := applyOptions(env, map[string]*pluginv1.ComponentValue{name: encodedOption(t, value)})
+				require.ErrorIs(t, err, ErrUnsupported)
+				require.Empty(t, env)
+			})
+		}
+	}
+}
+
+func TestFeatureOptionsRankAboveEnvironmentAndConfiguration(t *testing.T) {
+	config, err := encode(map[string]any{"enabled": true, "features": map[string]any{"tier": "config", "size": 3}})
+	require.NoError(t, err)
+	req := model.Request{Environment: map[string]string{"TG_FEATURE": "tier=environment,wide=true"}, Features: map[string]string{"tier": "option"}}
+	require.NoError(t, withFeatures(&req, config))
+	require.Equal(t, map[string]string{"tier": "option", "size": "3", "wide": "true"}, req.Features)
+}
+
+func TestOperationAcceptsBothModesAndDeclaredOptions(t *testing.T) {
+	request := componentRequest(t)
+	request.Operation.Options = map[string]*pluginv1.ComponentValue{"iam_assume_role": encodedOption(t, "arn:aws:iam::1:role/option")}
+	for _, mode := range []string{"native", "executable"} {
+		request.Operation.Mode = mode
+		got, err := operation(request.RootDirectory, "terragrunt", request.Operation, request.Invocation)
+		require.NoError(t, err, mode)
+		require.Equal(t, "arn:aws:iam::1:role/option", got.Environment["TG_IAM_ASSUME_ROLE"])
+		require.Equal(t, "native", got.Mode, "evaluation is the same in both modes")
+	}
+	require.Empty(t, request.Invocation.Environment["TG_IAM_ASSUME_ROLE"], "the host's invocation is never modified")
+}
+
+func TestExecutableModeNeverPreparesNatively(t *testing.T) {
+	request := componentRequest(t)
+	request.Operation.Mode = "executable"
+	prepared := false
+	p := New(func(context.Context, model.Request) (*model.Resolution, error) {
+		prepared = true
+		return &model.Resolution{}, nil
+	})
+	_, err := p.Prepare(t.Context(), request)
+	require.Error(t, err)
+	require.False(t, prepared, "no HCL evaluation or command runs for a unit the executable owns")
+
+	// State resolution and validation remain available: Atmos reads state locations the same way in both modes.
+	_, err = p.Validate(t.Context(), request)
+	require.NoError(t, err)
+}
+
+func TestSettingsAcceptBothModes(t *testing.T) {
+	for _, mode := range []string{"native", "executable"} {
+		value, err := encode(map[string]any{"enabled": true, "mode": mode})
+		require.NoError(t, err)
+		require.NoError(t, settings(value), mode)
+	}
+	value, err := encode(map[string]any{"enabled": true, "mode": "cli"})
+	require.NoError(t, err)
+	require.Error(t, settings(value))
+}
+
+// TestManifestDeclaresExactlyTheOptionsThePluginAccepts keeps the static metadata the host builds flags
+// from in step with the options the plugin understands: a declared option the plugin rejects would fail
+// every command, and an accepted option nobody declared could never be set.
+func TestManifestDeclaresExactlyTheOptionsThePluginAccepts(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "plugin.yaml"))
+	require.NoError(t, err)
+	var manifest struct {
+		Spec struct {
+			Capabilities struct {
+				Components struct {
+					Discovery struct {
+						Terragrunt struct {
+							Modes   []string `yaml:"modes"`
+							Options []struct {
+								Name      string   `yaml:"name"`
+								Sensitive bool     `yaml:"sensitive"`
+								Commands  []string `yaml:"commands"`
+							} `yaml:"options"`
+						} `yaml:"terragrunt"`
+					} `yaml:"discovery"`
+				} `yaml:"components"`
+			} `yaml:"capabilities"`
+		} `yaml:"spec"`
+	}
+	require.NoError(t, yaml.Unmarshal(raw, &manifest))
+	declared := manifest.Spec.Capabilities.Components.Discovery.Terragrunt
+	require.ElementsMatch(t, []string{"native", "executable"}, declared.Modes)
+	require.NotEmpty(t, declared.Options)
+
+	names := []string{}
+	for _, option := range declared.Options {
+		names = append(names, option.Name)
+		require.NotEmpty(t, option.Commands, option.Name)
+		require.Equal(t, option.Name == "iam_assume_role_web_identity_token", option.Sensitive, option.Name)
+	}
+	accepted := []string{"feature"}
+	for name := range toolEnvironment {
+		accepted = append(accepted, name)
+	}
+	require.ElementsMatch(t, accepted, names)
+}
+
 func TestPreparationTransmitsUnitFileCopyProvenance(t *testing.T) {
 	for _, copied := range []bool{false, true} {
 		t.Run(map[bool]string{false: "explicit generation", true: "adjacent copy"}[copied], func(t *testing.T) {
@@ -654,6 +844,79 @@ func TestPreparationExportsOverlayModes(t *testing.T) {
 	require.Equal(t, "shadow.sh", result.Files[len(result.Files)-1].Path)
 }
 
+func TestExecutableDiscoveryIncludesInlineTerraformModules(t *testing.T) {
+	for _, mode := range []string{ModeNative, ModeExecutable} {
+		t.Run(mode, func(t *testing.T) {
+			root := t.TempDir()
+			for _, name := range []string{"app", "shared"} {
+				dir := filepath.Join(root, "live", name)
+				require.NoError(t, os.MkdirAll(dir, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "terragrunt.hcl"), []byte("inputs = {}\n"), 0o600))
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(root, "live", "app", "main.tf"), []byte("# inline module"), 0o600))
+			options, err := encode(map[string]any{"mode": mode})
+			require.NoError(t, err)
+			request := &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: options, IncludePaths: []string{"live/**"}, Operation: &pluginv1.ComponentOperation{Mode: mode, Command: "plan"}}
+			response, err := New(nil).Discover(t.Context(), request)
+			require.NoError(t, err)
+			if mode == ModeExecutable {
+				require.Len(t, response.Components, 1)
+				require.Equal(t, "app", response.Components[0].Address.Component)
+				require.Equal(t, "terragrunt", response.Components[0].Engine)
+			} else {
+				require.Empty(t, response.Components)
+				require.NotEmpty(t, response.Diagnostics)
+			}
+			require.NotEmpty(t, response.Diagnostics, "shared configurations remain skipped with a warning")
+		})
+	}
+}
+
+func TestScopedDiscoveryRetainsGeneratedUnitsAndDependencies(t *testing.T) {
+	root := fixture(t, "explicit-stack")
+	options, err := encode(map[string]any{"enabled": true, "mode": "native", "discovery": map[string]any{"enabled": true}})
+	require.NoError(t, err)
+	provider := New(nil)
+	request := &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: options, IncludePaths: []string{"live/**"}, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "plan"}, Invocation: &pluginv1.Invocation{Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "tofu"}}}
+	initial, err := provider.Discover(t.Context(), request)
+	require.NoError(t, err)
+	require.NotEmpty(t, initial.Components)
+	for _, selected := range initial.Components {
+		scoped := proto.Clone(request).(*pluginv1.DiscoverComponentsRequest)
+		scoped.IncludePaths = []string{selected.Source}
+		targets := []*pluginv1.DiscoveredComponent{selected}
+		for _, dependency := range selected.Dependencies {
+			for _, candidate := range initial.Components {
+				if proto.Equal(dependency.Target, candidate.Address) {
+					targets = append(targets, candidate)
+				}
+			}
+		}
+		for _, target := range targets {
+			scoped.IncludePaths = append(scoped.IncludePaths, target.Source)
+			for _, source := range target.Sources {
+				if source.Kind == pluginv1.ComponentSource_FILE {
+					scoped.IncludePaths = append(scoped.IncludePaths, source.Path)
+				}
+			}
+		}
+		current, err := provider.Discover(t.Context(), scoped)
+		require.NoError(t, err)
+		for _, target := range targets {
+			var found *pluginv1.DiscoveredComponent
+			for _, candidate := range current.Components {
+				if proto.Equal(target.Address, candidate.Address) {
+					found = candidate
+				}
+			}
+			require.NotNil(t, found)
+			require.Equal(t, target.Source, found.Source)
+			require.Equal(t, target.Engine, found.Engine)
+			require.Equal(t, target.Dependencies, found.Dependencies)
+		}
+	}
+}
+
 func TestDiscoveryRejectsScopeAndConfiguration(t *testing.T) {
 	for _, name := range []string{"provider", "settings", "empty scope", "imports", "unknown option", "non-native mode"} {
 		t.Run(name, func(t *testing.T) {
@@ -794,9 +1057,6 @@ func TestStateAndPreparationRejectEscapedProvenance(t *testing.T) {
 	require.Equal(t, codes.Unimplemented, status.Code(err))
 }
 
-// Watched paths reach the host as slash-separated, project-relative strings. Terragrunt reports paths with
-// mixed separators on Windows (a native directory plus a slash-separated suffix), so every spelling of the
-// same file must normalize to one slash-separated relative path.
 func TestRelativeNormalizesMixedSeparators(t *testing.T) {
 	// Terragrunt reports physical paths, so compare from the physical root.
 	root, err := filepath.EvalSymlinks(t.TempDir())

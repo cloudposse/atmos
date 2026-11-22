@@ -25,12 +25,12 @@ type failedUnit struct {
 // recordDiagnostics interprets a discovery response's diagnostics. Warnings print and never fail.
 // An error naming a unit is held for the commands that target that unit; an error that names no
 // unit is a project-level failure and is returned.
-func recordDiagnostics(provider string, diagnostics []*pluginv1.Diagnostic, failures map[failedKey]*failedUnit) error {
+func recordDiagnostics(provider string, diagnostics []*pluginv1.Diagnostic, failures map[failedKey]*failedUnit, warnings *adapter.WarningDeduper) error {
 	var projectLevel error
 	for _, diagnostic := range diagnostics {
 		err := adapter.DiagnosticError(diagnostic)
 		if err == nil {
-			adapter.WarnDiagnostic(diagnostic)
+			adapter.WarnDiagnostic(diagnostic, warnings)
 			continue
 		}
 		detail := diagnostic.GetDetail()
@@ -80,7 +80,14 @@ func brokenDependency(instance *pluginv1.DiscoveredComponent, instances map[[3]s
 				WithHintf("Fix `%s` first; run `atmos terraform plan %s -s %s` to see its error.", target, dep.Target.Component, dep.Target.Stack).
 				Err()
 		}
-		if _, exists := instances[addressKey(dep.Target)]; !exists {
+		owner, exists := instances[addressKey(dep.Target)]
+		if exists && owner.Provider != instance.Provider {
+			return errUtils.Build(errUtils.ErrPluginProtocol).
+				WithExplanationf("Component `%s` in stack `%s` (provider `%s`) depends on `%s`, which is owned by provider `%s`.", instance.Address.Component, instance.Address.Stack, instance.Provider, target, owner.Provider).
+				WithHint("A provider may depend only on its own components.").
+				Err()
+		}
+		if !exists {
 			return errUtils.Build(errUtils.ErrPluginInvalidConfig).
 				WithExplanationf("Component `%s` in stack `%s` (%s) depends on `%s`, which is not part of the discovered components.", instance.Address.Component, instance.Address.Stack, instance.Source, target).
 				WithHint("Include the dependency in `discovery.included_paths` and keep it out of `discovery.excluded_paths`.").

@@ -13,8 +13,10 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/broker"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/terragruntexec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -168,12 +170,11 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 
 	// Process and validate stack configuration.
 	shouldProcess, shouldCheckStack := shouldProcessStacks(&info)
-	if shouldProcess {
-		info, err = e.services.ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
-		if err != nil {
-			return err
-		}
+	info, err = e.processExecutionStacks(&atmosConfig, &info, authManager)
+	if err != nil {
+		return err
 	}
+
 	// Stack processing rebuilds ComponentSection; keep the provisioning markers
 	// so implicit init cannot re-copy the source over fixture-generated files.
 	maps.Copy(info.ComponentSection, fixtureState)
@@ -210,6 +211,21 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 	// which creates the file, so it is also removed when a later preparation step fails.
 	defer cleanupTerraformRC(&info)
 
+	// Executable mode runs the unit through the pinned terragrunt executable instead of native adaptation.
+	if terragruntexec.Owns(&info) {
+		if err := rejectTerragruntPlanPolicy(&info, planPolicy); err != nil {
+			return err
+		}
+		// Test hooks already ran before authentication to bootstrap their fixtures.
+		err := e.executeTerragruntUnit(component.ContextFromOptions(opts...), &atmosConfig, &info, terragruntUnitRun{shouldProcess: shouldProcess, runHooks: fixtureState == nil}, opts...)
+		captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, execMetadataSyncParams{
+			Cmd:    component.InvokingCommandFromOptions(opts...),
+			Parser: component.MetadataParserFromOptions(opts...),
+			Err:    err,
+		})
+		return err
+	}
+
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
 	execCtx, err := e.prepareComponentExecution(component.ContextFromOptions(opts...), executionOutputWriters(opts...), &atmosConfig, &info, shouldProcess)
 	if endedWithoutFailure(err) {
@@ -226,10 +242,8 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 	SetLastAuthContext(info.AuthContext, info.AuthManager)
 
 	// Test hooks already ran before authentication to bootstrap their fixtures.
-	if fixtureState == nil {
-		if err := runPreparedTerraformHooks(&atmosConfig, &info, opts...); err != nil {
-			return err
-		}
+	if err := runRemainingTerraformHooks(&atmosConfig, &info, fixtureState == nil, opts...); err != nil {
+		return err
 	}
 
 	// Run the full command pipeline: init, arg build, workspace, execute, cleanup.
@@ -479,4 +493,19 @@ func envKey(entry string) string {
 		}
 	}
 	return entry
+}
+
+func runRemainingTerraformHooks(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, run bool, opts ...component.ExecutionOption) error {
+	if !run {
+		return nil
+	}
+	return runPreparedTerraformHooks(config, info, opts...)
+}
+
+func (e *Executor) processExecutionStacks(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, manager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+	process, check := shouldProcessStacks(info)
+	if !process {
+		return *info, nil
+	}
+	return e.services.ProcessStacks(config, *info, check, info.ProcessTemplates, info.ProcessFunctions, info.Skip, manager)
 }

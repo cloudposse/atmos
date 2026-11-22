@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -135,11 +137,11 @@ func verifyPlanStackEnvironment(info *schema.ConfigAndStacksInfo, plan *configur
 	return nil
 }
 
-// settle restores or discards the stashed plan. A plan that could not be restored stays in its stash,
-// and the binding fails naming it. When Terraform also failed, the stash location joins its error:
-// the pipeline returns that error before the binding is read, and the exit code the hooks classify is
-// unchanged. The earlier plan is discarded only when the phase succeeded by the same classification
-// the binding uses; a failed run never displaces it, even when it left a partial plan behind.
+// settle settles the stashed earlier plan once the observation is complete. A plan that could not be restored
+// stays in its stash, and the binding fails naming it. When Terraform also failed, the stash location joins
+// its error: the pipeline returns that error before the binding is read, and the exit code the hooks
+// classify is unchanged. The earlier plan is discarded only when the phase succeeded by the same
+// classification the binding uses; a failed run never displaces it, even when it left a partial plan behind.
 func (s *planSnapshotter) settle(settleStale func(succeeded bool) error, runResult error, failed func(error) bool) error {
 	err := settleStale(!failed(runResult))
 	if err == nil {
@@ -182,15 +184,21 @@ func (s *planSnapshotter) observe(path, writtenPath string, run func() error, fa
 	return runErr
 }
 
+// createSensitiveTemp creates a file whose permissions, and on Windows ACL, are restricted before any
+// byte is written. It is a variable so tests can observe which files are created through it.
+var createSensitiveTemp = configuration.CreateSensitiveTemp
+
 // stashStalePlan keeps a private copy of a plan that already exists at the plan output path and
 // empties the file in place, so a non-empty file found there after the subprocess was written by that
 // run. Emptying in place keeps the file's mode and follows a symlink, so Terraform writes the new plan
 // exactly where it would have without the stash, and a private plan is never recreated with broader
-// permissions. The returned settle function must run once the observation is complete, with whether the
-// Terraform phase succeeded: it discards the copy only when the run succeeded and wrote a new plan, and
-// otherwise restores the earlier contents. A directory or
-// other non-regular output is rejected without being touched.
-func stashStalePlan(root, path string) (func(succeeded bool) error, error) {
+// permissions. The copy is created through a restricted file, so it is private on every platform. The
+// dataDir is the effective Terraform data directory: the stash is kept out of its modules, which the
+// working directory digest reads. The returned settle function must run once the observation is
+// complete, with whether the Terraform phase succeeded: it discards the copy only when the run
+// succeeded and wrote a new plan, and otherwise restores the earlier contents. A directory or other
+// non-regular output is rejected without being touched.
+func stashStalePlan(root, dataDir, path string) (func(succeeded bool) error, error) {
 	noop := func(bool) error { return nil }
 	info, err := os.Stat(path)
 	if err != nil {
@@ -207,12 +215,16 @@ func stashStalePlan(root, path string) (func(succeeded bool) error, error) {
 		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
 	}
 	// The stash directory is private and skipped by the working directory digest.
-	dir, err := os.MkdirTemp(stalePlanStashParent(root, path), stalePlanDirPrefix)
+	parent := stalePlanStashParent(root, dataDir, path)
+	if err := requireStashOutsideDigest(root, dataDir, parent); err != nil {
+		return noop, err
+	}
+	dir, err := os.MkdirTemp(parent, stalePlanDirPrefix)
 	if err != nil {
 		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
 	}
 	stashed := filepath.Join(dir, "plan")
-	if err := os.WriteFile(stashed, data, planFileMode); err != nil { //nolint:gosec // G703: stashed is inside a directory from os.MkdirTemp.
+	if err := writeSecuredFile(dir, stashed, data); err != nil {
 		_ = os.RemoveAll(dir)
 		return noop, fmt.Errorf(errWrapFmt, errUtils.ErrPlanVerificationFailed, err)
 	}
@@ -223,9 +235,27 @@ func stashStalePlan(root, path string) (func(succeeded bool) error, error) {
 	return func(succeeded bool) error { return settleStalePlan(path, stashed, dir, info.Mode().Perm(), succeeded) }, nil
 }
 
+// writeSecuredFile writes data to final through a restricted temporary file in directory, which is
+// renamed into place, so the bytes never sit in a file with inherited permissions.
+func writeSecuredFile(directory, final string, data []byte) error {
+	file, temporary, err := createSensitiveTemp(directory)
+	if err != nil {
+		return err
+	}
+	_, err = file.Write(data)
+	if err = errors.Join(err, file.Close()); err == nil {
+		err = os.Rename(temporary, final)
+	}
+	if err != nil {
+		_ = os.Remove(temporary)
+	}
+	return err
+}
+
 // settleStalePlan discards the copy only when the run succeeded and wrote a new plan; otherwise it
-// writes the earlier contents back through the same path, replacing a partial plan a failed run left. The copy is removed only after the restore succeeds or a
-// replacement is confirmed; otherwise it is kept for recovery and the error names it.
+// writes the earlier contents back through the same path, replacing a partial plan a failed run left.
+// The copy is removed only after the restore succeeds or a replacement is confirmed; otherwise it is
+// kept for recovery and the error names it.
 func settleStalePlan(path, stashed, dir string, mode os.FileMode, succeeded bool) error {
 	info, err := os.Stat(path)
 	if err != nil && !os.IsNotExist(err) {
@@ -242,11 +272,18 @@ func settleStalePlan(path, stashed, dir string, mode os.FileMode, succeeded bool
 	return nil
 }
 
-// restoreStalePlan writes the stashed contents back to the plan path with its original mode.
+// restoreStalePlan writes the stashed contents back to the plan path with its original mode. A plan
+// that is gone is recreated through the restricted creation path, so it is never broader than the copy.
 func restoreStalePlan(path, stashed string, mode os.FileMode) error {
 	data, err := os.ReadFile(stashed)
 	if err != nil {
 		return err
+	}
+	if _, statErr := os.Lstat(path); errors.Is(statErr, fs.ErrNotExist) {
+		if err := writeSecuredFile(filepath.Dir(path), path, data); err != nil {
+			return err
+		}
+		return os.Chmod(path, mode)
 	}
 	return os.WriteFile(path, data, mode) //nolint:gosec // G703: path is the plan output Terraform was told to write.
 }
@@ -265,13 +302,50 @@ func writtenPlanDigest(path string) (string, error) {
 }
 
 // stalePlanStashParent returns where the stash directory is created: beside the plan, except inside
-// downloaded modules, whose every file is digested, where it moves to the component directory.
-func stalePlanStashParent(root, path string) string {
+// downloaded modules, whose every file is digested, where it moves to the component directory. The
+// modules are those of the default location and of the effective Terraform data directory. A component
+// directory that itself lies inside those modules is digested whole, so the stash goes to the private
+// system temporary directory instead (an empty parent), outside every digested path.
+func stalePlanStashParent(root, dataDir, path string) string {
 	parent := filepath.Dir(path)
-	if root != "" && insideTerraformModules(root, parent) {
-		return root
+	if root == "" || !insideDigestedModules(root, dataDir, parent) {
+		return parent
 	}
-	return parent
+	if insideDigestedModules(root, dataDir, root) {
+		return ""
+	}
+	return root
+}
+
+// requireStashOutsideDigest rejects a stash parent that would put the stash inside the digested
+// modules. An empty parent means the system temporary directory, which TMPDIR can point inside the
+// working directory; the stash would then be part of both digest snapshots and settlement would
+// delete it, so the unchanged plan would later be rejected. The refusal happens before the plan is touched.
+func requireStashOutsideDigest(root, dataDir, parent string) error {
+	if parent != "" || root == "" {
+		return nil
+	}
+	temp := os.TempDir()
+	if !insideDigestedModules(root, dataDir, temp) {
+		return nil
+	}
+	return errUtils.Build(fmt.Errorf("%w: the temporary directory %s lies inside the digested working directory", errUtils.ErrPlanVerificationFailed, temp)).
+		WithHint("Point `TMPDIR` (`TMP` or `TEMP` on Windows) at a directory outside the component working directory and the Terraform data directory modules.").
+		Err()
+}
+
+// insideDigestedModules reports whether dir is part of the downloaded modules the working directory
+// digest reads. Both paths are resolved the way the digest resolves them.
+func insideDigestedModules(root, dataDir, dir string) bool {
+	resolvedRoot, err := resolvedPath(root)
+	if err != nil {
+		resolvedRoot = root
+	}
+	resolvedDir, err := resolvedPath(dir)
+	if err != nil {
+		resolvedDir = dir
+	}
+	return newWorkdirScope(resolvedRoot, dataDir).insideModules(resolvedDir)
 }
 
 // stalePlanDirPrefix names the directory that holds a plan found at the output path before a run.
