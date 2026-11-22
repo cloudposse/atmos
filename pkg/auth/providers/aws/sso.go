@@ -147,32 +147,21 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		return ssoCacheToCredentials(cached, p.region), nil
 	}
 
-	// 2. On-disk cache. Survives process restart; populated by prior atmos sessions.
-	if diskCached, ok := p.loadFullCachedToken(); ok {
-		log.Debug("Using on-disk cached SSO token", "expiresAt", diskCached.ExpiresAt)
-		p.sessionStore.Put(key, diskCached)
-		return ssoCacheToCredentials(diskCached, p.region), nil
-	}
-
-	// Prepare AWS config once — both the refresh path and the device-auth path need it.
-	oidcClient, err := p.newOIDCClient(ctx)
+	// 2. On-disk cache and 3. refresh-token exchange, under a cross-process lock
+	//    (see loadOrRefreshDiskToken).
+	diskToken, ok, err := p.loadOrRefreshDiskToken(ctx)
 	if err != nil {
 		return nil, err
 	}
+	if ok {
+		p.sessionStore.Put(key, diskToken)
+		return ssoCacheToCredentials(diskToken, p.region), nil
+	}
 
-	// 3. Refresh-token exchange. Skipped if the on-disk cache had no refresh token
-	//    (e.g., written by an older atmos version, or registration expired).
-	if expired, ok := p.loadExpiredCachedTokenForRefresh(); ok {
-		if refreshed, rerr := tryRefreshToken(ctx, oidcClient, expired); rerr == nil {
-			log.Debug("SSO token refreshed without browser interaction")
-			if serr := p.saveFullCachedToken(refreshed); serr != nil {
-				log.Debug("Failed to persist refreshed token", "error", serr)
-			}
-			p.sessionStore.Put(key, refreshed)
-			return ssoCacheToCredentials(refreshed, p.region), nil
-		} else {
-			log.Debug("Refresh-token exchange failed; falling through to device authorization", "error", rerr)
-		}
+	// Prepare the OIDC client for the device-auth path.
+	oidcClient, err := p.newOIDCClient(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	// 4. Device-authorization flow. Requires an interactive terminal.
@@ -194,9 +183,14 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		return nil, err
 	}
 
-	if err := p.saveFullCachedToken(freshToken); err != nil {
-		log.Debug("Failed to cache SSO token", "error", err)
-	}
+	// Save under the cache lock so a process reading or refreshing the cache
+	// never interleaves with this write.
+	p.withTokenCacheLock(ctx, func() error {
+		if err := p.saveFullCachedToken(freshToken); err != nil {
+			log.Debug("Failed to cache SSO token", "error", err)
+		}
+		return nil
+	})
 	p.sessionStore.Put(key, freshToken)
 	return ssoCacheToCredentials(freshToken, p.region), nil
 }
