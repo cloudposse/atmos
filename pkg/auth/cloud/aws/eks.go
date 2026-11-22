@@ -35,6 +35,9 @@ const (
 
 	// eksPresignLifetimeSeconds is the presigned URL lifetime (60 seconds).
 	eksPresignLifetimeSeconds = 60
+
+	// eksUserPrefix distinguishes EKS exec-plugin usernames in a kubeconfig.
+	eksUserPrefix = "eks"
 )
 
 // EKSClusterInfo contains cluster data needed for kubeconfig generation.
@@ -190,10 +193,48 @@ func BuildKubeClusterInfo(info *EKSClusterInfo, identityName string) (*kube.Clus
 		CertificateAuthorityData: info.CertificateAuthorityData,
 		ID:                       info.ARN,
 		Region:                   info.Region,
-		UserPrefix:               "eks",
+		UserPrefix:               eksUserPrefix,
+		AccountID:                clusterAccountID(info.ARN),
+		Identity:                 identityName,
 		ExecArgs:                 execArgs,
 		ExecEnv:                  execEnv,
 	}, nil
+}
+
+// EKSKubeUserName returns the kubeconfig exec-plugin username that
+// BuildKubeClusterInfo produces for the cluster with the given ARN, name and
+// region when authenticating as identityName:
+// atmos-eks-<name>-<region>-<account>-<identity>. The account ID and identity
+// keep contexts for different accounts or identities from sharing one user.
+func EKSKubeUserName(clusterARN, clusterName, region, identityName string) string {
+	defer perf.Track(nil, "aws.EKSKubeUserName")()
+
+	return kube.UserName(&kube.ClusterInfo{
+		Name:       clusterName,
+		Region:     region,
+		UserPrefix: eksUserPrefix,
+		AccountID:  clusterAccountID(clusterARN),
+		Identity:   identityName,
+	})
+}
+
+// LegacyEKSKubeUserName returns the atmos-eks-<name>-<region> username that
+// versions before the account ID and identity were added wrote, so cleanup can
+// still remove entries those versions left in a kubeconfig.
+func LegacyEKSKubeUserName(clusterName, region string) string {
+	defer perf.Track(nil, "aws.LegacyEKSKubeUserName")()
+
+	return kube.UserName(&kube.ClusterInfo{Name: clusterName, Region: region, UserPrefix: eksUserPrefix})
+}
+
+// clusterAccountID returns the account ID in an EKS cluster ARN, or "" when
+// the ARN cannot be parsed.
+func clusterAccountID(clusterARN string) string {
+	parsed, err := arn.Parse(clusterARN)
+	if err != nil {
+		return ""
+	}
+	return parsed.AccountID
 }
 
 // addPresignExpiry returns a middleware that adds X-Amz-Expires to the presigned URL query string.

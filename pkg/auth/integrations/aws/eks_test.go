@@ -384,7 +384,7 @@ func TestEKSIntegration_Cleanup_RemovesEntries(t *testing.T) {
 			kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
 			clusterARN := "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster"
 			contextName := tt.alias
-			userName := "atmos-eks-dev-cluster-us-east-2"
+			userName := "atmos-eks-dev-cluster-us-east-2-123456789012-dev-admin"
 
 			// Provision a kubeconfig with known entries using BuildClusterConfig.
 			info := &awsCloud.EKSClusterInfo{

@@ -192,9 +192,14 @@ func (e *EKSIntegration) Cleanup(_ context.Context) error {
 		contextName = clusterARN
 	}
 
-	userName := "atmos-eks-" + e.cluster.Name + "-" + e.cluster.Region
+	// The user name includes the account ID and identity (see
+	// awsCloud.BuildKubeClusterInfo). Also remove the atmos-eks-<name>-<region>
+	// user that older versions wrote; RemoveClusterConfig keeps either user while
+	// another context still references it.
+	userName := awsCloud.EKSKubeUserName(clusterARN, e.cluster.Name, e.cluster.Region, e.identity)
+	legacyUserName := awsCloud.LegacyEKSKubeUserName(e.cluster.Name, e.cluster.Region)
 
-	if err := mgr.RemoveClusterConfig(clusterARN, contextName, userName); err != nil {
+	if err := mgr.RemoveClusterConfig(clusterARN, contextName, userName, legacyUserName); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 
@@ -244,6 +249,8 @@ func (e *EKSIntegration) resolveKubeconfigSettings() (path, mode, update string)
 // integration's cluster. Each key is parsed as an ARN and must name the EKS
 // service, the integration's region and the "cluster/<name>" resource, so a
 // same-named cluster in another region (or a non-EKS entry) is never matched.
+// When same-named clusters of several accounts match, the one whose context
+// uses this integration's exec user is chosen.
 func (e *EKSIntegration) findClusterARN(mgr *kube.KubeconfigManager) (string, error) {
 	defer perf.Track(nil, "aws.EKSIntegration.findClusterARN")()
 
@@ -254,13 +261,48 @@ func (e *EKSIntegration) findClusterARN(mgr *kube.KubeconfigManager) (string, er
 
 	// Sort so the result does not depend on map iteration order.
 	sort.Strings(clusters)
+	var candidates []string
 	for _, id := range clusters {
 		if e.matchesClusterARN(id) {
-			return id, nil
+			candidates = append(candidates, id)
 		}
 	}
 
-	return "", fmt.Errorf("%w: no cluster ARN found matching %s in %s", errUtils.ErrEKSClusterNotFound, e.cluster.Name, e.cluster.Region)
+	switch len(candidates) {
+	case 0:
+		return "", fmt.Errorf("%w: no cluster ARN found matching %s in %s", errUtils.ErrEKSClusterNotFound, e.cluster.Name, e.cluster.Region)
+	case 1:
+		return candidates[0], nil
+	default:
+		return e.selectOwnedClusterARN(mgr, candidates)
+	}
+}
+
+// selectOwnedClusterARN picks, from same-named cluster ARNs of different
+// accounts, the one whose context uses this integration's exec user. It fails
+// rather than guessing when none or more than one qualifies.
+func (e *EKSIntegration) selectOwnedClusterARN(mgr *kube.KubeconfigManager, candidates []string) (string, error) {
+	var owned []string
+	for _, clusterARN := range candidates {
+		contextName := e.cluster.Alias
+		if contextName == "" {
+			contextName = clusterARN
+		}
+		kubeContext, err := mgr.LookupContext(contextName)
+		if err != nil {
+			return "", err
+		}
+		if kubeContext != nil && kubeContext.Cluster == clusterARN &&
+			kubeContext.AuthInfo == awsCloud.EKSKubeUserName(clusterARN, e.cluster.Name, e.cluster.Region, e.identity) {
+			owned = append(owned, clusterARN)
+		}
+	}
+
+	if len(owned) == 1 {
+		return owned[0], nil
+	}
+	return "", fmt.Errorf("%w: %d clusters named %s in %s match and none can be attributed to identity %q",
+		errUtils.ErrEKSClusterAmbiguous, len(candidates), e.cluster.Name, e.cluster.Region, e.identity)
 }
 
 // matchesClusterARN reports whether id is the ARN of this integration's EKS cluster.

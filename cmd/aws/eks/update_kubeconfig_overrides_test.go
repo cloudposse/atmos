@@ -258,7 +258,7 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 			config, err := clientcmd.LoadFromFile(path)
 			require.NoError(t, err)
 			assert.Equal(t, "bar-context", config.CurrentContext)
-			user := config.AuthInfos["atmos-eks-bar-eu-central-1"]
+			user := config.AuthInfos["atmos-eks-bar-eu-central-1-123456789012-foo"]
 			require.NotNil(t, user)
 			assert.Equal(t, []string{"aws", "eks", "token", "--cluster-name", "bar", "--region", "eu-central-1", "--identity=foo"}, user.Exec.Args)
 			env := map[string]string{}

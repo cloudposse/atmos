@@ -395,6 +395,9 @@ var (
 	// Azure CLI MSAL token cache (~/.azure/msal_token_cache.json) errors.
 	ErrAzureCLIMSALCacheUpdate      = errors.New("failed to update the Azure CLI MSAL token cache")
 	ErrAzureCLIMSALCacheUnparseable = errors.New("the Azure CLI MSAL token cache is not valid JSON; refusing to overwrite it")
+	// ErrEKSClusterAmbiguous is returned when a kubeconfig holds several EKS
+	// clusters that match an integration and none can be attributed to it.
+	ErrEKSClusterAmbiguous = errors.New("EKS cluster in kubeconfig is ambiguous")
 )
 
 // Docker credential helper errors.

@@ -82,9 +82,15 @@ type ClusterInfo struct {
 	// AccountID further disambiguates the exec-plugin username for clouds
 	// where Name+Region is not guaranteed unique: Azure resource groups are
 	// scoped per-subscription, so the same cluster name and resource group
-	// can exist in two subscriptions. Leave empty to keep the existing
-	// "atmos-eks-<name>-<region>" AWS/EKS username format unchanged.
+	// can exist in two subscriptions, and EKS clusters of the same name and
+	// region can exist in two AWS accounts. Leave empty to omit it.
 	AccountID string
+
+	// Identity is the Atmos identity the exec plugin authenticates as. It is
+	// part of the exec-plugin username so two contexts for the same cluster
+	// that use different identities never share (and overwrite) one user.
+	// Leave empty to omit it.
+	Identity string
 
 	// ExecArgs are the fully-built kubectl exec-credential-plugin arguments,
 	// e.g. [aws, eks, token, --cluster-name, X, --region, Y] or
@@ -223,39 +229,6 @@ func (m *KubeconfigManager) checkErrorModeCollisions(info *ClusterInfo, alias st
 	return nil
 }
 
-// RemoveClusterConfig removes a cluster, context, and user from the kubeconfig.
-// Idempotent: returns nil if entries do not exist.
-func (m *KubeconfigManager) RemoveClusterConfig(clusterARN, contextName, userName string) error {
-	defer perf.Track(nil, "kube.KubeconfigManager.RemoveClusterConfig")()
-
-	// If the file doesn't exist, nothing to clean up.
-	if _, err := os.Stat(m.path); os.IsNotExist(err) {
-		return nil
-	}
-
-	existing, err := clientcmd.LoadFromFile(m.path)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, err)
-	}
-
-	// Remove entries.
-	delete(existing.Clusters, clusterARN)
-	delete(existing.Contexts, contextName)
-	delete(existing.AuthInfos, userName)
-
-	// If current-context points to the removed context, clear it.
-	if existing.CurrentContext == contextName {
-		existing.CurrentContext = ""
-	}
-
-	// If the config is now empty, remove the file.
-	if len(existing.Clusters) == 0 && len(existing.Contexts) == 0 && len(existing.AuthInfos) == 0 {
-		return os.Remove(m.path)
-	}
-
-	return clientcmd.WriteToFile(*existing, m.path)
-}
-
 // ListClusterIDs returns all cluster ARN keys from the kubeconfig file.
 // Returns nil if the file does not exist.
 func (m *KubeconfigManager) ListClusterIDs() ([]string, error) {
@@ -329,13 +302,17 @@ func BuildClusterConfig(info *ClusterInfo, alias string) *clientcmdapi.Config {
 	return config
 }
 
-// UserName returns the shared exec-plugin username for a cluster entry.
+// UserName returns the exec-plugin username for a cluster entry:
+// atmos-<prefix>-<name>-<region>[-<account>][-<identity>].
 func UserName(info *ClusterInfo) string {
 	defer perf.Track(nil, "kube.UserName")()
 
 	name := "atmos-" + info.UserPrefix + "-" + info.Name + "-" + info.Region
 	if info.AccountID != "" {
 		name += "-" + info.AccountID
+	}
+	if info.Identity != "" {
+		name += "-" + info.Identity
 	}
 	return name
 }
