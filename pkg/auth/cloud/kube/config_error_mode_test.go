@@ -5,6 +5,7 @@ package kube
 // not a conflict, while a real difference still is (issue #3720, #3675).
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -122,4 +123,23 @@ func TestAuthInfosEqualIgnoringChdir(t *testing.T) {
 	assert.True(t, authInfosEqualIgnoringChdir(&clientcmdapi.AuthInfo{Token: "x"}, &clientcmdapi.AuthInfo{Token: "x"}), "no exec config")
 	assert.True(t, authInfosEqualIgnoringChdir(nil, nil))
 	assert.False(t, authInfosEqualIgnoringChdir(nil, withEnv()))
+}
+
+// TestWriteClusterConfig_ErrorMode_UnreadableFile verifies that an unparseable
+// existing kubeconfig is reported by the merge as a load failure and is left
+// untouched, rather than being treated as a collision or overwritten.
+func TestWriteClusterConfig_ErrorMode_UnreadableFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "kubeconfig")
+	garbage := []byte("clusters: [this is: not, valid")
+	require.NoError(t, os.WriteFile(path, garbage, 0o600))
+	mgr, err := NewKubeconfigManager(path, "")
+	require.NoError(t, err)
+
+	changed, err := mgr.WriteClusterConfig(errorModeInfo(t.TempDir()), errorModeAlias, "error")
+	require.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
+	assert.False(t, changed)
+
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, garbage, after)
 }
