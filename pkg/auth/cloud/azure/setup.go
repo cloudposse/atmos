@@ -653,11 +653,17 @@ func updateAzureProfile(home string, params ProfileUpdateParams) error {
 
 // UpdateSubscriptionsInProfile updates the subscriptions array in an Azure profile.
 // It sets the specified subscription as default and marks all others as not default.
+// Without a subscription ID there is nothing to make default, so the existing entries
+// (including the user's own `az account set` default) are returned unchanged.
 func UpdateSubscriptionsInProfile(profile map[string]interface{}, params ProfileUpdateParams) []interface{} {
 	// Get subscriptions array.
 	subscriptionsRaw, ok := profile["subscriptions"].([]interface{})
 	if !ok {
 		subscriptionsRaw = []interface{}{}
+	}
+
+	if params.SubscriptionID == "" {
+		return subscriptionsRaw
 	}
 
 	// Determine user type based on authentication method.
