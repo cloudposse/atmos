@@ -139,10 +139,15 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 		identityFlag = v.GetString(IdentityFlagName)
 	}
 
-	// --tags is mutually exclusive with --provider/--all/--identity/positional identity —
-	// it's an alternative way to select a target, not a composable cross-cutting filter here.
-	if len(tagsFlag) > 0 && (providerFlag != "" || allFlag || identityFlag != "" || len(args) > 0) {
-		return errUtils.ErrMutuallyExclusiveFlags
+	target, err := resolveLogoutTarget(&logoutSelection{
+		args:     args,
+		identity: identityFlag,
+		provider: providerFlag,
+		tags:     tagsFlag,
+		all:      allFlag,
+	})
+	if err != nil {
+		return err
 	}
 
 	ctx := cmd.Context()
@@ -153,33 +158,20 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Determine what to logout.
-	if allFlag {
+	switch target.kind {
+	case logoutTargetAll:
 		// Logout all identities.
 		return performLogoutAll(ctx, authManager, dryRun, deleteKeychain, force)
-	}
-
-	if len(tagsFlag) > 0 {
+	case logoutTargetTags:
 		// Logout from all providers matching tags.
 		return performTagsLogout(ctx, authManager, tagsFlag, dryRun, deleteKeychain, force)
-	}
-
-	if providerFlag != "" {
+	case logoutTargetProvider:
 		// Logout specific provider.
 		return performProviderLogout(ctx, authManager, providerFlag, dryRun, deleteKeychain, force)
-	}
-
-	// Support both positional argument and --identity flag for consistency with other auth commands.
-	// Positional argument takes precedence if both are provided.
-	var identityName string
-	if len(args) > 0 {
-		identityName = args[0]
-	} else if identityFlag != "" {
-		identityName = identityFlag
-	}
-
-	if identityName != "" {
+	case logoutTargetIdentity:
 		// Logout specific identity.
-		return performIdentityLogout(ctx, authManager, identityName, dryRun, deleteKeychain, force)
+		return performIdentityLogout(ctx, authManager, target.identity, dryRun, deleteKeychain, force)
+	case logoutTargetInteractive:
 	}
 
 	// Interactive mode: prompt user to choose.
