@@ -222,6 +222,11 @@ func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthMan
 		identityName = viper.GetString(IdentityFlagName)
 	}
 
+	// `--identity=false` disables authentication, which leaves nothing to report.
+	if err := checkIdentityNotDisabled("whoami", identityName); err != nil {
+		return "", err
+	}
+
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue
 

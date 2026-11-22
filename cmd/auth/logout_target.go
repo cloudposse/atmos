@@ -73,6 +73,10 @@ func resolveLogoutTarget(sel *logoutSelection) (logoutTarget, error) {
 	if identity == "" {
 		identity = sel.identityEnv
 	}
+	// `--identity=false` disables authentication, which leaves no identity to log out of.
+	if err := checkIdentityNotDisabled("logout", identity); err != nil {
+		return logoutTarget{}, err
+	}
 	if identity != "" && identity != IdentityFlagSelectValue {
 		return logoutTarget{kind: logoutTargetIdentity, identity: identity}, nil
 	}

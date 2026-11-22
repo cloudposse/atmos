@@ -68,6 +68,10 @@ atmos auth shell
       <li><code>false</code> to disable authentication (e.g., <code>--identity=false</code>)</li>
     </ul>
     When set to <code>false</code>, Atmos skips identity authentication and uses standard AWS credential resolution.
+    Among the auth subcommands, only <code>atmos auth exec</code> runs with authentication disabled: it runs the command with your
+    current environment and no Atmos credentials. Subcommands that act on an identity (<code>login</code>, <code>logout</code>,
+    <code>whoami</code>, <code>env</code>, <code>shell</code>, <code>console</code>) return an error when <code>--identity=false</code>
+    or <code>ATMOS_IDENTITY=false</code> is set, instead of looking up an identity named <code>false</code>.
 
 :::tip Flag Placement Best Practice
 When using `--identity` with a value, place it **before the `--` separator** and before any positional arguments:

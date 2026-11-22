@@ -332,6 +332,10 @@ var (
 	ErrIdentityNotInConfig                  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
+	// ErrAuthDisabledIdentityRequired is returned when `--identity=false` (or
+	// ATMOS_IDENTITY=false) disables authentication for an auth subcommand that
+	// cannot run without an identity, such as `atmos auth whoami`.
+	ErrAuthDisabledIdentityRequired = errors.New("authentication is disabled, but this command requires an identity")
 
 	// Provision target (delivery destination) errors.
 	ErrProvisionTargetNotFound    = errors.New("provision target not found")

@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/shell"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
@@ -131,6 +132,14 @@ func revokeEphemeralAuthExec(execCtx *authExecContext) {
 	}
 }
 
+// unauthenticatedExecContext is the exec context when authentication is
+// disabled: the OS environment plus the global env from atmos.yaml, with no
+// identity, so nothing is authenticated and nothing is revoked afterwards.
+func unauthenticatedExecContext(atmosConfig *schema.AtmosConfiguration) *authExecContext {
+	log.Debug("Authentication disabled; running the command without Atmos credentials")
+	return &authExecContext{envList: envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)}
+}
+
 // prepareAuthenticatedEnv loads config, authenticates, and prepares the shell
 // environment. Returns the sanitized env list (os.Environ + global env + auth
 // vars, with credential leaks removed) for direct use as the child process's
@@ -145,6 +154,13 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (*authExecConte
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
+	}
+
+	// `--identity=false` / `ATMOS_IDENTITY=false` disables Atmos authentication:
+	// run the command with the ambient environment so cloud SDKs use their own
+	// default credential resolution.
+	if resolveIdentityRequest(cmd, v).disabled() {
+		return unauthenticatedExecContext(&atmosConfig), nil
 	}
 
 	// Create auth manager.

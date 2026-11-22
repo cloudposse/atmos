@@ -182,6 +182,10 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 	if err != nil {
 		return nil, false, err
 	}
+	// `--identity=false` disables authentication, which contradicts logging in.
+	if err := checkIdentityNotDisabled("login", identityName); err != nil {
+		return nil, false, err
+	}
 
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue
