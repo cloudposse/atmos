@@ -731,7 +731,7 @@ func (p *Plugin) createPerOperationStatuses(ctx *plugin.HookContext, result *plu
 		})
 		switch {
 		case err != nil:
-			log.Warn("CI per-operation status creation skipped", logKeyName, opName, "error", err)
+			logOperationStatusError(opName, err)
 		case rc.Gate == ci.FeatureForkGate:
 			noteHeld(rc, "the per-operation status", logKeyName, opName)
 		default:
@@ -981,8 +981,8 @@ func runURL(hookCtx *plugin.HookContext) string {
 // instead, so this is not a warning-worthy condition.
 // Other errors are logged at Warn level.
 func logCheckRunError(msg string, err error) {
-	if errors.Is(err, errUtils.ErrGitHubTokenNotFound) {
-		log.Debug(msg, "reason", "GITHUB_TOKEN not set")
+	if reason, ok := configurationGapReason(err); ok {
+		log.Debug(msg, "reason", reason)
 		return
 	}
 	if errors.Is(err, errUtils.ErrCICheckRunMissingComponent) {

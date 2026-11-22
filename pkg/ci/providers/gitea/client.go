@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,8 +14,12 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// apiUnavailableMessage is logged when no usable Gitea API URL is configured.
+const apiUnavailableMessage = "Gitea commit statuses and comments are disabled"
 
 const (
 	apiTimeout       = 30 * time.Second
@@ -22,21 +27,50 @@ const (
 	pageSize         = 50
 )
 
+// apiURL returns the Gitea API base URL that requests may be sent to. A missing URL, or an
+// HTTP URL without ATMOS_CI_GITEA_ALLOW_INSECURE=true, returns ErrGiteaAPIUnavailable: the
+// run continues and only the API-backed features (statuses, comments) are skipped. A URL that
+// is malformed, embeds credentials, or carries a query or fragment returns ErrInvalidURL.
 func apiURL() (*url.URL, error) {
 	raw := configuredAPIURL()
+	if raw == "" {
+		return nil, fmt.Errorf("%w: no Gitea API URL is configured (set ATMOS_CI_GITEA_API_URL or the runner's server URL)", errUtils.ErrGiteaAPIUnavailable)
+	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" ||
-		!allowedScheme(u.Scheme) {
-		return nil, fmt.Errorf("%w: Gitea requires an HTTPS API URL (HTTP requires ATMOS_CI_GITEA_ALLOW_INSECURE=true)", errUtils.ErrInvalidURL)
+		(u.Scheme != "https" && u.Scheme != "http") {
+		return nil, fmt.Errorf("%w: Gitea requires an absolute HTTPS API URL without credentials, query, or fragment", errUtils.ErrInvalidURL)
+	}
+	if !allowedScheme(u.Scheme) {
+		return nil, fmt.Errorf("%w: Gitea requires an HTTPS API URL (HTTP requires ATMOS_CI_GITEA_ALLOW_INSECURE=true)", errUtils.ErrGiteaAPIUnavailable)
 	}
 	return u, nil
 }
 
-// ValidateConfig validates the endpoint before CI writes begin.
+// ValidateConfig validates the endpoint before CI writes begin. Only a malformed URL stops the
+// run. A missing or plain-HTTP URL disables the API-backed features with one log line, so the
+// job summary and step outputs are still written through the runner's files.
 func (p *Provider) ValidateConfig() error {
 	defer perf.Track(nil, "gitea.ValidateConfig")()
+
 	_, err := apiURL()
+	if errors.Is(err, errUtils.ErrGiteaAPIUnavailable) {
+		p.reportAPIUnavailable(err)
+		return nil
+	}
 	return err
+}
+
+// reportAPIUnavailable logs once per provider why statuses and comments are skipped. It is a
+// warning only when a token is configured, because then the user evidently expects API reporting.
+func (p *Provider) reportAPIUnavailable(err error) {
+	p.unavailableOnce.Do(func() {
+		if _, tokenErr := apiToken(); tokenErr == nil {
+			log.Warn(apiUnavailableMessage, "reason", err.Error())
+			return
+		}
+		log.Debug(apiUnavailableMessage, "reason", err.Error())
+	})
 }
 
 func (p *Provider) request(ctx context.Context, method, path string, body, result any) error {

@@ -31,8 +31,8 @@ const logKeyName = "name"
 // "provider does not support comments" cases are logged at Debug level (not
 // runtime failures); everything else is a warning.
 func logCommentError(msg string, err error) {
-	if errors.Is(err, errUtils.ErrGitHubTokenNotFound) {
-		log.Debug(msg, "reason", "GITHUB_TOKEN not set")
+	if reason, ok := configurationGapReason(err); ok {
+		log.Debug(msg, "reason", reason)
 		return
 	}
 	if errors.Is(err, errUtils.ErrCIOperationNotSupported) {
