@@ -87,7 +87,7 @@ When you authenticate with an identity that has an EKS integration, `atmos auth 
 
 ```yaml
 users:
-  - name: atmos-eks-dev-admin
+  - name: atmos-eks-dev-cluster-us-east-2-123456789012-dev-admin
     user:
       exec:
         apiVersion: client.authentication.k8s.io/v1beta1
@@ -100,11 +100,20 @@ users:
           - dev-cluster
           - --region
           - us-east-2
-          - --identity
-          - dev-admin
+          - --identity=dev-admin
+        env:
+          - name: ATMOS_IDENTITY
+            value: dev-admin
+          - name: ATMOS_CHDIR
+            value: /path/to/your/repo
+        interactiveMode: Never
 ```
 
 This means kubectl automatically calls `atmos aws eks token` whenever it needs a fresh token, providing seamless authentication without manual token management.
+
+The user is named `atmos-eks-<cluster>-<region>-<account>-<identity>`, so contexts for different accounts or identities never share a user. When `auth.realm` (or `ATMOS_AUTH_REALM`) is set, the realm follows `atmos-` (for example, `atmos-acme-eks-dev-cluster-us-east-2-123456789012-dev-admin`) and is passed to the command as `ATMOS_AUTH_REALM`, so repositories with different realms keep separate users in the shared kubeconfig.
+
+`ATMOS_CHDIR` is the directory the entry was written from, so kubectl finds the same Atmos configuration from any directory. If that directory no longer exists (for example, a removed worktree), the token command warns and runs from the current directory instead. Re-run `atmos auth login` (or the integration) from the repository to update the entry.
 
 ## Notes
 

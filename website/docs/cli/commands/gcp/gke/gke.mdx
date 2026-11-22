@@ -45,7 +45,9 @@ auth:
             update: merge
 ```
 
-The cluster `name`, `project_id`, and regional or zonal `location` are required. With no custom path, Atmos writes its own kubeconfig under the XDG config directory. `kubeconfig.update` supports `merge` (the default), `replace`, and `error`. Configuring a shared kubeconfig path is explicit opt-in and may update that file's `current-context`.
+The cluster `name`, `project_id`, and regional or zonal `location` are required. With no custom path, Atmos writes its own kubeconfig under the XDG config directory. `kubeconfig.update` supports `merge` (the default), `replace`, and `error`; `error` fails only when an existing entry of the same name has different settings, so re-running the integration is not an error. Configuring a shared kubeconfig path is explicit opt-in and may update that file's `current-context`.
+
+The kubeconfig user is named `atmos-gke-<cluster>-<project>-<location>-<identity>`, or `atmos-<realm>-gke-...` when `auth.realm` is set, so different identities and realms never share a user. Its exec entry sets `ATMOS_CHDIR` to the directory it was written from; if that directory is removed, the token command warns and runs from the current directory.
 
 ## Use the integration
 
