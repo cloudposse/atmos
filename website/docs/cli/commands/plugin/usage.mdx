@@ -276,7 +276,8 @@ plugins:
   <dt><code>plugins.packages.&lt;alias&gt;.timeout</code></dt>
   <dd>A positive Go duration, such as <code>30s</code> or <code>5m</code>, that bounds every call Atmos makes into the plugin
   (authentication, credential exchange, and commands). Omit it for no deadline. An invalid value fails configuration
-  validation and names the package.</dd>
+  validation and names the package. For a device-code login, the deadline includes the time the user spends opening the
+  verification URL and entering the code, so a short value makes device login fail; keep it at several minutes or omit it.</dd>
   <dt><code>plugins.packages.&lt;alias&gt;.command</code></dt>
   <dd>Selects which command export <code>plugin run</code> starts when a package exports more than one.</dd>
   <dt><code>plugins.packages.&lt;alias&gt;.config</code></dt>
