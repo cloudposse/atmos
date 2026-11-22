@@ -26,7 +26,7 @@ identity provider and read the AWS roles from the SAML assertion.
 | `provider/okta/` | `pkg/provider/okta` | `Okta` driver |
 | `provider/adfs/` | `pkg/provider/adfs` | `ADFS` driver |
 | `prompter/`, `page/`, `cookiejar/`, `helper/credentials/` | same names under `pkg/` or `helper/` | Shared helpers used by the drivers |
-| `mocks/` | `mocks` | Upstream mockery mocks used by the copied Okta and GoogleApps tests |
+| `mocks/` | `mocks` | Shared test mocks, generated with mockgen (upstream used mockery) |
 
 ## Changes from upstream
 
@@ -161,7 +161,13 @@ identity provider and read the AWS roles from the SAML assertion.
     bad FIDO key handle, every other FIDO factor is tried once, earlier ones included. A failed Duo endpoint status
     check is recorded and explained if the resubmit fails. A form redirect submits the form that triggered it even
     without an `action`, and the assertion is read from the target form that carries a `SAMLResponse`.
-- **Tests:** browser tests use `go.uber.org/mock` mocks of a narrow `samlPage` interface instead of a real browser.
+- **Tests:** every test mock is generated with `go.uber.org/mock/mockgen` from a `//go:generate` directive in the
+  file that declares the interface; the upstream mockery mocks and hand-written fakes were replaced. The shared
+  `mocks/` package holds `MockPrompter` (`prompter.Prompter`), `MockHelper` (`credentials.Helper`) and
+  `MockU2FDevice` (the GoogleApps and Okta `U2FDevice` interfaces, which are both `u2fhost.Device`). Test-only
+  mocks inside their packages cover `prompter.PinentryRunner`, the GoogleApps and Okta `DeviceFinder` interfaces
+  (their method is unexported) and `credentials.Helper` for that package's own tests (the shared copy would be an
+  import cycle there). Browser tests use mocks of a narrow `samlPage` interface instead of a real browser.
   Real-browser tests are in `browser_integration_test.go` and only run with `RUN_PLAYWRIGHT_INTEGRATION=1`.
 
 ## Review findings not adopted

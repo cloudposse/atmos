@@ -1,5 +1,8 @@
 package prompter
 
+// Atmos fork: the Prompter mock shared by the provider tests is generated with mockgen.
+//go:generate go run go.uber.org/mock/mockgen -source=$GOFILE -destination=../mocks/mock_prompter.go -package=mocks
+
 import (
 	"fmt"
 	"regexp"

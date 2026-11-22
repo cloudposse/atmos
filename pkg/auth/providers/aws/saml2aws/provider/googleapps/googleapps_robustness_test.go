@@ -7,10 +7,10 @@ import (
 	"net/url"
 	"testing"
 
-	u2fhost "github.com/marshallbrekka/go-u2fhost"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
@@ -47,7 +47,7 @@ func TestAuthenticate_SAMLResponseWithoutValue(t *testing.T) {
 func TestAuthenticate_LegacyCaptchaImage(t *testing.T) {
 	t.Setenv("TERM_PROGRAM", "Apple_Terminal")
 	pr := withMockPrompter(t)
-	pr.On("String", "Captcha", "").Return("solved-legacy").Once()
+	pr.EXPECT().String("Captcha", "").Return("solved-legacy", nil).Times(1)
 
 	const legacyCaptchaPage = `<html><body><form id="gaia_loginform" method="POST" action="/legacy-captcha">` +
 		`<input type="hidden" name="Passwd" value="">` +
@@ -111,8 +111,9 @@ func TestChallengeU2F_InvalidBase64(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			device := &mocks.U2FDevice{}
-			device.On("Close").Return().Once()
+			// Close is expected exactly once; any Authenticate call fails the test because it has no expectation.
+			device := mocks.NewMockU2FDevice(gomock.NewController(t))
+			device.EXPECT().Close().Times(1)
 			client := &U2FClient{ChallengeNonce: tt.nonce, KeyHandle: tt.keyHandle, AppID: "appID", Facet: "facet", Device: device}
 
 			var got string
@@ -120,9 +121,7 @@ func TestChallengeU2F_InvalidBase64(t *testing.T) {
 			require.NotPanics(t, func() { got, err = client.ChallengeU2F() })
 			require.Error(t, err)
 			assert.Empty(t, got)
-			// The device is closed and never asked to authenticate.
-			device.AssertExpectations(t)
-			device.AssertNotCalled(t, "Authenticate", (*u2fhost.AuthenticateRequest)(nil))
+			// The device is closed and never asked to authenticate (verified by the controller when the test ends).
 		})
 	}
 }

@@ -9,73 +9,24 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
 )
 
-// creates a fake runner so we can perform unit tests
-type FakePinentryRunner struct {
-	HasRun             bool
-	FakeOutput         string
-	FakePinentryOutput string
-	PassedInput        string
-}
+// pinentryCommand is the command the pinentry prompter sends for the "000000" pattern.
+const pinentryCommand = "SETPROMPT Security token [000000]\nGETPIN\n"
 
-func (f *FakePinentryRunner) Run(cmd string) (string, error) {
-	f.PassedInput = cmd
-	f.HasRun = true
-	if f.FakeOutput != "" {
-		return f.FakeOutput, nil
-	}
-	if f.FakePinentryOutput != "" {
-		reader := strings.NewReader(f.FakePinentryOutput)
-		return ParseResults(reader)
-	}
-	return f.FakeOutput, nil
-}
+// newPinentryRunner returns a PinentryRunner mock that expects exactly one run of the "000000" command and
+// answers it by parsing the given raw pinentry output, as the real runner does.
+func newPinentryRunner(t *testing.T, pinentryOutput string) *MockPinentryRunner {
+	t.Helper()
 
-// FakeDefaultPrompter is a Mock prompter
-type FakeDefaultPrompter struct {
-	CalledRequestSecurityCode bool
-	CalledChoose              bool
-	CalledChooseWithDefault   bool
-	CalledString              bool
-	CalledStringRequired      bool
-	CalledPassword            bool
-	CalledDisplay             bool
-}
-
-// all the functions to implement the Prompter interface
-func (f *FakeDefaultPrompter) RequestSecurityCode(p string) (string, error) {
-	f.CalledRequestSecurityCode = true
-	return "", nil
-}
-
-func (f *FakeDefaultPrompter) Choose(p string, option []string) (int, error) {
-	f.CalledChoose = true
-	return 0, nil
-}
-
-func (f *FakeDefaultPrompter) ChooseWithDefault(p string, d string, c []string) (string, error) {
-	f.CalledChooseWithDefault = true
-	return "", nil
-}
-
-func (f *FakeDefaultPrompter) String(p string, defaultValue string) (string, error) {
-	f.CalledString = true
-	return "", nil
-}
-
-func (f *FakeDefaultPrompter) StringRequired(p string) (string, error) {
-	f.CalledStringRequired = true
-	return "", nil
-}
-
-func (f *FakeDefaultPrompter) Password(p string) (string, error) {
-	f.CalledPassword = true
-	return "", nil
-}
-
-func (f *FakeDefaultPrompter) Display(p string) {
-	f.CalledDisplay = true
+	runner := NewMockPinentryRunner(gomock.NewController(t))
+	runner.EXPECT().Run(pinentryCommand).DoAndReturn(func(string) (string, error) {
+		return ParseResults(strings.NewReader(pinentryOutput))
+	}).Times(1)
+	return runner
 }
 
 func TestValidateAndSetPrompterShouldFailWithWrongInput(t *testing.T) {
@@ -157,63 +108,51 @@ func TestValidateAndSetPrompterShouldWorkWithInputForPinentry(t *testing.T) {
 }
 
 func TestChecksPinentryPrompterDefault(t *testing.T) {
-	p := &PinentryPrompter{}
-	fakeDefaultPrompter := &FakeDefaultPrompter{}
-	p.DefaultPrompter = fakeDefaultPrompter
+	// Every prompt except RequestSecurityCode is delegated to the default prompter exactly once, with the
+	// caller's arguments; the controller verifies the calls when the test ends.
+	defaultPrompter := mocks.NewMockPrompter(gomock.NewController(t))
+	defaultPrompter.EXPECT().Choose("random", []string{"1", "2"}).Return(0, nil).Times(1)
+	defaultPrompter.EXPECT().ChooseWithDefault("random", "random", []string{"1", "2"}).Return("", nil).Times(1)
+	defaultPrompter.EXPECT().String("random", "random").Return("", nil).Times(1)
+	defaultPrompter.EXPECT().StringRequired("random").Return("", nil).Times(1)
+	defaultPrompter.EXPECT().Password("random").Return("", nil).Times(1)
+	defaultPrompter.EXPECT().Display("random").Times(1)
+	p := &PinentryPrompter{DefaultPrompter: defaultPrompter}
 
 	_, _ = p.Choose("random", []string{"1", "2"})
-	assert.True(t, fakeDefaultPrompter.CalledChoose)
-
 	_, _ = p.ChooseWithDefault("random", "random", []string{"1", "2"})
-	assert.True(t, fakeDefaultPrompter.CalledChooseWithDefault)
-
 	_, _ = p.String("random", "random")
-	assert.True(t, fakeDefaultPrompter.CalledString)
-
 	_, _ = p.StringRequired("random")
-	assert.True(t, fakeDefaultPrompter.CalledStringRequired)
-
 	_, _ = p.Password("random")
-	assert.True(t, fakeDefaultPrompter.CalledPassword)
-
 	p.Display("random")
-	assert.True(t, fakeDefaultPrompter.CalledDisplay)
 }
 
 func TestChecksPinentryPrompterCallsPinentryForRequestSecurityCode(t *testing.T) {
-	p := &PinentryPrompter{}
-	runner := &FakePinentryRunner{}
-	p.Runner = runner
-	runner.FakeOutput = "random_code"
+	// The runner is called exactly once, with the pinentry command for the pattern.
+	runner := NewMockPinentryRunner(gomock.NewController(t))
+	runner.EXPECT().Run(pinentryCommand).Return("random_code", nil).Times(1)
+	p := &PinentryPrompter{Runner: runner}
 	pinentryOutput, err := p.RequestSecurityCode("000000")
 
 	assert.NoError(t, err)
-	assert.True(t, runner.HasRun)
 	assert.Equal(t, pinentryOutput, "random_code")
-	assert.Equal(t, runner.PassedInput, "SETPROMPT Security token [000000]\nGETPIN\n")
 }
 
 func TestChecksPinentryPrompterReturnsRightCodeGivenFakePinentryOutput(t *testing.T) {
-	p := &PinentryPrompter{}
-	runner := &FakePinentryRunner{}
-	p.Runner = runner
-	runner.FakePinentryOutput = "OK This line should get ignored\nOK This line should too\nD 654321\nOK Final\n"
+	runner := newPinentryRunner(t, "OK This line should get ignored\nOK This line should too\nD 654321\nOK Final\n")
+	p := &PinentryPrompter{Runner: runner}
 	pinentryOutput, err := p.RequestSecurityCode("000000")
 
 	assert.NoError(t, err)
-	assert.True(t, runner.HasRun)
 	assert.Equal(t, pinentryOutput, "654321")
 }
 
 func TestChecksPinentryPrompterReturnsNoCodeGivenErroneousFakePinentryOutput(t *testing.T) {
-	p := &PinentryPrompter{}
-	runner := &FakePinentryRunner{}
-	p.Runner = runner
-	runner.FakePinentryOutput = "OK This line should get ignored\nOK This line should too\nERR This is an error\nD 654321\nOK Final\n"
+	runner := newPinentryRunner(t, "OK This line should get ignored\nOK This line should too\nERR This is an error\nD 654321\nOK Final\n")
+	p := &PinentryPrompter{Runner: runner}
 	pinentryOutput, err := p.RequestSecurityCode("000000")
 
 	assert.Error(t, err)
-	assert.True(t, runner.HasRun)
 	assert.Equal(t, pinentryOutput, "")
 }
 

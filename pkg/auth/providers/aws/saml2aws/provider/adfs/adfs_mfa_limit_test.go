@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
 )
@@ -12,8 +13,15 @@ import (
 // Regression: a server that keeps returning the one-time-code page made Authenticate prompt and
 // submit forever. It must give up after maxMFAPromptAttempts codes.
 func TestAuthenticateMFAPromptAttemptLimit(t *testing.T) {
-	pr := &mocks.Prompter{}
-	pr.On("RequestSecurityCode", "000000").Return("999999")
+	// The expectations are independent of the production constant: five codes are allowed, so one login
+	// POST plus five code POSTs; the configured token is the first code, so four are prompted for.
+	const (
+		wantCodes   = 5
+		wantPrompts = 4
+	)
+	pr := mocks.NewMockPrompter(gomock.NewController(t))
+	// The controller verifies the exact prompt count when the test ends.
+	pr.EXPECT().RequestSecurityCode("000000").Return("999999", nil).Times(wantPrompts)
 	usePrompter(t, pr)
 
 	fake := &fakeADFS{
@@ -27,17 +35,10 @@ func TestAuthenticateMFAPromptAttemptLimit(t *testing.T) {
 	require.ErrorIs(t, err, ErrMFAAttemptsExceeded)
 	assert.Empty(t, assertion)
 
-	// The expectations are independent of the production constant: five codes are allowed, so one login
-	// POST plus five code POSTs; the configured token is the first code, so four are prompted for.
-	const (
-		wantCodes   = 5
-		wantPrompts = 4
-	)
 	posts := fake.postedForms()
 	require.Len(t, posts, 1+wantCodes)
 	assert.Equal(t, []string{"111111"}, posts[1]["VerificationCode"])
 	assert.Equal(t, []string{"999999"}, posts[wantCodes]["VerificationCode"])
-	pr.AssertNumberOfCalls(t, "RequestSecurityCode", wantPrompts)
 }
 
 // Regression: a server that keeps returning the Azure MFA wait page was polled forever.
@@ -64,8 +65,8 @@ func TestAuthenticateAzureMFAPollLimit(t *testing.T) {
 
 // The limit only stops a server that never finishes: approval within the limit still succeeds.
 func TestAuthenticateMFAPromptWithinLimit(t *testing.T) {
-	pr := &mocks.Prompter{}
-	pr.On("RequestSecurityCode", "000000").Return("999999")
+	pr := mocks.NewMockPrompter(gomock.NewController(t))
+	pr.EXPECT().RequestSecurityCode("000000").Return("999999", nil).AnyTimes()
 	usePrompter(t, pr)
 
 	verification := mfaPage(`<input name="VerificationCode" type="text" value="" />`)

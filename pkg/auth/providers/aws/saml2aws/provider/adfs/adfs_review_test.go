@@ -12,6 +12,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
 )
@@ -180,7 +181,8 @@ func TestChallengeFormSelection(t *testing.T) {
 
 // Regression: a SAMLResponse input without a value followed by an MFA input submitted an OTP.
 func TestAuthenticateParseErrorStopsBeforeMFA(t *testing.T) {
-	pr := &mocks.Prompter{}
+	// The prompter has no expectations, so any prompt fails the test.
+	pr := mocks.NewMockPrompter(gomock.NewController(t))
 	usePrompter(t, pr)
 
 	fake := &fakeADFS{
@@ -194,7 +196,6 @@ func TestAuthenticateParseErrorStopsBeforeMFA(t *testing.T) {
 	assert.Contains(t, err.Error(), "unable to locate saml assertion value")
 	// Only the login form was posted; no code was submitted or prompted for.
 	assert.Len(t, fake.postedForms(), 1)
-	pr.AssertNotCalled(t, "RequestSecurityCode", "000000")
 }
 
 // Regression: the poll count alone did not bound the wait when each poll request is slow.

@@ -7,8 +7,8 @@ import (
 
 	"github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
 )
@@ -59,10 +59,10 @@ func captureStdio(t *testing.T, fn func()) (string, string) {
 // Regression: the Duo U2F touch prompts were printed to stdout, the caller's data channel, which
 // corrupts output such as `eval $(atmos auth env)`. They must go to stderr.
 func TestChallengeDuoU2F_PromptsOnStderr(t *testing.T) {
-	device := &mocks.U2FDevice{}
-	device.On("Close").Return().Once()
-	device.On("Authenticate", mock.Anything).Return(nil, &u2fhost.TestOfUserPresenceRequiredError{}).Once()
-	device.On("Authenticate", mock.Anything).Return(&u2fhost.AuthenticateResponse{ClientData: "cd", SignatureData: "sd"}, nil).Once()
+	device := mocks.NewMockU2FDevice(gomock.NewController(t))
+	device.EXPECT().Close().Times(1)
+	device.EXPECT().Authenticate(gomock.Any()).Return(nil, &u2fhost.TestOfUserPresenceRequiredError{}).Times(1)
+	device.EXPECT().Authenticate(gomock.Any()).Return(&u2fhost.AuthenticateResponse{ClientData: "cd", SignatureData: "sd"}, nil).Times(1)
 	client := &DUOU2FClient{Device: device, ChallengeNonce: "nonce", AppID: "appID", KeyHandle: "kh", StateToken: "st"}
 
 	var resp *ResponseData
@@ -75,5 +75,4 @@ func TestChallengeDuoU2F_PromptsOnStderr(t *testing.T) {
 	assert.Empty(t, stdout)
 	assert.Contains(t, stderr, "Touch the flashing U2F device to authenticate...")
 	assert.Contains(t, stderr, "Touch accepted. Proceeding with authentication")
-	device.AssertExpectations(t)
 }

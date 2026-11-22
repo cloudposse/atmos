@@ -1,5 +1,10 @@
 package okta
 
+// Atmos fork: the DeviceFinder mock (unexported method, so package-local) is generated with mockgen. The
+// U2FDevice interface is the same u2fhost.Device as in googleapps, so tests use the shared mocks.MockU2FDevice
+// generated from googleapps/u2f.go.
+//go:generate go run go.uber.org/mock/mockgen -source=$GOFILE -destination=mock_okta_webauthn_test.go -package=$GOPACKAGE -exclude_interfaces=U2FDevice
+
 import (
 	"errors"
 	"fmt"
@@ -62,7 +67,8 @@ type DeviceFinder interface {
 	findDevice() (u2fhost.Device, error)
 }
 
-// U2FDevice is used to support mocking this device with mockery https://github.com/vektra/mockery/issues/210#issuecomment-485026348
+// U2FDevice is used to support mocking this device.
+// Atmos fork: its mock is the shared mocks.MockU2FDevice, generated with mockgen from googleapps/u2f.go.
 type U2FDevice interface {
 	u2fhost.Device
 }

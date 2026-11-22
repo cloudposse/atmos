@@ -369,7 +369,7 @@ func TestVerifyMfa_Duo(t *testing.T) {
 		assert.Nil(t, err)
 
 		pr := withMockPrompter(t)
-		pr.Mock.On("StringRequired", "Enter passcode").Return("000000")
+		pr.EXPECT().StringRequired("Enter passcode").Return("000000", nil).MinTimes(1) // Unlimited, but at least one call (the former testify AssertExpectations contract).
 
 		var out bytes.Buffer
 		redirectStdLog(t, &out)

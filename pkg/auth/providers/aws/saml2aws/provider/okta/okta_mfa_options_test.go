@@ -10,8 +10,8 @@ import (
 
 	"github.com/marshallbrekka/go-u2fhost"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/creds"
 	"github.com/cloudposse/atmos/pkg/auth/providers/aws/saml2aws/mocks"
@@ -96,21 +96,21 @@ func TestVerifyMfa_FidoBadKeyTriesEveryOtherFactorOnce(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			device := &mocks.U2FDevice{}
+			device := mocks.NewMockU2FDevice(gomock.NewController(t))
 			withMockDevice(t, device)
-			device.On("Close").Return()
+			device.EXPECT().Close().MinTimes(1) // Unlimited, but at least one call (the former testify AssertExpectations contract).
 			for _, key := range tc.badKeys {
-				device.On("Authenticate", mock.MatchedBy(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == key })).
-					Return(nil, &u2fhost.BadKeyHandleError{}).Once()
+				device.EXPECT().Authenticate(gomock.Cond(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == key })).
+					Return(nil, &u2fhost.BadKeyHandleError{}).Times(1)
 			}
 			if tc.wantToken != "" {
-				device.On("Authenticate", mock.MatchedBy(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == "cred-a" })).
-					Return(&u2fhost.AuthenticateResponse{ClientData: "cd-a"}, nil).Once()
+				device.EXPECT().Authenticate(gomock.Cond(func(r *u2fhost.AuthenticateRequest) bool { return r.KeyHandle == "cred-a" })).
+					Return(&u2fhost.AuthenticateResponse{ClientData: "cd-a"}, nil).Times(1)
 			}
 
 			// The user selects the second factor.
 			pr := withMockPrompter(t)
-			pr.On("Choose", "Select which MFA option to use", mock.Anything).Return(1).Once()
+			pr.EXPECT().Choose("Select which MFA option to use", gomock.Any()).Return(1, nil).Times(1)
 
 			var log requestLog
 			ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -150,7 +150,6 @@ func TestVerifyMfa_FidoBadKeyTriesEveryOtherFactorOnce(t *testing.T) {
 			assert.Equal(t, []string{"/verify/b", "/verify/a"}, paths[:2])
 			assert.Equal(t, 1, log.count("/verify/a"))
 			assert.Equal(t, 1, log.count("/verify/b"))
-			device.AssertExpectations(t)
 		})
 	}
 }
