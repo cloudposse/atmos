@@ -4,7 +4,6 @@ package engine
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,6 +16,7 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/log/format"
 	"github.com/gruntwork-io/terragrunt/pkg/options"
 	"github.com/hashicorp/hcl/v2"
+	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
@@ -25,8 +25,6 @@ import (
 )
 
 var errUndecidableDestroyPolicy = errors.New("prevent_destroy cannot be determined without effects denied by the read-only guard")
-
-var errSourceDirectory = errors.New("native adapter source must be an existing local directory")
 
 // Resolve evaluates HCL using the pinned Terragrunt parser.
 //
@@ -40,7 +38,16 @@ func Resolve(ctx context.Context, request model.Request) (*model.Resolution, err
 // ErrPreventDestroy rejects a destroy operation on a unit that sets prevent_destroy.
 var ErrPreventDestroy = errors.New("unit is protected by prevent_destroy")
 
+// resolve preserves the structured L6 error boundary around invocation-local evaluation.
 func resolve(ctx context.Context, request *model.Request, filesystem afero.Fs) (*model.Resolution, error) {
+	result, err := resolveRequest(ctx, request, filesystem)
+	if err != nil {
+		return nil, problemFor(err, request.Path)
+	}
+	return result, nil
+}
+
+func resolveRequest(ctx context.Context, request *model.Request, filesystem afero.Fs) (*model.Resolution, error) {
 	if request.Phase == "inventory" {
 		return discoverProject(ctx, request)
 	}
@@ -92,7 +99,7 @@ func (e *unitEvaluator) resolveUnit(ctx context.Context) (*model.Resolution, err
 	if err != nil {
 		return nil, err
 	}
-	if err := checkUnitPolicies(ctx, e.request, cfg); err != nil {
+	if err := checkUnitPolicies(ctx, e.request, cfg, e.path); err != nil {
 		return nil, err
 	}
 	execution, applyFiles, err := e.unitExecution(ctx, cfg)
@@ -149,12 +156,13 @@ func backendGenerationOverlay(ctx context.Context, request *model.Request, files
 
 // requestPath uses one physical path identity for parsing and CLI execution. On
 // macOS, mixing /var and /private/var breaks upstream diamond dependency reads.
+// Like upstream Terragrunt, a symlinked terragrunt.hcl stays a unit where the link lives.
 func requestPath(path string) (string, error) {
 	path, err := filepath.Abs(strings.TrimPrefix(path, "terragrunt://"))
 	if err != nil {
 		return "", err
 	}
-	return canonicalPath(path)
+	return logicalPath(path)
 }
 
 func evaluationLogger(level string) (log.Logger, error) {
@@ -320,7 +328,11 @@ func (e *unitEvaluator) parseUnit(ctx context.Context) (*config.TerragruntConfig
 		if err != nil {
 			return nil, err
 		}
-		if e.request.Environment[downloadDirEnv] == "" {
+		// Reject unverifiable backend generation before the full download_dir probe.
+		if err := checkBackendGeneration(environment.FS, backendConfigurationPaths(cfg, e.path)); err != nil {
+			return nil, err
+		}
+		if e.request.Environment[downloadDirEnv] == "" && mentionsDownloadDir(environment.FS, backendConfigurationPaths(cfg, e.path)) {
 			cfg.DownloadDir, err = downloadDir(ctx, e.logger, environment, e.pctx)
 		}
 		return cfg, err
@@ -345,6 +357,34 @@ func downloadDir(ctx context.Context, logger log.Logger, environment *atmosbridg
 		return "", err
 	}
 	return full.DownloadDir, nil
+}
+
+// mentionsDownloadDir reports whether any parsed configuration file names download_dir. The probe
+// in downloadDir parses the whole unit, so a unit that never sets it skips the probe and its
+// inputs stay unevaluated during backend reads.
+func mentionsDownloadDir(filesystem afero.Fs, paths []string) bool {
+	for _, path := range paths {
+		data, err := afero.ReadFile(filesystem, path)
+		if err != nil {
+			continue
+		}
+		parser := hclparse.NewParser()
+		var file *hcl.File
+		var diagnostics hcl.Diagnostics
+		if strings.HasSuffix(path, ".json") {
+			file, diagnostics = parser.ParseJSON(data, path)
+		} else {
+			file, diagnostics = parser.ParseHCL(data, path)
+		}
+		if diagnostics.HasErrors() {
+			continue
+		}
+		content, _, _ := file.Body.PartialContent(&hcl.BodySchema{Attributes: []hcl.AttributeSchema{{Name: "download_dir"}}})
+		if content.Attributes["download_dir"] != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // withoutInputsFS projects inputs to the keys referenced by the configuration.
@@ -404,10 +444,18 @@ func (e *unitEvaluator) unitResolution(cfg *config.TerragruntConfig) (*model.Res
 	result := &model.Resolution{Path: e.path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(e.pctx.FilesRead.Paths(), e.path)}
 	if plainLocalSource(result.Source) {
 		result.Source = localPath(filepath.Dir(e.path), result.Source)
-		if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
-			return nil, fmt.Errorf("%w: %s", errSourceDirectory, result.Source)
+		if problem := localSourceProblem(e.environment.FS, e.path, *cfg.Terraform.Source, result.Source); problem != nil {
+			return nil, problem
 		}
 		result.Folders = []string{result.Source}
+	} else if localSubdirSource(result.Source) {
+		// A local `dir//subdir` source copies the whole `dir` tree and selects `subdir` inside it.
+		if problem := localSubdirSourceProblem(e.environment.FS, e.path, result.Source); problem != nil {
+			return nil, problem
+		}
+		root, _ := copiedSourceRoot(filepath.Dir(e.path), result.Source)
+		result.Source = absoluteSubdirSource(root, result.Source)
+		result.Folders = []string{root}
 	} else if err := validateRemoteSource(result.Source); err != nil {
 		return nil, err
 	}

@@ -49,6 +49,10 @@ func invocationError(err error) error {
 			return err
 		}
 	}
+	// A structured detail is the plugin's own vetted description of the failure.
+	if detail, ok := detailFromStatus(err); ok {
+		return DetailError(detail, status.Code(err))
+	}
 	switch status.Code(err) {
 	case codes.Canceled:
 		return errors.Join(errUtils.ErrPluginAPI, context.Canceled)
@@ -104,10 +108,7 @@ func (p *Provider) validateOperation(ctx context.Context, handle *native.Handle,
 	if result == nil {
 		return errUtils.ErrPluginProtocol
 	}
-	if len(result.Diagnostics) != 0 {
-		return errUtils.ErrPluginInvalidConfig
-	}
-	return nil
+	return firstDiagnosticError(result.Diagnostics)
 }
 
 // discoveryDiagnostic accepts only the versioned discovery contract. Messages,

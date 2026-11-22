@@ -19,7 +19,12 @@ import (
 
 func nativeUnit(t *testing.T, extra string) model.Request {
 	t.Helper()
-	root := t.TempDir()
+	return nativeUnitAt(t, t.TempDir(), extra)
+}
+
+// nativeUnitAt writes the native unit fixture below root, which the caller owns.
+func nativeUnitAt(t *testing.T, root, extra string) model.Request {
+	t.Helper()
 	module := filepath.Join(root, "module")
 	require.NoError(t, os.MkdirAll(module, 0o755))
 	source, err := json.Marshal(filepath.ToSlash(module))
@@ -53,18 +58,18 @@ inputs = { large = 9007199254740993, nested = { nullable = null, enabled = false
 func TestNativeRejectsUnsupportedSemantics(t *testing.T) {
 	for _, test := range []struct{ name, extra, message string }{
 		{"binary override", `terraform_binary = "another-tool"`, "terraform_binary"},
-		{"IAM role", `iam_role = "unsupported"`, "IAM settings"},
+		{"IAM role", `iam_role = "unsupported"`, "iam_role"},
 		{"generation escape", `generate "x" {
  path = "../x.tf"
  if_exists = "overwrite"
  disable_signature = true
  contents = ""
-}`, "unsupported generated path"},
+}`, "escapes the working directory"},
 		{"version constraint", `terragrunt_version_constraint = "> 99.0.0"`, "rejects version"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := Resolve(t.Context(), nativeUnit(t, test.extra))
-			require.ErrorContains(t, err, test.message)
+			requireCauseContains(t, err, test.message)
 		})
 	}
 }
@@ -82,7 +87,7 @@ remote_state {
 	require.Equal(t, "local", result.BackendType)
 	request.Phase = ""
 	_, err = Resolve(t.Context(), request)
-	require.ErrorContains(t, err, "cannot inspect selected executable")
+	requireCauseContains(t, err, "cannot inspect selected executable")
 }
 
 func TestBackendGenerateDoesNotWriteStack(t *testing.T) {
@@ -101,7 +106,11 @@ inputs = { value = local.value }
 `)
 	request.Phase = "discover"
 	_, err := Resolve(t.Context(), request)
-	require.ErrorContains(t, err, "read-only discovery cannot execute")
+	var problem *model.Problem
+	require.ErrorAs(t, err, &problem)
+	require.Equal(t, model.CodeEffectDenied, problem.Code)
+	require.False(t, problem.Safe)
+	require.NotEmpty(t, problem.Hints)
 }
 
 func TestVersionConstraintsUseSelectedExecutable(t *testing.T) {
@@ -160,13 +169,53 @@ generate "disabled" {
 	require.Error(t, err)
 	require.NoError(t, os.WriteFile(request.Path, []byte("inputs = {}"), 0o644))
 	_, err = Resolve(t.Context(), request)
-	require.ErrorContains(t, err, "requires terraform.source")
+	require.ErrorContains(t, err, "terraform.source")
 	for _, source := range []string{"tfr://example.invalid/repo", "./absent"} {
 		encoded, err := json.Marshal(source)
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(encoded)+" }"), 0o644))
 		_, err = Resolve(t.Context(), request)
 		require.Error(t, err)
+	}
+}
+
+// Discovery validates the module source transport, so an unsupported remote source fails before any
+// infrastructure command runs rather than only when the unit is prepared. A local source that
+// selects a subdirectory with `//` is no remote transport and must not be rejected as one.
+func TestDiscoveryValidatesRemoteModuleSources(t *testing.T) {
+	for _, test := range []struct {
+		source  string
+		invalid bool
+	}{
+		{source: "tfr://example.invalid/repo", invalid: true},
+		{source: "git::https://example.invalid/modules.git//vpc?ref=v1.0.0"},
+		{source: "https://example.invalid/module.zip"},
+		// A local module with a `//` subdirectory is not a remote source: Terragrunt copies the tree before it.
+		{source: "../../modules/sub//app"},
+		// A bare host path with `//` stays a remote shorthand that discovery cannot interpret.
+		{source: "example.invalid/org/modules//app", invalid: true},
+	} {
+		t.Run(test.source, func(t *testing.T) {
+			// The unit sits two levels below the test's own root, so the relative local source resolves
+			// inside that root, and the module it names exists there.
+			top := t.TempDir()
+			unit := filepath.Join(top, "stack", "unit")
+			require.NoError(t, os.MkdirAll(unit, 0o755))
+			require.NoError(t, os.MkdirAll(filepath.Join(top, "modules", "sub", "app"), 0o755))
+			request := nativeUnitAt(t, unit, "")
+			encoded, err := json.Marshal(test.source)
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(encoded)+" }"), 0o644))
+			request.Phase = "discover"
+			_, err = Resolve(t.Context(), request)
+			if !test.invalid {
+				require.NoError(t, err)
+				return
+			}
+			var problem *model.Problem
+			require.ErrorAs(t, err, &problem)
+			require.Equal(t, model.CodeInvalidSource, problem.Code)
+		})
 	}
 }
 
@@ -190,6 +239,25 @@ func TestResolvePreservesUnitOverlay(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []byte("ignored"), result.Overlay[".hidden"])
 	require.NotContains(t, result.Overlay, "override.tf")
+}
+
+// The unit path is the root of copy-rule globs, so a glob metacharacter in it (or in the name of
+// any test that owns a temp directory) must not widen the overlay read to the parent directory.
+func TestResolveUnitInDirectoryWithGlobMetacharacters(t *testing.T) {
+	base := t.TempDir()
+	locked := filepath.Join(base, "locked")
+	root := filepath.Join(base, "unit{with-brace")
+	require.NoError(t, os.MkdirAll(root, 0o755))
+	require.NoError(t, os.MkdirAll(locked, 0o755))
+	request := nativeUnitAt(t, root, "")
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".tflint.hcl"), []byte("# lint"), 0o644))
+	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
+		require.NoError(t, os.Chmod(locked, 0))
+		t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	}
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, []byte("# lint"), result.Overlay[".tflint.hcl"])
 }
 
 func TestRejectRemoteStateEncryption(t *testing.T) {
@@ -267,24 +335,26 @@ remote_state {
 }
 
 func TestOverlayRejectsLockFilesAndCarriesModes(t *testing.T) {
-	t.Run("committed dependency lock file", func(t *testing.T) {
+	t.Run("lock file beside the unit is a unit file copy, not an overlay file", func(t *testing.T) {
 		request := nativeUnit(t, "")
 		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), ".terraform.lock.hcl"), []byte("# lock"), 0o644))
-		_, err := Resolve(t.Context(), request)
-		require.ErrorIs(t, err, atmosbridge.ErrUnsupportedOverlay)
-		require.ErrorContains(t, err, ".terraform.lock.hcl")
-		request.Phase = "backend"
-		_, err = Resolve(t.Context(), request)
-		require.NoError(t, err, "backend reads never export the overlay")
-		request.Phase = ""
-		data, err := os.ReadFile(request.Path)
-		require.NoError(t, err)
-		excluded := strings.Replace(string(data), "terraform { source =", "terraform {\n exclude_from_copy = [\".terraform.lock.hcl\"]\n source =", 1)
-		excluded = strings.Replace(excluded, " }", "\n}", 1)
-		require.NoError(t, os.WriteFile(request.Path, []byte(excluded), 0o644))
 		result, err := Resolve(t.Context(), request)
 		require.NoError(t, err)
 		require.NotContains(t, result.Overlay, ".terraform.lock.hcl")
+		require.Equal(t, "# lock", result.Generated[".terraform.lock.hcl"])
+		require.True(t, result.UnitFileCopies[".terraform.lock.hcl"])
+	})
+	t.Run("nested dependency lock file", func(t *testing.T) {
+		request := nativeUnit(t, "")
+		nested := filepath.Join(filepath.Dir(request.Path), "sub")
+		require.NoError(t, os.MkdirAll(nested, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(nested, ".terraform.lock.hcl"), []byte("# lock"), 0o644))
+		_, err := Resolve(t.Context(), request)
+		require.ErrorIs(t, err, atmosbridge.ErrUnsupportedOverlay)
+		requireCauseContains(t, err, ".terraform.lock.hcl")
+		request.Phase = "backend"
+		_, err = Resolve(t.Context(), request)
+		require.NoError(t, err, "backend reads never export the overlay")
 	})
 	t.Run("executable file keeps its mode", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
@@ -463,6 +533,29 @@ func TestBackendGenerationOverlayPreservesCallerRequest(t *testing.T) {
 	require.Equal(t, original, request)
 }
 
+// The pinned upstream include parser rejects JSON parents before download-dir probing.
+// Exercise the probe with its real JSON input independently of that upstream restriction.
+func TestBackendRecognizesEscapedDownloadDirAttribute(t *testing.T) {
+	filesystem := afero.NewMemMapFs()
+	require.NoError(t, afero.WriteFile(filesystem, "parent.hcl.json", []byte(`{"download_\u0064ir":"custom-cache"}`), 0o600))
+	require.True(t, mentionsDownloadDir(filesystem, []string{"parent.hcl.json"}))
+}
+
+func TestDownloadDirDetectionUsesAttributeSyntax(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	for _, test := range []struct {
+		text string
+		want bool
+	}{
+		{`# download_dir is not set`, false},
+		{`locals { text = "download_dir" }`, false},
+		{`download_dir = run_cmd("must-not-run")`, true},
+	} {
+		require.NoError(t, afero.WriteFile(fs, "unit.hcl", []byte(test.text), 0o600))
+		require.Equal(t, test.want, mentionsDownloadDir(fs, []string{"unit.hcl"}))
+	}
+}
+
 func TestBackendInputProjectionUsesTargetFile(t *testing.T) {
 	request := nativeUnit(t, `download_dir = read_terragrunt_config("settings.hcl").inputs.cache`)
 	request.Phase = "backend"
@@ -485,7 +578,7 @@ func TestBackendInputProjectionRejectsUnknownTarget(t *testing.T) {
 	request.Environment["SETTINGS_FILE"] = "settings.hcl"
 	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(request.Path), "settings.hcl"), []byte(`inputs = { cache = "configured-cache" }`), 0o644))
 	_, err := Resolve(t.Context(), request)
-	require.ErrorContains(t, err, errInputReferenceTarget.Error(), "an unknown target must not silently select a fallback or evaluate unrelated inputs")
+	requireCauseContains(t, err, errInputReferenceTarget.Error(), "an unknown target must not silently select a fallback or evaluate unrelated inputs")
 }
 
 func TestBackendInputProjectionOrdinaryLocalsAndExposedInclude(t *testing.T) {
@@ -524,4 +617,60 @@ download_dir = include.root.inputs.cache
 			require.Equal(t, prepared.WorkingDir, backend.WorkingDir)
 		})
 	}
+}
+
+// subdirSourceFixture writes a unit two levels below a root that also holds `modules/vpc` and a
+// sibling `modules/shared`, then points the unit's `terraform.source` at the given spelling.
+func subdirSourceFixture(t *testing.T, source string) (model.Request, string) {
+	t.Helper()
+	top := t.TempDir()
+	unit := filepath.Join(top, "stack", "unit")
+	require.NoError(t, os.MkdirAll(unit, 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(top, "modules", "vpc"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(top, "modules", "shared"), 0o755))
+	request := nativeUnitAt(t, unit, "")
+	encoded, err := json.Marshal(source)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(encoded)+" }"), 0o644))
+	return request, top
+}
+
+func TestResolveLocalSubdirSourceKeepsRootAndSubdirectory(t *testing.T) {
+	request, top := subdirSourceFixture(t, "../../modules//vpc")
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	// The unit path may resolve through a symlinked temp directory, such as /private on macOS.
+	resolved, err := filepath.EvalSymlinks(top)
+	require.NoError(t, err)
+	root := filepath.Join(resolved, "modules")
+	require.Equal(t, root+"//vpc", result.Source)
+	require.Contains(t, result.Folders, root)
+	require.True(t, filepath.IsAbs(result.Source))
+}
+
+func TestResolveLocalSubdirSourceRejectsMissingPartsSafely(t *testing.T) {
+	for name, source := range map[string]string{
+		"missing subdirectory": "../../modules//absent-secret-name",
+		"missing root":         "../../absent-root-secret//vpc",
+	} {
+		t.Run(name, func(t *testing.T) {
+			request, _ := subdirSourceFixture(t, source)
+			_, err := Resolve(t.Context(), request)
+			var problem *model.Problem
+			require.ErrorAs(t, err, &problem)
+			require.Equal(t, model.CodeInvalidSource, problem.Code)
+			require.True(t, problem.Safe)
+			require.NotContains(t, problem.Detail, "secret")
+			require.NotContains(t, strings.Join(problem.Hints, " "), "secret")
+		})
+	}
+}
+
+func TestResolveRemoteSubdirSourceIsUnchanged(t *testing.T) {
+	source := "git::https://example.invalid/repo.git//modules/vpc?ref=v1"
+	request, _ := subdirSourceFixture(t, source)
+	result, err := Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, source, result.Source)
+	require.NotContains(t, result.Folders, "modules")
 }

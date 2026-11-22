@@ -76,8 +76,29 @@ func (*componentFixture) Validate(ctx context.Context, request *pluginv1.Compone
 		return nil, status.Error(codes.Internal, "must-not-disclose-secret-value")
 	case "unsupported":
 		return nil, status.Error(codes.Unimplemented, "unavailable")
+	case "detail-safe", "detail-unsafe":
+		return nil, fixtureFailure(request.GetOperation().GetCommand() == "detail-safe")
+	case "diagnostic-error":
+		return &pluginv1.ValidateResponse{Diagnostics: []*pluginv1.Diagnostic{{Field: "mode", Message: "Bad setting", Detail: &pluginv1.ErrorDetail{Code: "bad", Summary: "Bad setting", ConfigKey: "mode"}}}}, nil
 	}
 	return &pluginv1.ValidateResponse{}, nil
+}
+
+func fixtureFailure(safe bool) error {
+	detail := &pluginv1.ErrorDetail{
+		Code: "unsupported_setting", Summary: "Unsupported Terragrunt setting", Operation: "prepare", Unit: "vpc", Stack: "live/dev",
+		ConfigKey: "terraform_binary", Location: &pluginv1.SourceLocation{File: "live/dev/vpc/terragrunt.hcl", Line: 7, Column: 3}, Hints: []string{"Remove terraform_binary."}, UserSafe: safe,
+	}
+	if safe {
+		detail.Detail = "terraform_binary is not implemented."
+	} else {
+		detail.Detail = "token ghp_SECRETSECRETSECRET leaked"
+	}
+	withDetail, err := status.New(codes.Unimplemented, detail.Summary).WithDetails(detail)
+	if err != nil {
+		return err
+	}
+	return withDetail.Err()
 }
 
 func fixtureAddress() *pluginv1.ComponentAddress {

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -13,18 +14,16 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
-	"slices"
 	"strings"
 
-	"github.com/google/shlex"
-
 	errUtils "github.com/cloudposse/atmos/errors"
-	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const configurationPlanSuffix = ".atmos.json"
+
+// configurationPlanVersion is bumped whenever the stored binding changes shape.
+const configurationPlanVersion = 5
 
 // subcommandPlan names the Terraform plan command.
 const subcommandPlan = "plan"
@@ -32,10 +31,30 @@ const subcommandPlan = "plan"
 // planBindingSuffix names the binding of a default saved plan, which Atmos writes as "*.planfile".
 const planBindingSuffix = ".planfile" + configurationPlanSuffix
 
+// configurationPlan is the private record stored beside a saved plan. It binds the plan to the
+// exact preparation it was made from. Evaluated inputs and backend settings are not stored:
+// the plan file already embodies the inputs, and the backend is re-resolved at apply time and
+// compared by BackendDigest, so credentials in backend settings never reach this file.
 type configurationPlan struct {
 	Version                                                                               int
 	Stack, Component, Identity, EngineDigest, PlanDigest, WorkingDirectory, WorkingDigest string
-	Prepared                                                                              *schema.PreparedComponentConfiguration
+	BackendDigest                                                                         string
+	// SensitiveDigest binds the bytes of every sensitive generated file, including files the working
+	// directory digest excludes, such as those below a Terragrunt cache.
+	SensitiveDigest string
+	// StackEnvironmentDigest binds stack overrides when apply reuses filtered plan execution.
+	StackEnvironmentDigest string
+	// PublicFiles binds each non-sensitive generated file by presence and digest. Bytes are never
+	// stored, because a before-hook can write private values into a file the provider marked public.
+	PublicFiles map[string]publicFileRecord
+	Prepared    *schema.PreparedComponentConfiguration
+}
+
+// ownsConfigurationPlan reports whether a provider manages this component's saved plans.
+// Their plan files are reviewed artifacts bound to a record, not ephemeral scratch files.
+func ownsConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
+	_, owned := info.ComponentSettingsSection["configuration"]
+	return owned
 }
 
 func usesConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
@@ -75,18 +94,7 @@ func restoreConfigurationPlan(ctx context.Context, config *schema.AtmosConfigura
 	if err != nil {
 		return nil, err
 	}
-	identity, err := runtime.PlanIdentity(ctx, info, plan.Prepared.Sources)
-	if err != nil {
-		return nil, err
-	}
-	artifactMatches, err := configurationArtifactMatches(config, info, plan, path)
-	if err != nil {
-		return nil, err
-	}
-	if identity != plan.Identity || !artifactMatches {
-		return nil, fmt.Errorf("%w: plugin, source, engine, workdir, or reviewed artifact changed; create a new plan", errUtils.ErrPlanVerificationFailed)
-	}
-	if err := verifyReviewedBackendAndWorkdir(ctx, config, info, plan, path); err != nil {
+	if err := verifyReviewedPlan(ctx, config, info, runtime, plan); err != nil {
 		return nil, err
 	}
 	// Terraform runs inside the workdir, so a path relative to the project would not resolve there.
@@ -94,9 +102,37 @@ func restoreConfigurationPlan(ctx context.Context, config *schema.AtmosConfigura
 	if err != nil {
 		return nil, err
 	}
+	info.ConfigurationPlanImplicit = info.ConfigurationPlanImplicit || info.PlanFile == ""
 	info.UseTerraformPlan = true
 	info.PlanFile = absolute
 	return plan.Prepared, nil
+}
+
+// verifyReviewedPlan rejects a plan whose identity, artifact, backend, or workdir changed since review,
+// then restores the sensitive content the reviewed plan depends on.
+func verifyReviewedPlan(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, runtime schema.ComponentConfigurationPlanRuntime, plan *configurationPlan) error {
+	if err := verifyPlanStackEnvironment(info, plan); err != nil {
+		return err
+	}
+	path := configurationPlanPath(config, info)
+	identity, err := runtime.PlanIdentity(ctx, info, plan.Prepared.Sources)
+	if err != nil {
+		return err
+	}
+	artifactMatches, err := configurationArtifactMatches(config, info, plan, path)
+	if err != nil {
+		return err
+	}
+	if identity != plan.Identity || !artifactMatches {
+		return fmt.Errorf("%w: plugin, source, engine, workdir, or reviewed artifact changed; create a new plan", errUtils.ErrPlanVerificationFailed)
+	}
+	if err := verifyReviewedBackendAndWorkdir(ctx, config, info, plan, path); err != nil {
+		return err
+	}
+	if err := restoreSensitiveContent(plan.WorkingDirectory, plan.Prepared.Files, plan.SensitiveDigest); err != nil {
+		return err
+	}
+	return restorePublicContent(plan.WorkingDirectory, plan.Prepared.Files, plan.PublicFiles)
 }
 
 // verifyReviewedBackendAndWorkdir rejects a changed backend identity or a changed retained working directory.
@@ -114,9 +150,15 @@ func restoresConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
 
 // loadConfigurationPlan reads the companion binding and checks it targets this component.
 func loadConfigurationPlan(path string, info *schema.ConfigAndStacksInfo) (*configurationPlan, error) {
+	if err := requireSavedPlan(path, info); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path + configurationPlanSuffix)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, missingPlanRecordError(path, info)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("%w: plugin plan binding is missing: %w", errUtils.ErrPlanVerificationFailed, err)
+		return nil, fmt.Errorf("%w: plugin plan binding cannot be read: %w", errUtils.ErrPlanVerificationFailed, err)
 	}
 	var plan configurationPlan
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
@@ -125,10 +167,37 @@ func loadConfigurationPlan(path string, info *schema.ConfigAndStacksInfo) (*conf
 	if err := decoder.Decode(&plan); err != nil {
 		return nil, errUtils.ErrPlanVerificationFailed
 	}
-	if plan.Version != 1 || plan.Prepared == nil || plan.Stack != info.Stack || plan.Component != info.ComponentFromArg {
+	if plan.Version != configurationPlanVersion || plan.Prepared == nil || plan.Stack != info.Stack || plan.Component != info.ComponentFromArg {
 		return nil, errUtils.ErrPlanVerificationFailed
 	}
+	// The stored record omits inputs; the plan file already carries every value Terraform applies.
+	plan.Prepared.Inputs = map[string]any{}
 	return &plan, nil
+}
+
+// requireSavedPlan explains an absent plan file in terms of what the user did, not of file access.
+func requireSavedPlan(path string, info *schema.ConfigAndStacksInfo) error {
+	if _, err := os.Stat(path); err == nil || !errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if info.PlanFile != "" {
+		return errUtils.Build(errUtils.ErrSavedPlanNotFound).
+			WithExplanationf("The plan file `%s` does not exist.", path).
+			WithHintf("Create it with `atmos terraform plan %s -s %s -- -out=%s`.", info.ComponentFromArg, info.Stack, path).
+			Err()
+	}
+	return errUtils.Build(errUtils.ErrSavedPlanNotFound).
+		WithExplanationf("Component `%s` in stack `%s` has no saved plan. It was never planned, or its plan was already applied or replaced by a later apply.", info.ComponentFromArg, info.Stack).
+		WithHintf("Run `atmos terraform plan %s -s %s` first, then apply with `--from-plan`.", info.ComponentFromArg, info.Stack).
+		Err()
+}
+
+// missingPlanRecordError reports a plan file that Atmos did not create for this component.
+func missingPlanRecordError(path string, info *schema.ConfigAndStacksInfo) error {
+	return errUtils.Build(errUtils.ErrSavedPlanNotFound).
+		WithExplanationf("The plan file `%s` has no Atmos plan record (`%s%s`). Plugin-managed components apply only plans created by `atmos terraform plan`, because the record proves what was reviewed.", path, filepath.Base(path), configurationPlanSuffix).
+		WithHintf("Run `atmos terraform plan %s -s %s -- -out=%s` and apply that file.", info.ComponentFromArg, info.Stack, path).
+		Err()
 }
 
 // configurationArtifactMatches reports whether the plan file, engine binary, and working directory path are unchanged.
@@ -215,124 +284,58 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 		}
 		engineDigest = snapshot.engineDigest
 	}
-	return &configurationPlan{WorkingDigest: snapshot.workingDigest, Version: 1, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), Prepared: execCtx.preparedConfiguration}, nil
+	backendDigest, err := backendIdentityDigest(execCtx.preparedConfiguration.Backend)
+	if err != nil {
+		return nil, err
+	}
+	stored, public, err := reviewedPlanConfiguration(execCtx.preparedConfiguration, snapshot.publicFiles)
+	if err != nil {
+		return nil, err
+	}
+	environmentDigest, err := planStackEnvironmentDigest(info, stored)
+	if err != nil {
+		return nil, err
+	}
+	return &configurationPlan{StackEnvironmentDigest: environmentDigest, WorkingDigest: snapshot.workingDigest, SensitiveDigest: snapshot.sensitiveDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: snapshot.identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, PublicFiles: public, Prepared: stored}, nil
 }
 
-// validatePlanOutputFlags rejects ambiguous plan destinations before hooks or Terraform run.
-func validatePlanOutputFlags(command string, args []string) error {
-	if command != "plan" {
-		return nil
+// reviewedPlanConfiguration omits inputs and every generated file's bytes, and returns the digests of public files.
+func reviewedPlanConfiguration(prepared *schema.PreparedComponentConfiguration, publicFiles string) (*schema.PreparedComponentConfiguration, map[string]publicFileRecord, error) {
+	// Inputs and backend values stay out of the record; see configurationPlan. Generated files keep
+	// only their place: apply reads their bytes back from the retained workdir, whose digests prove
+	// they are the reviewed ones. Public bytes are dropped too, since a hook may have replaced them.
+	stored := *prepared
+	stored.Inputs, stored.Backend = nil, nil
+	stored.Files = withoutContent(stored.Files)
+	observed := map[string]publicFileRecord{}
+	if publicFiles == "" {
+		return &stored, observed, nil
 	}
-	count := 0
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "-out" || arg == "--out" {
-			count++
-			i++
-		} else if strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=") {
-			count++
-		}
-		if count > 1 {
-			return fmt.Errorf("%w: multiple plan output flags", errUtils.ErrPlanVerificationFailed)
+	if err := json.Unmarshal([]byte(publicFiles), &observed); err != nil {
+		return nil, nil, err
+	}
+	for i := range stored.Files {
+		if record, ok := observed[stored.Files[i].Path]; ok && !stored.Files[i].Sensitive && !record.Present {
+			stored.Files[i].IfExists = "remove"
 		}
 	}
-	return nil
+	return &stored, observed, nil
 }
 
-// validateEnvironmentPlanOutput rejects plan output flags in TF_CLI_ARGS or
-// TF_CLI_ARGS_plan for a configuration-owned plan. Terraform reads these
-// variables itself, so a flag there could choose a plan file that Atmos does not
-// see and therefore does not bind. The check inspects the effective value of each
-// variable in the subprocess environment: the sanitized process environment (or
-// the inherited one when auth did not sanitize it), the global atmos.yaml
-// environment, the component environment, and provider extra-argument
-// environment, with later layers overriding earlier ones. Hooks run as child
-// processes and cannot change it.
-func validateEnvironmentPlanOutput(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext) error {
-	if execCtx.preparedConfiguration == nil || info.DryRun || info.SubCommand != subcommandPlan {
-		return nil
+// backendIdentityDigest hashes the canonical JSON form of backend settings, which only ever need equality.
+func backendIdentityDigest(backend map[string]any) (string, error) {
+	// Backend values may cross JSON/protobuf boundaries as different Go number
+	// types. Hash their exact normalized values so equivalent backends match.
+	normalized, err := normalizedBackend(backend)
+	if err != nil {
+		return "", err
 	}
-	return rejectEnvironmentPlanOutput(planEnvironment(atmosConfig, info), runtime.GOOS)
-}
-
-// rejectEnvironmentPlanOutput rejects a plan output flag in the effective TF_CLI_ARGS or
-// TF_CLI_ARGS_plan of an environment listed in precedence order. Variable names are
-// case-insensitive on Windows only, where the last matching entry is the effective value.
-func rejectEnvironmentPlanOutput(entries []string, goos string) error {
-	for _, name := range []string{tfCliArgsEnvVar, tfCliArgsEnvVar + "_" + subcommandPlan} {
-		value, _ := lastEnvListValue(entries, name, goos)
-		args, err := tokenizeEnvironmentArgs(value)
-		if err != nil {
-			return fmt.Errorf("%w: %s cannot be parsed: %w", errUtils.ErrPlanVerificationFailed, name, err)
-		}
-		if containsOutputFlag(args) {
-			return fmt.Errorf("%w: %s sets a plan output flag; pass -out as a command argument instead", errUtils.ErrPlanVerificationFailed, name)
-		}
+	data, err := json.Marshal(normalized)
+	if err != nil {
+		return "", err
 	}
-	return nil
-}
-
-// tokenizeEnvironmentArgs splits a TF_CLI_ARGS value the way the engine does:
-// spaces, tabs, and newlines separate tokens outside quotes, and a malformed
-// value (for example an unterminated quote) is an error because the engine
-// refuses to run with it. The shared parseArgs only splits on spaces, so a tab
-// before -out would hide the flag from the check.
-func tokenizeEnvironmentArgs(value string) ([]string, error) {
-	return shlex.Split(value)
-}
-
-// planEnvironment lists the environment layers a plan subprocess receives, in precedence order.
-func planEnvironment(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) []string {
-	base := info.SanitizedEnv
-	if base == nil {
-		base = os.Environ()
-	}
-	entries := slices.Clone(base)
-	if atmosConfig != nil {
-		entries = envpkg.MergeGlobalEnv(entries, atmosConfig.Env)
-	}
-	entries = append(entries, info.ComponentEnvList...)
-	if info.ComponentExecution == nil {
-		return entries
-	}
-	for i := range info.ComponentExecution.ExtraArguments {
-		item := &info.ComponentExecution.ExtraArguments[i]
-		if !slices.Contains(item.Commands, subcommandPlan) {
-			continue
-		}
-		for name, value := range item.Environment {
-			entries = append(entries, name+"="+value)
-		}
-	}
-	return entries
-}
-
-// containsOutputFlag reports any plan output flag, with or without a value.
-func containsOutputFlag(args []string) bool {
-	return slices.ContainsFunc(args, func(arg string) bool {
-		return arg == "-out" || arg == "--out" || strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=")
-	})
-}
-
-func plannedOutputPath(directory string, args []string) string {
-	for i, arg := range args {
-		path := ""
-		switch {
-		case (arg == "-out" || arg == "--out") && i+1 < len(args):
-			path = args[i+1]
-		case strings.HasPrefix(arg, "-out="):
-			path = strings.TrimPrefix(arg, "-out=")
-		case strings.HasPrefix(arg, "--out="):
-			path = strings.TrimPrefix(arg, "--out=")
-		}
-		if path != "" {
-			if filepath.IsAbs(path) {
-				return path
-			}
-			return filepath.Join(directory, path)
-		}
-	}
-	return ""
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:]), nil
 }
 
 func fileDigest(path string) (string, error) {
@@ -382,9 +385,15 @@ func verifyConfigurationPlanState(ctx context.Context, config *schema.AtmosConfi
 	if err != nil {
 		return err
 	}
-	if state == nil || state.BackendType != plan.Prepared.BackendType || state.Workspace != plan.Prepared.Workspace || !equalBackendConfiguration(state.Backend, plan.Prepared.Backend) {
+	if state == nil || state.BackendType != plan.Prepared.BackendType || state.Workspace != plan.Prepared.Workspace {
 		return fmt.Errorf("%w: reviewed backend identity changed", errUtils.ErrPlanVerificationFailed)
 	}
+	digest, err := backendIdentityDigest(state.Backend)
+	if err != nil || digest != plan.BackendDigest {
+		return fmt.Errorf("%w: reviewed backend identity changed", errUtils.ErrPlanVerificationFailed)
+	}
+	// The verified current backend stands in for the one the record deliberately does not store.
+	plan.Prepared.Backend = state.Backend
 	return nil
 }
 
@@ -401,14 +410,11 @@ func excludedWorkdirFile(root, path, planPath, name string) bool {
 // Root and a non-empty planPath are resolved to absolute paths first, so a relative root never
 // fails to exclude the plan file; an empty planPath stays empty and excludes nothing.
 func configurationWorkdirDigest(root, planPath string) (string, error) {
-	root, err := filepath.Abs(root)
+	// An explicit plan path may be absolute while the directory is relative, or the reverse.
+	// Both must compare equal, or the plan file itself would be hashed into the directory digest.
+	root, planPath, err := absolutePaths(root, planPath)
 	if err != nil {
-		return "", planIOError(err)
-	}
-	if planPath != "" {
-		if planPath, err = filepath.Abs(planPath); err != nil {
-			return "", planIOError(err)
-		}
+		return "", err
 	}
 	files := make(map[string]string)
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
@@ -437,6 +443,31 @@ func configurationWorkdirDigest(root, planPath string) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
+// absolutePaths returns both paths absolute and with symlinks resolved, so one file reached through
+// two spellings (for example /var and /private/var on macOS) compares equal.
+func absolutePaths(root, planPath string) (string, string, error) {
+	absoluteRoot, err := resolvedPath(root)
+	if err != nil {
+		return "", "", err
+	}
+	absolutePlan, err := resolvedPath(planPath)
+	if err != nil {
+		return "", "", err
+	}
+	return absoluteRoot, absolutePlan, nil
+}
+
+func resolvedPath(path string) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	if resolved, err := filepath.EvalSymlinks(absolute); err == nil {
+		return resolved, nil
+	}
+	return absolute, nil
+}
+
 // skipWorkdirDirectory reports whether a nested directory holds only mutable or cached data.
 // The .atmos directory is provisioner bookkeeping (access timestamps and metadata lock files
 // that even a read-only lookup of the retained directory creates), never executed content. The
@@ -450,7 +481,7 @@ func skipWorkdirDirectory(root, path, name string) bool {
 	if insideTerraformCacheOutsideModules(root, path) {
 		return true
 	}
-	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || strings.HasPrefix(name, ".atmos-policy-plan-"))
+	return !insideTerraformModules(root, path) && (name == ".git" || name == ".terragrunt-cache" || name == ".atmos" || strings.HasPrefix(name, ".atmos-policy-plan-") || strings.HasPrefix(name, stalePlanDirPrefix))
 }
 
 // Terraform's downloaded modules can contain scripts executed during apply. Other cache
@@ -506,6 +537,36 @@ func recordWorkdirFile(root, path string, entry fs.DirEntry, files map[string]st
 	}
 	files[filepath.ToSlash(relative)] = digest
 	return nil
+}
+
+// stateChangingSubcommands make an earlier saved plan stale once they succeed.
+var stateChangingSubcommands = map[string]struct{}{"apply": {}, "deploy": {}, "destroy": {}}
+
+// finishConfigurationPlan removes a saved plan and its record after a successful command made it
+// unusable: the plan was applied, or a direct apply changed the state it was made against. Any
+// other command leaves the reviewed plan alone, so plan, output, apply --from-plan keeps working.
+// An explicit plan path is the user's file, so only its Atmos record is removed.
+func finishConfigurationPlan(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	if !ownsConfigurationPlan(info) || info.DryRun {
+		return
+	}
+	// A CI exit-code mapping can report a failed apply as success. The subprocess's own status
+	// decides, so a plan whose apply failed (for example on a state lock) can be applied again.
+	if info.ExecMetadataRawExitCode != 0 {
+		return
+	}
+	if _, changes := stateChangingSubcommands[info.SubCommand]; !changes {
+		return
+	}
+	canonical := ConstructTerraformComponentPlanfilePath(config, info)
+	// A plan file the user named is theirs even when it is the canonical path, so it is kept.
+	if info.PlanFile == "" || info.ConfigurationPlanImplicit || filepath.Clean(configurationPlanPath(config, info)) != filepath.Clean(canonical) {
+		removeTerraformFile(canonical, "Failed to remove consumed plan file")
+	}
+	removeTerraformFile(canonical+configurationPlanSuffix, "Failed to remove consumed plan record")
+	if info.PlanFile != "" {
+		removeTerraformFile(configurationPlanPath(config, info)+configurationPlanSuffix, "Failed to remove consumed plan record")
+	}
 }
 
 // equalBackendConfiguration compares JSON backend values without losing numeric precision.

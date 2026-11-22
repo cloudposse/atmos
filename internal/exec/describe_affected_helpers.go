@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -301,8 +302,12 @@ func ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 		return nil, nil, nil, "", err
 	}
 
-	// Deferred cleanup ensures worktree is always removed.
-	defer cleanupWorktree(localRepoInfo.LocalWorktreePath, worktreePath)
+	// Deferred cleanup ensures worktree is always removed, including when the process is
+	// interrupted: SIGINT and SIGTERM skip deferred functions, so the worktree and its
+	// `.git/worktrees` registration would otherwise leak.
+	cleanup := sync.OnceFunc(func() { cleanupWorktree(localRepoInfo.LocalWorktreePath, worktreePath) })
+	defer removeOnSignal(cleanup)()
+	defer cleanup()
 
 	// Open the worktree as a git repository.
 	remoteRepo, err := g.OpenWorktreeAwareRepo(worktreePath)
@@ -338,6 +343,15 @@ func ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 	}
 
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
+}
+
+// affectedSignalCleanups removes describe-affected worktrees when the process is interrupted.
+var affectedSignalCleanups = g.NewWorktreeSignalCleanups(os.Exit)
+
+// removeOnSignal registers a worktree cleanup for SIGINT and SIGTERM. Call the returned function
+// after normal cleanup.
+func removeOnSignal(cleanup func()) func() {
+	return affectedSignalCleanups.Register(cleanup)
 }
 
 // cleanupWorktree removes a git worktree and its parent temp directory.

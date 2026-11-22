@@ -36,7 +36,7 @@ func TestMissingPlanDigestStopsBeforeAfterHooks(t *testing.T) {
 	phase := &executionPhase{command: "plan", args: []string{"plan", "-out=" + planPath}, insertAt: 1, componentPath: execution.workingDir}
 	shell := newShellFixture(t, nil)
 	err = hookExecutor(shell).runExecutionPhase(project.config, info, phase, nil, func(_ *schema.ConfigAndStacksInfo, args []string, _ []component.ExecutionOption) error {
-		return snapshotter.around(args, func() error { return nil })()
+		return snapshotter.around(args, func() error { return nil }, failedOnError)()
 	})
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 	require.ErrorIs(t, snapshotter.err, errUtils.ErrPlanVerificationFailed)
@@ -44,7 +44,7 @@ func TestMissingPlanDigestStopsBeforeAfterHooks(t *testing.T) {
 	require.Empty(t, shell.calls, "after hooks must not run when the plan cannot be fingerprinted")
 
 	commandErr := errors.New("terraform failed")
-	err = snapshotter.around(phase.args, func() error { return commandErr })()
+	err = snapshotter.around(phase.args, func() error { return commandErr }, failedOnError)()
 	require.ErrorIs(t, err, commandErr, "an ordinary command failure must not be masked by a missing plan")
 	// Even if an exit-code policy treats the failure as successful, a stale artifact
 	// cannot become a reviewed plan without an observation from this invocation.
@@ -55,10 +55,83 @@ func TestMissingPlanDigestStopsBeforeAfterHooks(t *testing.T) {
 	require.NoFileExists(t, planPath+configurationPlanSuffix)
 
 	err = hookExecutor(shell).runExecutionPhase(project.config, info, phase, nil, func(_ *schema.ConfigAndStacksInfo, args []string, _ []component.ExecutionOption) error {
-		return snapshotter.around(args, func() error { return os.WriteFile(planPath, []byte("valid plan"), 0o600) })()
+		return snapshotter.around(args, func() error { return os.WriteFile(planPath, []byte("valid plan"), 0o600) }, failedOnError)()
 	})
 	require.NoError(t, err)
 	require.Len(t, shell.calls, 1, "a successful fingerprint permits the after hook")
+}
+
+// A plan left at the output path by an earlier run is not bound by a run that wrote nothing, such as
+// a help-only invocation that exits successfully. The earlier file is left as it was.
+func TestStalePlanIsNotBoundByARunThatWroteNothing(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: config, info: info, execCtx: execCtx, pathFrom: func([]string) string { return path }}
+	execCtx.planSnapshots = snapshotter
+	args := []string{"plan", "-out=" + path, "-help"}
+
+	err := snapshotter.around(args, func() error { return nil }, failedOnError)()
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed, "the run wrote no plan, so the digest step fails")
+	require.Nil(t, snapshotter.result, "no reviewed snapshot is recorded for a plan this run did not write")
+	require.Error(t, snapshotter.err)
+	stale, readErr := os.ReadFile(path)
+	require.NoError(t, readErr)
+	require.Equal(t, "reviewed plan", string(stale), "the earlier plan is restored untouched")
+	entries, readErr := os.ReadDir(filepath.Dir(path))
+	require.NoError(t, readErr)
+	for _, entry := range entries {
+		require.NotContains(t, entry.Name(), stalePlanDirPrefix, "no stash is left behind")
+	}
+	require.Error(t, recordConfigurationPlan(t.Context(), config, info, execCtx, args))
+	require.NoFileExists(t, path+configurationPlanSuffix)
+
+	// Negative path: a run that writes the plan, even with identical bytes, is bound.
+	err = snapshotter.around(args[:2], func() error { return os.WriteFile(path, []byte("reviewed plan"), 0o600) }, failedOnError)()
+	require.NoError(t, err)
+	require.NoError(t, snapshotter.err)
+	require.NotNil(t, snapshotter.result)
+	require.NotEmpty(t, snapshotter.result.planDigest)
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, args[:2]))
+	require.FileExists(t, path+configurationPlanSuffix)
+	entries, readErr = os.ReadDir(filepath.Dir(path))
+	require.NoError(t, readErr)
+	for _, entry := range entries {
+		require.NotContains(t, entry.Name(), stalePlanDirPrefix, "the stash is discarded after a fresh write")
+	}
+}
+
+// failedOnError classifies every error as a failed command.
+func failedOnError(err error) bool { return err != nil }
+
+// The snapshotter uses the phase's classification of the result: a "changes present" status the
+// phase accepts (for example -detailed-exitcode from extra_arguments' TF_CLI_ARGS_plan) still binds
+// the plan, and a run that kept no snapshot is never replaced by a later observation.
+func TestPlanSnapshotUsesThePhaseClassification(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	info := project.info(t, "plan")
+	project.provider.EXPECT().Prepare(gomock.Any(), info).Return(project.prepared(), nil)
+	execution, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, info, false)
+	require.NoError(t, err)
+	planPath := filepath.Join(execution.workingDir, "reviewed.plan")
+	snapshotter := &planSnapshotter{ctx: t.Context(), config: project.config, info: info, execCtx: execution, pathFrom: func([]string) string { return planPath }}
+	execution.planSnapshots = snapshotter
+	changes := errUtils.ExitCodeError{Code: 2}
+	acceptsChanges := func(err error) bool { return err != nil && !errors.Is(err, changes) }
+	write := func() error {
+		require.NoError(t, os.WriteFile(planPath, []byte("plan with changes"), 0o600))
+		return changes
+	}
+	err = snapshotter.around([]string{"plan"}, write, acceptsChanges)()
+	require.ErrorIs(t, err, changes, "the status still reaches the caller")
+	require.NoError(t, snapshotter.err)
+	require.NotNil(t, snapshotter.result, "a status the phase accepts binds the plan")
+	require.NotEmpty(t, snapshotter.result.planDigest)
+
+	// A genuine failure keeps no snapshot, and the binding does not fall back to a later observation.
+	err = snapshotter.around([]string{"plan"}, write, failedOnError)()
+	require.ErrorIs(t, err, changes)
+	require.Nil(t, snapshotter.result)
+	_, err = execution.reviewedSnapshot(t.Context(), project.config, info, planPath)
+	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
 }
 
 func newReviewedPlanProject(t *testing.T) *reviewedPlanProject {
@@ -132,7 +205,7 @@ func TestApplyOfReviewedPlanReusesReviewedPreparationAndWorkdir(t *testing.T) {
 
 	require.Equal(t, project.workdir, execution.componentPath, "a reviewed plan runs in the retained directory")
 	require.Equal(t, execution.workingDir, execution.componentPath)
-	require.Equal(t, map[string]any{"value": "reviewed"}, execution.preparedConfiguration.Inputs)
+	require.Empty(t, execution.preparedConfiguration.Inputs, "the record stores no inputs; the plan file carries them")
 	retained, err := os.ReadFile(filepath.Join(project.workdir, "main.tf"))
 	require.NoError(t, err)
 	require.Equal(t, "# reviewed module", string(retained))
@@ -149,6 +222,39 @@ func TestApplyOfReviewedPlanReusesReviewedPreparationAndWorkdir(t *testing.T) {
 	args, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
 	require.Contains(t, strings.Split(string(args), "\n"), planPath)
+}
+
+func TestSavedPlanApplySkipsSecondComponentValidation(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	executor := testExecutor(t)
+	validations := 0
+	executor.services.ValidateComponent = func(_ *schema.AtmosConfiguration, _ string, section map[string]any, _, _ string, _ []string, _ int) (bool, error) {
+		validations++
+		vars, _ := section["vars"].(map[string]any)
+		return vars["value"] == "reviewed", nil
+	}
+	planPath := project.review(t)
+	require.Equal(t, 1, validations, "plan creation validates the component with its values")
+
+	apply := project.reviewedApply(t, planPath)
+	_, err := executor.prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
+	require.NoError(t, err, "a verified saved plan must not be rejected for its intentionally empty vars")
+	require.Equal(t, 1, validations, "saved-plan apply must not revalidate the redacted component")
+}
+
+func TestDirectPluginApplyStillValidatesComponent(t *testing.T) {
+	project := newReviewedPlanProject(t)
+	apply := project.info(t, "apply")
+	project.provider.EXPECT().Prepare(gomock.Any(), apply).Return(project.prepared(), nil)
+	executor := testExecutor(t)
+	validations := 0
+	executor.services.ValidateComponent = func(_ *schema.AtmosConfiguration, _ string, _ map[string]any, _, _ string, _ []string, _ int) (bool, error) {
+		validations++
+		return false, nil
+	}
+	_, err := executor.prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, project.config, apply, false)
+	require.ErrorIs(t, err, errUtils.ErrInvalidComponent)
+	require.Equal(t, 1, validations, "a direct apply has no reviewed plan to replace validation")
 }
 
 // Terragrunt evaluates the configuration again for apply, so a hook enabled only for apply is
@@ -234,7 +340,9 @@ func TestPrepareConfigurationRestoresReviewedPlanWithoutPreparing(t *testing.T) 
 
 	prepared, err := prepareConfiguration(t.Context(), project.config, apply)
 	require.NoError(t, err)
-	require.Equal(t, map[string]any{"value": "reviewed"}, apply.ComponentVarsSection)
+	// The record keeps no inputs: the plan file carries the values Terraform applies.
+	require.Empty(t, apply.ComponentVarsSection)
+	require.NotNil(t, apply.ComponentVarsSection)
 	require.Equal(t, prepared.Inputs, apply.ComponentSection["vars"])
 
 	// A tampered plan is rejected before any of the reviewed state is applied to the invocation.
@@ -303,7 +411,7 @@ func TestPlanSnapshotterFingerprintsThePlanBeforeAfterHooksRun(t *testing.T) {
 			execution.planSnapshots = snapshotter
 
 			// Terraform writes the plan.
-			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) })
+			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) }, failedOnError)
 			require.NoError(t, terraform())
 			written, err := fileDigest(planPath)
 			require.NoError(t, err)
@@ -353,7 +461,7 @@ func TestPlanSnapshotterBindsTheEngineThatRanTerraform(t *testing.T) {
 			snapshotter := &planSnapshotter{ctx: t.Context(), config: project.config, info: info, execCtx: execution, pathFrom: func([]string) string { return planPath }}
 			execution.planSnapshots = snapshotter
 
-			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) })
+			terraform := snapshotter.around(nil, func() error { return os.WriteFile(planPath, []byte("reviewed plan"), 0o600) }, failedOnError)
 			require.NoError(t, terraform())
 			require.NotNil(t, snapshotter.result)
 			require.Equal(t, ran, snapshotter.result.engineDigest, "the engine digest is taken around the subprocess")

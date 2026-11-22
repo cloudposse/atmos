@@ -88,7 +88,7 @@ The command performs the following:
 - The command compares each stack manifest section of the stack configurations from both sources looking for differences
 
 - And finally, the command outputs a JSON or YAML document consisting of a list of the affected components and stacks
-  and what caused it to be affected
+  and what caused it to be affected. Results are sorted by stack. Within a stack, components of each type are sorted by name.
 
 Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related
 components and stacks as affected. Atmos will then skip evaluating the stacks for differences since it already

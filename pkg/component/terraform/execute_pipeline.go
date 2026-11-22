@@ -3,11 +3,15 @@ package terraform
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
+	"maps"
+	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -22,6 +26,51 @@ import (
 	"github.com/cloudposse/atmos/pkg/terraform/autoinit"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// warnConfigurationDryRun explains which plugin metadata a dry-run preview omits.
+func warnConfigurationDryRun(info *schema.ConfigAndStacksInfo) {
+	if info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) {
+		ui.Warning("Dry-run preview may omit Terragrunt extra arguments, required var files, and environment variables because Terragrunt configuration is not evaluated")
+	}
+}
+
+// resolvePreparedComponentPath keeps reviewed plans on their retained workdir.
+func (e *Executor) resolvePreparedComponentPath(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) (string, error) {
+	if prepared != nil && usesConfigurationPlan(info) {
+		// Provisioning could replace the reviewed plan's modules.
+		return ConstructTerraformComponentWorkingDir(atmosConfig, info), nil
+	}
+	return e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
+}
+
+// resolveComponentToolchain preserves an environment already selected during preparation.
+func resolveComponentToolchain(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, shouldProcess bool, environment *dependencies.ToolchainEnvironment) (*dependencies.ToolchainEnvironment, error) {
+	if !shouldProcess || environment != nil {
+		return environment, nil
+	}
+	environment, err := resolveAndInstallToolchainDeps(config, info)
+	if err != nil {
+		return nil, err
+	}
+	info.Command = environment.Resolve(info.Command)
+	return environment, nil
+}
+
+// writePreparedConfigurationFiles validates generated paths before writing a live preparation.
+func writePreparedConfigurationFiles(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration, componentPath string) error {
+	if prepared == nil || info.DryRun || (usesConfigurationPlan(info) && restoresConfigurationPlan(info)) {
+		return nil
+	}
+	if err := rejectRuntimeArtifacts(prepared.Files); err != nil {
+		return err
+	}
+	if err := writePreparedConfiguration(componentPath, prepared); err != nil {
+		return fmt.Errorf("component %s in stack %s, working directory %s: %w", info.ComponentFromArg, info.Stack, componentPath, err)
+	}
+	// Prepared files can introduce sensitive declarations at an already inspected path.
+	loadTerraformModuleInfo(info, componentPath)
+	return nil
+}
 
 // componentExecContext holds the per-execution state assembled by prepareComponentExecution.
 // It is consumed by executeCommandPipeline without further modification.
@@ -61,6 +110,9 @@ func (e *Executor) prepareComponentExecution(
 	if err != nil {
 		return nil, err
 	}
+	// A restored plugin plan was validated when it was created. Its binding omits
+	// variable values, so validating the reconstructed component would test empty vars.
+	restoredConfigurationPlan := prepared != nil && isRestoredConfigurationPlan(info)
 
 	componentPath, err := e.resolvePreparedComponentPath(ctx, writers, atmosConfig, info, prepared)
 	if err != nil {
@@ -81,14 +133,11 @@ func (e *Executor) prepareComponentExecution(
 	}
 
 	varFile := ConstructTerraformComponentVarfileName(info)
-	testVarFile := ""
-	if hasTerraformTestVars(info) {
-		testVarFile = ConstructTerraformComponentTestVarfileName(info)
-	}
+	testVarFile := terraformTestVarfileName(info)
 	planFile := ConstructTerraformComponentPlanfileName(info)
 	workingDir := ConstructTerraformComponentWorkingDir(atmosConfig, info)
 
-	if err = e.runPreExecutionSteps(atmosConfig, info, workingDir, tenv); err != nil {
+	if err = e.runPreExecutionSteps(atmosConfig, info, workingDir, tenv, restoredConfigurationPlan); err != nil {
 		return nil, err
 	}
 
@@ -103,6 +152,19 @@ func (e *Executor) prepareComponentExecution(
 	}, nil
 }
 
+// terraformTestVarfileName returns the test var file name, or "" when the component has no test vars.
+func terraformTestVarfileName(info *schema.ConfigAndStacksInfo) string {
+	if !hasTerraformTestVars(info) {
+		return ""
+	}
+	return ConstructTerraformComponentTestVarfileName(info)
+}
+
+// isRestoredConfigurationPlan reports whether the invocation applies a provider-owned saved plan.
+func isRestoredConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
+	return ownsConfigurationPlan(info) && usesConfigurationPlan(info) && restoresConfigurationPlan(info)
+}
+
 // runPreExecutionSteps performs validation, auth pre-hook, config file generation,
 // env var warnings, and env var assembly. Extracted from prepareComponentExecution
 // to keep cyclomatic complexity within bounds.
@@ -111,6 +173,7 @@ func (e *Executor) runPreExecutionSteps(
 	info *schema.ConfigAndStacksInfo,
 	workingDir string,
 	tenv *dependencies.ToolchainEnvironment,
+	restoredConfigurationPlan bool,
 ) error {
 	// `(computed)` is an inspection-only degradation marker. Never permit it to
 	// reach Terraform via a generated tfvars file or TF_VAR_ environment value.
@@ -127,21 +190,16 @@ func (e *Executor) runPreExecutionSteps(
 		return err
 	}
 
-	if err := e.validateTerraformComponent(atmosConfig, info); err != nil {
-		return err
+	if !restoredConfigurationPlan {
+		if err := e.validateTerraformComponent(atmosConfig, info); err != nil {
+			return err
+		}
 	}
 
 	if !schema.ConfigurationOwned(info.ComponentSettingsSection) || info.DryRun {
-		if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
-			// The error is returned and rendered once by the command boundary, so it is only logged
-			// at debug level here to avoid printing the same failure twice.
-			log.Debug("Error executing 'atmos auth terraform pre-hook'",
-				logFieldComponent, info.ComponentFromArg, "error", err)
-			// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
-			// Authentication setup failures must not silently produce unauthenticated terraform commands.
+		if err := runAuthPreHook(atmosConfig, info); err != nil {
 			return err
 		}
-		disableTerraformPluginCacheForExecution(atmosConfig, info)
 	}
 
 	// Generate backend and provider-override files. When AutoGenerateFiles=true,
@@ -170,6 +228,21 @@ func assemblePreExecutionEnvVars(atmosConfig *schema.AtmosConfiguration, info *s
 	return assembleComponentEnvVars(atmosConfig, info, tenv)
 }
 
+// runAuthPreHook runs the auth pre-hook and disables the Terraform plugin cache for this execution.
+func runAuthPreHook(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if err := auth.TerraformPreHook(atmosConfig, info); err != nil {
+		// The error is returned and rendered once by the command boundary, so it is only logged
+		// at debug level here to avoid printing the same failure twice.
+		log.Debug("Error executing 'atmos auth terraform pre-hook'",
+			logFieldComponent, info.ComponentFromArg, "error", err)
+		// Pre-hook failures terminate execution — this matches the original terraform.go behavior.
+		// Authentication setup failures must not silently produce unauthenticated terraform commands.
+		return err
+	}
+	disableTerraformPluginCacheForExecution(atmosConfig, info)
+	return nil
+}
+
 // executeCommandPipeline runs the full terraform command pipeline after the component
 // has been prepared: optional init pre-step, argument construction, workspace setup,
 // TTY guard, and final command execution + cleanup.
@@ -185,28 +258,43 @@ func terraformPhaseLabel(info *schema.ConfigAndStacksInfo, phase string) string 
 	return strings.TrimSpace(tool + " " + phase)
 }
 
+// runGroupedInitPhase runs the init pre-step, when needed, and returns the possibly updated component path.
+func (e *Executor) runGroupedInitPhase(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	execCtx *componentExecContext,
+	componentPath string,
+	opts ...component.ExecutionOption,
+) (string, error) {
+	if !shouldRunTerraformInit(atmosConfig, info) {
+		return componentPath, nil
+	}
+	// Phase-level CI log grouping (Dimension "phase"): fold the `init` phase
+	// into its own collapsible group. A no-op unless ci.groups.mode is "auto"
+	// and this is the outermost Atmos invocation (a terraform run nested inside
+	// a workflow step stays flat inside the step's group).
+	err := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandInit), func() error {
+		var phaseErr error
+		componentPath, phaseErr = e.executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile, opts...)
+		return phaseErr
+	})
+	if err != nil {
+		return componentPath, errUtils.AsPrerequisiteError(err)
+	}
+	return componentPath, nil
+}
+
 func (e *Executor) executeCommandPipeline(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	execCtx *componentExecContext,
 	opts ...component.ExecutionOption,
 ) error {
-	componentPath := execCtx.componentPath
 	warnConfigurationDryRun(info)
 
-	if shouldRunTerraformInit(atmosConfig, info) {
-		// Phase-level CI log grouping (Dimension "phase"): fold the `init` phase
-		// into its own collapsible group. A no-op unless ci.groups.mode is "auto"
-		// and this is the outermost Atmos invocation (a terraform run nested inside
-		// a workflow step stays flat inside the step's group).
-		err := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandInit), func() error {
-			var phaseErr error
-			componentPath, phaseErr = e.executeTerraformInitPhase(atmosConfig, info, componentPath, execCtx.varFile, opts...)
-			return phaseErr
-		})
-		if err != nil {
-			return errUtils.AsPrerequisiteError(err)
-		}
+	componentPath, err := e.runGroupedInitPhase(atmosConfig, info, execCtx, execCtx.componentPath, opts...)
+	if err != nil {
+		return err
 	}
 
 	handleDeploySubcommand(atmosConfig, info)
@@ -263,9 +351,9 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	// this, incidental init/workspace-select output (e.g. a stray "No changes."
 	// lookalike) can poison the exec-metadata parser's extraction even though the
 	// real plan/apply's own output is correct (research.md Decision 32).
-	// Init/provisioning can relocate the execution directory after preparation.
+	// Init may relocate the actual execution directory after preparation.
 	execCtx.componentPath, execCtx.workingDir = componentPath, componentPath
-	if err := validateEnvironmentPlanOutput(atmosConfig, info, execCtx); err != nil {
+	if err := validateEnvironmentPlanOutput(atmosConfig, info, execCtx, opts...); err != nil {
 		return err
 	}
 	allArgsAndFlags, restore, err := expandPolicyPlanArguments(info, execCtx, allArgsAndFlags, componentPath)
@@ -294,13 +382,14 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 		return e.executeGovernedTerraformCommand(atmosConfig, info, allArgsAndFlags, componentPath, uploadStatusFlag, execCtx.planPolicy, mainOpts...)
 	})
 	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
-	if mainErr != nil && !lifecycleOwnsRecovery(info) {
+	// A completed -detailed-exitcode plan reports changes with status 2 after writing the plan, so
+	// it is neither recovered nor returned before the reviewed plan is recorded. A component with
+	// provider-supplied hooks already recovered inside its lifecycle.
+	if mainErr != nil && !completedPlanWithChanges(mainErr) && !lifecycleOwnsRecovery(info) {
 		mainErr = e.recoverFromInitRequired(atmosConfig, info, execCtx, allArgsAndFlags, componentPath, uploadStatusFlag,
 			mainErr, &execMetadataStdoutBuf, &execMetadataStderrBuf, append(slices.Clone(opts), captureArgs)...)
 	}
-	// An explicit -detailed-exitcode plan reports changes with status 2 after writing the
-	// plan, so the reviewed plan is recorded before that status is returned.
-	if mainErr != nil && !isExplicitDetailedPlanChanges(info, effectiveArgs, mainErr) {
+	if mainErr != nil && !completedPlanWithChanges(mainErr) {
 		return mainErr
 	}
 	// Policy plans run against a private artifact that is removed after the guard
@@ -315,158 +404,11 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	return mainErr
 }
 
-// planSnapshot is the configuration a saved plan is bound to: the provider identity and the
-// digest of the retained working directory, excluding the plan and the state Terraform writes.
-type planSnapshot struct {
-	path, identity, workingDigest string
-	// engineDigest is the digest of the Terraform executable observed around the subprocess, so a hook
-	// that replaces the binary afterwards cannot move the binding onto the replacement. It is empty when
-	// the executable could not be read, and the binding then falls back to its own observation.
-	engineDigest string
-	// planDigest is the digest of the plan file Terraform wrote, taken before any after hook runs. It is
-	// empty when no digest was observed, and it is not part of the before-and-after comparison.
-	planDigest string
-}
-
-// planSnapshotKey carries the plan snapshotter to the main command's subprocess.
-type planSnapshotKey struct{}
-
-// planSnapshotter observes the configuration around the Terraform subprocess, after the before
-// hooks and before the after hooks. A hook that rewrites the module after Terraform read it then
-// cannot move the binding onto the rewritten bytes.
-type planSnapshotter struct {
-	ctx      context.Context
-	config   *schema.AtmosConfiguration
-	info     *schema.ConfigAndStacksInfo
-	execCtx  *componentExecContext
-	pathFrom func(phaseArgs []string) string
-	result   *planSnapshot
-	err      error
-}
-
-// takePlanSnapshot fingerprints the configuration with the inputs the binding record uses.
-func takePlanSnapshot(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, execCtx *componentExecContext, path string) (*planSnapshot, error) {
-	runtime, err := planRuntime(config)
-	if err != nil {
-		return nil, err
-	}
-	identity, err := runtime.PlanIdentity(ctx, info, execCtx.preparedConfiguration.Sources)
-	if err != nil {
-		return nil, err
-	}
-	digest, err := configurationWorkdirDigest(execCtx.workingDir, path)
-	if err != nil {
-		return nil, err
-	}
-	engineDigest, _ := fileDigest(info.Command)
-	return &planSnapshot{path: path, identity: identity, workingDigest: digest, engineDigest: engineDigest}, nil
-}
-
-// around wraps one run of the Terraform subprocess. The configuration must be the same before and
-// after it; the unchanged snapshot is kept for the binding, and a changed one rejects the plan.
-func (s *planSnapshotter) around(phaseArgs []string, run func() error) func() error {
-	return func() error {
-		s.result, s.err = nil, nil
-		path := s.pathFrom(phaseArgs)
-		if path == "" {
-			return run()
-		}
-		before, err := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
-		if err != nil {
-			return err
-		}
-		runErr := run()
-		after, err := takePlanSnapshot(s.ctx, s.config, s.info, s.execCtx, path)
-		switch {
-		case err != nil:
-			s.err = err
-		case *after != *before:
-			s.err = fmt.Errorf("%w: configuration changed while Terraform ran", errUtils.ErrPlanVerificationFailed)
-		default:
-			// Hash the engine's actual -out artifact before after hooks, even when policy
-			// later publishes it at a different path retained by the companion.
-			writtenPath := path
-			if s.execCtx.planPolicy != nil {
-				writtenPath = plannedOutputPath(s.execCtx.componentPath, phaseArgs)
-			}
-			if planCommandFailed(phaseArgs, runErr) {
-				return runErr
-			}
-			digest, digestErr := fileDigest(writtenPath)
-			if digestErr != nil {
-				s.err = digestErr
-				return digestErr
-			}
-			after.planDigest = digest
-			s.result = after
-		}
-		return runErr
-	}
-}
-
-// planCommandFailed leaves Terraform's detailed plan status available for binding.
-func planCommandFailed(args []string, err error) bool {
-	return err != nil && (!detailedExitCodeEnabled(args) || resolveExitCode(err) != detailedExitCodeChangesDetected)
-}
-
-// reviewedSnapshot returns the configuration Terraform read, or takes a fresh snapshot when no
-// observed run recorded one for this plan.
-func (c *componentExecContext) reviewedSnapshot(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, path string) (*planSnapshot, error) {
-	if s := c.planSnapshots; s != nil {
-		if s.err != nil {
-			return nil, s.err
-		}
-		if s.result != nil && s.result.path == path {
-			return s.result, nil
-		}
-	}
-	return takePlanSnapshot(ctx, config, info, c, path)
-}
-
-// observePlanSnapshots returns ctx carrying a snapshotter for a plan this invocation binds. Policy
-// plans publish the artifact at the original output path, so that path is the one excluded from the
-// digest. The returned context is unchanged when no plan is bound.
-func (c *componentExecContext) observePlanSnapshots(ctx context.Context, config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, policyArgs []string) context.Context {
-	c.planSnapshots = nil
-	if !bindsPlan(info, c) {
-		return ctx
-	}
-	c.planSnapshots = &planSnapshotter{ctx: ctx, config: config, info: info, execCtx: c, pathFrom: func(phaseArgs []string) string {
-		if c.planPolicy != nil {
-			phaseArgs = policyArgs
-		}
-		return plannedOutputPath(c.componentPath, phaseArgs)
-	}}
-	return context.WithValue(ctx, planSnapshotKey{}, c.planSnapshots)
-}
-
-// isExplicitDetailedPlanChanges reports plan's "changes present" status from -detailed-exitcode.
-// A failed hook is never that status, even when the hook itself exited with 2.
-func isExplicitDetailedPlanChanges(info *schema.ConfigAndStacksInfo, args []string, err error) bool {
-	if errors.Is(err, errUtils.ErrComponentHookFailed) {
-		return false
-	}
-	return info.SubCommand == subcommandPlan && detailedExitCodeEnabled(args) && resolveExitCode(err) == detailedExitCodeChangesDetected
-}
-
-// detailedExitCodeEnabled reports whether args enable -detailed-exitcode. It accepts the bare flag
-// and the explicit boolean forms (-detailed-exitcode=true, --detailed-exitcode=false), and the last
-// occurrence wins, matching Go flag semantics. An unparsable value counts as not enabled.
-func detailedExitCodeEnabled(args []string) bool {
-	enabled := false
-	for _, arg := range args {
-		name, value, hasValue := strings.Cut(arg, "=")
-		if name != detailedExitCodeFlag && name != "-"+detailedExitCodeFlag {
-			continue
-		}
-		if !hasValue {
-			enabled = true
-			continue
-		}
-		parsed, err := strconv.ParseBool(value)
-		enabled = err == nil && parsed
-	}
-	return enabled
+// completedPlanWithChanges accepts only the completed phase itself, not a joined
+// or wrapped failure that also contains a status-two result.
+func completedPlanWithChanges(err error) bool {
+	var changes *successfulPlanChanges
+	return errors.As(err, &changes) && err == changes //nolint:err113,errorlint // Identity is required: errors.Is would also accept joined failures.
 }
 
 // recoverFromInitRequired is smart init's plan/apply-time safety net: when the main command
@@ -632,4 +574,98 @@ func addTerraformTestVarfileArg(info *schema.ConfigAndStacksInfo, testVarFile st
 		return
 	}
 	info.AdditionalArgsAndFlags = append([]string{varFileFlag, testVarFile}, info.AdditionalArgsAndFlags...)
+}
+
+// withoutContent copies files, dropping the bytes of every one.
+func withoutContent(files []schema.ComponentConfigurationFile) []schema.ComponentConfigurationFile {
+	stored := slices.Clone(files)
+	for i := range stored {
+		stored[i].Content = nil
+	}
+	return stored
+}
+
+// restoreSensitiveContent reads the bytes of each sensitive file back from the working directory and
+// restores them only when they are the reviewed ones. The working directory digest excludes some
+// locations, so the reviewed bytes are verified here against the digest recorded with the plan.
+func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurationFile, reviewed string) error {
+	contents, err := readSensitiveFiles(workdir, files)
+	if err != nil {
+		return err
+	}
+	if contents == nil {
+		return nil
+	}
+	// The digest binds absence as well as bytes: a file that was already absent when the plan was
+	// reviewed and is still absent matches, while one that disappeared or appeared since does not.
+	if digestSensitiveContents(contents) != reviewed {
+		for i := range files {
+			// A file the entry removes is absent by design, so only other policies report it as missing.
+			if files[i].Sensitive && contents[files[i].Path] == nil && !slices.Contains([]string{"remove", "remove_terragrunt"}, files[i].IfExists) {
+				return fmt.Errorf("%w: reviewed generated file %s is missing: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, fs.ErrNotExist)
+			}
+		}
+		return fmt.Errorf("%w: reviewed generated file changed", errUtils.ErrPlanVerificationFailed)
+	}
+	for i := range files {
+		if files[i].Sensitive {
+			files[i].Content = contents[files[i].Path]
+		}
+	}
+	return nil
+}
+
+// sensitiveDigest fingerprints the sensitive generated files as they are in the working directory.
+// It is empty when no file is sensitive.
+func sensitiveDigest(workdir string, files []schema.ComponentConfigurationFile) (string, error) {
+	contents, err := readSensitiveFiles(workdir, files)
+	if err != nil || contents == nil {
+		return "", err
+	}
+	return digestSensitiveContents(contents), nil
+}
+
+// readSensitiveFiles reads every sensitive file below workdir, keyed by path. A missing file maps
+// to nil content. It returns nil when no file is sensitive.
+func readSensitiveFiles(workdir string, files []schema.ComponentConfigurationFile) (map[string][]byte, error) {
+	if !slices.ContainsFunc(files, func(file schema.ComponentConfigurationFile) bool { return file.Sensitive }) {
+		return nil, nil
+	}
+	root, err := os.OpenRoot(workdir)
+	if err != nil {
+		return nil, planIOError(err)
+	}
+	defer root.Close()
+	contents := make(map[string][]byte)
+	for i := range files {
+		if !files[i].Sensitive {
+			continue
+		}
+		content, err := root.ReadFile(files[i].Path)
+		if errors.Is(err, fs.ErrNotExist) {
+			contents[files[i].Path] = nil
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: reviewed generated file %s cannot be read: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, err)
+		}
+		if content == nil {
+			content = []byte{}
+		}
+		contents[files[i].Path] = content
+	}
+	return contents, nil
+}
+
+// digestSensitiveContents hashes the paths and bytes of the sensitive files in a stable order.
+func digestSensitiveContents(contents map[string][]byte) string {
+	hash := sha256.New()
+	for _, path := range slices.Sorted(maps.Keys(contents)) {
+		if contents[path] == nil {
+			fmt.Fprintf(hash, "%s\x00absent\n", path)
+			continue
+		}
+		fmt.Fprintf(hash, "%s\x00%x\n", path, sha256.Sum256(contents[path]))
+	}
+	return hex.EncodeToString(hash.Sum(nil))
 }

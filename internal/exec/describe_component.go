@@ -13,6 +13,7 @@ import (
 	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
+	configurationadapter "github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/component/typedetect"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -654,8 +655,10 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 	if configAndStacksInfo.StackFile != "" {
 		mergeContext = GetMergeContextForStack(configAndStacksInfo.StackFile)
 	}
-	// Fall back to the old method if the stack file is not set
-	if mergeContext == nil {
+	// Fall back to the old method if the stack file is not set. A component supplied by a
+	// configuration provider has no manifest of its own: the most recently processed manifest
+	// is unrelated to it (and varies between runs), so it must not be reported as its origin.
+	if mergeContext == nil && !configurationadapter.OwnsComponent(configAndStacksInfo.ComponentSection) {
 		mergeContext = GetLastMergeContext()
 	}
 

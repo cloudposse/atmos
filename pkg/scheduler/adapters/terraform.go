@@ -173,6 +173,9 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		ui.Success("No components matched")
 		return nil
 	}
+	if err := preflightTerraformGraph(ctx, opts.AtmosConfig, graph); err != nil {
+		return err
+	}
 
 	maxConcurrency := effectiveTerraformMaxConcurrency(opts.Info)
 	if maxConcurrency > 1 {

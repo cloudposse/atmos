@@ -103,7 +103,8 @@ func TestOwnedFilesRejectAncestorAliasAfterPreflight(t *testing.T) {
 			if err := os.Symlink("retained", filepath.Join(directory, "nested")); err != nil {
 				t.Skipf("symlink unavailable: %v", err)
 			}
-			require.ErrorIs(t, writeFile(root, file), errUtils.ErrPluginInvalidConfig)
+			_, err = writeFile(root, file, "")
+			require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 			contents, err := os.ReadFile(filepath.Join(directory, "retained", "generated.tf"))
 			require.NoError(t, err)
 			require.Equal(t, original, string(contents))

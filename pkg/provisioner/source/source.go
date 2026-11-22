@@ -102,6 +102,12 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 	if params.ComponentType == "terraform" {
 		options = append(options, WithRuntimePreservation(params.ComponentConfig), withProvenance(target, params.Stack, sourceSpec, &receipt))
 	}
+	// Like automatic provisioning, take the stamp before copying, so an edit made during the
+	// copy refreshes the workdir on the next run.
+	stamp := ""
+	if target.IsWorkdir {
+		stamp = localSourceStamp(sourceSpec)
+	}
 	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
 		if err := VendorSource(ctx, params.AtmosConfig, sourceSpec, targetDir, options...); err != nil {
 			return err
@@ -119,6 +125,9 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 			"component": params.Component,
 			"stack":     params.Stack,
 		}, "Verify source URI is accessible and credentials are valid")
+	}
+	if target.IsWorkdir {
+		recordSourceStamp(targetDir, stamp, ui.New(nil))
 	}
 
 	restoreInstanceLock(targetDir, params.ComponentConfig)
