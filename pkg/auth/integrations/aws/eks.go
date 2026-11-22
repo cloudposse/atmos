@@ -3,8 +3,10 @@ package aws
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
-	"strings"
+
+	"github.com/aws/aws-sdk-go-v2/aws/arn"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -15,6 +17,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+)
+
+const (
+	// eksServiceName is the service component of an EKS cluster ARN.
+	eksServiceName = "eks"
+	// eksClusterResourcePrefix precedes the cluster name in an EKS cluster ARN resource.
+	eksClusterResourcePrefix = "cluster/"
 )
 
 func init() {
@@ -231,7 +240,10 @@ func (e *EKSIntegration) resolveKubeconfigSettings() (path, mode, update string)
 	return "", "", ""
 }
 
-// findClusterARN searches the kubeconfig for a cluster ARN matching this integration's cluster name.
+// findClusterARN searches the kubeconfig for the EKS cluster ARN of this
+// integration's cluster. Each key is parsed as an ARN and must name the EKS
+// service, the integration's region and the "cluster/<name>" resource, so a
+// same-named cluster in another region (or a non-EKS entry) is never matched.
 func (e *EKSIntegration) findClusterARN(mgr *kube.KubeconfigManager) (string, error) {
 	defer perf.Track(nil, "aws.EKSIntegration.findClusterARN")()
 
@@ -240,13 +252,24 @@ func (e *EKSIntegration) findClusterARN(mgr *kube.KubeconfigManager) (string, er
 		return "", err
 	}
 
-	// Look for an ARN ending with "cluster/<name>".
-	suffix := "cluster/" + e.cluster.Name
-	for _, arn := range clusters {
-		if strings.HasSuffix(arn, suffix) {
-			return arn, nil
+	// Sort so the result does not depend on map iteration order.
+	sort.Strings(clusters)
+	for _, id := range clusters {
+		if e.matchesClusterARN(id) {
+			return id, nil
 		}
 	}
 
-	return "", fmt.Errorf("no cluster ARN found matching %s", e.cluster.Name)
+	return "", fmt.Errorf("%w: no cluster ARN found matching %s in %s", errUtils.ErrEKSClusterNotFound, e.cluster.Name, e.cluster.Region)
+}
+
+// matchesClusterARN reports whether id is the ARN of this integration's EKS cluster.
+func (e *EKSIntegration) matchesClusterARN(id string) bool {
+	parsed, err := arn.Parse(id)
+	if err != nil {
+		return false
+	}
+	return parsed.Service == eksServiceName &&
+		parsed.Region == e.cluster.Region &&
+		parsed.Resource == eksClusterResourcePrefix+e.cluster.Name
 }
