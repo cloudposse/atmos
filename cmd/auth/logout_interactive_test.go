@@ -224,3 +224,29 @@ func TestExecuteAuthLogoutCommand_PlainLogoutWithoutTTYFails(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrTTYRequired)
 }
+
+// TestPerformIdentityLogout_CaseInsensitiveIdentity is the regression for `auth logout`
+// failing with "identity not found" for a differently-cased identity name: the name
+// resolves to the configured identity, which is the one logged out.
+func TestPerformIdentityLogout_CaseInsensitiveIdentity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	m := authTypes.NewMockAuthManager(ctrl)
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"prod-admin": {Kind: "aws/permission-set"},
+		"dev-admin":  {Kind: "aws/permission-set"},
+	})
+	m.EXPECT().GetProviderForIdentity("prod-admin").Return("aws-sso")
+	m.EXPECT().GetRealm().Return(realmInfoMatcher())
+	m.EXPECT().Logout(gomock.Any(), "prod-admin", false).Return(nil)
+
+	require.NoError(t, performIdentityLogout(context.Background(), m, "Prod-Admin", false, false, false))
+}
+
+// TestCanonicalIdentityKey covers exact, case-insensitive, and unknown names.
+func TestCanonicalIdentityKey(t *testing.T) {
+	identities := map[string]schema.Identity{"prod-admin": {}, "dev-admin": {}}
+	assert.Equal(t, "prod-admin", canonicalIdentityKey(identities, "prod-admin"))
+	assert.Equal(t, "prod-admin", canonicalIdentityKey(identities, "PROD-Admin"))
+	assert.Equal(t, "Unknown", canonicalIdentityKey(identities, "Unknown"), "an unknown name is returned unchanged")
+	assert.Equal(t, "", canonicalIdentityKey(nil, ""))
+}

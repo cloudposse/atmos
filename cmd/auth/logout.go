@@ -349,8 +349,9 @@ func displayExternalCredentialWarnings() {
 func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, identityName string, dryRun bool, deleteKeychain bool, force bool) error { //nolint:gocognit,revive
 	defer perf.Track(nil, "auth.performIdentityLogout")()
 
-	// Validate identity exists.
+	// Validate identity exists. Names resolve case-insensitively, as `auth login` does.
 	identities := authManager.GetIdentities()
+	identityName = canonicalIdentityKey(identities, identityName)
 	if _, exists := identities[identityName]; !exists {
 		ui.MarkdownMessagef("**Error:** identity %q not found in configuration\n\n", identityName)
 		ui.MarkdownMessagef("**Available identities:**\n")

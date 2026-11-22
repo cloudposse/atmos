@@ -106,3 +106,31 @@ func TestExecuteAuthExecCommand_ChildArgsAndExitCode(t *testing.T) {
 		})
 	}
 }
+
+// TestExecuteAuthExecCommand_CaseInsensitiveIdentity is the regression for `auth exec`
+// failing with "identity not found" for a differently-cased identity name that
+// `auth login` and `auth whoami` accept.
+func TestExecuteAuthExecCommand_CaseInsensitiveIdentity(t *testing.T) {
+	executable, err := os.Executable()
+	require.NoError(t, err)
+
+	setupMockAuthFixture(t)
+	reportPath := filepath.Join(t.TempDir(), "child-report.json")
+	t.Setenv(authExecChildEnv, "1")
+	t.Setenv(authExecChildReportEnv, reportPath)
+	t.Setenv(authExecChildExitEnv, "0")
+
+	cmd := authExecCmd
+	resetAuthCmdFlags(t, cmd)
+	restorePersistentIdentityFlag(t)
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags([]string{"--identity=Mock-Identity", "--", executable}))
+
+	require.NoError(t, executeAuthExecCommand(cmd, cmd.Flags().Args()))
+
+	raw, readErr := os.ReadFile(reportPath)
+	require.NoError(t, readErr, "the child process must have run")
+	var report authExecChildReport
+	require.NoError(t, json.Unmarshal(raw, &report))
+	assert.Empty(t, report.Args)
+}

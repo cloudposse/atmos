@@ -385,6 +385,8 @@ func (m *manager) ExecuteIdentityIntegrations(ctx context.Context, identityName 
 func (m *manager) RevokeEphemeralIntegrations(ctx context.Context, identityName string, globalDefault *bool) error {
 	defer perf.Track(nil, "auth.Manager.RevokeEphemeralIntegrations")()
 
+	// Resolve the name case-insensitively so integrations bound to the identity match.
+	identityName = m.canonicalIdentityName(identityName)
 	linkedIntegrations := m.findIntegrationsForIdentity(identityName, false)
 	if len(linkedIntegrations) == 0 {
 		return nil

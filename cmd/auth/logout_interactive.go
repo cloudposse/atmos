@@ -70,6 +70,21 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
+// canonicalIdentityKey returns the configured identity key that matches name,
+// exactly or else case-insensitively (identity keys are stored lower-cased while
+// users may type the original casing), or name unchanged when nothing matches.
+func canonicalIdentityKey(identities map[string]schema.Identity, name string) string {
+	if _, exists := identities[name]; exists {
+		return name
+	}
+	for _, key := range sortedKeys(identities) {
+		if strings.EqualFold(key, name) {
+			return key
+		}
+	}
+	return name
+}
+
 // executeLogoutOption executes the selected logout action.
 // This is a pure routing function that can be easily tested.
 func executeLogoutOption(ctx context.Context, authManager auth.AuthManager, option logoutOption, dryRun bool, deleteKeychain bool, force bool) error { //nolint:revive

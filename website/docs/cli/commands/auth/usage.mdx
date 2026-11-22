@@ -118,6 +118,8 @@ Using the equals syntax (`--identity=admin`) is unambiguous and works in all con
 
 **Identities** represent the user accounts or roles available from provider credentials:
 
+Identity names are case-insensitive wherever you pass one: `--identity`, `ATMOS_IDENTITY`, the positional identity of `atmos auth logout`, and a custom command's `identity:`. For example, `--identity Prod-Admin` and `--identity prod-admin` select the same identity in `atmos auth login`, `whoami`, `env`, `exec`, `shell`, and `logout`.
+
 **AWS**
 - **Permission Set**: `aws/permission-set`
 - **Assume Role**: `aws/assume-role`
