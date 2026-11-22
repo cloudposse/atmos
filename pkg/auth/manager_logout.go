@@ -109,6 +109,9 @@ func (m *manager) deleteIdentityKeyringEntries(identityName string, deleteKeycha
 		log.Debug("Deleted keyring entry", logKeyIdentity, identityName, logKeyRealm, m.realm.Value)
 	}
 
+	// Also delete the identity's ambiguous previous-layout entry, which v1.234.1 deleted as its own.
+	errs = append(errs, m.deleteAmbiguousLegacyKeyringEntry(identityName, logKeyIdentity, bestEffort)...)
+
 	// Also delete legacy entry (pre-realm format) for backward compatibility cleanup.
 	if m.realm.Value != "" {
 		if err := m.credentialStore.Delete(identityName, ""); err != nil {
@@ -265,6 +268,9 @@ func (m *manager) deleteProviderKeyringEntries(providerName string, deleteKeycha
 			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, providerName, err))
 		}
 	}
+
+	// Also delete the provider's ambiguous previous-layout entry, which v1.234.1 deleted as its own.
+	errs = append(errs, m.deleteAmbiguousLegacyKeyringEntry(providerName, logKeyProvider, bestEffort)...)
 
 	// Also delete legacy entry (pre-realm format) for backward compatibility cleanup.
 	if m.realm.Value != "" {

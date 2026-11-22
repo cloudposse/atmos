@@ -115,6 +115,44 @@ func (s *keyringCredentialStore) AdoptAmbiguousLegacyRealmEntry(alias, realm str
 	return nil
 }
 
+// AmbiguousLegacyRealmDeleter is implemented by credential stores that can delete the ambiguous
+// previous-layout keyring entry of an alias in a realm. Delete never removes such an entry,
+// because it may belong to another realm and alias split; an explicit keychain logout does,
+// because older versions treated the entry as the alias's own key and deleted it at logout, and
+// keeping it would let a later login offer to revive the credentials the user just deleted.
+type AmbiguousLegacyRealmDeleter interface {
+	// DeleteAmbiguousLegacyRealmEntry deletes the ambiguous previous-layout entry of alias in
+	// realm, whatever it holds, and describes it (Key and OtherOwners; Credentials is nil). It
+	// returns nil when there is no such entry. Keys that are also current-layout keys of another
+	// realm (they contain "__") are never deleted.
+	DeleteAmbiguousLegacyRealmEntry(alias, realm string) (*AmbiguousLegacyRealmEntry, error)
+}
+
+// Every keyring-backed store (system, file, memory, noop) implements AmbiguousLegacyRealmDeleter.
+var _ AmbiguousLegacyRealmDeleter = (*keyringCredentialStore)(nil)
+
+// DeleteAmbiguousLegacyRealmEntry implements AmbiguousLegacyRealmDeleter.
+func (s *keyringCredentialStore) DeleteAmbiguousLegacyRealmEntry(alias, realm string) (*AmbiguousLegacyRealmEntry, error) {
+	defer perf.Track(nil, "credentials.keyringCredentialStore.DeleteAmbiguousLegacyRealmEntry")()
+
+	legacy, ok := s.ambiguousLegacyRealmKey(alias, realm)
+	if !ok {
+		return nil, nil
+	}
+	// Probe first, so a caller reports a deletion only for an entry that existed.
+	exists, err := s.kr.Has(legacy)
+	if err != nil {
+		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to probe legacy credentials: %w", err))
+	}
+	if !exists {
+		return nil, nil
+	}
+	if err := s.kr.Delete(legacy); err != nil {
+		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete legacy credentials: %w", err))
+	}
+	return &AmbiguousLegacyRealmEntry{Key: legacy, OtherOwners: otherLegacyRealmOwners(alias, realm)}, nil
+}
+
 // readLegacyEntry returns the raw entry under key and its decoded credentials. A missing or
 // undecodable entry returns nil credentials and no error: it is not offered for adoption, and
 // a corrupt entry is never propagated. Other keyring failures are returned.
