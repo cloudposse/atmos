@@ -3,14 +3,17 @@ package aws
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"reflect"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/http"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -83,6 +86,12 @@ func (g *ConsoleURLGenerator) GetConsoleURL(ctx context.Context, creds types.ICr
 	if err != nil {
 		return "", 0, err
 	}
+
+	// The credentials travel in the federation request URL. Register them with the
+	// masker so any output that repeats the URL or the session document is masked.
+	atmosio.RegisterSecret(awsCreds.AccessKeyID)
+	atmosio.RegisterSecret(awsCreds.SecretAccessKey)
+	atmosio.RegisterSecret(awsCreds.SessionToken)
 
 	// Determine session duration.
 	duration := determineSessionDuration(options.SessionDuration)
@@ -227,7 +236,10 @@ func (g *ConsoleURLGenerator) getSigninToken(ctx context.Context, sessionData []
 	// Make HTTP request to federation endpoint.
 	response, err := http.Get(ctx, federationURL, g.httpClient)
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to call federation endpoint: %w", errUtils.ErrHTTPRequestFailed, err)
+		// The request URL carries the credentials in its Session parameter, and both the
+		// transport error and the status error repeat that URL, so the original error is
+		// never returned: it is rebuilt with the query and every credential redacted.
+		return "", redactFederationError(err, baseURL.RawQuery, sessionData)
 	}
 
 	// Parse response to extract SigninToken.
@@ -245,6 +257,51 @@ func (g *ConsoleURLGenerator) getSigninToken(ctx context.Context, sessionData []
 	log.Debug("Successfully obtained signin token from AWS federation endpoint")
 
 	return result.SigninToken, nil
+}
+
+// federationRedactedQuery replaces the getSigninToken query in errors.
+const federationRedactedQuery = "Action=getSigninToken&Session=[redacted]"
+
+// federationRedacted replaces a credential value found in a federation error.
+const federationRedacted = "[redacted]"
+
+// redactFederationError rebuilds a federation request error without the credentials.
+// rawQuery is the encoded getSigninToken query (it holds the Session document) and
+// sessionData is the Session JSON. The query is replaced first, then every remaining
+// raw, query-escaped, or path-escaped credential value (a response body may echo the
+// session). Cancellation and deadline causes stay in the error chain.
+func redactFederationError(err error, rawQuery string, sessionData []byte) error {
+	msg := err.Error()
+	if rawQuery != "" {
+		msg = strings.ReplaceAll(msg, rawQuery, federationRedactedQuery)
+	}
+	for _, secret := range federationSecrets(sessionData) {
+		for _, form := range []string{secret, url.QueryEscape(secret), url.PathEscape(secret)} {
+			msg = strings.ReplaceAll(msg, form, federationRedacted)
+		}
+	}
+
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded} {
+		if errors.Is(err, cause) {
+			return fmt.Errorf("%w: %w: failed to call federation endpoint %s: %s", errUtils.ErrHTTPRequestFailed, cause, AWSFederationEndpoint, msg)
+		}
+	}
+	return fmt.Errorf("%w: failed to call federation endpoint %s: %s", errUtils.ErrHTTPRequestFailed, AWSFederationEndpoint, msg)
+}
+
+// federationSecrets returns the non-empty credential values in the Session JSON.
+func federationSecrets(sessionData []byte) []string {
+	var session map[string]string
+	if err := json.Unmarshal(sessionData, &session); err != nil {
+		return nil
+	}
+	secrets := make([]string, 0, len(session))
+	for _, value := range session {
+		if value != "" {
+			secrets = append(secrets, value)
+		}
+	}
+	return secrets
 }
 
 // SupportsConsoleAccess returns true for AWS.
