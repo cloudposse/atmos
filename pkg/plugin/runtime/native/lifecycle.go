@@ -110,7 +110,7 @@ func (h *Handle) callContext(ctx context.Context, interactive bool) (context.Con
 	var work *budget
 	if limit > 0 && interactive {
 		work = newBudget(h.callTimeout, func() { cancel(errUtils.ErrPluginTimeout) })
-		limit += h.interactionLimit
+		limit = saturatingDurationAdd(limit, h.interactionLimit)
 	}
 	cancelTimeout := func() {}
 	if limit > 0 {

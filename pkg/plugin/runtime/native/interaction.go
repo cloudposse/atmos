@@ -1,6 +1,7 @@
 package native
 
 import (
+	"math"
 	"sync"
 	"time"
 
@@ -10,6 +11,16 @@ import (
 // DefaultInteractionLimit is how long an interactive invocation may wait for the user, on top of
 // its call timeout. It matches the longest device-code lifetime common identity providers issue.
 const DefaultInteractionLimit = 15 * time.Minute
+
+// saturatingDurationAdd adds two non-negative durations, capping the result at the largest
+// time.Duration. The call timeout has no upper bound, so adding the interaction limit to a very
+// large one would otherwise wrap to a negative duration and drop the call's hard deadline.
+func saturatingDurationAdd(a, b time.Duration) time.Duration {
+	if b > 0 && a > time.Duration(math.MaxInt64)-b {
+		return time.Duration(math.MaxInt64)
+	}
+	return a + b
+}
 
 // WithInteractionLimit bounds the time an interactive invocation may spend waiting for the user
 // to complete a sign-in. That wait does not count against the call timeout, but the call's hard
