@@ -52,7 +52,7 @@ func buildKeyringKey(alias, realm string) string {
 
 // legacyRealmKeyringKey returns the previous realm-scoped key "atmos_<realm>_<alias>". Both
 // parts may contain "_", so realm "acme" + alias "prod_admin" and realm "acme_prod" + alias
-// "admin" share one key; it is read only when legacyRealmKeyIsUnambiguous holds.
+// "admin" share one key; it is read only when the store's legacyKeyIsUnambiguous holds.
 func legacyRealmKeyringKey(alias, realm string) string {
 	return KeyringRealmPrefix + KeyringSeparator + realm + KeyringSeparator + alias
 }
@@ -145,6 +145,8 @@ func NewCredentialStoreWithConfig(authConfig *schema.AuthConfig) types.Credentia
 		}
 	}
 
+	// Keep an explicitly configured realm from being mistaken for the auto realm.
+	setExplicitRealm(store, authConfig)
 	return store
 }
 

@@ -113,8 +113,8 @@ func TestFilterRealmKeys_SeparatesRealms(t *testing.T) {
 		buildKeyringKey("reader", "acme"),
 		buildKeyringKey("solo", ""),
 	}
-	assert.Equal(t, []string{"prod_admin", "reader"}, filterRealmKeys(keys, "acme"))
-	assert.Equal(t, []string{"admin"}, filterRealmKeys(keys, "acme_prod"))
+	assert.Equal(t, []string{"prod_admin", "reader"}, (&keyringCredentialStore{}).filterRealmKeys(keys, "acme"))
+	assert.Equal(t, []string{"admin"}, (&keyringCredentialStore{}).filterRealmKeys(keys, "acme_prod"))
 }
 
 // TestKeyringStore_DeleteReportsLegacyDeleteFailure verifies a backend failure while

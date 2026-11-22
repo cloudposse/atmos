@@ -28,7 +28,14 @@ const (
 
 	// MaxLength is the maximum allowed length for a realm value.
 	MaxLength = 64
+
+	// AutoValueLength is the length of the realm Atmos derives from the atmos.yaml path when no
+	// realm is configured: the first 8 bytes of a SHA-256, as lowercase hex (pkg/config/auth_realm.go).
+	AutoValueLength = 16
 )
+
+// autoValuePattern matches the exact format of the realm derived from the atmos.yaml path.
+var autoValuePattern = regexp.MustCompile(fmt.Sprintf(`^[0-9a-f]{%d}$`, AutoValueLength))
 
 // RealmInfo contains the computed realm value and its source.
 type RealmInfo struct {
@@ -144,6 +151,15 @@ func Validate(input string) error {
 	}
 
 	return nil
+}
+
+// HasAutoValueFormat reports whether value has the exact format of the realm Atmos derives from
+// the atmos.yaml path when no realm is configured: AutoValueLength lowercase hexadecimal
+// characters. Such a realm never contains "_". Callers that only see the realm string use this to
+// recognize the auto realm; a configured realm can have the same format, so callers that know the
+// configured realm must exclude it themselves.
+func HasAutoValueFormat(value string) bool {
+	return autoValuePattern.MatchString(value)
 }
 
 // SourceDescription returns a human-readable description of where the realm came from.

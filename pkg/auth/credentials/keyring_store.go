@@ -20,6 +20,9 @@ import (
 type keyringCredentialStore struct {
 	kr        keyring.Keyring
 	storeType string
+	// explicitRealm is the realm the store's config says was configured explicitly, so it is never
+	// mistaken for the auto realm (see keyring_legacy_auto_realm.go). Empty when unknown.
+	explicitRealm string
 }
 
 // Store stores credentials for the given alias within the specified realm.
@@ -60,7 +63,7 @@ func (s *keyringCredentialStore) retrieveEnvelope(alias, realm string) (types.IC
 	// Read-fallback migration: entries written before the "__" realm separator are still
 	// found, but only when the old key cannot belong to another realm and alias split.
 	fromLegacy := false
-	if errors.Is(err, keyring.ErrNotFound) && legacyRealmKeyIsUnambiguous(alias, realm) {
+	if errors.Is(err, keyring.ErrNotFound) && s.legacyKeyIsUnambiguous(alias, realm) {
 		data, err = s.kr.Get(legacyRealmKeyringKey(alias, realm))
 		fromLegacy = err == nil
 	}
@@ -120,7 +123,7 @@ func (s *keyringCredentialStore) Delete(alias string, realm string) error {
 	s.deleteExternalConfigDigest(alias, realm)
 	// Also remove the previous-layout entry Retrieve would fall back to, so a deleted
 	// credential cannot resurface. An ambiguous old key may belong to another realm and is kept.
-	if legacyRealmKeyIsUnambiguous(alias, realm) {
+	if s.legacyKeyIsUnambiguous(alias, realm) {
 		if err := s.kr.Delete(legacyRealmKeyringKey(alias, realm)); err != nil {
 			return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete legacy credentials: %w", err))
 		}
@@ -140,7 +143,7 @@ func (s *keyringCredentialStore) List(realm string) ([]string, error) {
 		}
 		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to list credentials: %w", err))
 	}
-	return filterRealmKeys(keys, realm), nil
+	return s.filterRealmKeys(keys, realm), nil
 }
 
 // IsExpired checks if credentials for the given alias are expired within the specified realm.
@@ -192,9 +195,9 @@ func (s *keyringCredentialStore) SetAny(key string, value interface{}) error {
 
 // filterRealmKeys reduces a flat list of realm-scoped keyring keys to aliases. With a realm it
 // returns aliases under "atmos_<realm>__" plus unambiguous previous-layout aliases under
-// "atmos_<realm>_" (see legacyRealmKeyIsUnambiguous), each once; with an empty realm it strips
+// "atmos_<realm>_" (see legacyKeyIsUnambiguous), each once; with an empty realm it strips
 // only the "atmos_" prefix (so callers see "realm__alias"), matching the historical List behavior.
-func filterRealmKeys(keys []string, realm string) []string {
+func (s *keyringCredentialStore) filterRealmKeys(keys []string, realm string) []string {
 	base := KeyringRealmPrefix + KeyringSeparator
 	aliases := make([]string, 0, len(keys))
 	if realm == "" {
@@ -212,7 +215,7 @@ func filterRealmKeys(keys []string, realm string) []string {
 		alias, ok := strings.CutPrefix(key, current)
 		if !ok {
 			alias, ok = strings.CutPrefix(key, legacy)
-			ok = ok && legacyRealmKeyIsUnambiguous(alias, realm)
+			ok = ok && s.legacyKeyIsUnambiguous(alias, realm)
 		}
 		if ok && alias != "" && !seen[alias] {
 			seen[alias] = true

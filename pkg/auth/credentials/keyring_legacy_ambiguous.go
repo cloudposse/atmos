@@ -40,7 +40,7 @@ type AmbiguousLegacyRealmEntry struct {
 
 // AmbiguousLegacyRealmStore is implemented by credential stores that can find and adopt
 // previous-layout keyring entries whose key is ambiguous. Retrieve never reads such entries
-// (see legacyRealmKeyIsUnambiguous) because they might belong to another realm; a caller that
+// (see legacyKeyIsUnambiguous) because they might belong to another realm; a caller that
 // can ask the user whether the entry is theirs uses this interface instead.
 type AmbiguousLegacyRealmStore interface {
 	// FindAmbiguousLegacyRealmEntry returns the ambiguous previous-layout entry for alias in
@@ -57,7 +57,7 @@ type AmbiguousLegacyRealmStore interface {
 func (s *keyringCredentialStore) FindAmbiguousLegacyRealmEntry(alias, realm string) (*AmbiguousLegacyRealmEntry, error) {
 	defer perf.Track(nil, "credentials.keyringCredentialStore.FindAmbiguousLegacyRealmEntry")()
 
-	legacy, ok := ambiguousLegacyRealmKey(alias, realm)
+	legacy, ok := s.ambiguousLegacyRealmKey(alias, realm)
 	if !ok {
 		return nil, nil
 	}
@@ -85,7 +85,7 @@ func (s *keyringCredentialStore) FindAmbiguousLegacyRealmEntry(alias, realm stri
 func (s *keyringCredentialStore) AdoptAmbiguousLegacyRealmEntry(alias, realm string) error {
 	defer perf.Track(nil, "credentials.keyringCredentialStore.AdoptAmbiguousLegacyRealmEntry")()
 
-	legacy, ok := ambiguousLegacyRealmKey(alias, realm)
+	legacy, ok := s.ambiguousLegacyRealmKey(alias, realm)
 	if !ok {
 		return errors.Join(ErrCredentialStore, ErrCredentialsNotFound)
 	}
@@ -141,12 +141,12 @@ func (s *keyringCredentialStore) readLegacyEntry(key string) (string, types.ICre
 
 // ambiguousLegacyRealmKey returns the previous-layout key of alias in realm when it is
 // ambiguous and may be offered for adoption. It reports false when there is no realm, when the
-// key is unambiguous (Retrieve migrates it), and when the key contains "__": such a key is also
+// key is unambiguous (Retrieve migrates it, see legacyKeyIsUnambiguous), and when the key contains "__": such a key is also
 // a current-layout key of another realm (realm "acme" + alias "x__y" is "atmos_acme_x__y",
 // the current key of realm "acme_x" + alias "y"), so adopting and deleting it could break a
 // live entry.
-func ambiguousLegacyRealmKey(alias, realm string) (string, bool) {
-	if realm == "" || alias == "" || legacyRealmKeyIsUnambiguous(alias, realm) {
+func (s *keyringCredentialStore) ambiguousLegacyRealmKey(alias, realm string) (string, bool) {
+	if realm == "" || alias == "" || s.legacyKeyIsUnambiguous(alias, realm) {
 		return "", false
 	}
 	key := legacyRealmKeyringKey(alias, realm)
