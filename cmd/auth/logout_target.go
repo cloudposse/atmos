@@ -32,6 +32,8 @@ const (
 	logoutTargetProvider
 	// A single identity.
 	logoutTargetIdentity
+	// A single identity chosen with the identity selector (a bare `--identity`).
+	logoutTargetSelectIdentity
 )
 
 // logoutTarget is the resolved logout target.
@@ -43,7 +45,8 @@ type logoutTarget struct {
 
 // resolveLogoutTarget decides what to log out of from the selectors, in the
 // order --all, --tags, --provider, positional identity, --identity, ATMOS_IDENTITY,
-// and otherwise interactive selection.
+// and otherwise interactive selection. A bare `--identity` selects an identity
+// with the identity selector.
 func resolveLogoutTarget(sel *logoutSelection) (logoutTarget, error) {
 	// --tags is mutually exclusive with --provider/--all/--identity/positional identity —
 	// it's an alternative way to select a target, not a composable cross-cutting filter here.
@@ -77,7 +80,10 @@ func resolveLogoutTarget(sel *logoutSelection) (logoutTarget, error) {
 	if err := checkIdentityNotDisabled("logout", identity); err != nil {
 		return logoutTarget{}, err
 	}
-	if identity != "" && identity != IdentityFlagSelectValue {
+	if identity == IdentityFlagSelectValue {
+		return logoutTarget{kind: logoutTargetSelectIdentity}, nil
+	}
+	if identity != "" {
 		return logoutTarget{kind: logoutTargetIdentity, identity: identity}, nil
 	}
 

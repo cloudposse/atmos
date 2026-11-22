@@ -17,9 +17,9 @@ func TestResolveLogoutTarget(t *testing.T) {
 	}{
 		{name: "nothing selected prompts", sel: logoutSelection{}, want: logoutTarget{kind: logoutTargetInteractive}},
 		{
-			name: "--identity without a value prompts instead of looking up the sentinel",
+			name: "--identity without a value selects an identity instead of looking up the sentinel",
 			sel:  logoutSelection{identityFlag: IdentityFlagSelectValue},
-			want: logoutTarget{kind: logoutTargetInteractive},
+			want: logoutTarget{kind: logoutTargetSelectIdentity},
 		},
 		{name: "--identity with a value", sel: logoutSelection{identityFlag: "prod"}, want: logoutTarget{kind: logoutTargetIdentity, identity: "prod"}},
 		{name: "positional identity wins over --identity", sel: logoutSelection{args: []string{"dev"}, identityFlag: "prod"}, want: logoutTarget{kind: logoutTargetIdentity, identity: "dev"}},

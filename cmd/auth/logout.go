@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -171,6 +170,9 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	case logoutTargetIdentity:
 		// Logout specific identity.
 		return performIdentityLogout(ctx, authManager, target.identity, dryRun, deleteKeychain, force)
+	case logoutTargetSelectIdentity:
+		// A bare --identity: choose the identity with the identity selector.
+		return performSelectIdentityLogout(ctx, authManager, dryRun, deleteKeychain, force)
 	case logoutTargetInteractive:
 	}
 
@@ -208,7 +210,7 @@ func printLogoutAllDryRun(authManager auth.AuthManager, deleteKeychain bool) {
 	// Show file paths for each provider.
 	if len(providers) > 0 {
 		ui.Writef("  • Files:\n")
-		for providerName := range providers {
+		for _, providerName := range sortedKeys(providers) {
 			basePath := authManager.GetFilesDisplayPath(providerName)
 			ui.Writef("    - %s/%s/\n", basePath, providerName)
 		}
@@ -352,7 +354,7 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	if _, exists := identities[identityName]; !exists {
 		ui.MarkdownMessagef("**Error:** identity %q not found in configuration\n\n", identityName)
 		ui.MarkdownMessagef("**Available identities:**\n")
-		for name := range identities {
+		for _, name := range sortedKeys(identities) {
 			ui.Writef(fmtBulletItem, name)
 		}
 		ui.Writeln("")
@@ -436,7 +438,7 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 	if _, exists := providers[providerName]; !exists {
 		ui.MarkdownMessagef("**Error:** provider %q not found in configuration\n\n", providerName)
 		ui.MarkdownMessagef("**Available providers:**\n")
-		for name := range providers {
+		for _, name := range sortedKeys(providers) {
 			ui.Writef(fmtBulletItem, name)
 		}
 		ui.Writeln("")
@@ -508,104 +510,6 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 	displayExternalCredentialWarnings()
 
 	return nil
-}
-
-// logoutOption represents a logout choice in the interactive menu.
-type logoutOption struct {
-	label  string
-	typ    string // "identity", "provider", "all"
-	target string
-}
-
-// buildLogoutOptions creates the list of logout options from identities and providers.
-// This is a pure function that can be easily tested.
-func buildLogoutOptions(identities map[string]schema.Identity, providers map[string]schema.Provider) []logoutOption {
-	defer perf.Track(nil, "auth.buildLogoutOptions")()
-
-	var options []logoutOption
-
-	// Add identity options.
-	for name := range identities {
-		options = append(options, logoutOption{
-			label:  fmt.Sprintf("Identity: %s", name),
-			typ:    "identity",
-			target: name,
-		})
-	}
-
-	// Add provider options.
-	for name := range providers {
-		options = append(options, logoutOption{
-			label:  fmt.Sprintf("Provider: %s (removes all identities)", name),
-			typ:    "provider",
-			target: name,
-		})
-	}
-
-	// Add "all" option.
-	options = append(options, logoutOption{
-		label:  "All identities (complete logout)",
-		typ:    "all",
-		target: "",
-	})
-
-	return options
-}
-
-// executeLogoutOption executes the selected logout action.
-// This is a pure routing function that can be easily tested.
-func executeLogoutOption(ctx context.Context, authManager auth.AuthManager, option logoutOption, dryRun bool, deleteKeychain bool, force bool) error { //nolint:revive
-	defer perf.Track(nil, "auth.executeLogoutOption")()
-
-	switch option.typ {
-	case "identity":
-		return performIdentityLogout(ctx, authManager, option.target, dryRun, deleteKeychain, force)
-	case "provider":
-		return performProviderLogout(ctx, authManager, option.target, dryRun, deleteKeychain, force)
-	case "all":
-		return performLogoutAll(ctx, authManager, dryRun, deleteKeychain, force)
-	default:
-		return errUtils.ErrInvalidLogoutOption
-	}
-}
-
-// performInteractiveLogout prompts user to choose what to logout.
-func performInteractiveLogout(ctx context.Context, authManager auth.AuthManager, dryRun bool, deleteKeychain bool, force bool) error {
-	defer perf.Track(nil, "auth.performInteractiveLogout")()
-
-	identities := authManager.GetIdentities()
-	providers := authManager.GetProviders()
-
-	if len(identities) == 0 {
-		ui.MarkdownMessagef("**No identities configured** in atmos.yaml\n")
-		return nil
-	}
-
-	// Build options list.
-	options := buildLogoutOptions(identities, providers)
-
-	// Create select options for huh.
-	var huhOptions []huh.Option[logoutOption]
-	for _, opt := range options {
-		huhOptions = append(huhOptions, huh.NewOption(opt.label, opt))
-	}
-
-	var selected logoutOption
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewSelect[logoutOption]().
-				Title("Choose what to logout from:").
-				Options(huhOptions...).
-				Value(&selected),
-		),
-	).WithTheme(uiutils.NewAtmosHuhTheme())
-
-	if err := form.Run(); err != nil {
-		return err
-	}
-
-	// Perform the selected logout action.
-	return executeLogoutOption(ctx, authManager, selected, dryRun, deleteKeychain, force)
 }
 
 func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun bool, deleteKeychain bool, force bool) error {

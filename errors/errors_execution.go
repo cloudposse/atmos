@@ -442,3 +442,10 @@ var (
 	// because the user declined or no interactive prompt could confirm it.
 	ErrAwsUserLegacyKeyringEntryNotAdopted = errors.New("AWS user credentials may be stored under an older keyring key that was not adopted")
 )
+
+// Interactive auth logout selection errors.
+var (
+	// ErrLogoutSelectionRequiresTTY reports that `atmos auth logout` needs to ask what to log out of,
+	// but no interactive prompt can be shown (no TTY, CI, or --interactive=false).
+	ErrLogoutSelectionRequiresTTY = fmt.Errorf("interactive logout selection: %w", ErrTTYRequired)
+)
