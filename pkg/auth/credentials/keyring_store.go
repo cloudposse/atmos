@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/keyring"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -46,8 +47,10 @@ func (s *keyringCredentialStore) Retrieve(alias string, realm string) (types.ICr
 	data, err := s.kr.Get(buildKeyringKey(alias, realm))
 	// Read-fallback migration: entries written before the "__" realm separator are still
 	// found, but only when the old key cannot belong to another realm and alias split.
+	fromLegacy := false
 	if errors.Is(err, keyring.ErrNotFound) && legacyRealmKeyIsUnambiguous(alias, realm) {
 		data, err = s.kr.Get(legacyRealmKeyringKey(alias, realm))
+		fromLegacy = err == nil
 	}
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
@@ -60,7 +63,39 @@ func (s *keyringCredentialStore) Retrieve(alias string, realm string) (types.ICr
 	if err := json.Unmarshal([]byte(data), &env); err != nil {
 		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal credential envelope: %w", err))
 	}
-	return unmarshalCredential(env)
+	creds, err := unmarshalCredential(env)
+	if err != nil {
+		return nil, err
+	}
+	// Only an entry that decodes is moved, so a corrupt legacy entry is never propagated.
+	if fromLegacy {
+		s.migrateLegacyRealmEntry(alias, realm, data)
+	}
+	return creds, nil
+}
+
+// migrateLegacyRealmEntry rewrites an entry read through the unambiguous previous-layout
+// fallback under the current key and then deletes the legacy key, so later reads no longer
+// depend on the fallback. It is best effort and never fails the read: on any error the legacy
+// key is kept and the fallback keeps serving it. The entry is copied unchanged, and it is not
+// copied when the current key already exists (written by another process since the first
+// read), so fresh credentials are never overwritten by older ones.
+func (s *keyringCredentialStore) migrateLegacyRealmEntry(alias, realm, data string) {
+	current, legacy := buildKeyringKey(alias, realm), legacyRealmKeyringKey(alias, realm)
+	exists, err := s.kr.Has(current)
+	if err != nil || exists {
+		log.Debug("Not migrating legacy keyring entry", "alias", alias, "realm", realm, "currentExists", exists, "error", err)
+		return
+	}
+	if err := s.kr.Set(current, data); err != nil {
+		log.Debug("Failed to migrate legacy keyring entry; keeping the legacy key", "alias", alias, "realm", realm, "error", err)
+		return
+	}
+	if err := s.kr.Delete(legacy); err != nil {
+		log.Debug("Failed to delete migrated legacy keyring entry", "alias", alias, "realm", realm, "error", err)
+		return
+	}
+	log.Debug("Migrated legacy keyring entry to the current key layout", "alias", alias, "realm", realm)
 }
 
 // Delete deletes credentials for the given alias within the specified realm. It is idempotent.

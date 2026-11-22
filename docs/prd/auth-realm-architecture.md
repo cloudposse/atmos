@@ -144,6 +144,8 @@ Keyring keys include realm prefix using underscore separators (underscores inste
 
 Entries written in the previous `atmos_{realm}_{identity}` layout are still read (and deleted on logout) when neither the realm nor the identity contains `_`, the only case in which the old key cannot belong to another realm. Other old entries are ignored and re-created on the next login. The pre-realm `atmos_{identity}` cleanup after a realm-scoped login likewise skips identities containing `_`, whose key another realm can share.
 
+An entry found through that fallback is migrated on read: it is copied unchanged to `atmos_{realm}__{identity}` and the old key is deleted, so later reads no longer depend on the fallback. The migration is best effort and never fails the read. It is skipped when the new key already exists (another process stored newer credentials), and on a write or delete failure the old key is kept and the fallback keeps serving it. Only entries that decode are migrated. Long-lived `aws/user` keys stored by `atmos auth user configure` are read through the same path, so they migrate on first use. The one case that cannot migrate is an old key whose realm or identity contains `_`: it is never read, so an `aws/user` identity in that case must run `atmos auth user configure` again. The ambiguous old key is left in the keyring, because it may belong to another realm.
+
 ### Environment Variables
 
 When credentials are set up, file paths include the realm:
@@ -546,3 +548,4 @@ func TestCredentialRealmIsolation(t *testing.T) {
 |------|---------|---------|
 | 2026-01-28 | 1.0 | Initial auth realm architecture PRD |
 | 2026-02-19 | 1.1 | Updated to reflect implemented opt-in design: realm is required when auth is configured (no auto-hash default), underscore keyring separator for Windows compatibility, realm stored on AWSFileManager struct. Updated status from Proposed to Implemented. |
+| 2026-11-22 | 1.2 | Realm-scoped keyring keys use `__` between realm and identity (#3720). Unambiguous previous-layout entries are migrated to the new key on read. |
