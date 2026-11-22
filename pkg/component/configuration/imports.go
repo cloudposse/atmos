@@ -60,6 +60,11 @@ func checkProviderImport(config *schema.AtmosConfiguration, scheme string, setti
 func WatchExcludes(settings map[string]any) ([]string, error) {
 	defer perf.Track(nil, "configuration.WatchExcludes")()
 
+	// Watch exclusions belong to a provider-owned component; the user's own
+	// `settings.configuration` data is not interpreted.
+	if !schema.ConfigurationOwned(settings) {
+		return nil, nil
+	}
 	provider, _ := settings["configuration"].(map[string]any)
 	raw := provider["watch_excludes"]
 	if raw == nil {

@@ -56,7 +56,7 @@ func TestFailedUnitStaysVisibleAndFailsOnlyItsOwnCommands(t *testing.T) {
 	require.ErrorIs(t, failure, errUtils.ErrPluginInvalidConfig)
 	assert.Equal(t, "Unsupported Terragrunt setting `terraform_binary`", failure.Error())
 
-	_, err = session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "broken", Command: "tofu", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}})
+	_, err = session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "broken", Command: "tofu", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}})
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	assert.Equal(t, failure.Error(), err.Error())
 }

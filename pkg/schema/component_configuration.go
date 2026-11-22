@@ -168,17 +168,66 @@ type ComponentConfigurationFile struct {
 	UnitFileCopy bool
 }
 
-// ConfigurationOwned reports whether a configuration provider owns a component's settings.
-// Discovery records ownership as a map; an explicit false or null leaves an ordinary component.
+// ConfigurationOwnedKey is the reserved `settings.configuration` key that marks a Terraform component
+// supplied by an enabled configuration provider. Only the stack processor sets it (see
+// MarkConfigurationOwnership); a value written in a stack manifest is removed, so free-form user data
+// under `settings.configuration` never makes a component provider-owned.
+const ConfigurationOwnedKey = "atmos_provider_owned"
+
+// ConfigurationOwned reports whether a configuration provider owns a component's settings. Ownership
+// is the stack processor's marker, never the mere presence of `settings.configuration`, which is a
+// free-form user section.
 func ConfigurationOwned(settings map[string]any) bool {
-	switch value := settings["configuration"].(type) {
-	case nil:
+	configuration, _ := settings["configuration"].(map[string]any)
+	owned, _ := configuration[ConfigurationOwnedKey].(bool)
+	return owned
+}
+
+// SelectsConfigurationProvider reports whether an enabled section under `components.terraform`
+// selects the named configuration provider.
+func (c *AtmosConfiguration) SelectsConfigurationProvider(provider string) bool {
+	if c == nil || provider == "" {
 		return false
-	case bool:
-		return value
-	default:
-		return true
 	}
+	for section, settings := range c.Components.Terraform.ConfigurationProviders {
+		name := section
+		if settings.Provider != "" {
+			name = settings.Provider
+		}
+		if settings.Enabled && name == provider {
+			return true
+		}
+	}
+	return false
+}
+
+// MarkConfigurationOwnership records on a component's merged settings whether a configuration
+// provider supplies it. Discovery and provider imports write `settings.configuration.provider`; the
+// component is provider-owned only when it is a Terraform component and that provider is enabled in
+// this configuration. Any other `settings.configuration` is the user's own data and behaves as it did
+// before configuration providers existed; a marker it carries is removed. The configuration map is
+// copied before it changes, because merged settings can share it with a cached provider result.
+func (c *AtmosConfiguration) MarkConfigurationOwnership(componentType string, settings map[string]any) {
+	configuration, ok := settings["configuration"].(map[string]any)
+	if !ok {
+		return
+	}
+	provider, _ := configuration["provider"].(string)
+	owned := componentType == "terraform" && c.SelectsConfigurationProvider(provider)
+	value, marked := configuration[ConfigurationOwnedKey]
+	if (owned && value == true) || (!owned && !marked) {
+		return
+	}
+	updated := make(map[string]any, len(configuration)+1)
+	for key, item := range configuration {
+		updated[key] = item
+	}
+	if owned {
+		updated[ConfigurationOwnedKey] = true
+	} else {
+		delete(updated, ConfigurationOwnedKey)
+	}
+	settings["configuration"] = updated
 }
 
 // HasComponentDiscovery reports an explicit opt-in without consulting plugins or the filesystem.

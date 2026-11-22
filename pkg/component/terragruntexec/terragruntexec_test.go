@@ -231,15 +231,19 @@ func TestBuildCommandOmitsAbsentOptions(t *testing.T) {
 func unitInfo(subcommand string) *schema.ConfigAndStacksInfo {
 	return &schema.ConfigAndStacksInfo{
 		SubCommand: subcommand, ComponentFromArg: "app", Stack: "live/dev",
-		ComponentSettingsSection: map[string]any{"configuration": map[string]any{"engine": "terragrunt"}},
+		ComponentSettingsSection: map[string]any{"configuration": map[string]any{"engine": "terragrunt", schema.ConfigurationOwnedKey: true}},
 	}
 }
 
 func TestOwnsFollowsTheDiscoveryEngine(t *testing.T) {
 	assert.True(t, Owns(unitInfo("plan")))
 	native := unitInfo("plan")
-	native.ComponentSettingsSection["configuration"] = map[string]any{"engine": "opentofu"}
+	native.ComponentSettingsSection["configuration"] = map[string]any{"engine": "opentofu", schema.ConfigurationOwnedKey: true}
 	assert.False(t, Owns(native))
+	// The user's own settings.configuration never routes a component to the executable.
+	user := unitInfo("plan")
+	user.ComponentSettingsSection["configuration"] = map[string]any{"engine": "terragrunt"}
+	assert.False(t, Owns(user))
 	assert.False(t, Owns(&schema.ConfigAndStacksInfo{}))
 }
 

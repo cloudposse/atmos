@@ -104,9 +104,9 @@ func TestImportedUnitsBecomeComponentsOfTheImportingStack(t *testing.T) {
 		require.Equal(t, "live/app/terragrunt.hcl", req.Source)
 		return &pluginv1.PrepareComponentResponse{Engine: "opentofu", ModuleSource: "/module", State: &pluginv1.ComponentStateIdentity{BackendType: "local"}}, nil
 	})
-	_, err = session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "web", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{"source": "live/app/terragrunt.hcl"}}})
+	_, err = session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "web", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "source": "live/app/terragrunt.hcl"}}})
 	require.NoError(t, err)
-	_, err = session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "web", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{"source": "live/other/terragrunt.hcl"}}})
+	_, err = session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "web", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "source": "live/other/terragrunt.hcl"}}})
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 }
 
@@ -161,14 +161,14 @@ func TestDiscoveredAndImportedUnitAtOneAddressConflict(t *testing.T) {
 	_, err = session.Discover(t.Context())
 	require.NoError(t, err)
 
-	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "db", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{"source": catalog.Source}}}
+	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "db", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "source": catalog.Source}}}
 	_, err = session.Prepare(t.Context(), info)
 	require.ErrorIs(t, err, errUtils.ErrConfigurationImportConflict)
 	require.ErrorContains(t, err, "live/db/terragrunt.hcl")
 	require.ErrorContains(t, err, "catalog/db/terragrunt.hcl")
 
 	// Without a competing import, the discovered unit is still found at its address.
-	info.ComponentSettingsSection = map[string]any{"configuration": map[string]any{"source": "live/db/terragrunt.hcl"}}
+	info.ComponentSettingsSection = map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "source": "live/db/terragrunt.hcl"}}
 	instance, err := session.instanceFor(info)
 	require.NoError(t, err)
 	require.Equal(t, "live/db/terragrunt.hcl", instance.Source)
@@ -313,8 +313,10 @@ func TestImportConflictsRejectOnlyDifferentUnits(t *testing.T) {
 }
 
 func TestOwnsComponentRecognizesProviderSections(t *testing.T) {
-	owned := map[string]any{"settings": map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}}
+	owned := map[string]any{"settings": map[string]any{"configuration": map[string]any{"provider": "terragrunt", schema.ConfigurationOwnedKey: true}}}
 	require.True(t, configuration.OwnsComponent(owned))
+	// A user's own settings.configuration that names a provider is not provider-owned.
+	require.False(t, configuration.OwnsComponent(map[string]any{"settings": map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}}))
 	require.False(t, configuration.OwnsComponent(map[string]any{"settings": map[string]any{"team": "platform"}}))
 	require.False(t, configuration.OwnsComponent(nil))
 }
@@ -578,7 +580,7 @@ func TestImportedUnitDependencyOutsideTheImportedRoot(t *testing.T) {
 			require.NoError(t, err)
 			_, _, err = session.ImportComponents(t.Context(), "terragrunt://live/app")
 			require.NoError(t, err)
-			_, err = session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "web", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{"source": app.Source}}})
+			_, err = session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "web", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "source": app.Source}}})
 			if test.want != nil {
 				require.ErrorIs(t, err, test.want)
 				return
@@ -634,7 +636,7 @@ func TestImportedDependencyUsesItsPreparedStateInTheImportingStack(t *testing.T)
 			_, _, err = session.ImportComponents(t.Context(), "terragrunt://live")
 			require.NoError(t, err)
 			info := func(component string, unit *pluginv1.DiscoveredComponent, identity string) *schema.ConfigAndStacksInfo {
-				return &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: component, SubCommand: "apply", TerraformWorkspace: "default", ComponentSettingsSection: map[string]any{"configuration": map[string]any{"source": unit.Source}}, SanitizedEnv: []string{"IDENTITY=" + identity}}
+				return &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: component, SubCommand: "apply", TerraformWorkspace: "default", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "source": unit.Source}}, SanitizedEnv: []string{"IDENTITY=" + identity}}
 			}
 			_, err = session.Prepare(t.Context(), info("network", network, "network"))
 			require.NoError(t, err)
@@ -706,7 +708,7 @@ func TestDependencyPreparedStateIsComparedAcrossSeparateImports(t *testing.T) {
 				require.NoError(t, err)
 			}
 			info := func(component string, unit *pluginv1.DiscoveredComponent, identity string) *schema.ConfigAndStacksInfo {
-				return &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: component, SubCommand: "apply", TerraformWorkspace: "default", ComponentSettingsSection: map[string]any{"configuration": map[string]any{"source": unit.Source}}, SanitizedEnv: []string{"IDENTITY=" + identity}}
+				return &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: component, SubCommand: "apply", TerraformWorkspace: "default", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "source": unit.Source}}, SanitizedEnv: []string{"IDENTITY=" + identity}}
 			}
 			if len(test.imports) > 1 {
 				_, err = session.Prepare(t.Context(), info("network", network, "network"))

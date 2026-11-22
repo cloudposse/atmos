@@ -11,9 +11,13 @@ import (
 // A configuration provider can declare an engine independently of its own name.
 func instanceEngine(config *schema.AtmosConfiguration, kind string, component map[string]any) string {
 	settings, _ := component["settings"].(map[string]any)
-	provider, _ := settings["configuration"].(map[string]any)
-	if engine, ok := provider["engine"].(string); ok && engine != "" {
-		return engine
+	// Only a provider-owned component reports its provider's engine; the user's own
+	// `settings.configuration` data never changes the engine.
+	if schema.ConfigurationOwned(settings) {
+		provider, _ := settings["configuration"].(map[string]any)
+		if engine, ok := provider["engine"].(string); ok && engine != "" {
+			return engine
+		}
 	}
 	if kind != "terraform" {
 		return kind

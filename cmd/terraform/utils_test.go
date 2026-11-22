@@ -1334,7 +1334,7 @@ func TestRetainedWorkdirPlanfilePathLocatesTheWorkdirOfAFreshRunner(t *testing.T
 
 	unit := &schema.ConfigAndStacksInfo{
 		Stack: "live/dev", ComponentFromArg: "app", FinalComponent: "app",
-		ComponentSettingsSection: map[string]any{"configuration": true},
+		ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}},
 		ComponentSection:         map[string]any{"provision": map[string]any{"workdir": map[string]any{"enabled": true}}},
 	}
 	path, ok := retainedWorkdirPlanfilePath(config, unit)

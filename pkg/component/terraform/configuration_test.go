@@ -29,7 +29,7 @@ func TestPrepareConfiguration(t *testing.T) {
 	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
 	binary, err := os.Executable()
 	require.NoError(t, err)
-	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", Stack: "live/dev", ComponentFromArg: "app", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
+	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", Stack: "live/dev", ComponentFromArg: "app", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 	expected := &schema.PreparedComponentConfiguration{Engine: "terraform", Source: filepath.Join(t.TempDir(), "module"), Inputs: map[string]any{"fresh": "output"}, BackendType: "local", Backend: map[string]any{"path": "state.tfstate"}, Workspace: "default"}
 	runtime.EXPECT().Prepare(gomock.Any(), info).Return(expected, nil)
 	result, err := prepareConfiguration(t.Context(), config, info)
@@ -84,7 +84,7 @@ func TestPrepareConfigurationNeverForcesSourceRefresh(t *testing.T) {
 			config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
 			binary, err := os.Executable()
 			require.NoError(t, err)
-			info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
+			info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 			runtime.EXPECT().Prepare(gomock.Any(), info).Return(&schema.PreparedComponentConfiguration{Engine: "terraform", Source: test.source}, nil)
 
 			_, err = prepareConfiguration(t.Context(), config, info)
@@ -108,10 +108,10 @@ func TestPrepareConfigurationGuards(t *testing.T) {
 		{name: "ordinary"},
 		{name: "explicitly disabled", info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": false}}},
 		{name: "null", info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": nil}}},
-		{name: "unavailable", info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": true}}, want: errUtils.ErrPluginUnsupportedExtension},
-		{name: "abstract", runtime: true, info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": true}, SubCommand: "apply", ComponentIsAbstract: true}, want: errUtils.ErrAbstractComponentCantBeProvisioned},
-		{name: "dry run", runtime: true, info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": true}, DryRun: true}},
-		{name: "missing binary", runtime: true, info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": true}, Command: "atmos-no-such-engine-234856"}, want: errUtils.ErrPluginInvalidConfig},
+		{name: "unavailable", info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}, want: errUtils.ErrPluginUnsupportedExtension},
+		{name: "abstract", runtime: true, info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, SubCommand: "apply", ComponentIsAbstract: true}, want: errUtils.ErrAbstractComponentCantBeProvisioned},
+		{name: "dry run", runtime: true, info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, DryRun: true}},
+		{name: "missing binary", runtime: true, info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, Command: "atmos-no-such-engine-234856"}, want: errUtils.ErrPluginInvalidConfig},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			config := &schema.AtmosConfiguration{}
@@ -129,7 +129,7 @@ func TestPrepareConfigurationGuards(t *testing.T) {
 }
 
 func TestConfigurationArtifactNames(t *testing.T) {
-	info := &schema.ConfigAndStacksInfo{Stack: "live/dev", ComponentFromArg: "region/app", ComponentSettingsSection: map[string]any{"configuration": true}}
+	info := &schema.ConfigAndStacksInfo{Stack: "live/dev", ComponentFromArg: "region/app", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 	names := []string{ConstructTerraformComponentVarfileName(info), ConstructTerraformComponentPlanfileName(info), ConstructTerraformComponentTestVarfileName(info)}
 	for _, name := range names {
 		require.Equal(t, filepath.Base(name), name)
@@ -216,7 +216,7 @@ func TestPrepareConfigurationKeepsCacheLocalStateLocation(t *testing.T) {
 	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
 	binary, err := os.Executable()
 	require.NoError(t, err)
-	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", Stack: "live/dev", ComponentFromArg: "app", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
+	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", Stack: "live/dev", ComponentFromArg: "app", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 	cache := filepath.Join(t.TempDir(), ".terragrunt-cache", "a", "b", "terraform.tfstate")
 	runtime.EXPECT().Prepare(gomock.Any(), info).Return(&schema.PreparedComponentConfiguration{Engine: "terraform", Source: "./module", BackendType: "local", Backend: map[string]any{"path": cache}}, nil)
 
@@ -281,7 +281,7 @@ func TestPrepareConfigurationStagesIAMForEvaluation(t *testing.T) {
 		return &schema.PreparedComponentConfiguration{Engine: "terraform", Source: "./module", IAM: iam}, nil
 	})
 	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
-	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}, SanitizedEnv: []string{"AWS_ACCESS_KEY_ID=BASE", "AWS_SECRET_ACCESS_KEY=base-secret"}}
+	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, SanitizedEnv: []string{"AWS_ACCESS_KEY_ID=BASE", "AWS_SECRET_ACCESS_KEY=base-secret"}}
 	_, err = prepareConfiguration(t.Context(), config, info)
 	require.NoError(t, err)
 	require.Equal(t, 1, recorded.calls, "the staged session is reused for execution")
@@ -295,7 +295,7 @@ func TestPrepareConfigurationRejectsChangedIAMAfterStaging(t *testing.T) {
 	runtime := NewMockIAMProbingRuntime(gomock.NewController(t))
 	runtime.EXPECT().ProbeIAM(gomock.Any(), gomock.Any()).Return(&schema.ComponentIAM{Role: "role-a"}, nil)
 	runtime.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&schema.PreparedComponentConfiguration{Engine: "terraform", Source: "./module", IAM: &schema.ComponentIAM{Role: "role-b"}}, nil)
-	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
+	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 	_, err = prepareConfiguration(t.Context(), &schema.AtmosConfiguration{ComponentConfigurations: runtime}, info)
 	require.ErrorContains(t, err, "changed between role and unit evaluation")
 }
@@ -436,7 +436,7 @@ func TestPreparedConfigurationSensitiveInputsNeverHitDisk(t *testing.T) {
 		config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
 		binary, err := os.Executable()
 		require.NoError(t, err)
-		info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
+		info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 		inputs := map[string]any{"credentials": map[string]any{"secret-input-key": ""}, "empty": map[string]any{}, "null": nil, "public": "visible"}
 		prepared := &schema.PreparedComponentConfiguration{Inputs: inputs, SensitiveInputKeys: map[string]bool{"credentials": true, "empty": true, "null": true, "absent": true}}
 		runtime.EXPECT().Prepare(gomock.Any(), info).Return(prepared, nil)
@@ -460,7 +460,7 @@ func TestGetTerraformStateStopsWhenProviderCannotResolveBackend(t *testing.T) {
 		assert.Equal(t, "network", params.Component)
 		assert.Equal(t, "live", params.Stack)
 		return map[string]any{
-			"settings": map[string]any{"configuration": true},
+			"settings": map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}},
 			"backend":  map[string]any{"path": "must-not-be-read"},
 		}, nil
 	}

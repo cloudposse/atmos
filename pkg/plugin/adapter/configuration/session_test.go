@@ -89,7 +89,7 @@ func TestSessionDiscoveryAndPreparation(t *testing.T) {
 		require.Equal(t, "live/network/terragrunt.hcl", request.Source)
 		return &pluginv1.ResolveComponentStateResponse{State: networkState}, nil
 	}).Times(2)
-	prepared, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", Command: "tofu", SubCommand: "apply", TerraformWorkspace: "stage", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvList: []string{"FROM_COMPONENT=original", "FROM_COMPONENT=override"}, ComponentEnvSection: map[string]any{"FROM_COMPONENT": "override"}})
+	prepared, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", Command: "tofu", SubCommand: "apply", TerraformWorkspace: "stage", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, ComponentEnvList: []string{"FROM_COMPONENT=original", "FROM_COMPONENT=override"}, ComponentEnvSection: map[string]any{"FROM_COMPONENT": "override"}})
 	require.NoError(t, err)
 	require.Equal(t, json.Number("9007199254740993"), prepared.Inputs["large"])
 	require.Equal(t, filepath.Join(config.BasePathAbsolute, "state.tfstate"), prepared.Backend["path"])
@@ -187,7 +187,7 @@ func TestSessionCancellationAndFailure(t *testing.T) {
 	prepared, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{})
 	require.NoError(t, err)
 	require.Nil(t, prepared)
-	_, err = session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{UseTerraformPlan: true, ComponentSettingsSection: map[string]any{"configuration": true}})
+	_, err = session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{UseTerraformPlan: true, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}})
 	require.True(t, errors.Is(err, errUtils.ErrPluginUnsupportedExtension))
 }
 
@@ -366,7 +366,7 @@ func TestPreparationRevalidatesDependencyPaths(t *testing.T) {
 			}
 			result, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{
 				Stack: "live", ComponentFromArg: "app", Command: "tofu", SubCommand: "apply", TerraformWorkspace: "stage",
-				ComponentSettingsSection: map[string]any{"configuration": true}, SanitizedEnv: []string{"IDENTITY=selected", "DEPENDENCY=identity"}, ComponentEnvList: []string{"DEPENDENCY=component"},
+				ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, SanitizedEnv: []string{"IDENTITY=selected", "DEPENDENCY=identity"}, ComponentEnvList: []string{"DEPENDENCY=component"},
 			})
 			switch change {
 			case "unchanged", "reordered":
@@ -524,7 +524,7 @@ func TestPreparationRejectsDependencyStateDrift(t *testing.T) {
 			})
 			require.NoError(t, err)
 			info := func(component string) *schema.ConfigAndStacksInfo {
-				return &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: component, Command: "tofu", SubCommand: "apply", TerraformWorkspace: "default", ComponentSettingsSection: map[string]any{"configuration": true}, SanitizedEnv: []string{"IDENTITY=" + component}}
+				return &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: component, Command: "tofu", SubCommand: "apply", TerraformWorkspace: "default", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, SanitizedEnv: []string{"IDENTITY=" + component}}
 			}
 			if test.prepareNetworkFirst {
 				provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", State: stateAt("network.tfstate")}, nil)
@@ -689,7 +689,7 @@ func TestRevisionResolveStateSendsTheInvocationProviderOptionsToTheProvider(t *t
 			revisionRoot := t.TempDir()
 			runtime, err := head.ForRevision(revisionRoot)
 			require.NoError(t, err)
-			info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "network", Command: "tofu", SubCommand: "output", TerraformWorkspace: "default", ComponentSettingsSection: map[string]any{"configuration": true}}
+			info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "network", Command: "tofu", SubCommand: "output", TerraformWorkspace: "default", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 
 			// Nothing is cached on either window, so each state reference reaches the provider.
 			_, err = head.ResolveState(t.Context(), info)
