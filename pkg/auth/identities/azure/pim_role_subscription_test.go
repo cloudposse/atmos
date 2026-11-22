@@ -83,3 +83,43 @@ func TestPIMRole_PostAuthenticate_UsesScopeSubscription(t *testing.T) {
 		})
 	}
 }
+
+// TestPIMRole_ScopedCredentials covers when the credentials are copied and when the
+// parent credentials are returned as-is.
+func TestPIMRole_ScopedCredentials(t *testing.T) {
+	subScoped := defaultPrincipal()
+	subScoped["scope"] = "/subscriptions/" + pimScopeSubscription
+	mgScoped := defaultPrincipal()
+	mgScoped["scope"] = "/providers/Microsoft.Management/managementGroups/mg1"
+
+	t.Run("non-Azure credentials pass through unchanged", func(t *testing.T) {
+		id := newTestIdentity(t, subScoped, &mockPIMClient{})
+		creds := &authTypes.GCPCredentials{AccessToken: "not-azure"}
+		assert.Same(t, creds, id.scopedCredentials(creds))
+	})
+
+	t.Run("non-subscription scope keeps the parent subscription", func(t *testing.T) {
+		id := newTestIdentity(t, mgScoped, &mockPIMClient{})
+		parent := testAzureCreds()
+		assert.Same(t, parent, id.scopedCredentials(parent))
+	})
+
+	t.Run("matching subscription needs no copy", func(t *testing.T) {
+		id := newTestIdentity(t, subScoped, &mockPIMClient{})
+		parent := testAzureCreds()
+		parent.SubscriptionID = pimScopeSubscription
+		assert.Same(t, parent, id.scopedCredentials(parent))
+	})
+
+	t.Run("different subscription is copied without mutating the parent", func(t *testing.T) {
+		id := newTestIdentity(t, subScoped, &mockPIMClient{})
+		parent := testAzureCreds()
+		parent.HomeAccountID = "home.tenant"
+		got, ok := id.scopedCredentials(parent).(*authTypes.AzureCredentials)
+		require.True(t, ok)
+		assert.NotSame(t, parent, got)
+		assert.Equal(t, pimScopeSubscription, got.SubscriptionID)
+		assert.Equal(t, "home.tenant", got.HomeAccountID, "the copy keeps every other field")
+		assert.Equal(t, "00000000-0000-0000-0000-000000000000", parent.SubscriptionID)
+	})
+}

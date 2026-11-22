@@ -3,11 +3,13 @@ package gcp
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 )
@@ -51,4 +53,19 @@ func TestBuildKubeClusterInfo_WorkingDirectory(t *testing.T) {
 	assert.Equal(t, workingDir, env["ATMOS_CHDIR"])
 	assert.True(t, filepath.IsAbs(env["ATMOS_CHDIR"]))
 	assert.Equal(t, "example-deployer", env["ATMOS_IDENTITY"])
+}
+
+// TestAppendWorkingDirExecEnv_WorkingDirectoryUnavailable verifies the entry is
+// omitted (not an empty or relative ATMOS_CHDIR) when the directory is gone.
+func TestAppendWorkingDirExecEnv_WorkingDirectoryUnavailable(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Only Linux reliably fails Getwd after removing the current directory")
+	}
+	dir := t.TempDir()
+	t.Chdir(dir)
+	require.NoError(t, os.Remove(dir))
+
+	env := appendWorkingDirExecEnv([]clientcmdapi.ExecEnvVar{{Name: "ATMOS_IDENTITY", Value: "dev"}})
+
+	assert.Equal(t, []clientcmdapi.ExecEnvVar{{Name: "ATMOS_IDENTITY", Value: "dev"}}, env)
 }

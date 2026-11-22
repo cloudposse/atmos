@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 )
 
@@ -40,6 +41,21 @@ func TestSetupFiles_PropertiesAreWhereGcloudReadsThem(t *testing.T) {
 	data, err := os.ReadFile(gcloudActivePropertiesPath(env))
 	require.NoError(t, err, "gcloud would find no properties for the active configuration")
 	assert.Contains(t, string(data), "project = test-project")
+}
+
+// TestGetPropertiesFilePath_ConfigurationsDirFailure verifies a configurations path
+// that cannot be created (it exists as a regular file) is reported, not ignored.
+func TestGetPropertiesFilePath_ConfigurationsDirFailure(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	configDir, err := GetConfigDir(testRealm, "gcp-adc", "blocked-identity")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, ConfigurationsSubdir), []byte("not a dir"), 0o600))
+
+	_, err = GetPropertiesFilePath(testRealm, "gcp-adc", "blocked-identity")
+	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+
+	_, err = WritePropertiesFile(testRealm, "gcp-adc", "blocked-identity", "p1", "")
+	require.ErrorIs(t, err, errUtils.ErrWritePropertiesFile)
 }
 
 // TestWritePropertiesFile_PathMatchesActiveConfig verifies the path WritePropertiesFile

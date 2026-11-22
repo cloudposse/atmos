@@ -111,6 +111,24 @@ func TestUpdateAzureCLICache_LeavesUnparseableCacheUntouched(t *testing.T) {
 	assert.Equal(t, string(corrupt), string(data), "an unparseable az cache must be left exactly as it was")
 }
 
+// TestUpdateAzureCLICache_WriteFailureIsNonFatal verifies a cache update that fails
+// for a reason other than an unparseable file (here ".azure" is a regular file, so
+// the directory cannot be created) still lets authentication succeed.
+func TestUpdateAzureCLICache_WriteFailureIsNonFatal(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("USERPROFILE", tmpHome)
+	t.Setenv("AZURE_CONFIG_DIR", tmpHome)
+	azurePath := filepath.Join(tmpHome, ".azure")
+	require.NoError(t, os.WriteFile(azurePath, []byte("not a directory"), 0o600))
+
+	require.NoError(t, newCLICacheTestProvider().updateAzureCLICache(newCLICacheTestUpdate()))
+
+	data, err := os.ReadFile(azurePath)
+	require.NoError(t, err)
+	assert.Equal(t, "not a directory", string(data))
+}
+
 // TestUpdateAzureCLICache_ReadsUnderMSALExtensionsLock verifies the read, update,
 // and write all happen under the lock file msal-extensions (and therefore az)
 // uses. While that lock is held, a concurrent az write lands in the file; the
