@@ -43,6 +43,7 @@ func TestSkippedAPIWritesLogConfigurationGapsQuietly(t *testing.T) {
 	quiet := map[string]error{
 		"github token missing":  wrap(errUtils.ErrGitHubTokenNotFound),
 		"gitea api unavailable": wrap(errUtils.ErrGiteaAPIUnavailable),
+		"gitea token missing":   wrap(errUtils.ErrGiteaTokenNotFound),
 	}
 	for logger, logFn := range loggers {
 		for name, err := range quiet {

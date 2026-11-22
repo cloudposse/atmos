@@ -1,6 +1,7 @@
 package gitea_test
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform" // Register the terraform CI plugin.
 	"github.com/cloudposse/atmos/pkg/ci/providers/gitea"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -159,4 +161,26 @@ func TestExecuteSendsStatusesOverHTTPWithOptIn(t *testing.T) {
 	for _, request := range requests {
 		assert.True(t, strings.HasPrefix(request, "POST /api/v1/repos/acme/infra/statuses/0123456789abcdef0123456789abcdef01234567 token secret-token"), request)
 	}
+}
+
+// Over HTTPS without a token, Gitea skips statuses as quietly as GitHub does without one.
+func TestExecuteWithoutTokenSkipsStatusesQuietly(t *testing.T) {
+	var buf bytes.Buffer
+	oldLevel := log.GetLevel()
+	log.SetLevel(log.WarnLevel)
+	log.SetOutput(&buf)
+	t.Cleanup(func() {
+		log.SetOutput(os.Stderr)
+		log.SetLevel(oldLevel)
+	})
+
+	// Nothing listens on the discard port; no request may be attempted without a token anyway.
+	summary, output := giteaRun(t, "https://127.0.0.1:9")
+
+	for _, err := range runPlan(t, true) {
+		require.NoError(t, err)
+	}
+	assert.NotEmpty(t, readFile(t, summary))
+	assert.Contains(t, readFile(t, output), "has_changes=true")
+	assert.Empty(t, buf.String())
 }

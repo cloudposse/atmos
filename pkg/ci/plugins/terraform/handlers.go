@@ -973,7 +973,8 @@ func runURL(hookCtx *plugin.HookContext) string {
 }
 
 // logCheckRunError logs check run errors at an appropriate level.
-// Token-related errors (missing GITHUB_TOKEN) are logged at Debug level since
+// Configuration gaps (a missing GitHub or Gitea token, or no usable Gitea API URL;
+// see configurationGapReason) are logged at Debug level since
 // they indicate a configuration gap rather than a runtime failure. A missing
 // component is expected and routine for bulk (--affected/--all) invocations'
 // global before-hook, which fires before components are resolved — the

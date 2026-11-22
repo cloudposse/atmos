@@ -15,6 +15,8 @@ func configurationGapReason(err error) (string, bool) {
 	switch {
 	case errors.Is(err, errUtils.ErrGitHubTokenNotFound):
 		return "GITHUB_TOKEN not set", true
+	case errors.Is(err, errUtils.ErrGiteaTokenNotFound):
+		return "ATMOS_CI_GITEA_TOKEN or GITEA_TOKEN not set", true
 	case errors.Is(err, errUtils.ErrGiteaAPIUnavailable):
 		return "Gitea API URL unavailable", true
 	default:
