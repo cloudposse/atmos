@@ -427,3 +427,10 @@ var (
 	ErrManifestSchemaGenerate = errors.New("failed to generate manifest JSON schema")
 	ErrManifestValidation     = errors.New("manifest validation failed")
 )
+
+// Cross-process chain credential cache errors (#3720).
+var (
+	// ErrChainStepConfigChanged reports that cached credentials of a chain step were written for
+	// a different effective configuration (or cannot be shown to match it), so they are not reused.
+	ErrChainStepConfigChanged = errors.New("cached credentials do not match the chain step's current configuration")
+)

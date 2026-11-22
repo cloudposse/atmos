@@ -26,11 +26,16 @@ type keyringCredentialStore struct {
 func (s *keyringCredentialStore) Store(alias string, creds types.ICredentials, realm string) error {
 	defer perf.Track(nil, "credentials.keyringCredentialStore.Store")()
 
+	return s.storeEnvelope(alias, creds, realm, "")
+}
+
+// storeEnvelope persists credentials, and an optional configuration digest, in the envelope.
+func (s *keyringCredentialStore) storeEnvelope(alias string, creds types.ICredentials, realm, digest string) error {
 	typ, raw, err := marshalCredential(creds)
 	if err != nil {
 		return err
 	}
-	data, err := json.Marshal(&credentialEnvelope{Type: typ, Data: raw})
+	data, err := json.Marshal(&credentialEnvelope{Type: typ, Data: raw, ConfigDigest: digest})
 	if err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
 	}
@@ -44,6 +49,13 @@ func (s *keyringCredentialStore) Store(alias string, creds types.ICredentials, r
 func (s *keyringCredentialStore) Retrieve(alias string, realm string) (types.ICredentials, error) {
 	defer perf.Track(nil, "credentials.keyringCredentialStore.Retrieve")()
 
+	creds, _, err := s.retrieveEnvelope(alias, realm)
+	return creds, err
+}
+
+// retrieveEnvelope reads the envelope stored for alias within realm and returns its credentials
+// and configuration digest ("" for envelopes written without one).
+func (s *keyringCredentialStore) retrieveEnvelope(alias, realm string) (types.ICredentials, string, error) {
 	data, err := s.kr.Get(buildKeyringKey(alias, realm))
 	// Read-fallback migration: entries written before the "__" realm separator are still
 	// found, but only when the old key cannot belong to another realm and alias split.
@@ -54,24 +66,24 @@ func (s *keyringCredentialStore) Retrieve(alias string, realm string) (types.ICr
 	}
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
-			return nil, errors.Join(ErrCredentialStore, ErrCredentialsNotFound)
+			return nil, "", errors.Join(ErrCredentialStore, ErrCredentialsNotFound)
 		}
-		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve credentials: %w", err))
+		return nil, "", errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve credentials: %w", err))
 	}
 
 	var env credentialEnvelope
 	if err := json.Unmarshal([]byte(data), &env); err != nil {
-		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal credential envelope: %w", err))
+		return nil, "", errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal credential envelope: %w", err))
 	}
 	creds, err := unmarshalCredential(env)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	// Only an entry that decodes is moved, so a corrupt legacy entry is never propagated.
 	if fromLegacy {
 		s.migrateLegacyRealmEntry(alias, realm, data)
 	}
-	return creds, nil
+	return creds, env.ConfigDigest, nil
 }
 
 // migrateLegacyRealmEntry rewrites an entry read through the unambiguous previous-layout
@@ -105,6 +117,7 @@ func (s *keyringCredentialStore) Delete(alias string, realm string) error {
 	if err := s.kr.Delete(buildKeyringKey(alias, realm)); err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials: %w", err))
 	}
+	s.deleteExternalConfigDigest(alias, realm)
 	// Also remove the previous-layout entry Retrieve would fall back to, so a deleted
 	// credential cannot resurface. An ambiguous old key may belong to another realm and is kept.
 	if legacyRealmKeyIsUnambiguous(alias, realm) {

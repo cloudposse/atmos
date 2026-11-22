@@ -75,9 +75,15 @@ func EmptyRealmKeyIsUnambiguous(alias string) bool {
 }
 
 // credentialEnvelope is used to persist interface credentials with type information.
+//
+// ConfigDigest is the SHA-256 of the non-secret effective configuration of the chain step that
+// produced the credentials (see ConfigDigestStore). It is omitted when empty, so envelopes
+// without one are byte-identical to those of older versions, and older versions decode
+// envelopes with one unchanged because encoding/json ignores unknown fields.
 type credentialEnvelope struct {
-	Type string          `json:"type"`
-	Data json.RawMessage `json:"data"`
+	Type         string          `json:"type"`
+	Data         json.RawMessage `json:"data"`
+	ConfigDigest string          `json:"config_digest,omitempty"`
 }
 
 // NewCredentialStore creates a new credential store instance based on configuration.

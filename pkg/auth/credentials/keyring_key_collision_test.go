@@ -124,6 +124,7 @@ func TestKeyringStore_DeleteReportsLegacyDeleteFailure(t *testing.T) {
 	kr := keyring.NewMockKeyring(gomock.NewController(t))
 	store := &keyringCredentialStore{kr: kr, storeType: types.CredentialStoreTypeMemory}
 	kr.EXPECT().Delete(buildKeyringKey("admin", "acme")).Return(nil)
+	kr.EXPECT().Delete(buildConfigDigestKey("admin", "acme")).Return(nil)
 	kr.EXPECT().Delete(legacyRealmKeyringKey("admin", "acme")).Return(assert.AnError)
 
 	err := store.Delete("admin", "acme")

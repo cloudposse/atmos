@@ -146,6 +146,16 @@ Entries written in the previous `atmos_{realm}_{identity}` layout are still read
 
 An entry found through that fallback is migrated on read: it is copied unchanged to `atmos_{realm}__{identity}` and the old key is deleted, so later reads no longer depend on the fallback. The migration is best effort and never fails the read. It is skipped when the new key already exists (another process stored newer credentials), and on a write or delete failure the old key is kept and the fallback keeps serving it. Only entries that decode are migrated. Long-lived `aws/user` keys stored by `atmos auth user configure` are read through the same path, so they migrate on first use. The one case that cannot migrate is an old key whose realm or identity contains `_`: it is never read, so an `aws/user` identity in that case must run `atmos auth user configure` again. The ambiguous old key is left in the keyring, because it may belong to another realm.
 
+#### Configuration digests of chain steps
+
+Keyring keys name a step (provider or identity) but not its configuration, and stack or component `auth` overrides can give the same name a different account, role, or start URL. So a cached step is reused across processes only when it was written for the same effective configuration (#3720):
+
+- Each keyring entry stores a `config_digest` next to `type` and `data`. Older versions ignore the field, and entries without a digest have exactly the old format.
+- AWS session credentials are never stored in the keyring; they live in the identity's own credential files. For these, a record `{"digest", "expiration"}` is stored under `atmos-config-digest_{realm}__{identity}` after that identity's login. The expiration ties the record to those exact files, so files that something else rewrote no longer match. `List` never reports these keys, and logout deletes them with the identity.
+- The digest is a plain SHA-256 of canonical JSON over the non-secret configuration of every step from the chain root through that step. For providers it covers `kind`, `start_url`, `url`, `region`, `username` and `spec`. For identities it covers `kind`, `provider`, `via`, `principal`, `spec` and `emulator`. It never includes the provider `password` or identity `credentials`. Inside `principal` and `spec`, keys that name secret material (such as `*secret*`, `*token*`, `*password*`, `*private_key*`, `*access_key*`, `external_id`) are dropped. References such as `*_path`, `*_env`, `*_url` and `*_arn` are kept.
+- A step whose digest is missing or different is a cache miss and is authenticated again. Entries written before this change have no digest, so after an upgrade each intermediate step is authenticated once more. The target step is always authenticated again, as before.
+- The noop keyring persists nothing, so no digest can be recorded. With it, steps backed by identity files keep the previous name-only reuse.
+
 ### Environment Variables
 
 When credentials are set up, file paths include the realm:
@@ -548,4 +558,4 @@ func TestCredentialRealmIsolation(t *testing.T) {
 |------|---------|---------|
 | 2026-01-28 | 1.0 | Initial auth realm architecture PRD |
 | 2026-02-19 | 1.1 | Updated to reflect implemented opt-in design: realm is required when auth is configured (no auto-hash default), underscore keyring separator for Windows compatibility, realm stored on AWSFileManager struct. Updated status from Proposed to Implemented. |
-| 2026-11-22 | 1.2 | Realm-scoped keyring keys use `__` between realm and identity (#3720). Unambiguous previous-layout entries are migrated to the new key on read. |
+| 2026-11-22 | 1.2 | Realm-scoped keyring keys use `__` between realm and identity (#3720). Unambiguous previous-layout entries are migrated to the new key on read. Cached chain steps carry a configuration digest and are reused only when it matches. |

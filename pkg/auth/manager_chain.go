@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -171,8 +170,9 @@ func (m *manager) findFirstValidCachedCredentials() int {
 		identityName := m.chain[i]
 		log.Debug("Checking cached credentials", logKeyChainIndex, i, identityNameKey, identityName)
 
-		// Retrieve credentials with automatic keyring → identity storage fallback.
-		cachedCreds, err := m.loadCredentialsWithFallback(context.Background(), identityName)
+		// Retrieve credentials with automatic keyring → identity storage fallback. Intermediate
+		// steps are refused when they were cached for a different configuration (#3720).
+		cachedCreds, err := m.loadChainStepCredentials(context.Background(), m.chain, i)
 		if err != nil {
 			log.Debug("Failed to retrieve credentials", logKeyChainIndex, i, identityNameKey, identityName, "error", err)
 			continue
@@ -350,107 +350,10 @@ func (m *manager) determineStartingIndex(startIndex int) int {
 	return startIndex
 }
 
-// loadCredentialsWithFallback retrieves credentials with keyring → identity storage fallback.
-// This is the single source of truth for credential retrieval across all auth operations.
-// It ensures consistent behavior whether credentials are in keyring or identity storage.
-//
-// For AWS credentials, session tokens (with expiration) are stored in files but NOT in keyring.
-// Keyring stores long-lived IAM credentials for re-authentication. This method prefers
-// session credentials from files when they exist and are not expired, so users can see
-// accurate expiration times in whoami output.
-func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName string) (types.ICredentials, error) {
-	// Fast path: Try keyring cache first. Identities that do not persist credentials (the helper
-	// owns them) skip it so a stale entry written by an older version is never reused.
-	keyringErr := credentials.ErrCredentialsNotFound
-	var keyringCreds types.ICredentials
-	if m.identityPersistsCredentials(identityName) {
-		keyringCreds, keyringErr = m.credentialStore.Retrieve(identityName, m.realm.Value)
-	}
-	if keyringErr == nil {
-		log.Debug("Retrieved credentials from keyring", logKeyIdentity, identityName)
-
-		// For AWS credentials without session token, also check files for session credentials.
-		// Session tokens have expiration info that users want to see in whoami.
-		if awsCreds, ok := keyringCreds.(*types.AWSCredentials); ok && awsCreds.SessionToken == "" {
-			fileCreds := m.loadSessionCredsFromFiles(ctx, identityName)
-			if fileCreds != nil {
-				log.Debug("Using session credentials from files (have expiration)", logKeyIdentity, identityName)
-				return fileCreds, nil
-			}
-		}
-		return keyringCreds, nil
-	}
-
-	// If keyring returned an error other than "not found", propagate it.
-	if !errors.Is(keyringErr, credentials.ErrCredentialsNotFound) {
-		return nil, fmt.Errorf("keyring error for identity %q: %w", identityName, keyringErr)
-	}
-
-	// Slow path: Fall back to identity storage (AWS files, etc.).
-	// This handles cases where credentials were created outside of Atmos
-	// (e.g., via AWS CLI/SSO) but are available in standard credential files.
-	log.Debug("Credentials not in keyring, trying identity storage", logKeyIdentity, identityName)
-
-	identity, exists := m.identities[identityName]
-	if !exists {
-		return nil, fmt.Errorf(errUtils.ErrWrapWithNameFormat, errUtils.ErrIdentityNotInConfig, identityName)
-	}
-
-	// Ensure the identity has access to manager for resolving provider information.
-	// This builds the authentication chain and sets manager reference so the identity
-	// can resolve the root provider for file-based credentials.
-	// This is best-effort - if it fails, LoadCredentials will fail with a clear error.
-	_ = m.ensureIdentityHasManager(identityName)
-
-	// Delegate to identity's LoadCredentials method.
-	// Each identity type knows how to load its own credentials from storage.
-	loadedCreds, loadErr := identity.LoadCredentials(ctx)
-	if loadErr != nil {
-		m.emitRealmMismatchWarning(identityName)
-		return nil, fmt.Errorf("failed to load credentials from identity storage for %q: %w", identityName, loadErr)
-	}
-
-	if loadedCreds == nil {
-		m.emitRealmMismatchWarning(identityName)
-		return nil, fmt.Errorf("%w: credentials loaded from storage are nil for identity %q", errUtils.ErrNoCredentialsFound, identityName)
-	}
-
-	log.Debug("Successfully loaded credentials from identity storage", logKeyIdentity, identityName)
-	return loadedCreds, nil
-}
-
-// loadSessionCredsFromFiles attempts to load session credentials from identity storage files.
-// Returns nil if loading fails or credentials are expired.
-func (m *manager) loadSessionCredsFromFiles(ctx context.Context, identityName string) types.ICredentials {
-	identity, exists := m.identities[identityName]
-	if !exists {
-		return nil
-	}
-
-	_ = m.ensureIdentityHasManager(identityName)
-
-	fileCreds, err := identity.LoadCredentials(ctx)
-	if err != nil {
-		log.Debug("Could not load credentials from files", logKeyIdentity, identityName, "error", err)
-		return nil
-	}
-
-	if fileCreds == nil || fileCreds.IsExpired() {
-		return nil
-	}
-
-	// Only return if these are session credentials (have session token).
-	if awsCreds, ok := fileCreds.(*types.AWSCredentials); ok && awsCreds.SessionToken != "" {
-		return fileCreds
-	}
-
-	return nil
-}
-
 // getChainCredentials retrieves cached credentials from the specified starting point.
 func (m *manager) getChainCredentials(chain []string, startIndex int) (types.ICredentials, error) {
 	identityName := chain[startIndex]
-	creds, err := m.loadCredentialsWithFallback(context.Background(), identityName)
+	creds, err := m.loadChainStepCredentials(context.Background(), chain, startIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -487,7 +390,7 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 	case isSessionToken(credentials):
 		log.Debug("Skipping keyring cache for session token provider credentials", logKeyProvider, providerName)
 	default:
-		if err := m.credentialStore.Store(providerName, credentials, m.realm.Value); err != nil {
+		if err := m.storeChainStepCredentials([]string{providerName}, 0, credentials); err != nil {
 			log.Debug("Failed to cache provider credentials", "error", err)
 		} else {
 			log.Debug("Cached provider credentials", "providerName", providerName)
@@ -674,7 +577,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		case isSessionToken(currentCreds):
 			log.Debug("Skipping keyring cache for session tokens", logKeyIdentityStep, identityStep)
 		default:
-			if err := m.credentialStore.Store(identityStep, currentCreds, m.realm.Value); err != nil {
+			if err := m.storeChainStepCredentials(m.chain, i, currentCreds); err != nil {
 				log.Debug("Failed to cache credentials", logKeyIdentityStep, identityStep, "error", err)
 			} else {
 				log.Debug("Cached credentials", logKeyIdentityStep, identityStep)
