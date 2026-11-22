@@ -109,14 +109,36 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 		errUtils.CheckErrorPrintAndExit(addGCPReauthExplanation(err), "", "")
 	}
 
+	return reportWhoami(ctx, whoami, v.GetString(OutputFlagName))
+}
+
+// reportWhoami validates the credentials and prints the whoami status. It
+// fails when the credentials are expired or invalid, so scripts can rely on the
+// exit status (missing credentials already fail in authManager.Whoami).
+func reportWhoami(ctx context.Context, whoami *authTypes.WhoamiInfo, format string) error {
+	defer perf.Track(nil, "auth.reportWhoami")()
+
 	// Validate credentials if available.
 	isValid := validateCredentials(ctx, whoami)
 
 	// Output.
-	if v.GetString(OutputFlagName) == "json" {
-		return printWhoamiJSON(whoami)
+	if format == "json" {
+		if err := printWhoamiJSON(whoami); err != nil {
+			return err
+		}
+		if !isValid {
+			// The human format prints this warning itself; JSON keeps stdout clean.
+			ui.Warning("Credentials may be expired or invalid.")
+		}
+	} else {
+		printWhoamiHuman(whoami, isValid)
 	}
-	printWhoamiHuman(whoami, isValid)
+
+	if !isValid {
+		// The status was already reported above, so exit non-zero without
+		// rendering an additional error box.
+		return errors.Join(errUtils.ErrExpiredCredentials, errUtils.ExitCodeError{Code: 1, Silent: true})
+	}
 	return nil
 }
 

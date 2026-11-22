@@ -80,3 +80,7 @@ atmos auth whoami --output json
   <dt>`ATMOS_AUTH_WHOAMI_OUTPUT`</dt>
   <dd>Set to `json` for JSON output by default.</dd>
 </dl>
+
+## Exit status
+
+`atmos auth whoami` exits with `0` only when the identity has valid credentials. It exits with `1` when there are no credentials, or when the credentials are expired or invalid; the status is still printed (and, with `--output json`, the JSON document is still written to stdout). Use it in scripts to check whether you need to run `atmos auth login`.
