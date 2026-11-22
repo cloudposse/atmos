@@ -93,7 +93,7 @@ func TestCredentialStreamPresentsDeviceCodeBeforeReturningCredentials(t *testing
 		stream.EXPECT().Recv().Return(nil, io.EOF),
 	)
 	presented := false
-	actual, err := receiveCredentials(stream, interactionHandler(t.Context(), true, func(string, string) { presented = true }))
+	actual, err := receiveCredentials(stream, interactionHandler(t.Context(), true, func(string, string) { presented = true }), nil)
 	require.NoError(t, err)
 	assert.True(t, presented)
 	assert.Equal(t, credentials, actual)
@@ -132,7 +132,7 @@ func TestCredentialStreamPresentsDeviceCodeOnStderrBeforeResult(t *testing.T) {
 		}),
 		stream.EXPECT().Recv().Return(nil, io.EOF),
 	)
-	actual, err := receiveCredentials(stream, interactionHandler(t.Context(), true, presentDeviceCode))
+	actual, err := receiveCredentials(stream, interactionHandler(t.Context(), true, presentDeviceCode), nil)
 	require.NoError(t, err)
 	require.Equal(t, credentials, actual)
 	require.Empty(t, stdout.String())
@@ -144,7 +144,7 @@ func TestCredentialStreamRejectsUnrenderableOrRepeatedInteractions(t *testing.T)
 		stream := NewMockcredentialStream(gomock.NewController(t))
 		prompt := &pluginv1.AuthenticateEvent{Event: &pluginv1.AuthenticateEvent_Interaction{Interaction: deviceInteraction()}}
 		stream.EXPECT().Recv().Return(prompt, nil).Times(map[bool]int{false: 1, true: 2}[interactive])
-		actual, err := receiveCredentials(stream, interactionHandler(t.Context(), interactive, func(string, string) {}))
+		actual, err := receiveCredentials(stream, interactionHandler(t.Context(), interactive, func(string, string) {}), nil)
 		require.ErrorIs(t, err, errUtils.ErrPluginInteractionRequired)
 		assert.Nil(t, actual)
 	}

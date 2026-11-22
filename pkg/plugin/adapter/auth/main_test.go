@@ -37,6 +37,9 @@ func (*providerFixture) Authenticate(request *pluginv1.ProviderRequest, stream g
 	if request.Name == authDeadlineFixtureName {
 		return hangUntilAuthDeadline(stream.Context(), request.Invocation)
 	}
+	if wait, ok := slowDeviceFixtures[request.Name]; ok {
+		return sendDeviceThenWait(stream, request.Invocation, wait)
+	}
 	if fields, ok := deviceFixtureFields[request.Name]; ok {
 		// The prompt is still sent when the host is noninteractive so the host's refusal is tested
 		// independently, but the policy itself must have crossed the transport.

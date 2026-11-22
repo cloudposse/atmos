@@ -57,6 +57,11 @@ func sendDeviceThenCredentials(stream grpc.ServerStreamingServer[pluginv1.Authen
 	}}}); err != nil {
 		return err
 	}
+	return sendDeviceCredentials(stream)
+}
+
+// sendDeviceCredentials emits the OIDC credential result that completes a device flow.
+func sendDeviceCredentials(stream grpc.ServerStreamingServer[pluginv1.AuthenticateEvent]) error {
 	// The envelope lifetime must not outlive the token, so both share one expiry.
 	expiry := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 	data, err := structpb.NewStruct(map[string]any{

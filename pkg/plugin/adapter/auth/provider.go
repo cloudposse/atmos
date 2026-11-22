@@ -42,8 +42,12 @@ type Definition struct {
 	SchemaTarget string
 	Services     Services
 	Credentials  *credential.Registry
-	// Timeout bounds every call into the plugin; zero means no deadline.
+	// Timeout bounds every call into the plugin; zero means no deadline. In an interactive
+	// call, time spent waiting for the user to sign in does not count against it.
 	Timeout time.Duration
+	// InteractionLimit bounds that user wait when Timeout is set; zero means
+	// native.DefaultInteractionLimit.
+	InteractionLimit time.Duration
 }
 
 // ProviderConstructor supplies the same full-configuration constructor used by built-in auth.
@@ -98,7 +102,7 @@ func (p *provider) Authenticate(ctx context.Context) (types.ICredentials, error)
 		if err != nil {
 			return err
 		}
-		envelope, err := receiveCredentials(stream, interactionHandler(call.ctx, call.request.GetInteractive(), presentDeviceCode))
+		envelope, err := receiveCredentials(stream, interactionHandler(call.ctx, call.request.GetInteractive(), presentDeviceCode), call.awaitUser)
 		if err != nil {
 			return err
 		}
