@@ -111,7 +111,7 @@ users:
 
 This means kubectl automatically calls `atmos aws eks token` whenever it needs a fresh token, providing seamless authentication without manual token management.
 
-The user is named `atmos-eks-<cluster>-<region>-<account>-<identity>`, so contexts for different accounts or identities never share a user. When `auth.realm` (or `ATMOS_AUTH_REALM`) is set, the realm follows `atmos-` (for example, `atmos-acme-eks-dev-cluster-us-east-2-123456789012-dev-admin`) and is passed to the command as `ATMOS_AUTH_REALM`, so repositories with different realms keep separate users in the shared kubeconfig.
+The user is named `atmos-eks-<cluster>-<region>-<account>-<identity>`, so contexts for different accounts or identities never share a user. When `auth.realm` (or `ATMOS_AUTH_REALM`) is set, the realm follows `atmos-` (for example, `atmos-acme-eks-dev-cluster-us-east-2-123456789012-dev-admin`) and is passed to the command as `ATMOS_AUTH_REALM`, so repositories with different realms keep separate users in the shared kubeconfig. With a realm and no alias, the context is named `<realm>/<cluster ARN>` (for example, `acme/arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster`) instead of the bare ARN, so realms keep separate contexts too.
 
 `ATMOS_CHDIR` is the directory the entry was written from, so kubectl finds the same Atmos configuration from any directory. If that directory no longer exists (for example, a removed worktree), the token command warns and runs from the current directory instead. Re-run `atmos auth login` (or the integration) from the repository to update the entry.
 
@@ -125,7 +125,7 @@ The user is named `atmos-eks-<cluster>-<region>-<account>-<identity>`, so contex
 
 ## See Also
 
-- [Auth Login Command](/cli/commands/auth/login) — Authenticate with identities and auto-provision kubeconfig
-- [EKS Kubeconfig Authentication Tutorial](/tutorials/eks-kubeconfig-authentication) — Step-by-step EKS setup guide
-- [AWS EKS Update Kubeconfig](/cli/commands/aws/eks/update-kubeconfig) — Download kubeconfig from EKS clusters
-- [Auth Configuration](/cli/configuration/auth) — Configure providers, identities, and integrations
+- [Auth Login Command](/cli/commands/auth/login) - Authenticate with identities and auto-provision kubeconfig
+- [EKS Kubeconfig Authentication Tutorial](/tutorials/eks-kubeconfig-authentication) - Step-by-step EKS setup guide
+- [AWS EKS Update Kubeconfig](/cli/commands/aws/eks/update-kubeconfig) - Download kubeconfig from EKS clusters
+- [Auth Configuration](/cli/configuration/auth) - Configure providers, identities, and integrations

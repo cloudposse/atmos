@@ -47,7 +47,7 @@ auth:
 
 The cluster `name`, `project_id`, and regional or zonal `location` are required. With no custom path, Atmos writes its own kubeconfig under the XDG config directory. `kubeconfig.update` supports `merge` (the default), `replace`, and `error`; `error` fails only when an existing entry of the same name has different settings, so re-running the integration is not an error. Configuring a shared kubeconfig path is explicit opt-in and may update that file's `current-context`.
 
-The kubeconfig user is named `atmos-gke-<cluster>-<project>-<location>-<identity>`, or `atmos-<realm>-gke-...` when `auth.realm` is set, so different identities and realms never share a user. Its exec entry sets `ATMOS_CHDIR` to the directory it was written from; if that directory is removed, the token command warns and runs from the current directory.
+The kubeconfig user is named `atmos-gke-<cluster>-<project>-<location>-<identity>`, or `atmos-<realm>-gke-...` when `auth.realm` is set, so different identities and realms never share a user. Without an `alias`, the context is named after the cluster resource name, or `<realm>/projects/<project>/locations/<location>/clusters/<cluster>` when `auth.realm` is set, so realms never share a context either; an unprefixed context that an earlier version wrote for the same user is replaced. Logout removes a context only when it points at one of this integration's users, so a context of the same name that another realm or tool wrote is left alone. Its exec entry sets `ATMOS_CHDIR` to the directory it was written from; if that directory is removed, the token command warns and runs from the current directory.
 
 ## Use the integration
 
@@ -109,5 +109,5 @@ The identity must be able to describe the cluster, normally with `container.clus
 
 ## See also
 
-- [`atmos gcp gke token`](token) — Exec credential command
-- [Atmos Auth](/cli/configuration/auth) — Providers, identities, and integrations
+- [`atmos gcp gke token`](token) - Exec credential command
+- [Atmos Auth](/cli/configuration/auth) - Providers, identities, and integrations
