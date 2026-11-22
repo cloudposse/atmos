@@ -124,7 +124,7 @@ func seedStateFile(t *testing.T, cwd string) {
 // provision.workdir.enabled: true.
 //
 // The state file lives in the JIT workdir (.workdir/terraform/test-producer-from-source-b2f94c7d/),
-// not in components/terraform/. resolveLocalBackendComponentPath must derive the JIT path
+// Not in components/terraform/. The resolveLocalBackendComponentPath helper must derive the JIT path
 // even though the component was hydrated from an external source URI rather than a local
 // components/ directory.
 //

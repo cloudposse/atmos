@@ -16,7 +16,6 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/gruntwork-io/terragrunt/pkg/log/format"
 	"github.com/gruntwork-io/terragrunt/pkg/options"
-	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/spf13/afero"
 	"github.com/zclconf/go-cty/cty"
@@ -47,10 +46,19 @@ func resolve(ctx context.Context, request *model.Request, filesystem afero.Fs) (
 	return result, nil
 }
 
+// resolveRequest prepares the invocation-local evaluator and emits only safe early progress.
 func resolveRequest(ctx context.Context, request *model.Request, filesystem afero.Fs) (*model.Resolution, error) {
 	if request.Phase == "inventory" {
 		return discoverProject(ctx, request)
 	}
+	// Setup can fail before the evaluator installs its sensitivity guard. In that
+	// case no buffered path or event can be vouched for, so withhold them all.
+	evaluationStarted := false
+	defer func() {
+		if sink := logSinkFrom(ctx); !evaluationStarted && sink.collecting() {
+			sink.Withhold()
+		}
+	}()
 	filesystem, err := backendGenerationOverlay(ctx, request, filesystem)
 	if err != nil {
 		return nil, err
@@ -58,6 +66,12 @@ func resolveRequest(ctx context.Context, request *model.Request, filesystem afer
 	path, err := requestPath(request.Path)
 	if err != nil {
 		return nil, err
+	}
+	// Only static, path-free progress is safe before evaluation discovers secrets.
+	// The sink buffers the detailed event until configuration values can be redacted.
+	if sink := logSinkFrom(ctx); sink != nil {
+		sink.Event(log.InfoLevel, "Starting unit evaluation", "")
+		sink.Event(log.InfoLevel, "Evaluating unit", filepath.Dir(path))
 	}
 	ctx = config.WithCaches(ctx)
 	logger, err := evaluationLogger(ctx, request.LogLevel)
@@ -69,6 +83,7 @@ func resolveRequest(ctx context.Context, request *model.Request, filesystem afer
 		return nil, err
 	}
 	evaluator := unitEvaluator{logger: logger, environment: environment, pctx: requestParsingContext(request, path), request: request, path: path}
+	evaluationStarted = true // The evaluator now owns the sensitivity check.
 	return evaluator.resolve(ctx, &sensitivityScan{})
 }
 
@@ -258,13 +273,8 @@ func failedDestroyGuard(request *model.Request, fs afero.Fs, path string, parseE
 // continues to the ordinary parse. Anything the syntax cannot settle (an expression, an include, an
 // unreadable or invalid file) keeps the original error, so the guard still fails closed.
 func staticDestroyGuard(fs afero.Fs, path string, parseErr error) error {
-	data, err := afero.ReadFile(fs, path)
-	if err != nil {
-		return parseErr
-	}
-	file, diagnostics := hclsyntax.ParseConfig(data, path, hcl.InitialPos)
-	body, ok := file.Body.(*hclsyntax.Body)
-	if diagnostics.HasErrors() || !ok {
+	body, ok := parseBody(fs, path)
+	if !ok {
 		return parseErr
 	}
 	for _, block := range body.Blocks {

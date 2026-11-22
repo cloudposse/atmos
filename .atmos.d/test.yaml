@@ -184,7 +184,7 @@ commands:
           - type: atmos
             command: build deps
           - type: shell
-            command: go test -short ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 5m
+            command: go test -short ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout "${GO_TEST_TIMEOUT:-5m}"
 
       - name: short-cover
         description: Run quick tests with coverage
@@ -197,7 +197,7 @@ commands:
           - type: atmos
             command: build deps
           - type: shell
-            command: go test -short -cover ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout 5m
+            command: go test -short -cover ${TEST:-$(go list ./...)} ${TESTARGS:-} -timeout "${GO_TEST_TIMEOUT:-5m}"
 
       - name: coverage
         description: Run tests with coverage report

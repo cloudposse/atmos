@@ -59,9 +59,10 @@ func TestScaffoldGenerate_OCISource(t *testing.T) {
 	})
 
 	target := filepath.Join(root, "output")
-	runAtmosForScaffoldTest(t, root, map[string]string{
-		"XDG_CACHE_HOME": filepath.Join(t.TempDir(), ".cache"),
-	}, 2*time.Minute,
+	runAtmosForScaffoldTest(
+		t, root, map[string]string{
+			"XDG_CACHE_HOME": filepath.Join(t.TempDir(), ".cache"),
+		}, 2*time.Minute,
 		"scaffold", "generate", "oci://"+imageRef, target,
 		"--defaults",
 		"--no-git",
@@ -99,7 +100,8 @@ func TestScaffoldGenerate_OCISourceUpdate(t *testing.T) {
 	env := map[string]string{
 		"XDG_CACHE_HOME": filepath.Join(t.TempDir(), ".cache"),
 	}
-	runAtmosForScaffoldTest(t, root, env, 2*time.Minute,
+	runAtmosForScaffoldTest(
+		t, root, env, 2*time.Minute,
 		"scaffold", "generate", "oci://"+imageRef, target,
 		"--defaults",
 		"--git",
@@ -120,7 +122,8 @@ func TestScaffoldGenerate_OCISourceUpdate(t *testing.T) {
 		"file.txt":      "updated content\n",
 	})
 
-	runAtmosForScaffoldTest(t, root, env, 2*time.Minute,
+	runAtmosForScaffoldTest(
+		t, root, env, 2*time.Minute,
 		"scaffold", "generate", "oci://"+imageRef, target,
 		"--defaults",
 		"--update",
@@ -138,7 +141,7 @@ func TestScaffoldGenerate_OCISourceUpdate(t *testing.T) {
 // that test alone was scaffold-generate-only CLI coverage; this is the `atmos
 // init` counterpart.
 //
-// atmos init has no --defaults flag (unlike scaffold generate): the
+// Atmos init has no --defaults flag (unlike scaffold generate): the
 // non-interactive equivalent here is --interactive=false, which also makes
 // executeInit fall back to the scaffold.yaml fields' declared defaults (see
 // ExecuteWithBaseRef's useDefaults parameter in pkg/generator/ui/ui.go, wired
@@ -162,9 +165,10 @@ func TestInit_OCISource(t *testing.T) {
 	})
 
 	target := filepath.Join(root, "output")
-	runAtmosForScaffoldTest(t, root, map[string]string{
-		"XDG_CACHE_HOME": filepath.Join(t.TempDir(), ".cache"),
-	}, 2*time.Minute,
+	runAtmosForScaffoldTest(
+		t, root, map[string]string{
+			"XDG_CACHE_HOME": filepath.Join(t.TempDir(), ".cache"),
+		}, 2*time.Minute,
 		"init", "oci://"+imageRef, target,
 		"--interactive=false",
 		"--no-git",

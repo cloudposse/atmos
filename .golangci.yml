@@ -69,6 +69,9 @@ linters:
         provider-agnostic-auth:
           files:
             - "$all"
+            # Acceptance AWS credential checks and Floci SSM fixtures are AWS-specific.
+            - "!**/tests/preconditions.go"
+            - "!**/tests/terraform_floci_dag_test.go"
             - "!**/pkg/auth/providers/**"
             - "!**/pkg/store/providers/**"
             - "!**/pkg/auth/identities/**"

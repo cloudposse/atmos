@@ -59,7 +59,7 @@ func localModuleSubdir(source string, existingRoot func(root string) bool) (root
 	}
 	root, subdir = volume+rest[:index], rest[index+2:]
 	first := strings.SplitN(strings.TrimPrefix(root, "./"), "/", 2)[0]
-	if strings.Contains(first, ".") && !strings.HasPrefix(root, ".") && !filepath.IsAbs(root) && (existingRoot == nil || !existingRoot(root)) {
+	if strings.ContainsRune(first, '.') && !strings.HasPrefix(root, ".") && !filepath.IsAbs(root) && (existingRoot == nil || !existingRoot(root)) {
 		return "", "", false
 	}
 	return root, subdir, true

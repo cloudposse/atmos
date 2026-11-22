@@ -10,11 +10,12 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/gruntwork-io/terragrunt/pkg/config"
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
 func TestTruncatePreservesUTF8Boundary(t *testing.T) {
@@ -151,6 +152,74 @@ func TestResolveReportsLoggerEventsToTheContextSink(t *testing.T) {
 
 	_, err = Resolve(t.Context(), request)
 	require.NoError(t, err, "evaluation without a sink still works")
+}
+
+func TestLogSinkForwardsSafeProgressAndBuffersTerragruntEvents(t *testing.T) {
+	sink := NewLogSink("debug", "")
+	var forwarded []string
+	sink.Forward(func(entry *model.LogEntry) { forwarded = append(forwarded, entry.Level+":"+entry.Message) })
+	l := logger(t, sink)
+
+	l.Trace("below the level")
+	l.Debug("first")
+	l.Warn("second")
+	sink.Event(log.InfoLevel, "third", "")
+
+	assert.Equal(t, []string{"info:third"}, forwarded)
+	entries := sink.Entries()
+	require.Len(t, entries, 2)
+	assert.Equal(t, "first", entries[0].Message)
+	assert.Equal(t, "second", entries[1].Message)
+}
+
+func TestLogSinkBufferingKeepsOrderAcrossConcurrentUnits(t *testing.T) {
+	sink := NewLogSink("debug", "")
+	forwarded := make(map[string][]string)
+	var total int
+	sink.Forward(func(entry *model.LogEntry) {
+		forwarded[entry.Unit] = append(forwarded[entry.Unit], entry.Message)
+		total++
+	})
+	var wg sync.WaitGroup
+	for unit := range 8 {
+		wg.Go(func() {
+			for sequence := range 50 {
+				sink.Event(log.InfoLevel, fmt.Sprint(sequence), strings.Repeat("u", unit+1))
+			}
+		})
+	}
+	wg.Wait()
+	assert.Zero(t, total, "unit paths must not be forwarded before secrets are known")
+	entries := sink.Entries()
+	require.Len(t, entries, 400)
+	for _, entry := range entries {
+		forwarded[entry.Unit] = append(forwarded[entry.Unit], entry.Message)
+	}
+	for unit := range 8 {
+		var want []string
+		for sequence := range 50 {
+			want = append(want, fmt.Sprint(sequence))
+		}
+		assert.Equal(t, want, forwarded[strings.Repeat("u", unit+1)])
+	}
+}
+
+func TestLogSinkEventsFollowTheLevelAndAreRelativeToTheRoot(t *testing.T) {
+	root := t.TempDir()
+	for level, want := range map[string]int{"": 0, "warn": 0, "debug": 1, "trace": 2} {
+		sink := NewLogSink(level, root)
+		assert.Equal(t, want > 0, sink.Enabled(), level)
+		sink.Event(log.InfoLevel, "Evaluating unit", filepath.Join(root, "live", "app"))
+		sink.Event(log.TraceLevel, "too verbose", "")
+		entries := sink.Entries()
+		require.Len(t, entries, want, level)
+		if want > 0 {
+			assert.Equal(t, model.LogEntry{Time: entries[0].Time, Level: "info", Message: "Evaluating unit", Unit: "live/app"}, entries[0])
+			assert.False(t, entries[0].Time.IsZero())
+		}
+	}
+	var missing *LogSink
+	assert.NotPanics(t, func() { missing.Event(log.InfoLevel, "ignored", "") })
 }
 
 // A value registered as sensitive is redacted from every event, including events collected before the
@@ -442,123 +511,52 @@ func TestUnredactedSensitivityCountsOnlyUnknownValues(t *testing.T) {
 	assert.True(t, unredactedSensitivity(fsys, []string{broken}, unit, true), "an unparseable file fails closed")
 }
 
-func TestResolveWithholdsTransformedSensitiveInputCommandOutput(t *testing.T) {
-	for _, test := range []struct {
-		name, expression string
-		withheld         bool
-	}{
-		{"direct call", "sensitive(%s)", false},
-		{"transform inside", "sensitive(upper(%s))", true},
-		{"transform outside", "upper(sensitive(%s))", true},
-		{"nested input", "{ key = sensitive(upper(%s)) }", true},
-		{"merge overwrite", `merge({ token = sensitive(%s) }, { token = "replacement" })`, true},
-		{"merge disjoint", `merge({ token = sensitive(%s) }, { public = "visible" })`, false},
-		{"merge unknown keys", `merge({ token = sensitive(%s) }, jsondecode("{\"token\":\"replacement\"}"))`, true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			call := effectCommand(t, "raw-secret-73ea")
-			request := nativeUnit(t, "inputs = { token = "+fmt.Sprintf(test.expression, call)+", public = upper(\"visible\") }\n")
-			request.Environment[effectChildEnv] = "1"
-			sink := NewLogSink("debug", request.BasePath)
-			logger(t, sink).Debug("before raw-secret-73ea")
-			result, err := Resolve(WithLogSink(t.Context(), sink), request)
-			require.NoError(t, err)
-			require.NotEmpty(t, result.SensitiveInputs)
-			effects, err := os.ReadFile(filepath.Join(request.BasePath, "effects"))
-			require.NoError(t, err, "the Go subprocess must actually execute")
-			assert.Contains(t, string(effects), "raw-secret-73ea")
-			entries := sink.Entries()
-			require.NotEmpty(t, entries)
-			for _, entry := range entries {
-				assert.NotContains(t, entry.Message, "raw-secret-73ea")
-			}
-			if test.withheld {
-				require.Len(t, entries, 1)
-				assert.Contains(t, entries[0].Message, "withheld")
-			} else {
-				assert.Equal(t, "before <MASKED>", entries[0].Message)
-			}
-		})
-	}
-}
-
-func TestApplyTimeReparseWithholdsTransformedSensitiveInput(t *testing.T) {
-	request := nativeUnit(t, `inputs = { token = "plan-input", phase = get_terraform_command() }`)
-	request.Environment[effectChildEnv] = "1"
-	sink := NewLogSink("debug", request.BasePath)
-	ctx := config.WithCaches(WithLogSink(t.Context(), sink))
-	l, err := evaluationLogger(ctx, "debug")
-	require.NoError(t, err)
-	environment, err := evaluationEnvironment(ctx, &request, nil, request.Path)
-	require.NoError(t, err)
-	pctx := requestParsingContext(&request, request.Path)
-	evaluator := unitEvaluator{logger: l, environment: environment, pctx: pctx, request: &request, path: request.Path}
-	cfg, err := evaluator.parseUnit(ctx)
-	require.NoError(t, err)
-	body, err := os.ReadFile(request.Path)
-	require.NoError(t, err)
-	body = []byte(strings.ReplaceAll(string(body), `"plan-input"`, "sensitive(upper("+effectCommand(t, "apply-raw-secret")+"))"))
-	require.NoError(t, os.WriteFile(request.Path, body, 0o600))
-	l.Debug("before apply-raw-secret")
-	require.NotContains(t, sink.Entries()[0].Message, "withheld")
-	_, _, err = evaluator.unitExecution(ctx, cfg, &sensitivityScan{})
-	require.NoError(t, err)
+func TestLogSinkBuffersUnitPathsUntilSensitiveValuesAreRegistered(t *testing.T) {
+	root := t.TempDir()
+	sink := NewLogSink("debug", root)
+	var forwarded []*model.LogEntry
+	sink.Forward(func(entry *model.LogEntry) { forwarded = append(forwarded, entry) })
+	sink.Event(log.InfoLevel, "Evaluating unit", filepath.Join(root, "live", "private-unit", "app"))
+	require.Empty(t, forwarded)
+	sink.RedactValue("private-unit")
 	entries := sink.Entries()
 	require.Len(t, entries, 1)
+	assert.Equal(t, "live/<MASKED>/app", entries[0].Unit)
+	assert.Equal(t, "Evaluating unit", entries[0].Message)
+	assert.Equal(t, "info", entries[0].Level)
+	sink.Withhold()
+	entries = sink.Entries()
+	require.Len(t, entries, 1)
+	assert.Empty(t, entries[0].Unit)
 	assert.Contains(t, entries[0].Message, "withheld")
-	assert.NotContains(t, entries[0].Message, "apply-raw-secret")
 }
 
-func TestSensitiveInputsSelectExposedInclude(t *testing.T) {
-	root := filepath.Join(string(filepath.Separator), "repo")
-	unit := filepath.Join(root, "app", unitFile)
-	parent := filepath.Join(root, "parent.hcl")
-	for _, test := range []struct {
-		name   string
-		path   string
-		expose string
-		found  bool
-	}{
-		{"ancestor", `find_in_parent_folders("parent.hcl")`, "true", true},
-		{"absolute", fmt.Sprintf("%q", filepath.ToSlash(parent)), "true", true},
-		{"missing", `"missing.hcl"`, "true", false},
-		{"hidden", `"parent.hcl"`, "false", false},
-		{"unknown exposure", `"parent.hcl"`, "local.expose", false},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			fsys := afero.NewMemMapFs()
-			require.NoError(t, fsys.MkdirAll(filepath.Dir(unit), 0o755))
-			require.NoError(t, afero.WriteFile(fsys, parent, []byte(`locals { token = sensitive("private") }`), 0o644))
-			content := fmt.Sprintf("include \"root\" {\n path = %s\n expose = %s\n}\ninputs = { token = include.root.locals.token }", test.path, test.expose)
-			require.NoError(t, afero.WriteFile(fsys, unit, []byte(content), 0o644))
-			paths := SensitiveInputs(fsys, []string{unit, parent}, map[string]any{"token": "private"})
-			if test.found {
-				require.Equal(t, [][]string{{"token"}}, paths)
-			} else {
-				require.Empty(t, paths)
-			}
-		})
-	}
-}
-
-func TestApplyValidationFailureRetainsSensitiveFileReads(t *testing.T) {
-	request := nativeUnit(t, "include \"extra\" {\n path = get_terraform_command() == \"apply\" ? \"${get_terragrunt_dir()}/apply.hcl\" : \"${get_terragrunt_dir()}/plan.hcl\"\n}\n")
-	request.Environment[effectChildEnv] = "1"
-	dir := filepath.Dir(request.Path)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "plan.hcl"), []byte("inputs = {}\n"), 0o600))
-	body := fmt.Sprintf("locals {\n token = sensitive(%s)\n args = get_terraform_cli_args()\n}\n", effectCommand(t, "apply-validation-secret"))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "apply.hcl"), []byte(body), 0o600))
-	sink := NewLogSink("debug", request.BasePath)
-	logger(t, sink).Debug("before apply-validation-secret")
-	_, err := Resolve(WithLogSink(t.Context(), sink), request)
-	require.ErrorIs(t, err, ErrUnsupportedExecution)
-	effects, err := os.ReadFile(filepath.Join(request.BasePath, "effects"))
+func TestResolveForwardsPathFreeProgressAndBuffersRedactedDetails(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)
-	require.Contains(t, string(effects), "apply-validation-secret")
-	entries := sink.Entries()
-	require.Len(t, entries, 1)
-	require.Contains(t, entries[0].Message, "withheld")
-	require.NotContains(t, entries[0].Message, "apply-validation-secret")
+	request := nativeUnitAt(t, filepath.Join(root, "private-unit"), "locals { token = sensitive(\"private-unit\") }\n")
+	request.BasePath = root
+	sink := NewLogSink("debug", root)
+	var forwarded []model.LogEntry
+	sink.Forward(func(entry *model.LogEntry) { forwarded = append(forwarded, *entry) })
+
+	_, err = Resolve(WithLogSink(t.Context(), sink), request)
+
+	require.NoError(t, err)
+	require.Len(t, forwarded, 1)
+	assert.Equal(t, "Starting unit evaluation", forwarded[0].Message)
+	assert.Equal(t, "info", forwarded[0].Level)
+	assert.Empty(t, forwarded[0].Unit)
+	assert.Empty(t, forwarded[0].Fields)
+	var detailed []model.LogEntry
+	for _, entry := range sink.Entries() {
+		assert.NotContains(t, entry.Unit, "private-unit")
+		if entry.Message == "Evaluating unit" {
+			detailed = append(detailed, entry)
+		}
+	}
+	require.Len(t, detailed, 1)
+	assert.Equal(t, "<MASKED>", detailed[0].Unit)
 }
 
 func writeFiles(t *testing.T, fsys afero.Fs, files map[string]string) {
