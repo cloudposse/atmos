@@ -284,13 +284,14 @@ func (c *Client) reconcileMilestoneStatuses(eventHead string) (result error) {
 	if err != nil {
 		return err
 	}
-	// Queue heads are recorded first, so a failed lookup still revokes them.
+	// Queue heads are recorded first, and PRs fetched before a failed lookup are
+	// recorded before the error check, so a failed lookup revokes all of them.
 	prs, err = c.addQueuedPRs(prs, entries)
-	if err != nil {
-		return err
-	}
 	for _, pr := range prs {
 		heads[pr.Head.SHA] = true
+	}
+	if err != nil {
+		return err
 	}
 	return c.publishPolicyVerdicts(prs, entries, queueHeads, branch)
 }
@@ -299,7 +300,9 @@ func (c *Client) reconcileMilestoneStatuses(eventHead string) (result error) {
 // PR stack queues every layer into the default branch while each upper layer
 // still targets its parent branch, so the base-filtered open list omits them.
 // Merged entries keep the landed-commit rule in queuePolicy.checkEntry, and a
-// PR that is no longer open stays missing so its group fails closed.
+// PR that is no longer open stays missing so its group fails closed. On a
+// lookup error it returns the PRs gathered so far, so the caller can revoke
+// their heads.
 func (c *Client) addQueuedPRs(prs []ReleasePR, entries []queueEntry) ([]ReleasePR, error) {
 	known := make(map[int]bool, len(prs))
 	for i := range prs {
@@ -313,7 +316,7 @@ func (c *Client) addQueuedPRs(prs []ReleasePR, entries []queueEntry) ([]ReleaseP
 		known[number] = true
 		var pr ReleasePR
 		if err := c.Get(fmt.Sprintf("pulls/%d", number), &pr); err != nil {
-			return nil, err
+			return prs, err
 		}
 		if pr.Number == number && pr.State == "open" {
 			prs = append(prs, pr)

@@ -28,15 +28,22 @@ the failure would block merges as soon as the status is required, as `Check`'s d
   the evaluated set, so it gets a normal policy verdict and its own head status. A PR that is no longer
   open stays missing, so its group still fails closed. Merged entries keep the existing landed-commit rule.
 - The lookup runs after queue-group heads are recorded, so a failed lookup still revokes every known head,
-  including earlier groups.
-- `magefiles/release/milestone/milestone_gate_test.go`: add `TestMilestoneGateStackedQueueEntries` (open
-  stacked layer passes, a stacked layer that fails policy reports the policy reason, a closed stacked layer
-  stays missing, and a lookup error revokes every known head). `TestMilestoneGateMergedQueueEntry` now
-  asserts that merged entries are never looked up and that a closed unmerged PR is still rejected.
+  including earlier groups. On a lookup error, `addQueuedPRs` returns the PRs it already fetched, and their
+  heads are recorded before the error check, so a success left by an earlier run on one of those heads is
+  revoked too.
+- `magefiles/release/milestone/milestone_gate_stacked_test.go` (new): `TestMilestoneGateStackedQueueEntries`
+  (open stacked layer passes, a stacked layer that fails policy reports the policy reason, a closed stacked
+  layer stays missing, and a lookup error revokes every known head) and
+  `TestMilestoneGateStackedLookupRevokesFetchedHeads` (the first of two lookups succeeds and the second fails;
+  the fetched PR's head and every queue head are revoked).
+- `magefiles/release/milestone/milestone_gate_test.go`: `TestMilestoneGateMergedQueueEntry` now asserts that
+  merged entries are never looked up and that a closed unmerged PR is still rejected.
 
 ## Validation
 
-- The new test fails on the unfixed code in all four cases, reproducing the bug.
+- `TestMilestoneGateStackedQueueEntries` fails on the unfixed code in all four cases, reproducing the bug.
+- `TestMilestoneGateStackedLookupRevokesFetchedHeads` fails when `addQueuedPRs` discards fetched PRs on
+  error, and passes with the partial-result fix.
 - `go test -tags mage -count=1 -race ./magefiles/release/milestone/` passes.
 - Statement coverage of `addQueuedPRs` and `reconcileMilestoneStatuses` is 100%.
 - `gofumpt` and `golangci-lint` were not run directly in this session; the repository's pre-commit hooks
