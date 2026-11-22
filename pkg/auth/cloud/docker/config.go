@@ -91,7 +91,9 @@ func getDockerConfigDir() string {
 // registry through a credential helper (credHelpers[registry] or credsStore), the
 // credentials are stored in that helper instead and only an empty placeholder
 // entry is written to auths, matching `docker login`. A helper failure is returned
-// as ErrDockerCredentialHelper and leaves config.json unchanged.
+// as ErrDockerCredentialHelper and leaves config.json unchanged. If config.json
+// cannot be saved after a successful helper store, the stored credential is
+// erased again so it is not orphaned in the helper.
 func (m *ConfigManager) WriteAuth(registry, username, password string) error {
 	defer perf.Track(nil, "docker.ConfigManager.WriteAuth")()
 
@@ -112,7 +114,10 @@ func (m *ConfigManager) WriteAuth(registry, username, password string) error {
 				return withHelperHint(err, helper)
 			}
 			config.setAuth(registry, helperPlaceholderEntry)
-			return m.saveConfig(config)
+			if err := m.saveConfig(config); err != nil {
+				return m.rollbackHelperStore(err, helper, registry)
+			}
+			return nil
 		}
 
 		// Encode credentials as base64(username:password).
@@ -169,6 +174,18 @@ func (m *ConfigManager) RemoveAuth(registries ...string) error {
 		}
 		return errors.Join(helperErrs...)
 	})
+}
+
+// rollbackHelperStore undoes a helper store whose config.json save failed.
+// Without the auths placeholder, RemoveAuth would never erase the credential
+// and it would be orphaned in the helper (for example the OS keychain), so it is
+// erased on a best-effort basis. The save error is always returned, joined
+// with the erase error when the rollback also fails.
+func (m *ConfigManager) rollbackHelperStore(saveErr error, helper, registry string) error {
+	if err := m.credentialHelper().Erase(helper, registry); err != nil {
+		return errors.Join(saveErr, withHelperHint(err, helper))
+	}
+	return saveErr
 }
 
 // credentialHelper returns the configured credential helper runner.
