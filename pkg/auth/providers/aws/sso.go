@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
-	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
@@ -54,6 +53,9 @@ type ssoProvider struct {
 	ssoClient    ssoClient          // For dependency injection in tests.
 	sessionStore *sessionTokenStore // In-process registry that coalesces same-portal providers.
 	realm        string             // Credential isolation realm set by auth manager.
+	// pollWait waits between device-token polls; nil uses waitForPollInterval.
+	// Tests inject it to observe the polling intervals without sleeping.
+	pollWait func(ctx context.Context, d time.Duration) error
 }
 
 // NewSSOProvider creates a new AWS SSO provider.
@@ -611,74 +613,6 @@ func (m spinnerModel) checkResult() tea.Cmd {
 			return m.checkResult()()
 		}
 	}
-}
-
-// pollForAccessToken polls the device authorization endpoint until an access token is
-// available or times out. The returned ssoTokenCache carries AccessToken, RefreshToken
-// (when issued), and ExpiresAt; remaining fields are populated by runDeviceAuthFlow.
-func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooidc.Client, registerResp *ssooidc.RegisterClientOutput, authResp *ssooidc.StartDeviceAuthorizationOutput) (ssoTokenCache, error) {
-	var result ssoTokenCache
-	expiresIn := authResp.ExpiresIn
-	interval := authResp.Interval
-	// Normalize to a sane minimum to avoid divide-by-zero and busy-waiting.
-	if interval <= 0 {
-		interval = 1
-	}
-
-	intervalDur := time.Duration(interval) * time.Second
-
-	// Initial delay before first poll.
-	time.Sleep(intervalDur)
-	for i := 0; i < int(expiresIn/interval); i++ {
-		tokenResp, err := oidcClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
-			ClientId:     registerResp.ClientId,
-			ClientSecret: registerResp.ClientSecret,
-			DeviceCode:   authResp.DeviceCode,
-			GrantType:    aws.String("urn:ietf:params:oauth:grant-type:device_code"),
-		})
-		if err == nil {
-			result.AccessToken = aws.ToString(tokenResp.AccessToken)
-			result.RefreshToken = aws.ToString(tokenResp.RefreshToken)
-			result.ExpiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
-			break
-		}
-
-		var authPendingErr *types.AuthorizationPendingException
-		var slowDownErr *types.SlowDownException
-
-		if errors.As(err, &authPendingErr) {
-			time.Sleep(intervalDur)
-			continue
-		} else if errors.As(err, &slowDownErr) {
-			// Slow down: double the interval as requested by the server.
-			intervalDur = time.Duration(interval*2) * time.Second
-			time.Sleep(intervalDur)
-			continue
-		}
-
-		return ssoTokenCache{}, errUtils.Build(errUtils.ErrSSOTokenCreationFailed).
-			WithExplanation("Failed to create AWS SSO access token").
-			WithHint("Ensure you completed the device authorization in your browser").
-			WithHint("The verification code may have expired - try authenticating again").
-			WithContext("provider", p.name).
-			WithContext("start_url", p.startURL).
-			WithExitCode(1).
-			Err()
-	}
-
-	if result.AccessToken == "" {
-		return ssoTokenCache{}, errUtils.Build(errUtils.ErrSSOTokenCreationFailed).
-			WithExplanation("AWS SSO authentication timed out waiting for browser confirmation").
-			WithHint("Complete the device authorization in your browser within the time limit").
-			WithHint("Visit the verification URL and enter the code displayed earlier").
-			WithHintf("Try again with `atmos auth login --provider=%s`; Atmos keeps its own SSO token cache, so `aws sso login` does not help", p.name).
-			WithContext("provider", p.name).
-			WithContext("start_url", p.startURL).
-			WithContext("region", p.region).
-			WithExitCode(1).
-			Err()
-	}
-	return result, nil
 }
 
 // Logout removes provider-specific credential storage.
