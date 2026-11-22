@@ -56,6 +56,10 @@ func (m *manager) logoutIdentity(ctx context.Context, identityName string, delet
 	// Step 1: Delete keyring entry ONLY if deleteKeychain flag is set.
 	errs := m.deleteIdentityKeyringEntries(identityName, deleteKeychain, bestEffort)
 
+	// The configuration digest record describes the credential files Step 3 removes, so it is
+	// removed whether or not the keyring entry is kept.
+	m.deleteExternalStepDigest(identityName)
+
 	// Step 2: Clean up linked integrations (non-fatal).
 	m.cleanupIntegrations(ctx, identityName)
 

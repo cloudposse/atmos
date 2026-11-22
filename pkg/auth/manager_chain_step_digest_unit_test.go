@@ -285,6 +285,10 @@ func TestOperationCredentialStore_ForwardsDigests(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "d2", record.Digest)
 
+	require.NoError(t, op.DeleteExternalConfigDigest("target", "acme"))
+	_, err = innerDigests.RetrieveExternalConfigDigest("target", "operation-1")
+	require.ErrorIs(t, err, credentials.ErrDataNotFound, "the delete must reach the operation realm")
+
 	plain := &operationCredentialStore{CredentialStore: &testStore{}, scope: scope}
 	assert.False(t, plain.SupportsConfigDigests())
 	require.ErrorIs(t, plain.StoreWithConfigDigest("target", creds, "acme", "d"), credentials.ErrNotSupported)
@@ -293,6 +297,7 @@ func TestOperationCredentialStore_ForwardsDigests(t *testing.T) {
 	require.ErrorIs(t, err, credentials.ErrNotSupported)
 	_, err = plain.RetrieveExternalConfigDigest("target", "acme")
 	require.ErrorIs(t, err, credentials.ErrNotSupported)
+	require.ErrorIs(t, plain.DeleteExternalConfigDigest("target", "acme"), credentials.ErrNotSupported)
 }
 
 // TestChainStepCache_StoreWithoutDigestsKeepsNameOnlyReuse verifies custom stores that cannot

@@ -47,3 +47,16 @@ func describeLegacyRealmOwners(owners []credentials.LegacyRealmOwner) string {
 	}
 	return strings.Join(parts, " or ")
 }
+
+// deleteExternalStepDigest removes the configuration digest record that a login wrote for the
+// credentials the identity keeps in its own files (see recordExternalStepDigest). Best effort: a
+// leftover record is harmless, because it stops matching once the credentials are rewritten.
+func (m *manager) deleteExternalStepDigest(identityName string) {
+	store, ok := m.credentialStore.(credentials.ConfigDigestStore)
+	if !ok {
+		return
+	}
+	if err := store.DeleteExternalConfigDigest(identityName, m.realm.Value); err != nil {
+		log.Debug("Failed to delete configuration digest record", logKeyIdentity, identityName, logKeyRealm, m.realm.Value, "error", err)
+	}
+}

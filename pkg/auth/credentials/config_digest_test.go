@@ -90,6 +90,16 @@ func TestExternalConfigDigest_RoundTripAndCleanup(t *testing.T) {
 	require.NoError(t, store.Delete("mid", "acme"))
 	_, err = store.RetrieveExternalConfigDigest("mid", "acme")
 	require.ErrorIs(t, err, ErrDataNotFound, "Delete must remove the digest record too")
+
+	// DeleteExternalConfigDigest removes only the record, and is idempotent.
+	require.NoError(t, store.Store("mid", &types.OIDCCredentials{Token: "t"}, "acme"))
+	require.NoError(t, store.StoreExternalConfigDigest("mid", "acme", record))
+	require.NoError(t, store.DeleteExternalConfigDigest("mid", "acme"))
+	require.NoError(t, store.DeleteExternalConfigDigest("mid", "acme"))
+	_, err = store.RetrieveExternalConfigDigest("mid", "acme")
+	require.ErrorIs(t, err, ErrDataNotFound)
+	_, err = store.Retrieve("mid", "acme")
+	require.NoError(t, err, "the credentials are kept")
 }
 
 // TestExternalConfigDigest_Errors verifies backend and decoding failures are reported.
@@ -123,6 +133,15 @@ func TestExternalConfigDigest_Errors(t *testing.T) {
 		kr.EXPECT().Delete(buildConfigDigestKey("mid", "acme")).Return(assert.AnError)
 		kr.EXPECT().Delete(legacyRealmKeyringKey("mid", "acme")).Return(nil)
 		require.NoError(t, store.Delete("mid", "acme"))
+	})
+
+	t.Run("record delete failure is reported by DeleteExternalConfigDigest", func(t *testing.T) {
+		kr := keyring.NewMockKeyring(gomock.NewController(t))
+		store := &keyringCredentialStore{kr: kr, storeType: types.CredentialStoreTypeSystemKeyring}
+		kr.EXPECT().Delete(buildConfigDigestKey("mid", "acme")).Return(assert.AnError)
+		err := store.DeleteExternalConfigDigest("mid", "acme")
+		require.ErrorIs(t, err, assert.AnError)
+		require.ErrorIs(t, err, ErrCredentialStore)
 	})
 }
 

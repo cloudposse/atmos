@@ -48,6 +48,10 @@ type ConfigDigestStore interface {
 	StoreExternalConfigDigest(alias, realm string, record ExternalConfigDigest) error
 	// RetrieveExternalConfigDigest returns the record written by StoreExternalConfigDigest.
 	RetrieveExternalConfigDigest(alias, realm string) (ExternalConfigDigest, error)
+	// DeleteExternalConfigDigest removes the record written by StoreExternalConfigDigest. It is
+	// idempotent. Delete also removes it; logout calls this directly because it removes the
+	// credentials the record describes even when it keeps the keyring entry.
+	DeleteExternalConfigDigest(alias, realm string) error
 }
 
 // buildConfigDigestKey creates the realm-scoped key of an external configuration digest record,
@@ -110,11 +114,21 @@ func (s *keyringCredentialStore) RetrieveExternalConfigDigest(alias, realm strin
 	return record, nil
 }
 
+// DeleteExternalConfigDigest removes the configuration digest record of alias within realm.
+func (s *keyringCredentialStore) DeleteExternalConfigDigest(alias, realm string) error {
+	defer perf.Track(nil, "credentials.keyringCredentialStore.DeleteExternalConfigDigest")()
+
+	if err := s.kr.Delete(buildConfigDigestKey(alias, realm)); err != nil {
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete configuration digest: %w", err))
+	}
+	return nil
+}
+
 // deleteExternalConfigDigest removes the configuration digest record of alias within realm. It
 // is best effort: a leftover record is harmless, because it only describes credentials and
 // stops matching once they are rewritten (see ExternalConfigDigest.Expiration).
 func (s *keyringCredentialStore) deleteExternalConfigDigest(alias, realm string) {
-	if err := s.kr.Delete(buildConfigDigestKey(alias, realm)); err != nil {
+	if err := s.DeleteExternalConfigDigest(alias, realm); err != nil {
 		log.Debug("Failed to delete configuration digest record", "alias", alias, "realm", realm, "error", err)
 	}
 }

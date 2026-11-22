@@ -70,3 +70,14 @@ func (s *operationCredentialStore) RetrieveExternalConfigDigest(alias, realm str
 	}
 	return store.RetrieveExternalConfigDigest(alias, s.realmFor(alias, realm))
 }
+
+// DeleteExternalConfigDigest forwards to the wrapped store in the alias's operation realm.
+func (s *operationCredentialStore) DeleteExternalConfigDigest(alias, realm string) error {
+	defer perf.Track(nil, "auth.operationCredentialStore.DeleteExternalConfigDigest")()
+
+	store, err := s.digestStore()
+	if err != nil {
+		return err
+	}
+	return store.DeleteExternalConfigDigest(alias, s.realmFor(alias, realm))
+}
