@@ -113,4 +113,3 @@ atmos auth exec --identity azure-prod -- az resource list --resource-group my-rg
 While the command runs, it owns Ctrl-C: Atmos keeps running until the command exits, and the terminal delivers Ctrl-C to the command directly, so Atmos does not send it a second time. A `SIGINT` sent only to the Atmos process (for example with `kill -INT`) is forwarded to the command.
 
 When Atmos receives `SIGTERM` (for example from `kill`, a CI job cancellation, or a container stop), it forwards `SIGTERM` to the command and waits up to 30 seconds for it to exit before Atmos exits, so the command is not left running. On Windows, the console delivers Ctrl-C to the command directly and there is no `SIGTERM` to forward.
-
