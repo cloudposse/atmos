@@ -147,9 +147,9 @@ func invocationDeadline(ctx context.Context) *timestamppb.Timestamp {
 
 // finishInvocation converts interruption and deadline expiry into actionable errors and
 // stops the plugin so it cannot outlive the operation that was abandoned.
-// An interactive call that reaches its own hard deadline (rather than an earlier one its caller
-// set) spent the interaction limit waiting for the user, so it is reported differently from a
-// plugin that ran out of time. work is nil for calls without an interactive budget.
+// An interactive call that reaches its own hard deadline, rather than an earlier one its caller
+// set, spent the interaction limit waiting for the user. That case is reported differently from a
+// plugin that ran out of time. The work budget is nil for calls without an interactive budget.
 func (h *Handle) finishInvocation(callCtx context.Context, work *budget, err error) error {
 	if err == nil {
 		return nil

@@ -16,15 +16,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/plugin/testkit/fakeplugin"
 )
 
-// budgetProbe starts a budget whose expiry is observable without a real clock.
-func budgetProbe(timeout time.Duration) (*budget, *atomic.Bool) {
+// budgetProbe starts a one-minute budget whose expiry is observable without a real clock.
+func budgetProbe() (*budget, *atomic.Bool) {
 	var expired atomic.Bool
-	return newBudget(timeout, func() { expired.Store(true) }), &expired
+	return newBudget(time.Minute, func() { expired.Store(true) }), &expired
 }
 
 func TestBudgetExpiresAfterTimeoutWithoutUserWait(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		work, expired := budgetProbe(time.Minute)
+		work, expired := budgetProbe()
 		time.Sleep(time.Minute - time.Second)
 		synctest.Wait()
 		require.False(t, expired.Load(), "the budget must not expire early")
@@ -37,7 +37,7 @@ func TestBudgetExpiresAfterTimeoutWithoutUserWait(t *testing.T) {
 
 func TestBudgetDoesNotCountUserWait(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		work, expired := budgetProbe(time.Minute)
+		work, expired := budgetProbe()
 		defer work.stop()
 		time.Sleep(40 * time.Second)
 		resume := work.await()
@@ -56,7 +56,7 @@ func TestBudgetDoesNotCountUserWait(t *testing.T) {
 
 func TestBudgetStaysPausedUntilEveryWaitEnds(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		work, expired := budgetProbe(time.Minute)
+		work, expired := budgetProbe()
 		defer work.stop()
 		first, second := work.await(), work.await()
 		first()
@@ -73,7 +73,7 @@ func TestBudgetStaysPausedUntilEveryWaitEnds(t *testing.T) {
 
 func TestBudgetPausedAtExpiryRunsOutWhenResumed(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		work, expired := budgetProbe(time.Minute)
+		work, expired := budgetProbe()
 		defer work.stop()
 		time.Sleep(time.Minute)
 		// The timer is due but has not been observed; a wait that starts now must not revive it.
@@ -87,7 +87,7 @@ func TestBudgetPausedAtExpiryRunsOutWhenResumed(t *testing.T) {
 
 func TestStoppedBudgetNeverExpires(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		work, expired := budgetProbe(time.Minute)
+		work, expired := budgetProbe()
 		resume := work.await()
 		work.stop()
 		resume()
