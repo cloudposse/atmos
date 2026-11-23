@@ -1,0 +1,54 @@
+---
+slug: plugin-sign-in-timeout
+title: "Plugin Sign-Ins No Longer Race the Package Timeout"
+authors: [aknysh]
+tags: [enhancement]
+---
+A package timeout is supposed to stop a plugin that hangs. For an authentication plugin with a device-code or
+browser login, it also stopped the person signing in: the minutes spent opening the link, entering the code,
+and approving the request all counted against the same deadline. A short timeout made interactive login
+impossible, and a long one let a stuck plugin run just as long.
+<!--truncate-->
+
+## The Problem
+
+The [`plugins.packages.<alias>.timeout`](/cli/configuration/plugins#pluginspackagesalias) setting was one
+fixed deadline for the whole call into a plugin. Device-code and browser sign-ins spend most of that call
+waiting for a human, so you had to choose between two bad options:
+
+- Keep the timeout short, so a hung plugin fails fast, and watch interactive logins get cut off mid sign-in.
+- Raise the timeout until sign-ins fit, and give up the protection against a plugin that never answers.
+
+## The Fix
+
+The package timeout now measures the plugin's own work, not the time you spend signing in.
+
+- While Atmos shows a device-code prompt, or waits for a browser sign-in callback, the clock for `timeout`
+  is paused. A plugin that hangs without prompting is still stopped once `timeout` has passed.
+- The wait for the user has its own limit, `interaction_timeout`, which defaults to 15 minutes. An
+  interactive call is stopped no later than `timeout` plus `interaction_timeout`.
+- If the sign-in is not finished in time, the error says so and names the setting to raise.
+- Noninteractive calls cannot prompt, so they keep `timeout` as their deadline.
+
+## How to Use It
+
+Most packages need no change: interactive logins now get up to 15 minutes for the sign-in on top of the
+package timeout. When your identity provider gives users longer to approve a sign-in, set
+[`interaction_timeout`](/cli/configuration/plugins#pluginspackagesalias) next to `timeout` for that package:
+
+```yaml
+plugins:
+  packages:
+    my-oidc:
+      timeout: 30s
+      interaction_timeout: 30m
+```
+
+The value is a Go duration of at most `24h`, and it requires `timeout`, because without a timeout a call has
+no deadline to extend. An invalid value fails configuration validation and names the package. See
+[`atmos plugin`](/cli/commands/plugin/usage) for how timeouts apply to plugin calls.
+
+## Get Involved
+
+Report sign-in flows that still time out in [Atmos issues](https://github.com/cloudposse/atmos/issues), with
+the package configuration and credentials removed.
