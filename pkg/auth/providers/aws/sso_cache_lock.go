@@ -39,25 +39,7 @@ func (p *ssoProvider) loadOrRefreshDiskToken(ctx context.Context) (ssoTokenCache
 
 		// 3. Refresh-token exchange. Skipped if the on-disk cache had no refresh token
 		//    (e.g., written by an older atmos version, or registration expired).
-		expired, ok := p.loadExpiredCachedTokenForRefresh()
-		if !ok {
-			return nil
-		}
-		oidcClient, err := p.newOIDCClient(ctx)
-		if err != nil {
-			clientErr = err
-			return nil
-		}
-		refreshed, rerr := tryRefreshToken(ctx, oidcClient, expired)
-		if rerr != nil {
-			log.Debug("Refresh-token exchange failed; falling through to device authorization", "error", rerr)
-			return nil
-		}
-		log.Debug("SSO token refreshed without browser interaction")
-		if serr := p.saveFullCachedToken(refreshed); serr != nil {
-			log.Debug("Failed to persist refreshed token", "error", serr)
-		}
-		token, found = refreshed, true
+		token, found, clientErr = p.refreshExpiredDiskToken(ctx)
 		return nil
 	})
 
@@ -87,4 +69,29 @@ func (p *ssoProvider) withTokenCacheLock(ctx context.Context, fn func() error) {
 		log.Debug("Could not lock the SSO token cache; continuing without the lock", "path", tokenPath, "error", lockErr)
 		_ = fn()
 	}
+}
+
+// refreshExpiredDiskToken exchanges an expired cached token's refresh token for a
+// new session token. It reports false when there is nothing to refresh or the
+// exchange fails, so the caller falls through to device authorization; the error
+// is non-nil only when the OIDC client cannot be created.
+func (p *ssoProvider) refreshExpiredDiskToken(ctx context.Context) (ssoTokenCache, bool, error) {
+	expired, ok := p.loadExpiredCachedTokenForRefresh()
+	if !ok {
+		return ssoTokenCache{}, false, nil
+	}
+	oidcClient, err := p.newOIDCClient(ctx)
+	if err != nil {
+		return ssoTokenCache{}, false, err
+	}
+	refreshed, rerr := tryRefreshToken(ctx, oidcClient, expired)
+	if rerr != nil {
+		log.Debug("Refresh-token exchange failed; falling through to device authorization", "error", rerr)
+		return ssoTokenCache{}, false, nil
+	}
+	log.Debug("SSO token refreshed without browser interaction")
+	if serr := p.saveFullCachedToken(refreshed); serr != nil {
+		log.Debug("Failed to persist refreshed token", "error", serr)
+	}
+	return refreshed, true, nil
 }

@@ -29,10 +29,13 @@ var slowDownReply = fakeOIDCResponse{
 	body:      `{"error":"slow_down"}`,
 }
 
+// pollTestExpiresIn is the device code lifetime, in seconds, used by poll tests.
+const pollTestExpiresIn = 600
+
 // pollTestInputs returns the registration and device-authorization outputs a poll needs.
-func pollTestInputs(expiresIn, interval int32) (*ssooidc.RegisterClientOutput, *ssooidc.StartDeviceAuthorizationOutput) {
+func pollTestInputs(interval int32) (*ssooidc.RegisterClientOutput, *ssooidc.StartDeviceAuthorizationOutput) {
 	return &ssooidc.RegisterClientOutput{ClientId: aws.String("client-id"), ClientSecret: aws.String("client-secret")},
-		&ssooidc.StartDeviceAuthorizationOutput{DeviceCode: aws.String("device-code"), ExpiresIn: expiresIn, Interval: interval}
+		&ssooidc.StartDeviceAuthorizationOutput{DeviceCode: aws.String("device-code"), ExpiresIn: pollTestExpiresIn, Interval: interval}
 }
 
 // recordingWait records each requested polling interval without sleeping.
@@ -62,7 +65,7 @@ func TestPollForAccessToken_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	register, auth := pollTestInputs(600, 30)
+	register, auth := pollTestInputs(30)
 	done := make(chan error, 1)
 	go func() {
 		_, err := p.pollForAccessToken(ctx, newFakeOIDCClient(srv.URL), register, auth)
@@ -97,7 +100,7 @@ func TestPollForAccessToken_CancelledWhilePending(t *testing.T) {
 		return ctx.Err()
 	}
 
-	register, auth := pollTestInputs(600, 1)
+	register, auth := pollTestInputs(1)
 	_, err := p.pollForAccessToken(ctx, newFakeOIDCClient(srv.URL), register, auth)
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, int32(1), srv.calls.Load())
@@ -117,7 +120,7 @@ func TestPollForAccessToken_RequestFailsAfterCancellation(t *testing.T) {
 	p := newPollTestProvider()
 	p.pollWait = (&recordingWait{}).wait
 
-	register, auth := pollTestInputs(600, 1)
+	register, auth := pollTestInputs(1)
 	_, err := p.pollForAccessToken(ctx, client, register, auth)
 	require.ErrorIs(t, err, context.Canceled)
 }
@@ -131,7 +134,7 @@ func TestPollForAccessToken_SlowDownAddsFiveSeconds(t *testing.T) {
 	recorder := &recordingWait{}
 	p.pollWait = recorder.wait
 
-	register, auth := pollTestInputs(600, 1)
+	register, auth := pollTestInputs(1)
 	result, err := p.pollForAccessToken(context.Background(), newFakeOIDCClient(srv.URL), register, auth)
 	require.NoError(t, err)
 	assert.Equal(t, "access", result.AccessToken)
@@ -151,7 +154,7 @@ func TestPollForAccessToken_TerminalErrorKeepsCause(t *testing.T) {
 	p := newPollTestProvider()
 	p.pollWait = (&recordingWait{}).wait
 
-	register, auth := pollTestInputs(600, 1)
+	register, auth := pollTestInputs(1)
 	_, err := p.pollForAccessToken(context.Background(), newFakeOIDCClient(srv.URL), register, auth)
 	require.ErrorIs(t, err, errUtils.ErrSSOTokenCreationFailed)
 	var denied *ssooidctypes.AccessDeniedException

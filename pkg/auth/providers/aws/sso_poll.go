@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	// ssoDeviceCodeGrantType is the OAuth 2.0 device authorization grant type (RFC 8628).
+	// The OAuth 2.0 device authorization grant type (RFC 8628).
 	ssoDeviceCodeGrantType = "urn:ietf:params:oauth:grant-type:device_code"
 
-	// ssoSlowDownIncrement is how much a slow_down response increases the
+	// How much a slow_down response increases the
 	// polling interval for this and all later requests (RFC 8628 section 3.5).
 	ssoSlowDownIncrement = 5 * time.Second
 )
@@ -51,8 +51,6 @@ func (p *ssoProvider) waitPoll(ctx context.Context, d time.Duration) error {
 // seconds to the interval, as RFC 8628 requires, and a terminal OIDC error is
 // returned with the AWS error kept as its cause.
 func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient ssoTokenRefresher, registerResp *ssooidc.RegisterClientOutput, authResp *ssooidc.StartDeviceAuthorizationOutput) (ssoTokenCache, error) {
-	var result ssoTokenCache
-	expiresIn := authResp.ExpiresIn
 	interval := authResp.Interval
 	// Normalize to a sane minimum to avoid divide-by-zero and busy-waiting.
 	if interval <= 0 {
@@ -62,13 +60,13 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient ssoToke
 	intervalDur := time.Duration(interval) * time.Second
 	// The device code is valid for expiresIn seconds; slow_down responses make
 	// each poll wait longer, so the attempt count alone cannot bound polling.
-	deadline := time.Now().Add(time.Duration(expiresIn) * time.Second)
+	deadline := time.Now().Add(time.Duration(authResp.ExpiresIn) * time.Second)
 
 	// Initial delay before first poll.
 	if err := p.waitPoll(ctx, intervalDur); err != nil {
 		return ssoTokenCache{}, p.pollCancelledError(err)
 	}
-	for i := 0; i < int(expiresIn/interval); i++ {
+	for i := 0; i < int(authResp.ExpiresIn/interval); i++ {
 		tokenResp, err := oidcClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
 			ClientId:     registerResp.ClientId,
 			ClientSecret: registerResp.ClientSecret,
@@ -76,10 +74,11 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient ssoToke
 			GrantType:    aws.String(ssoDeviceCodeGrantType),
 		})
 		if err == nil {
-			result.AccessToken = aws.ToString(tokenResp.AccessToken)
-			result.RefreshToken = aws.ToString(tokenResp.RefreshToken)
-			result.ExpiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
-			break
+			return ssoTokenCache{
+				AccessToken:  aws.ToString(tokenResp.AccessToken),
+				RefreshToken: aws.ToString(tokenResp.RefreshToken),
+				ExpiresAt:    time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second),
+			}, nil
 		}
 
 		// A cancelled context also fails the request; report the cancellation.
@@ -87,25 +86,10 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient ssoToke
 			return ssoTokenCache{}, p.pollCancelledError(ctx.Err())
 		}
 
-		var authPendingErr *types.AuthorizationPendingException
-		var slowDownErr *types.SlowDownException
-
-		switch {
-		case errors.As(err, &authPendingErr):
-			// The user has not approved yet: poll again at the same interval.
-		case errors.As(err, &slowDownErr):
-			// Slow down: add five seconds to the interval (RFC 8628 section 3.5).
-			intervalDur += ssoSlowDownIncrement
-		default:
-			return ssoTokenCache{}, errUtils.Build(errUtils.ErrSSOTokenCreationFailed).
-				WithCause(err).
-				WithExplanation("Failed to create AWS SSO access token").
-				WithHint("Ensure you completed the device authorization in your browser").
-				WithHint("The verification code may have expired - try authenticating again").
-				WithContext("provider", p.name).
-				WithContext("start_url", p.startURL).
-				WithExitCode(1).
-				Err()
+		var terminal bool
+		intervalDur, terminal = nextPollInterval(err, intervalDur)
+		if terminal {
+			return ssoTokenCache{}, p.pollTerminalError(err)
 		}
 
 		if err := p.waitPoll(ctx, intervalDur); err != nil {
@@ -116,19 +100,52 @@ func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient ssoToke
 		}
 	}
 
-	if result.AccessToken == "" {
-		return ssoTokenCache{}, errUtils.Build(errUtils.ErrSSOTokenCreationFailed).
-			WithExplanation("AWS SSO authentication timed out waiting for browser confirmation").
-			WithHint("Complete the device authorization in your browser within the time limit").
-			WithHint("Visit the verification URL and enter the code displayed earlier").
-			WithHintf("Try again with `atmos auth login --provider=%s`; Atmos keeps its own SSO token cache, so `aws sso login` does not help", p.name).
-			WithContext("provider", p.name).
-			WithContext("start_url", p.startURL).
-			WithContext("region", p.region).
-			WithExitCode(1).
-			Err()
+	return ssoTokenCache{}, p.pollTimeoutError()
+}
+
+// nextPollInterval returns the interval to use after a CreateToken failure, and
+// whether the failure is terminal. A pending authorization keeps the interval and
+// slow_down adds five seconds to it (RFC 8628 section 3.5); anything else is terminal.
+func nextPollInterval(err error, current time.Duration) (time.Duration, bool) {
+	var authPendingErr *types.AuthorizationPendingException
+	var slowDownErr *types.SlowDownException
+
+	switch {
+	case errors.As(err, &authPendingErr):
+		// The user has not approved yet: poll again at the same interval.
+		return current, false
+	case errors.As(err, &slowDownErr):
+		return current + ssoSlowDownIncrement, false
+	default:
+		return current, true
 	}
-	return result, nil
+}
+
+// pollTerminalError reports a CreateToken failure that polling cannot recover from.
+func (p *ssoProvider) pollTerminalError(cause error) error {
+	return errUtils.Build(errUtils.ErrSSOTokenCreationFailed).
+		WithCause(cause).
+		WithExplanation("Failed to create AWS SSO access token").
+		WithHint("Ensure you completed the device authorization in your browser").
+		WithHint("The verification code may have expired - try authenticating again").
+		WithContext("provider", p.name).
+		WithContext("start_url", p.startURL).
+		WithExitCode(1).
+		Err()
+}
+
+// pollTimeoutError reports that the device code expired before the browser confirmation arrived.
+func (p *ssoProvider) pollTimeoutError() error {
+	return errUtils.Build(errUtils.ErrSSOTokenCreationFailed).
+		WithExplanation("AWS SSO authentication timed out waiting for browser confirmation").
+		WithHint("Complete the device authorization in your browser within the time limit").
+		WithHint("Visit the verification URL and enter the code displayed earlier").
+		WithHintf("Try again with `atmos auth login --provider=%s`; Atmos keeps its own SSO token cache, so `aws sso login` does not help", p.name).
+		WithContext("provider", p.name).
+		WithContext("start_url", p.startURL).
+		WithContext("region", p.region).
+		WithExitCode(1).
+		Err()
 }
 
 // pollCancelledError reports that device-token polling stopped because its

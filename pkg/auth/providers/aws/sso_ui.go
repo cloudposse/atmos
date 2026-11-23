@@ -96,7 +96,7 @@ func renderVerificationDialog(code, url string) (string, bool) {
 	content.WriteString("Verification Code: ")
 	content.WriteString(codeStyle.Render(code))
 
-	containsURL := fitsInDialog(url, boxStyle)
+	containsURL := fitsInDialog(url, &boxStyle)
 	switch {
 	case containsURL:
 		content.WriteString(dialogSectionBreak)
@@ -117,7 +117,7 @@ func renderVerificationDialog(code, url string) (string, bool) {
 // the dialog growing wider than link.MaxInlineWidth. The border and horizontal
 // padding of the box take columns too, so they are subtracted from the budget;
 // otherwise a URL at the inline limit makes the dialog wrap in an 80-column terminal.
-func fitsInDialog(url string, box lipgloss.Style) bool {
+func fitsInDialog(url string, box *lipgloss.Style) bool {
 	return url != "" && lipgloss.Width(url) <= link.MaxInlineWidth-box.GetHorizontalFrameSize()
 }
 

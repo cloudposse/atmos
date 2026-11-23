@@ -75,7 +75,7 @@ func TestPollForAccessToken_NormalizesZeroInterval(t *testing.T) {
 	recorder := &recordingWait{}
 	p.pollWait = recorder.wait
 
-	register, auth := pollTestInputs(600, 0)
+	register, auth := pollTestInputs(0)
 	result, err := p.pollForAccessToken(context.Background(), newFakeOIDCClient(srv.URL), register, auth)
 	require.NoError(t, err)
 	assert.Equal(t, "access", result.AccessToken)
