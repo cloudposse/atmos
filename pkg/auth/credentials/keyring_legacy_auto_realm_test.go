@@ -149,3 +149,18 @@ func TestKeyringStore_AutoRealmFromConfigPathIsNotExplicit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, keys, got)
 }
+
+// TestKeyringStore_DeleteKeepsLegacyKeyOwnedByAnotherAlias verifies Delete does not remove a
+// previous-layout key whose envelope records a different alias: the empty-realm alias
+// "acme_admin" stores at "atmos_acme_admin", the legacy key of alias "admin" in realm "acme".
+func TestKeyringStore_DeleteKeepsLegacyKeyOwnedByAnotherAlias(t *testing.T) {
+	store := newMemoryKeyringStore()
+	keys := &types.AWSCredentials{AccessKeyID: "AKIAOTHER", SecretAccessKey: "other-secret"}
+	require.NoError(t, store.Store("acme_admin", keys, ""))
+	require.NoError(t, store.Store("admin", keys, "acme"))
+
+	require.NoError(t, store.Delete("admin", "acme"))
+
+	_, err := store.kr.Get(legacyRealmKeyringKey("admin", "acme"))
+	require.NoError(t, err, "the entry owned by alias acme_admin must be kept")
+}

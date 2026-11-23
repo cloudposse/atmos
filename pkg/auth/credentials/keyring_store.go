@@ -122,7 +122,7 @@ func (s *keyringCredentialStore) migrateLegacyRealmEntry(alias, realm, data stri
 func (s *keyringCredentialStore) Delete(alias string, realm string) error {
 	defer perf.Track(nil, "credentials.keyringCredentialStore.Delete")()
 
-	if s.currentKeyBelongsTo(alias, realm) {
+	if s.keyBelongsTo(buildKeyringKey(alias, realm), alias) {
 		if err := s.kr.Delete(buildKeyringKey(alias, realm)); err != nil {
 			return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials: %w", err))
 		}
@@ -130,7 +130,9 @@ func (s *keyringCredentialStore) Delete(alias string, realm string) error {
 	s.deleteExternalConfigDigest(alias, realm)
 	// Also remove the previous-layout entry Retrieve would fall back to, so a deleted
 	// credential cannot resurface. An ambiguous old key may belong to another realm and is kept.
-	if s.legacyKeyIsUnambiguous(alias, realm) {
+	// The legacy key is also checked for ownership: another alias (for example "acme_admin" in the
+	// empty realm) can have an entry at the same key, which is kept.
+	if s.legacyKeyIsUnambiguous(alias, realm) && s.keyBelongsTo(legacyRealmKeyringKey(alias, realm), alias) {
 		if err := s.kr.Delete(legacyRealmKeyringKey(alias, realm)); err != nil {
 			return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete legacy credentials: %w", err))
 		}
@@ -138,12 +140,11 @@ func (s *keyringCredentialStore) Delete(alias string, realm string) error {
 	return nil
 }
 
-// currentKeyBelongsTo reports whether the entry at the current key of alias in realm may be
-// deleted as alias's own: it is absent, unreadable (kept deletable), carries no alias (written by
-// an older version), or carries this alias. An entry stored for another alias that shares the key
+// keyBelongsTo reports whether the entry at key may be deleted as alias's own: it is absent,
+// unreadable (kept deletable), carries no alias (written by an older version), or carries this alias. An entry stored for another alias that shares the key
 // belongs to that alias and is kept.
-func (s *keyringCredentialStore) currentKeyBelongsTo(alias, realm string) bool {
-	data, err := s.kr.Get(buildKeyringKey(alias, realm))
+func (s *keyringCredentialStore) keyBelongsTo(key, alias string) bool {
+	data, err := s.kr.Get(key)
 	if err != nil {
 		return true
 	}

@@ -133,6 +133,7 @@ func TestExternalConfigDigest_Errors(t *testing.T) {
 		kr.EXPECT().Get(buildKeyringKey("mid", "acme")).Return("", keyring.ErrNotFound)
 		kr.EXPECT().Delete(buildKeyringKey("mid", "acme")).Return(nil)
 		kr.EXPECT().Delete(buildConfigDigestKey("mid", "acme")).Return(assert.AnError)
+		kr.EXPECT().Get(legacyRealmKeyringKey("mid", "acme")).Return("", keyring.ErrNotFound)
 		kr.EXPECT().Delete(legacyRealmKeyringKey("mid", "acme")).Return(nil)
 		require.NoError(t, store.Delete("mid", "acme"))
 	})

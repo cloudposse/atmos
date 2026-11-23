@@ -158,6 +158,11 @@ func runEnabledBrokers(ctx context.Context, atmosConfig *schema.AtmosConfigurati
 			// here would be invisible — leaving the user no causal link to the real cause.
 			log.Warn("Credential broker failed; private reads may fail without these credentials", "broker", p.Name(), "error", err)
 			ok = false
+			// A broker may return a usable partial environment (for example cached tokens) alongside
+			// the error; export it, but keep the run recorded as failed.
+			if exportEnv(p.Name(), env) {
+				markBrokered()
+			}
 			continue
 		}
 

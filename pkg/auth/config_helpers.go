@@ -7,6 +7,7 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -182,6 +183,14 @@ func MergeComponentAuthConfig(
 	var finalAuthConfig schema.AuthConfig
 	if err := mapstructure.Decode(mergedMap, &finalAuthConfig); err != nil {
 		return nil, fmt.Errorf("%w: auth config map to struct: %w", errUtils.ErrDecode, err)
+	}
+
+	// RealmSource is runtime metadata with no serialized field, so it is lost in the map round
+	// trip. Restore it so credential stores can tell an explicit realm from the auto-derived one.
+	// A realm the component itself sets is explicit.
+	finalAuthConfig.RealmSource = workingGlobalAuth.RealmSource
+	if finalAuthConfig.Realm != workingGlobalAuth.Realm {
+		finalAuthConfig.RealmSource = realm.SourceConfig
 	}
 
 	// Rebuild IdentityCaseMap to include both global and component identities.

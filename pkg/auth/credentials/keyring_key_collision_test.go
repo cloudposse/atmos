@@ -127,6 +127,7 @@ func TestKeyringStore_DeleteReportsLegacyDeleteFailure(t *testing.T) {
 	kr.EXPECT().Get(buildKeyringKey("admin", "acme")).Return("", keyring.ErrNotFound)
 	kr.EXPECT().Delete(buildKeyringKey("admin", "acme")).Return(nil)
 	kr.EXPECT().Delete(buildConfigDigestKey("admin", "acme")).Return(nil)
+	kr.EXPECT().Get(legacyRealmKeyringKey("admin", "acme")).Return("", keyring.ErrNotFound)
 	kr.EXPECT().Delete(legacyRealmKeyringKey("admin", "acme")).Return(assert.AnError)
 
 	err := store.Delete("admin", "acme")

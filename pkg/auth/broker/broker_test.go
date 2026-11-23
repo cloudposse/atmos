@@ -225,3 +225,22 @@ func TestExportOrder_GitConfigCountLast(t *testing.T) {
 func TestRefreshInterval_MatchesSchedule(t *testing.T) {
 	assert.Equal(t, refreshInterval, RefreshInterval())
 }
+
+// TestRunEnabledBrokers_PartialEnvWithErrorIsFailedRun asserts that a broker returning both an
+// environment and an error exports the environment but reports the run as failed, so it is
+// retried on retryBackoff rather than waiting the full refreshInterval.
+func TestRunEnabledBrokers_PartialEnvWithErrorIsFailedRun(t *testing.T) {
+	resetRegistry()
+	t.Cleanup(resetRegistry)
+
+	key := "ATMOS_BROKER_TEST_PARTIAL"
+	require.NoError(t, os.Unsetenv(key))
+	t.Cleanup(func() { _ = os.Unsetenv(key) })
+
+	Register(&fakeProvider{name: "partial", enabled: true, env: map[string]string{key: "1"}, err: errors.New("mint failed")})
+
+	ok := runEnabledBrokers(context.Background(), &schema.AtmosConfiguration{})
+
+	assert.False(t, ok, "a broker error must mark the run failed")
+	assert.Equal(t, "1", os.Getenv(key), "partial env must still be exported")
+}

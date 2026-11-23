@@ -672,7 +672,7 @@ func TestMergeComponentAuthFromConfig_NilGlobalAuth(t *testing.T) {
 
 func TestMergeComponentAuthFromConfig_RealmSurvivesMapstructureRoundTrip(t *testing.T) {
 	// Realm has mapstructure:"realm" so it must survive the struct→map→merge→map→struct round-trip.
-	// RealmSource has mapstructure:"-" so it is lost — this is expected because GetRealm() recomputes it.
+	// RealmSource has mapstructure:"-" so the merge restores it from the global config.
 	globalAuth := &schema.AuthConfig{
 		Realm:       "my-project",
 		RealmSource: "config",
@@ -711,9 +711,9 @@ func TestMergeComponentAuthFromConfig_RealmSurvivesMapstructureRoundTrip(t *test
 	// Realm must survive the merge round-trip.
 	assert.Equal(t, "my-project", result.Realm)
 
-	// RealmSource is lost (mapstructure:"-") — this is expected.
-	// GetRealm() recomputes it from the Realm value when creating the manager.
-	assert.Empty(t, result.RealmSource)
+	// RealmSource is not serialized (mapstructure:"-"), so the merge restores the global value;
+	// credential stores need it to tell an explicit realm from the auto-derived one.
+	assert.Equal(t, "config", result.RealmSource)
 
 	// Other fields still work.
 	assert.Len(t, result.Identities, 2)
@@ -1048,4 +1048,23 @@ func TestClearExistingIdentityDefaults_ClearsAll(t *testing.T) {
 	assert.False(t, authConfig.Identities["a"].Default)
 	assert.False(t, authConfig.Identities["b"].Default)
 	assert.False(t, authConfig.Identities["c"].Default)
+}
+
+func TestMergeComponentAuthConfig_PreservesRealmSource(t *testing.T) {
+	globalAuth := &schema.AuthConfig{Realm: "0123456789abcdef", RealmSource: "config"}
+
+	t.Run("global source is kept", func(t *testing.T) {
+		result, err := MergeComponentAuthConfig(&schema.AtmosConfiguration{}, globalAuth, map[string]any{})
+		require.NoError(t, err)
+		assert.Equal(t, "0123456789abcdef", result.Realm)
+		assert.Equal(t, "config", result.RealmSource)
+	})
+
+	t.Run("component realm is explicit", func(t *testing.T) {
+		auto := &schema.AuthConfig{Realm: "0123456789abcdef", RealmSource: "config-path"}
+		result, err := MergeComponentAuthConfig(&schema.AtmosConfiguration{}, auto, map[string]any{"realm": "custom"})
+		require.NoError(t, err)
+		assert.Equal(t, "custom", result.Realm)
+		assert.Equal(t, "config", result.RealmSource)
+	})
 }
