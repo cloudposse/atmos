@@ -52,7 +52,7 @@ func TestSetupFiles(t *testing.T) {
 	_, err = os.Stat(adcPath)
 	require.NoError(t, err)
 
-	propsPath := filepath.Join(tmp, "atmos", testRealm, GCPSubdir, providerName, ConfigSubdir, "setup-identity", PropertiesFileName)
+	propsPath := filepath.Join(tmp, "atmos", testRealm, GCPSubdir, providerName, ConfigSubdir, "setup-identity", ConfigurationsSubdir, "config_atmos")
 	data, err := os.ReadFile(propsPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "project = test-project")

@@ -122,7 +122,9 @@ type Cluster struct {
 type Registry struct {
     AccountID string // required for aws/ecr
     Region    string // required for aws/ecr
-    Name      string // required for azure/acr (login server = name + ".azurecr.io")
+    Name      string // required for azure/acr (login server = name + the cloud's ACR suffix:
+                    // ".azurecr.io" public, ".azurecr.us" usgovernment, ".azurecr.cn" china,
+                    // chosen by the identity's provider cloud_environment)
     TenantID  string // optional for azure/acr — defaults to identity's tenant
 }
 ```

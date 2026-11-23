@@ -16,11 +16,15 @@ atmos azure acr login --identity azure-dev
 
 # Explicit registry login server using ambient Azure credentials
 atmos azure acr login --registry myregistry.azurecr.io
+
+# Sovereign clouds: the login server suffix selects the cloud
+atmos azure acr login --registry myregistry.azurecr.us
 ```
 
 Named-integration and identity modes use Atmos Auth. Explicit `--registry` mode uses ambient Azure
 credentials (the Azure SDK default credential chain: environment variables, managed identity,
-workload identity, Azure CLI).
+workload identity, Azure CLI). Every `--registry` value is validated before any login starts, and
+the ambient token is requested from the cloud that matches the registry's suffix.
 
 ## Configuration
 
@@ -57,7 +61,37 @@ auth:
 
 `spec.registry` is the same struct used by `aws/ecr` integrations (`account_id`, `region` for AWS;
 `name`, `tenant_id` for Azure) — only the fields relevant to the integration's `kind` matter.
-Login server = `{name}.azurecr.io`.
+The login server is `{name}` plus the suffix of the identity's provider cloud
+(`spec.cloud_environment` on the provider):
+
+| `cloud_environment` | Login server |
+|---------------------|--------------|
+| `public` (default, or unset/unknown) | `{name}.azurecr.io` |
+| `usgovernment` | `{name}.azurecr.us` |
+| `china` | `{name}.azurecr.cn` |
+
+A registry only accepts an Azure AD token from its own cloud, so the provider's
+`cloud_environment` must match the registry. Logout cannot know which cloud was used, so it removes
+the Docker login for `{name}.azurecr.io`, `{name}.azurecr.us` and `{name}.azurecr.cn`.
+
+### Registry in another tenant (`spec.registry.tenant_id`)
+
+A registry only accepts an Azure AD token issued by its own Entra ID tenant; the exchange sends
+the token and the tenant that issued it. `spec.registry.tenant_id` (a tenant GUID or a domain such
+as `partner.onmicrosoft.com`, validated when the integration loads) names the registry's tenant
+when it differs from the identity's:
+
+- Same tenant as the identity: the identity's credentials are used unchanged.
+- Another tenant: Atmos mints an ARM token in that tenant silently from the realm's MSAL cache
+  (the provider's cached refresh token, same client), at the provider cloud's login endpoint.
+  This needs an `azure/device-code` or `azure/interactive` provider and an account that is a
+  member or guest of the registry's tenant.
+- `azure/cli` and `azure/oidc` credentials fail with `ErrACRTenantOverrideUnsupported` (never a
+  silent fallback to the identity's tenant). Fix: use an identity whose provider `tenant_id` is the
+  registry's tenant and drop `spec.registry.tenant_id`.
+- A tenant that demands its own sign-in (Conditional Access, MFA) also fails, with a hint to
+  configure a provider for that tenant.
+- `--registry` mode has no tenant option.
 
 ## Guidance
 
