@@ -23,10 +23,10 @@ import (
 
 const (
 	// The prodUserRepoA and prodUserRepoB constants are the realm-scoped users of the prod admin integration.
-	prodUserRepoA = "atmos-repo-a-eks-prod-us-east-2-111111111111-admin"
-	prodUserRepoB = "atmos-repo-b-eks-prod-us-east-2-111111111111-admin"
+	prodUserRepoA = "atmos-repo-a-eks-prod-us-east-2-111111111111-admin-70ac3e65"
+	prodUserRepoB = "atmos-repo-b-eks-prod-us-east-2-111111111111-admin-299cbf1c"
 	// The prodUserPreRealm and prodUserLegacy constants are the users older versions wrote for it.
-	prodUserPreRealm = "atmos-eks-prod-us-east-2-111111111111-admin"
+	prodUserPreRealm = "atmos-eks-prod-us-east-2-111111111111-admin-48b9c2fe"
 	prodUserLegacy   = "atmos-eks-prod-us-east-2"
 	// The foreignUser constant is a user Atmos did not write, such as one from the AWS CLI.
 	foreignUser = "arn:aws:eks:us-east-2:111111111111:cluster/prod-aws-cli"

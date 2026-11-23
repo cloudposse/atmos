@@ -159,13 +159,18 @@ func BuildKubeClusterInfo(info *GKEClusterInfo, identityName string) *kube.Clust
 func GKEKubeUserName(projectID, location, clusterName, identityName, realm string) string {
 	defer perf.Track(nil, "gcp.GKEKubeUserName")()
 
-	return kube.UserName(&kube.ClusterInfo{
+	return kube.UserName(gkeUserInfo(projectID, location, clusterName, identityName, realm))
+}
+
+// gkeUserInfo returns the ClusterInfo fields that make up a GKE user name.
+func gkeUserInfo(projectID, location, clusterName, identityName, realm string) *kube.ClusterInfo {
+	return &kube.ClusterInfo{
 		Name:       clusterName,
 		Region:     gkeUserRegion(projectID, location),
 		UserPrefix: gkeUserPrefix,
 		Identity:   identityName,
 		Realm:      realm,
-	})
+	}
 }
 
 // GKEKubeUserNames returns GKEKubeUserName followed by the names older
@@ -176,12 +181,13 @@ func GKEKubeUserName(projectID, location, clusterName, identityName, realm strin
 func GKEKubeUserNames(projectID, location, clusterName, identityName string, scope kube.RealmScope) []string {
 	defer perf.Track(nil, "gcp.GKEKubeUserNames")()
 
-	names := []string{GKEKubeUserName(projectID, location, clusterName, identityName, scope.Realm)}
+	// Each realm variant also lists its unhashed form, which earlier builds wrote.
+	names := kube.UserNameForms(gkeUserInfo(projectID, location, clusterName, identityName, scope.Realm))
 	if scope.Realm != "" {
-		names = append(names, GKEKubeUserName(projectID, location, clusterName, identityName, ""))
+		names = append(names, kube.UserNameForms(gkeUserInfo(projectID, location, clusterName, identityName, ""))...)
 	}
 	for _, legacyRealm := range scope.LegacyRealms {
-		names = append(names, GKEKubeUserName(projectID, location, clusterName, identityName, legacyRealm))
+		names = append(names, kube.UserNameForms(gkeUserInfo(projectID, location, clusterName, identityName, legacyRealm))...)
 	}
 	return append(names, LegacyGKEKubeUserName(projectID, location, clusterName))
 }

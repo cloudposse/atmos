@@ -57,6 +57,7 @@ func TestOwnedUserNames_LegacyRealms(t *testing.T) {
 	info := autoRealmClusterInfo()
 	assert.Equal(t, []string{
 		"atmos-eks-dev-cluster-us-east-2",
+		"atmos-" + testAutoRealm + "-eks-dev-cluster-us-east-2-6071cba9",
 		"atmos-" + testAutoRealm + "-eks-dev-cluster-us-east-2",
 		testLegacyUser,
 	}, OwnedUserNames(info))
@@ -183,4 +184,11 @@ func TestRemoveOwnedClusterConfig_DerivedRealmNames(t *testing.T) {
 	assert.NotContains(t, config.AuthInfos, UserName(info))
 	assert.Contains(t, config.Contexts, "0123456789abcdef/"+info.ID, "a context of another user is kept")
 	assert.Contains(t, config.Clusters, info.ID, "the kept context still uses the cluster")
+}
+
+// userNameInRealm returns the UserName info would have under realm.
+func userNameInRealm(info *ClusterInfo, realm string) string {
+	scoped := *info
+	scoped.Realm = realm
+	return UserName(&scoped)
 }

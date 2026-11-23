@@ -104,8 +104,8 @@ func TestEKSIntegration_Execute_DistinctUserPerRealm(t *testing.T) {
 	userA := config.Contexts["prod-a"].AuthInfo
 	userB := config.Contexts["prod-b"].AuthInfo
 	require.NotEqual(t, userA, userB, "realms must not share a kube user")
-	assert.Equal(t, "atmos-repo-a-eks-prod-us-east-2-111111111111-admin", userA)
-	assert.Equal(t, "atmos-repo-b-eks-prod-us-east-2-111111111111-admin", userB)
+	assert.Equal(t, "atmos-repo-a-eks-prod-us-east-2-111111111111-admin-70ac3e65", userA)
+	assert.Equal(t, "atmos-repo-b-eks-prod-us-east-2-111111111111-admin-299cbf1c", userB)
 
 	assert.Equal(t, resolvedDir(t, repoA), resolvedDir(t, execEnvValue(t, config.AuthInfos[userA], "ATMOS_CHDIR")))
 	assert.Equal(t, resolvedDir(t, repoB), resolvedDir(t, execEnvValue(t, config.AuthInfos[userB], "ATMOS_CHDIR")))
@@ -124,7 +124,7 @@ func TestEKSIntegration_Execute_EmptyRealmKeepsUserName(t *testing.T) {
 	config, err := loadKubeconfig(kubeconfigPath)
 	require.NoError(t, err)
 	user := config.Contexts["prod"].AuthInfo
-	assert.Equal(t, "atmos-eks-prod-us-east-2-111111111111-admin", user)
+	assert.Equal(t, "atmos-eks-prod-us-east-2-111111111111-admin-48b9c2fe", user)
 	assert.Empty(t, execEnvValue(t, config.AuthInfos[user], "ATMOS_AUTH_REALM"))
 }
 
@@ -143,9 +143,9 @@ func TestEKSIntegration_Cleanup_KeepsOtherRealmUser(t *testing.T) {
 	config, err := loadKubeconfig(kubeconfigPath)
 	require.NoError(t, err)
 	assert.NotContains(t, config.Contexts, "prod-a")
-	assert.NotContains(t, config.AuthInfos, "atmos-repo-a-eks-prod-us-east-2-111111111111-admin")
+	assert.NotContains(t, config.AuthInfos, "atmos-repo-a-eks-prod-us-east-2-111111111111-admin-70ac3e65")
 	assert.Contains(t, config.Contexts, "prod-b")
-	assert.Contains(t, config.AuthInfos, "atmos-repo-b-eks-prod-us-east-2-111111111111-admin")
+	assert.Contains(t, config.AuthInfos, "atmos-repo-b-eks-prod-us-east-2-111111111111-admin-299cbf1c")
 	assert.Contains(t, config.Clusters, prodClusterARN, "the cluster is still used by the prod-b context")
 }
 
@@ -160,7 +160,7 @@ func TestEKSIntegration_Cleanup_RemovesPreRealmUser(t *testing.T) {
 
 	before, err := loadKubeconfig(kubeconfigPath)
 	require.NoError(t, err)
-	preRealmUser := "atmos-eks-prod-us-east-2-111111111111-admin"
+	preRealmUser := "atmos-eks-prod-us-east-2-111111111111-admin-48b9c2fe"
 	require.Equal(t, preRealmUser, before.Contexts[prodAdminContextName].AuthInfo)
 
 	require.NoError(t, newRealmEKSIntegration(t, kubeconfigPath, prodAdminContextName, realmRepoA).Cleanup(t.Context()))

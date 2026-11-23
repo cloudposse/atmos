@@ -121,7 +121,7 @@ func TestEnsureIdentityEnvironmentProvisionsGKEAndReturnsKubeconfig(t *testing.T
 	require.NoError(t, err)
 	assert.Equal(t, "example", config.CurrentContext)
 	assert.Contains(t, config.Clusters, "projects/example-project/locations/us-central1/clusters/example-cluster")
-	assert.Empty(t, config.AuthInfos["atmos-gke-example-cluster-example-project-us-central1-example-deployer"].Token)
+	assert.Empty(t, config.AuthInfos["atmos-gke-example-cluster-example-project-us-central1-example-deployer-fcce54b1"].Token)
 
 	// The process-level canonical target cache suppresses duplicate provisioning.
 	_, err = m.EnsureIdentityEnvironment(t.Context(), "example-deployer")

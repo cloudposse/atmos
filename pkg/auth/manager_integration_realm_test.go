@@ -110,7 +110,7 @@ func TestManager_ExecuteIntegration_AutoRealmKeepsV1234ContextName(t *testing.T)
 	assert.Equal(t, realmTestClusterARN, config.CurrentContext)
 	require.Len(t, config.Contexts, 1)
 	require.Contains(t, config.Contexts, realmTestClusterARN)
-	wantUser := "atmos-eks-dev-cluster-us-east-2-123456789012-dev-user"
+	wantUser := "atmos-eks-dev-cluster-us-east-2-123456789012-dev-user-49845aa7"
 	assert.Equal(t, wantUser, config.Contexts[realmTestClusterARN].AuthInfo)
 	require.Contains(t, config.AuthInfos, wantUser)
 	for _, env := range config.AuthInfos[wantUser].Exec.Env {
@@ -155,7 +155,7 @@ func TestManager_ExecuteIntegration_ExplicitRealmPrefixesContext(t *testing.T) {
 	config, err := clientcmd.LoadFromFile(path)
 	require.NoError(t, err)
 	wantContext := "acme/" + realmTestClusterARN
-	wantUser := "atmos-acme-eks-dev-cluster-us-east-2-123456789012-dev-user"
+	wantUser := "atmos-acme-eks-dev-cluster-us-east-2-123456789012-dev-user-a9911425"
 	assert.Equal(t, wantContext, config.CurrentContext)
 	require.Contains(t, config.Contexts, wantContext)
 	assert.Equal(t, wantUser, config.Contexts[wantContext].AuthInfo)

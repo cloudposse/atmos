@@ -68,11 +68,17 @@ func OwnedUserNames(info *ClusterInfo) []string {
 			names = append(names, name)
 		}
 	}
+	// The unhashed form earlier builds wrote for the same entry.
+	appendName(UnhashedUserName(info))
 	if info.Realm != "" {
-		appendName(userNameInRealm(info, ""))
+		for _, name := range userNameFormsInRealm(info, "") {
+			appendName(name)
+		}
 	}
 	for _, legacyRealm := range info.LegacyRealms {
-		appendName(userNameInRealm(info, legacyRealm))
+		for _, name := range userNameFormsInRealm(info, legacyRealm) {
+			appendName(name)
+		}
 	}
 	for _, name := range info.LegacyUserNames {
 		appendName(name)
@@ -80,11 +86,11 @@ func OwnedUserNames(info *ClusterInfo) []string {
 	return names
 }
 
-// userNameInRealm returns the UserName info would have under realm.
-func userNameInRealm(info *ClusterInfo, realm string) string {
+// userNameFormsInRealm returns the UserNameForms info would have under realm.
+func userNameFormsInRealm(info *ClusterInfo, realm string) []string {
 	scoped := *info
 	scoped.Realm = realm
-	return UserName(&scoped)
+	return UserNameForms(&scoped)
 }
 
 // contextMigration describes the entries older versions wrote for a cluster

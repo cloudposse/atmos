@@ -211,30 +211,37 @@ func BuildKubeClusterInfo(info *EKSClusterInfo, identityName string) (*kube.Clus
 func EKSKubeUserName(clusterARN, clusterName, region, identityName, realm string) string {
 	defer perf.Track(nil, "aws.EKSKubeUserName")()
 
-	return kube.UserName(&kube.ClusterInfo{
+	return kube.UserName(eksUserInfo(clusterARN, clusterName, region, identityName, realm))
+}
+
+// eksUserInfo returns the ClusterInfo fields that make up an EKS user name.
+func eksUserInfo(clusterARN, clusterName, region, identityName, realm string) *kube.ClusterInfo {
+	return &kube.ClusterInfo{
 		Name:       clusterName,
 		Region:     region,
 		UserPrefix: eksUserPrefix,
 		AccountID:  clusterAccountID(clusterARN),
 		Identity:   identityName,
 		Realm:      realm,
-	})
+	}
 }
 
 // EKSKubeUserNames returns EKSKubeUserName followed by the names older
 // versions wrote for the same entry, so cleanup can remove any of them: the
 // name without the realm (when realm is set), the names under each of
 // legacyRealms (see kube.ClusterInfo.LegacyRealms) and the legacy
-// atmos-eks-<name>-<region> name.
+// atmos-eks-<name>-<region> name. Realm- or identity-scoped names also list
+// their unhashed form (see kube.UserName).
 func EKSKubeUserNames(clusterARN, clusterName, region, identityName string, scope kube.RealmScope) []string {
 	defer perf.Track(nil, "aws.EKSKubeUserNames")()
 
-	names := []string{EKSKubeUserName(clusterARN, clusterName, region, identityName, scope.Realm)}
+	// Each realm variant also lists its unhashed form, which earlier builds wrote.
+	names := kube.UserNameForms(eksUserInfo(clusterARN, clusterName, region, identityName, scope.Realm))
 	if scope.Realm != "" {
-		names = append(names, EKSKubeUserName(clusterARN, clusterName, region, identityName, ""))
+		names = append(names, kube.UserNameForms(eksUserInfo(clusterARN, clusterName, region, identityName, ""))...)
 	}
 	for _, legacyRealm := range scope.LegacyRealms {
-		names = append(names, EKSKubeUserName(clusterARN, clusterName, region, identityName, legacyRealm))
+		names = append(names, kube.UserNameForms(eksUserInfo(clusterARN, clusterName, region, identityName, legacyRealm))...)
 	}
 	return append(names, LegacyEKSKubeUserName(clusterName, region))
 }

@@ -19,7 +19,7 @@ func TestGKEKubeUserName_MatchesWrittenUser(t *testing.T) {
 		identity string
 		want     string
 	}{
-		{name: "identity", identity: "gcp-admin", want: "atmos-gke-example-cluster-example-project-us-central1-gcp-admin"},
+		{name: "identity", identity: "gcp-admin", want: "atmos-gke-example-cluster-example-project-us-central1-gcp-admin-3768a76d"},
 		{name: "no identity", want: "atmos-gke-example-cluster-example-project-us-central1"},
 	}
 
@@ -43,11 +43,14 @@ func TestLegacyGKEKubeUserName(t *testing.T) {
 // then the pre-realm name (only with a realm) and the legacy name.
 func TestGKEKubeUserNames(t *testing.T) {
 	assert.Equal(t, []string{
+		"atmos-acme-gke-example-cluster-example-project-us-central1-gcp-admin-0073a8c3",
 		"atmos-acme-gke-example-cluster-example-project-us-central1-gcp-admin",
+		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin-3768a76d",
 		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin",
 		"atmos-gke-example-cluster-example-project-us-central1",
 	}, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", kube.RealmScope{Realm: "acme"}))
 	assert.Equal(t, []string{
+		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin-3768a76d",
 		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin",
 		"atmos-gke-example-cluster-example-project-us-central1",
 	}, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", kube.RealmScope{Realm: ""}))
@@ -79,7 +82,9 @@ func TestGKEKubeUserNames_LegacyRealms(t *testing.T) {
 	names := GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", kube.RealmScope{Realm: written.Realm, LegacyRealms: written.LegacyRealms})
 
 	assert.Equal(t, []string{
+		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin-3768a76d",
 		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin",
+		"atmos-" + derived + "-gke-example-cluster-example-project-us-central1-gcp-admin-97b37070",
 		"atmos-" + derived + "-gke-example-cluster-example-project-us-central1-gcp-admin",
 		"atmos-gke-example-cluster-example-project-us-central1",
 	}, names)

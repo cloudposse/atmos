@@ -101,8 +101,8 @@ func TestAKSIntegration_Execute_DistinctUserPerIdentity(t *testing.T) {
 	adminUser := config.Contexts["dev-admin"].AuthInfo
 	readerUser := config.Contexts["dev-reader"].AuthInfo
 	assert.NotEqual(t, adminUser, readerUser, "contexts for different identities must not share an exec user")
-	assert.Equal(t, "atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin", adminUser)
-	assert.Equal(t, "atmos-aks-dev-cluster-dev-rg-sub-123-azure-reader", readerUser)
+	assert.Equal(t, "atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin-e1743c31", adminUser)
+	assert.Equal(t, "atmos-aks-dev-cluster-dev-rg-sub-123-azure-reader-a2094342", readerUser)
 	assert.Equal(t, "azure-admin", identityArg(t, kubeconfigPath, "dev-admin"))
 	assert.Equal(t, "azure-reader", identityArg(t, kubeconfigPath, "dev-reader"))
 }
@@ -124,7 +124,7 @@ func TestAKSIntegration_Cleanup_KeepsOtherIdentityContext(t *testing.T) {
 	config, err := clientcmd.LoadFromFile(kubeconfigPath)
 	require.NoError(t, err)
 	assert.NotContains(t, config.Contexts, "dev-reader")
-	assert.NotContains(t, config.AuthInfos, "atmos-aks-dev-cluster-dev-rg-sub-123-azure-reader")
+	assert.NotContains(t, config.AuthInfos, "atmos-aks-dev-cluster-dev-rg-sub-123-azure-reader-a2094342")
 	assert.Contains(t, config.Clusters, devClusterResourceID, "the cluster is still used by the dev-admin context")
 	assert.Equal(t, "azure-admin", identityArg(t, kubeconfigPath, "dev-admin"))
 }

@@ -49,11 +49,20 @@ value with the `config` source, so the realm value alone cannot tell a configure
   shared one exec user and overwrote each other's credentials. AKS and GKE had the same bug.
 - **Fix.** `kube.ClusterInfo` gained `Identity` and `LegacyUserNames`, and moved to
   `pkg/auth/cloud/kube/cluster_info.go`. `kube.UserName` now builds
-  `atmos-[<realm>-]<prefix>-<name>-<region>[-<account>][-<identity>]`:
+  `atmos-[<realm>-]<prefix>-<name>-<region>[-<account>][-<identity>][-<hash>]`:
   - EKS: `atmos-eks-<name>-<region>-<account>-<identity>`. The account comes from the cluster ARN
     (`pkg/auth/cloud/aws/eks.go`).
   - AKS: `atmos-aks-<name>-<resource-group>-<subscription>-<identity>` (`pkg/auth/cloud/azure/aks.go`).
   - GKE: `atmos-gke-<name>-<project>-<location>-<identity>` (`pkg/auth/cloud/gcp/gke.go`).
+  - **Hash suffix.** Realms, cluster names and identities can contain `-`, which is also the separator, so
+    different tuples could build the same name (realm `r` with cluster `b-eks-c` and realm `r-eks-b` with
+    cluster `c`) and the merge would overwrite one user with the other. When the name includes a realm or an
+    identity, `kube.UserName` appends `-<hash>`: the first 8 hex characters of a SHA-256 over the realm,
+    user prefix, cluster name, region, account and identity joined with a NUL byte. The readable part is
+    unchanged, and names without a realm or identity are exactly what v1.234.1 wrote. The unhashed
+    forms that earlier builds of this branch wrote (`kube.UnhashedUserName`) stay in the owned-name lists
+    (`kube.UserNameForms`, `OwnedUserNames`, `EKSKubeUserNames` and the AKS and GKE equivalents), so
+    cleanup and the error-mode migration still recognize and remove them.
   - New helpers `EKSKubeUserName(s)`, `AKSKubeUserName(s)` and `GKEKubeUserName(s)` return the current
     name plus every name older versions wrote. `LegacyEKSKubeUserName`, `LegacyAKSKubeUserName` and
     `LegacyGKEKubeUserName` return the pre-identity names.
@@ -279,7 +288,7 @@ No open work remains for this change. These choices can be revisited:
 Compatibility notes for users (release notes):
 
 - Kubeconfig user names change. EKS names gain `-<account>-<identity>`, and AKS and GKE names gain
-  `-<identity>`. With an explicitly configured realm, every name also gains `<realm>-` after `atmos-`.
+  `-<identity>`; a name that includes an identity or realm also ends with an 8-character hash. With an explicitly configured realm, every name also gains `<realm>-` after `atmos-`.
   Scripts that hardcode `atmos-eks-...`, `atmos-aks-...` or `atmos-gke-...` user names must be updated.
 - Context names change only when `auth.realm` or `ATMOS_AUTH_REALM` is set and no alias is configured. The
   default context becomes `<realm>/<cluster-id>`, so `kubectl --context <cluster-id>` must switch to the

@@ -283,14 +283,19 @@ func AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, r
 	// Subscription IDs are case-insensitive GUIDs, and the writer's value (the
 	// configured or credential subscription) can differ in case from the one
 	// in the ARM resource ID that cleanup parses, so both are lowercased here.
-	return kube.UserName(&kube.ClusterInfo{
+	return kube.UserName(aksUserInfo(clusterName, resourceGroup, subscriptionID, identityName, realm))
+}
+
+// aksUserInfo returns the ClusterInfo fields that make up an AKS user name.
+func aksUserInfo(clusterName, resourceGroup, subscriptionID, identityName, realm string) *kube.ClusterInfo {
+	return &kube.ClusterInfo{
 		Name:       clusterName,
 		Region:     resourceGroup,
 		UserPrefix: aksUserPrefix,
 		AccountID:  strings.ToLower(subscriptionID),
 		Identity:   identityName,
 		Realm:      realm,
-	})
+	}
 }
 
 // AKSKubeUserNames returns AKSKubeUserName followed by the names older
@@ -301,12 +306,13 @@ func AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, r
 func AKSKubeUserNames(clusterName, resourceGroup, subscriptionID, identityName string, scope kube.RealmScope) []string {
 	defer perf.Track(nil, "azure.AKSKubeUserNames")()
 
-	names := []string{AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, scope.Realm)}
+	// Each realm variant also lists its unhashed form, which earlier builds wrote.
+	names := kube.UserNameForms(aksUserInfo(clusterName, resourceGroup, subscriptionID, identityName, scope.Realm))
 	if scope.Realm != "" {
-		names = append(names, AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, ""))
+		names = append(names, kube.UserNameForms(aksUserInfo(clusterName, resourceGroup, subscriptionID, identityName, ""))...)
 	}
 	for _, legacyRealm := range scope.LegacyRealms {
-		names = append(names, AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, legacyRealm))
+		names = append(names, kube.UserNameForms(aksUserInfo(clusterName, resourceGroup, subscriptionID, identityName, legacyRealm))...)
 	}
 	return append(names, LegacyAKSKubeUserName(clusterName, resourceGroup, subscriptionID))
 }

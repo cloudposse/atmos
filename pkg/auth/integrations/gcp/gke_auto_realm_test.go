@@ -51,7 +51,7 @@ func TestGKEIntegration_AutoRealmKeepsNamesAndMigrates(t *testing.T) {
 	assert.Equal(t, exampleClusterID, config.CurrentContext)
 	require.Len(t, config.Contexts, 1)
 	require.Contains(t, config.Contexts, exampleClusterID)
-	user := "atmos-gke-example-cluster-example-project-us-central1-gcp-admin"
+	user := "atmos-gke-example-cluster-example-project-us-central1-gcp-admin-3768a76d"
 	assert.Equal(t, user, config.Contexts[exampleClusterID].AuthInfo)
 	assert.Len(t, config.AuthInfos, 1, "the prefixed user is removed")
 	assert.Empty(t, execEnvValue(t, config.AuthInfos[user], "ATMOS_AUTH_REALM"))

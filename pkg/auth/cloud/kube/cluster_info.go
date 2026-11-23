@@ -1,6 +1,8 @@
 package kube
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -87,12 +89,43 @@ type ClusterInfo struct {
 	ExecEnv []clientcmdapi.ExecEnvVar
 }
 
+// errWrapFormat wraps a sentinel error around the underlying cause.
+const errWrapFormat = "%w: %w"
+
+// userNameHashLen is the number of hex characters of the collision-guard
+// hash appended to realm- or identity-scoped user names.
+const userNameHashLen = 8
+
 // UserName returns the exec-plugin username for a cluster entry:
 // atmos-[<realm>-]<prefix>-<name>-<region>[-<account>][-<identity>].
 // The realm comes right after "atmos-" so an empty realm keeps the names
-// earlier versions wrote.
+// earlier versions wrote. When the name includes a realm or an identity, a
+// "-<hash>" suffix is appended: the first 8 hex characters of a SHA-256 over
+// every component joined with a NUL byte. The components themselves are joined
+// with "-", which realms, cluster names and identities may contain, so without
+// the hash different tuples could produce the same name (realm "r" with
+// cluster "b-eks-c" versus realm "r-eks-b" with cluster "c") and one entry
+// would overwrite the other's user. Names without a realm or identity are
+// unchanged from earlier versions.
 func UserName(info *ClusterInfo) string {
 	defer perf.Track(nil, "kube.UserName")()
+
+	name := UnhashedUserName(info)
+	if info.Realm == "" && info.Identity == "" {
+		return name
+	}
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		info.Realm, info.UserPrefix, info.Name, info.Region, info.AccountID, info.Identity,
+	}, "\x00")))
+	return name + "-" + hex.EncodeToString(sum[:])[:userNameHashLen]
+}
+
+// UnhashedUserName returns the exec-plugin username without the hash suffix:
+// the form earlier builds wrote for realm- or identity-scoped entries. It is
+// only used to recognize those names as owned for cleanup and migration; new
+// entries are always written under UserName.
+func UnhashedUserName(info *ClusterInfo) string {
+	defer perf.Track(nil, "kube.UnhashedUserName")()
 
 	parts := []string{"atmos"}
 	if info.Realm != "" {
@@ -106,6 +139,18 @@ func UserName(info *ClusterInfo) string {
 		parts = append(parts, info.Identity)
 	}
 	return strings.Join(parts, "-")
+}
+
+// UserNameForms returns UserName followed by UnhashedUserName when the two
+// differ, so cleanup recognizes both the current and the earlier form.
+func UserNameForms(info *ClusterInfo) []string {
+	defer perf.Track(nil, "kube.UserNameForms")()
+
+	current, unhashed := UserName(info), UnhashedUserName(info)
+	if current == unhashed {
+		return []string{current}
+	}
+	return []string{current, unhashed}
 }
 
 // execEnv returns the exec-plugin environment for info: its ExecEnv plus

@@ -18,8 +18,8 @@ import (
 
 const (
 	// The exampleUserRepoA and exampleUserRepoB constants are the realm-scoped users of the example integration.
-	exampleUserRepoA = "atmos-repo-a-gke-example-cluster-example-project-us-central1-gcp-admin"
-	exampleUserRepoB = "atmos-repo-b-gke-example-cluster-example-project-us-central1-gcp-admin"
+	exampleUserRepoA = "atmos-repo-a-gke-example-cluster-example-project-us-central1-gcp-admin-b5680427"
+	exampleUserRepoB = "atmos-repo-b-gke-example-cluster-example-project-us-central1-gcp-admin-6c2358ed"
 	// The exampleUserPreRealm constant is the user written before realms were part of the name.
 	exampleUserPreRealm = legacyExampleUserName + "-gcp-admin"
 	// The foreignGKEUser constant is a user Atmos did not write, such as one from gcloud.

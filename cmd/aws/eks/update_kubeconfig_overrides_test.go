@@ -212,14 +212,14 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 		wantExecRealm string
 		wantErr       error
 	}{
-		{name: "preserves auth context", alias: "bar-context", wantContext: "bar-context", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
-		{name: "realm scopes the user", realm: "acme", alias: "bar-context", wantContext: "bar-context", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo", wantExecRealm: "acme"},
-		{name: "default context without realm is the ARN", wantContext: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
-		{name: "realm prefixes the default context", realm: "acme", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo", wantExecRealm: "acme"},
-		{name: "explicit config realm prefixes the default context", realm: "acme", realmSource: "config", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo", wantExecRealm: "acme"},
-		{name: "env realm prefixes the default context", realm: "acme", realmSource: "env", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo", wantExecRealm: "acme"},
-		{name: "auto realm from the config path keeps the ARN context", realm: "462813558259d41c", realmSource: "config-path", wantContext: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
-		{name: "default realm keeps the ARN context", realm: "default", realmSource: "default", wantContext: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
+		{name: "preserves auth context", alias: "bar-context", wantContext: "bar-context", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo-78707f6c"},
+		{name: "realm scopes the user", realm: "acme", alias: "bar-context", wantContext: "bar-context", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo-f4a343fa", wantExecRealm: "acme"},
+		{name: "default context without realm is the ARN", wantContext: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo-78707f6c"},
+		{name: "realm prefixes the default context", realm: "acme", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo-f4a343fa", wantExecRealm: "acme"},
+		{name: "explicit config realm prefixes the default context", realm: "acme", realmSource: "config", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo-f4a343fa", wantExecRealm: "acme"},
+		{name: "env realm prefixes the default context", realm: "acme", realmSource: "env", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo-f4a343fa", wantExecRealm: "acme"},
+		{name: "auto realm from the config path keeps the ARN context", realm: "462813558259d41c", realmSource: "config-path", wantContext: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo-78707f6c"},
+		{name: "default realm keeps the ARN context", realm: "default", realmSource: "default", wantContext: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo-78707f6c"},
 		{name: "working directory unavailable", unavailable: true, wantErr: errUtils.ErrWorkingDirAccessFailed},
 		{name: "kubeconfig parent is a file", writeFailure: true, wantErr: errUtils.ErrKubeconfigWrite},
 	} {

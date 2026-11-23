@@ -156,9 +156,9 @@ func TestUpdateKubeconfig_DryRunDirectWritesNothing(t *testing.T) {
 	preview, err := clientcmd.Load(stdout.Bytes())
 	require.NoError(t, err, "stdout is the kubeconfig entries that would be written")
 	assert.Equal(t, arn, preview.CurrentContext)
-	require.Contains(t, preview.AuthInfos, "atmos-eks-bar-eu-central-1-123456789012-foo")
+	require.Contains(t, preview.AuthInfos, "atmos-eks-bar-eu-central-1-123456789012-foo-78707f6c")
 	assert.Equal(t, []string{"aws", "eks", "token", "--cluster-name", "bar", "--region", "eu-central-1", "--identity=foo"},
-		preview.AuthInfos["atmos-eks-bar-eu-central-1-123456789012-foo"].Exec.Args)
+		preview.AuthInfos["atmos-eks-bar-eu-central-1-123456789012-foo-78707f6c"].Exec.Args)
 	assert.Contains(t, stderr.String(), "Dry run")
 	assert.Contains(t, compactOutput(stderr.String()), compactOutput(path))
 

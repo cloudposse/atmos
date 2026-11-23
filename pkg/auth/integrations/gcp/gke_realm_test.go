@@ -60,8 +60,8 @@ func TestGKEIntegration_Execute_DistinctUserPerRealm(t *testing.T) {
 	userA := config.Contexts["example-a"].AuthInfo
 	userB := config.Contexts["example-b"].AuthInfo
 	require.NotEqual(t, userA, userB, "realms must not share a kube user")
-	assert.Equal(t, "atmos-repo-a-gke-example-cluster-example-project-us-central1-gcp-admin", userA)
-	assert.Equal(t, "atmos-repo-b-gke-example-cluster-example-project-us-central1-gcp-admin", userB)
+	assert.Equal(t, "atmos-repo-a-gke-example-cluster-example-project-us-central1-gcp-admin-b5680427", userA)
+	assert.Equal(t, "atmos-repo-b-gke-example-cluster-example-project-us-central1-gcp-admin-6c2358ed", userB)
 
 	assert.Equal(t, resolvedDir(t, repoA), resolvedDir(t, execEnvValue(t, config.AuthInfos[userA], "ATMOS_CHDIR")))
 	assert.Equal(t, resolvedDir(t, repoB), resolvedDir(t, execEnvValue(t, config.AuthInfos[userB], "ATMOS_CHDIR")))
@@ -84,9 +84,9 @@ func TestGKEIntegration_Cleanup_KeepsOtherRealmUser(t *testing.T) {
 	config, err := clientcmd.LoadFromFile(kubeconfigPath)
 	require.NoError(t, err)
 	assert.NotContains(t, config.Contexts, "example-a")
-	assert.NotContains(t, config.AuthInfos, "atmos-repo-a-gke-example-cluster-example-project-us-central1-gcp-admin")
+	assert.NotContains(t, config.AuthInfos, "atmos-repo-a-gke-example-cluster-example-project-us-central1-gcp-admin-b5680427")
 	assert.Contains(t, config.Contexts, "example-b")
-	assert.Contains(t, config.AuthInfos, "atmos-repo-b-gke-example-cluster-example-project-us-central1-gcp-admin")
+	assert.Contains(t, config.AuthInfos, "atmos-repo-b-gke-example-cluster-example-project-us-central1-gcp-admin-6c2358ed")
 	assert.Contains(t, config.Clusters, exampleClusterID, "the cluster is still used by the example-b context")
 }
 

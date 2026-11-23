@@ -77,13 +77,13 @@ func NewKubeconfigManager(customPath, modeStr string) (*KubeconfigManager, error
 	if path == "" {
 		defaultPath, err := DefaultKubeconfigPath()
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigPath, err)
+			return nil, fmt.Errorf(errWrapFormat, errUtils.ErrKubeconfigPath, err)
 		}
 		path = defaultPath
 	} else {
 		expanded, err := expandKubeconfigPath(path)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigPath, err)
+			return nil, fmt.Errorf(errWrapFormat, errUtils.ErrKubeconfigPath, err)
 		}
 		path = expanded
 	}
@@ -160,7 +160,7 @@ func (m *KubeconfigManager) ListClusterIDs() ([]string, error) {
 
 	existing, err := clientcmd.LoadFromFile(m.path)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, err)
+		return nil, fmt.Errorf(errWrapFormat, errUtils.ErrKubeconfigMerge, err)
 	}
 
 	arns := make([]string, 0, len(existing.Clusters))
@@ -226,7 +226,7 @@ func DefaultKubeconfigPath() (string, error) {
 
 	kubeDir, err := xdg.GetXDGConfigDir("kube", defaultDirMode)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", errUtils.ErrKubeconfigPath, err)
+		return "", fmt.Errorf(errWrapFormat, errUtils.ErrKubeconfigPath, err)
 	}
 
 	return filepath.Join(kubeDir, "config"), nil
@@ -288,7 +288,7 @@ func expandKubeconfigPath(path string) (string, error) {
 	if path == "~" || strings.HasPrefix(path, "~/") || strings.HasPrefix(path, `~\`) {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return "", fmt.Errorf("%w: %w", errUtils.ErrKubeconfigPath, err)
+			return "", fmt.Errorf(errWrapFormat, errUtils.ErrKubeconfigPath, err)
 		}
 		if path == "~" {
 			path = home
@@ -334,7 +334,7 @@ func expandPathEnvVars(path string) (string, error) {
 // writeConfig writes a kubeconfig to the file, replacing any existing content.
 func (m *KubeconfigManager) writeConfig(config *clientcmdapi.Config) error {
 	if err := clientcmd.WriteToFile(*config, m.path); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrKubeconfigWrite, err)
+		return fmt.Errorf(errWrapFormat, errUtils.ErrKubeconfigWrite, err)
 	}
 
 	if err := os.Chmod(m.path, m.mode); err != nil {
@@ -398,11 +398,11 @@ func (m *KubeconfigManager) loadExisting() (config *clientcmdapi.Config, exists 
 		if errors.Is(statErr, fs.ErrNotExist) {
 			return clientcmdapi.NewConfig(), false, nil
 		}
-		return nil, false, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, statErr)
+		return nil, false, fmt.Errorf(errWrapFormat, errUtils.ErrKubeconfigMerge, statErr)
 	}
 	loaded, loadErr := clientcmd.LoadFromFile(m.path)
 	if loadErr != nil {
-		return nil, false, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, loadErr)
+		return nil, false, fmt.Errorf(errWrapFormat, errUtils.ErrKubeconfigMerge, loadErr)
 	}
 	return loaded, true, nil
 }

@@ -48,22 +48,49 @@ func (m *KubeconfigManager) checkErrorModeCollisions(newConfig *clientcmdapi.Con
 // findCollision returns the kind and name of the first entry in newConfig that
 // exists in existing with different content.
 func findCollision(existing, newConfig *clientcmdapi.Config, migration *contextMigration) (kind, name string, found bool) {
-	for id, cluster := range newConfig.Clusters {
-		if current, exists := existing.Clusters[id]; exists && !clustersEqual(current, cluster) {
-			return "cluster", id, true
-		}
+	if id, ok := collidingCluster(existing, newConfig); ok {
+		return "cluster", id, true
 	}
-	for id, kubeContext := range newConfig.Contexts {
-		if current, exists := existing.Contexts[id]; exists && !contextsEqual(current, kubeContext) && !migration.ownsLegacyContext(current, kubeContext) {
-			return "context", id, true
-		}
+	if id, ok := collidingContext(existing, newConfig, migration); ok {
+		return "context", id, true
 	}
-	for id, user := range newConfig.AuthInfos {
-		if current, exists := existing.AuthInfos[id]; exists && !authInfosEqualIgnoringChdir(current, user) {
-			return "user", id, true
-		}
+	if id, ok := collidingUser(existing, newConfig); ok {
+		return "user", id, true
 	}
 	return "", "", false
+}
+
+// collidingCluster returns the first cluster in newConfig that exists in
+// existing with different content.
+func collidingCluster(existing, newConfig *clientcmdapi.Config) (string, bool) {
+	for id, cluster := range newConfig.Clusters {
+		if current, exists := existing.Clusters[id]; exists && !clustersEqual(current, cluster) {
+			return id, true
+		}
+	}
+	return "", false
+}
+
+// collidingContext returns the first context in newConfig that exists in
+// existing with different content, unless migration owns the existing one.
+func collidingContext(existing, newConfig *clientcmdapi.Config, migration *contextMigration) (string, bool) {
+	for id, kubeContext := range newConfig.Contexts {
+		if current, exists := existing.Contexts[id]; exists && !contextsEqual(current, kubeContext) && !migration.ownsLegacyContext(current, kubeContext) {
+			return id, true
+		}
+	}
+	return "", false
+}
+
+// collidingUser returns the first user in newConfig that exists in existing
+// with different content, ignoring the ATMOS_CHDIR exec env var.
+func collidingUser(existing, newConfig *clientcmdapi.Config) (string, bool) {
+	for id, user := range newConfig.AuthInfos {
+		if current, exists := existing.AuthInfos[id]; exists && !authInfosEqualIgnoringChdir(current, user) {
+			return id, true
+		}
+	}
+	return "", false
 }
 
 // collisionError reports an existing kubeconfig entry that differs from the one being written.

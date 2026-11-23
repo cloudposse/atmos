@@ -247,8 +247,8 @@ func TestExecuteAKSUpdateKubeconfigDirect_RealmScopesUser(t *testing.T) {
 
 	config, err := clientcmd.LoadFromFile(kubeconfig)
 	require.NoError(t, err)
-	assert.Equal(t, "atmos-acme-aks-aks-dev-rg-aks-cus-sub-123-dev", config.Contexts["dev-aks"].AuthInfo)
-	user := config.AuthInfos["atmos-acme-aks-aks-dev-rg-aks-cus-sub-123-dev"]
+	assert.Equal(t, "atmos-acme-aks-aks-dev-rg-aks-cus-sub-123-dev-e92c4e34", config.Contexts["dev-aks"].AuthInfo)
+	user := config.AuthInfos["atmos-acme-aks-aks-dev-rg-aks-cus-sub-123-dev-e92c4e34"]
 	require.NotNil(t, user)
 	require.NotNil(t, user.Exec)
 	assert.Contains(t, user.Exec.Env, clientcmdapi.ExecEnvVar{Name: "ATMOS_AUTH_REALM", Value: "acme"})
@@ -264,8 +264,8 @@ func TestExecuteAKSUpdateKubeconfigDirect_RealmPrefixesDefaultContext(t *testing
 		name, realm, wantContext, wantUser string
 		writeFailure                       bool
 	}{
-		{name: "no realm", wantContext: resourceID, wantUser: "atmos-aks-aks-dev-rg-aks-cus-sub-123-dev"},
-		{name: "realm", realm: "acme", wantContext: "acme/" + resourceID, wantUser: "atmos-acme-aks-aks-dev-rg-aks-cus-sub-123-dev"},
+		{name: "no realm", wantContext: resourceID, wantUser: "atmos-aks-aks-dev-rg-aks-cus-sub-123-dev-97954fc1"},
+		{name: "realm", realm: "acme", wantContext: "acme/" + resourceID, wantUser: "atmos-acme-aks-aks-dev-rg-aks-cus-sub-123-dev-e92c4e34"},
 		{name: "kubeconfig parent is a file", writeFailure: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

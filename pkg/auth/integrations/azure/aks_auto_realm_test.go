@@ -53,9 +53,9 @@ func TestAKSIntegration_AutoRealmKeepsNamesAndMigrates(t *testing.T) {
 	assert.Equal(t, devClusterResourceID, config.CurrentContext)
 	require.Len(t, config.Contexts, 1)
 	require.Contains(t, config.Contexts, devClusterResourceID)
-	assert.Equal(t, "atmos-aks-dev-cluster-dev-rg-sub-123-azure-dev", config.Contexts[devClusterResourceID].AuthInfo)
+	assert.Equal(t, "atmos-aks-dev-cluster-dev-rg-sub-123-azure-dev-6d99f9e9", config.Contexts[devClusterResourceID].AuthInfo)
 	assert.Len(t, config.AuthInfos, 1, "the prefixed user is removed")
-	assert.Empty(t, execEnvValue(t, config.AuthInfos["atmos-aks-dev-cluster-dev-rg-sub-123-azure-dev"], "ATMOS_AUTH_REALM"))
+	assert.Empty(t, execEnvValue(t, config.AuthInfos["atmos-aks-dev-cluster-dev-rg-sub-123-azure-dev-6d99f9e9"], "ATMOS_AUTH_REALM"))
 
 	// Logout after an unreleased build wrote the prefixed entries again.
 	require.NoError(t, newSourcedAKSIntegration(t, path, autoRealm, realm.SourceConfig).Execute(t.Context(), creds))

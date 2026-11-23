@@ -88,8 +88,8 @@ func TestGKEIntegration_Execute_DistinctUserPerIdentity(t *testing.T) {
 	adminUser := config.Contexts["example-admin"].AuthInfo
 	readerUser := config.Contexts["example-reader"].AuthInfo
 	assert.NotEqual(t, adminUser, readerUser, "contexts for different identities must not share an exec user")
-	assert.Equal(t, legacyExampleUserName+"-gcp-admin", adminUser)
-	assert.Equal(t, legacyExampleUserName+"-gcp-reader", readerUser)
+	assert.Equal(t, legacyExampleUserName+"-gcp-admin-3768a76d", adminUser)
+	assert.Equal(t, legacyExampleUserName+"-gcp-reader-ae315fb1", readerUser)
 	assert.Contains(t, config.AuthInfos[adminUser].Exec.Args, "--identity=gcp-admin")
 	assert.Contains(t, config.AuthInfos[readerUser].Exec.Args, "--identity=gcp-reader")
 }
@@ -110,7 +110,7 @@ func TestGKEIntegration_Cleanup_KeepsOtherIdentityContext(t *testing.T) {
 	config, err := clientcmd.LoadFromFile(kubeconfigPath)
 	require.NoError(t, err)
 	assert.NotContains(t, config.Contexts, "example-reader")
-	assert.NotContains(t, config.AuthInfos, legacyExampleUserName+"-gcp-reader")
+	assert.NotContains(t, config.AuthInfos, legacyExampleUserName+"-gcp-reader-ae315fb1")
 	assert.Contains(t, config.Clusters, exampleClusterID, "the cluster is still used by the example-admin context")
 	assert.Contains(t, config.AuthInfos[config.Contexts["example-admin"].AuthInfo].Exec.Args, "--identity=gcp-admin")
 }

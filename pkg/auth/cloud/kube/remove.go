@@ -50,7 +50,7 @@ func (m *KubeconfigManager) RemoveOwnedClusterConfig(clusterID string, contextNa
 
 	existing, err := clientcmd.LoadFromFile(m.path)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, err)
+		return fmt.Errorf(errWrapFormat, errUtils.ErrKubeconfigMerge, err)
 	}
 
 	var cfg removeOptions
@@ -62,13 +62,13 @@ func (m *KubeconfigManager) RemoveOwnedClusterConfig(clusterID string, contextNa
 	// If the config is now empty, remove the file.
 	if len(existing.Clusters) == 0 && len(existing.Contexts) == 0 && len(existing.AuthInfos) == 0 {
 		if err := os.Remove(m.path); err != nil {
-			return fmt.Errorf("%w: %w", errUtils.ErrKubeconfigWrite, err)
+			return fmt.Errorf(errWrapFormat, errUtils.ErrKubeconfigWrite, err)
 		}
 		return nil
 	}
 
 	if err := clientcmd.WriteToFile(*existing, m.path); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrKubeconfigWrite, err)
+		return fmt.Errorf(errWrapFormat, errUtils.ErrKubeconfigWrite, err)
 	}
 	return nil
 }
@@ -93,7 +93,7 @@ func WithIdentity(identity string) RemoveOption {
 func removeOwnedEntries(config *clientcmdapi.Config, clusterID string, contextNames, userNames []string, identity string) {
 	// Remove the owned contexts first, so references are counted without them.
 	for _, contextName := range contextNames {
-		if !contextOwnedBy(config, contextName, userNames) || !contextTargets(config, contextName, clusterID) || !userIdentityMatches(config, config.Contexts[contextName].AuthInfo, identity) {
+		if !ownedContextRemovable(config, contextName, clusterID, userNames, identity) {
 			continue
 		}
 		delete(config.Contexts, contextName)
@@ -112,6 +112,15 @@ func removeOwnedEntries(config *clientcmdapi.Config, clusterID string, contextNa
 	}
 }
 
+// ownedContextRemovable reports whether the named context is one of the owned
+// contexts for the cluster: it points at one of userNames, targets clusterID
+// and authenticates as identity (or as no identity).
+func ownedContextRemovable(config *clientcmdapi.Config, contextName, clusterID string, userNames []string, identity string) bool {
+	return contextOwnedBy(config, contextName, userNames) &&
+		contextTargets(config, contextName, clusterID) &&
+		userIdentityMatches(config, config.Contexts[contextName].AuthInfo, identity)
+}
+
 // LookupContext returns the named context from the kubeconfig, or nil when the
 // file or the context does not exist.
 func (m *KubeconfigManager) LookupContext(contextName string) (*clientcmdapi.Context, error) {
@@ -123,7 +132,7 @@ func (m *KubeconfigManager) LookupContext(contextName string) (*clientcmdapi.Con
 
 	existing, err := clientcmd.LoadFromFile(m.path)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, err)
+		return nil, fmt.Errorf(errWrapFormat, errUtils.ErrKubeconfigMerge, err)
 	}
 
 	return existing.Contexts[contextName], nil

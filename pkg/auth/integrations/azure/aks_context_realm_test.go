@@ -22,10 +22,10 @@ import (
 
 const (
 	// The devUserRepoA and devUserRepoB constants are the realm-scoped users of the dev integration.
-	devUserRepoA = "atmos-repo-a-aks-dev-cluster-dev-rg-sub-123-azure-dev"
-	devUserRepoB = "atmos-repo-b-aks-dev-cluster-dev-rg-sub-123-azure-dev"
+	devUserRepoA = "atmos-repo-a-aks-dev-cluster-dev-rg-sub-123-azure-dev-5be87a8d"
+	devUserRepoB = "atmos-repo-b-aks-dev-cluster-dev-rg-sub-123-azure-dev-921bda83"
 	// The devUserPreRealm constant is the user written before realms were part of the name.
-	devUserPreRealm = "atmos-aks-dev-cluster-dev-rg-sub-123-azure-dev"
+	devUserPreRealm = "atmos-aks-dev-cluster-dev-rg-sub-123-azure-dev-6d99f9e9"
 	// The foreignAKSUser constant is a user Atmos did not write, such as one from the Azure CLI.
 	foreignAKSUser = "clusterUser_dev-rg_dev-cluster"
 )

@@ -63,8 +63,8 @@ func TestAKSIntegration_Execute_DistinctUserPerRealm(t *testing.T) {
 	userA := config.Contexts["dev-a"].AuthInfo
 	userB := config.Contexts["dev-b"].AuthInfo
 	require.NotEqual(t, userA, userB, "realms must not share a kube user")
-	assert.Equal(t, "atmos-repo-a-aks-dev-cluster-dev-rg-sub-123-azure-dev", userA)
-	assert.Equal(t, "atmos-repo-b-aks-dev-cluster-dev-rg-sub-123-azure-dev", userB)
+	assert.Equal(t, "atmos-repo-a-aks-dev-cluster-dev-rg-sub-123-azure-dev-5be87a8d", userA)
+	assert.Equal(t, "atmos-repo-b-aks-dev-cluster-dev-rg-sub-123-azure-dev-921bda83", userB)
 
 	assert.Equal(t, resolvedDir(t, repoA), resolvedDir(t, execEnvValue(t, config.AuthInfos[userA], "ATMOS_CHDIR")))
 	assert.Equal(t, resolvedDir(t, repoB), resolvedDir(t, execEnvValue(t, config.AuthInfos[userB], "ATMOS_CHDIR")))
@@ -88,8 +88,8 @@ func TestAKSIntegration_Cleanup_KeepsOtherRealmUser(t *testing.T) {
 	config, err := clientcmd.LoadFromFile(kubeconfigPath)
 	require.NoError(t, err)
 	assert.NotContains(t, config.Contexts, "dev-a")
-	assert.NotContains(t, config.AuthInfos, "atmos-repo-a-aks-dev-cluster-dev-rg-sub-123-azure-dev")
+	assert.NotContains(t, config.AuthInfos, "atmos-repo-a-aks-dev-cluster-dev-rg-sub-123-azure-dev-5be87a8d")
 	assert.Contains(t, config.Contexts, "dev-b")
-	assert.Contains(t, config.AuthInfos, "atmos-repo-b-aks-dev-cluster-dev-rg-sub-123-azure-dev")
+	assert.Contains(t, config.AuthInfos, "atmos-repo-b-aks-dev-cluster-dev-rg-sub-123-azure-dev-921bda83")
 	assert.Contains(t, config.Clusters, devClusterResourceID, "the cluster is still used by the dev-b context")
 }

@@ -20,9 +20,9 @@ func TestAKSKubeUserName_MatchesWrittenUser(t *testing.T) {
 		identity       string
 		want           string
 	}{
-		{name: "subscription and identity", subscriptionID: "sub-123", identity: "azure-admin", want: "atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin"},
+		{name: "subscription and identity", subscriptionID: "sub-123", identity: "azure-admin", want: "atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin-e1743c31"},
 		{name: "no identity", subscriptionID: "sub-123", want: "atmos-aks-dev-cluster-dev-rg-sub-123"},
-		{name: "no subscription keeps the identity", identity: "azure-admin", want: "atmos-aks-dev-cluster-dev-rg-azure-admin"},
+		{name: "no subscription keeps the identity", identity: "azure-admin", want: "atmos-aks-dev-cluster-dev-rg-azure-admin-9d6d21c7"},
 	}
 
 	for _, tt := range tests {
@@ -45,11 +45,14 @@ func TestLegacyAKSKubeUserName(t *testing.T) {
 // then the pre-realm name (only with a realm) and the legacy name.
 func TestAKSKubeUserNames(t *testing.T) {
 	assert.Equal(t, []string{
+		"atmos-acme-aks-dev-cluster-dev-rg-sub-123-azure-admin-f150508f",
 		"atmos-acme-aks-dev-cluster-dev-rg-sub-123-azure-admin",
+		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin-e1743c31",
 		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin",
 		"atmos-aks-dev-cluster-dev-rg-sub-123",
 	}, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", kube.RealmScope{Realm: "acme"}))
 	assert.Equal(t, []string{
+		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin-e1743c31",
 		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin",
 		"atmos-aks-dev-cluster-dev-rg-sub-123",
 	}, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", kube.RealmScope{Realm: ""}))
@@ -81,7 +84,9 @@ func TestAKSKubeUserNames_LegacyRealms(t *testing.T) {
 	names := AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", kube.RealmScope{Realm: written.Realm, LegacyRealms: written.LegacyRealms})
 
 	assert.Equal(t, []string{
+		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin-e1743c31",
 		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin",
+		"atmos-" + derived + "-aks-dev-cluster-dev-rg-sub-123-azure-admin-a986975a",
 		"atmos-" + derived + "-aks-dev-cluster-dev-rg-sub-123-azure-admin",
 		"atmos-aks-dev-cluster-dev-rg-sub-123",
 	}, names)

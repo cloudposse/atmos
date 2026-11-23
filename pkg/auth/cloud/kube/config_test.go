@@ -152,17 +152,17 @@ func TestUserName(t *testing.T) {
 		{
 			name: "account and identity scoped",
 			info: &ClusterInfo{UserPrefix: "eks", Name: "prod", Region: "us-east-2", AccountID: "111111111111", Identity: "prod-admin"},
-			want: "atmos-eks-prod-us-east-2-111111111111-prod-admin",
+			want: "atmos-eks-prod-us-east-2-111111111111-prod-admin-038e7eb8",
 		},
 		{
 			name: "identity without account",
 			info: &ClusterInfo{UserPrefix: "eks", Name: "prod", Region: "us-east-2", Identity: "prod-admin"},
-			want: "atmos-eks-prod-us-east-2-prod-admin",
+			want: "atmos-eks-prod-us-east-2-prod-admin-366c0570",
 		},
 		{
 			name: "realm and identity scoped",
 			info: &ClusterInfo{Realm: "acme", UserPrefix: "eks", Name: "prod", Region: "us-east-2", AccountID: "111111111111", Identity: "prod-admin"},
-			want: "atmos-acme-eks-prod-us-east-2-111111111111-prod-admin",
+			want: "atmos-acme-eks-prod-us-east-2-111111111111-prod-admin-2ab6ce55",
 		},
 	}
 

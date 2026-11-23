@@ -160,7 +160,7 @@ func TestGKEIntegrationExecuteAndCleanup(t *testing.T) {
 	assert.Equal(t, "https://gke.example.invalid", config.Clusters[clusterID].Server)
 	assert.Equal(t, []byte("test-ca"), config.Clusters[clusterID].CertificateAuthorityData)
 	assert.Contains(t, config.Contexts, "example")
-	authInfo := config.AuthInfos["atmos-gke-example-cluster-example-project-us-central1-example-deployer"]
+	authInfo := config.AuthInfos["atmos-gke-example-cluster-example-project-us-central1-example-deployer-fcce54b1"]
 	require.NotNil(t, authInfo)
 	assert.Empty(t, authInfo.Token)
 	require.NotNil(t, authInfo.Exec)

@@ -44,9 +44,9 @@ func TestEKSIntegration_Execute_AutoRealmKeepsNames(t *testing.T) {
 	for _, tt := range []struct {
 		name, source, wantContext, wantUser, wantExecRealm string
 	}{
-		{name: "derived realm", source: realm.SourceAuto, wantContext: prodClusterARN, wantUser: "atmos-eks-prod-us-east-2-111111111111-admin"},
-		{name: "config realm", source: realm.SourceConfig, wantContext: autoRealm + "/" + prodClusterARN, wantUser: "atmos-" + autoRealm + "-eks-prod-us-east-2-111111111111-admin", wantExecRealm: autoRealm},
-		{name: "env realm", source: realm.SourceEnv, wantContext: autoRealm + "/" + prodClusterARN, wantUser: "atmos-" + autoRealm + "-eks-prod-us-east-2-111111111111-admin", wantExecRealm: autoRealm},
+		{name: "derived realm", source: realm.SourceAuto, wantContext: prodClusterARN, wantUser: "atmos-eks-prod-us-east-2-111111111111-admin-48b9c2fe"},
+		{name: "config realm", source: realm.SourceConfig, wantContext: autoRealm + "/" + prodClusterARN, wantUser: "atmos-" + autoRealm + "-eks-prod-us-east-2-111111111111-admin-5fbce2d3", wantExecRealm: autoRealm},
+		{name: "env realm", source: realm.SourceEnv, wantContext: autoRealm + "/" + prodClusterARN, wantUser: "atmos-" + autoRealm + "-eks-prod-us-east-2-111111111111-admin-5fbce2d3", wantExecRealm: autoRealm},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			stubProdEKSCluster(t)
@@ -79,7 +79,7 @@ func TestEKSIntegration_Execute_MigratesAutoRealmNames(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{prodClusterARN}, mapKeys(config.Contexts))
 	assert.Equal(t, prodClusterARN, config.CurrentContext)
-	assert.Equal(t, []string{"atmos-eks-prod-us-east-2-111111111111-admin"}, mapKeys(config.AuthInfos))
+	assert.Equal(t, []string{"atmos-eks-prod-us-east-2-111111111111-admin-48b9c2fe"}, mapKeys(config.AuthInfos))
 }
 
 // TestEKSIntegration_Cleanup_RemovesAutoRealmNames verifies that logout without
@@ -96,5 +96,5 @@ func TestEKSIntegration_Cleanup_RemovesAutoRealmNames(t *testing.T) {
 	config, err := loadKubeconfig(path)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"0123456789abcdef/" + prodClusterARN}, mapKeys(config.Contexts))
-	assert.Equal(t, []string{"atmos-0123456789abcdef-eks-prod-us-east-2-111111111111-admin"}, mapKeys(config.AuthInfos))
+	assert.Equal(t, []string{"atmos-0123456789abcdef-eks-prod-us-east-2-111111111111-admin-e360de54"}, mapKeys(config.AuthInfos))
 }

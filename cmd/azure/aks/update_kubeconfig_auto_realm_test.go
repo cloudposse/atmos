@@ -30,19 +30,19 @@ func TestExecuteAKSUpdateKubeconfigDirect_AutoRealmKeepsNames(t *testing.T) {
 	}{
 		{
 			name: "auto realm from config path", configRealm: autoRealm, configSource: "config-path",
-			wantContext: resourceID, wantUser: "atmos-aks-aks-dev-rg-aks-cus-sub-123-dev",
+			wantContext: resourceID, wantUser: "atmos-aks-aks-dev-rg-aks-cus-sub-123-dev-97954fc1",
 		},
 		{
 			name: "default realm without config path", configRealm: "default", configSource: "default",
-			wantContext: resourceID, wantUser: "atmos-aks-aks-dev-rg-aks-cus-sub-123-dev",
+			wantContext: resourceID, wantUser: "atmos-aks-aks-dev-rg-aks-cus-sub-123-dev-97954fc1",
 		},
 		{
 			name: "explicit config realm", configRealm: "acme", configSource: "config",
-			wantContext: "acme/" + resourceID, wantUser: "atmos-acme-aks-aks-dev-rg-aks-cus-sub-123-dev", wantExecRealm: "acme",
+			wantContext: "acme/" + resourceID, wantUser: "atmos-acme-aks-aks-dev-rg-aks-cus-sub-123-dev-e92c4e34", wantExecRealm: "acme",
 		},
 		{
 			name: "explicit env realm", configRealm: "acme", configSource: "env",
-			wantContext: "acme/" + resourceID, wantUser: "atmos-acme-aks-aks-dev-rg-aks-cus-sub-123-dev", wantExecRealm: "acme",
+			wantContext: "acme/" + resourceID, wantUser: "atmos-acme-aks-aks-dev-rg-aks-cus-sub-123-dev-e92c4e34", wantExecRealm: "acme",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

@@ -144,7 +144,7 @@ func TestBuildKubeClusterInfo(t *testing.T) {
 	assert.True(t, filepath.IsAbs(got.ExecEnv[1].Value))
 
 	config := kube.BuildClusterConfig(got, "example")
-	authInfo := config.AuthInfos["atmos-gke-example-cluster-example-project-us-central1-example-deployer"]
+	authInfo := config.AuthInfos[kube.UserName(got)]
 	require.NotNil(t, authInfo)
 	require.NotNil(t, authInfo.Exec)
 	assert.Empty(t, authInfo.Token)
@@ -230,8 +230,9 @@ func TestGKEKubeconfigDistinctProjectsDoNotCollide(t *testing.T) {
 	assert.Len(t, loaded.Clusters, 2)
 	assert.Len(t, loaded.Contexts, 2)
 	assert.Len(t, loaded.AuthInfos, 2)
-	assert.Contains(t, loaded.AuthInfos, "atmos-gke-example-cluster-example-project-a-us-central1-example-deployer")
-	assert.Contains(t, loaded.AuthInfos, "atmos-gke-example-cluster-example-project-b-us-central1-example-deployer")
+	for _, projectID := range []string{"example-project-a", "example-project-b"} {
+		assert.Contains(t, loaded.AuthInfos, GKEKubeUserName(projectID, "us-central1", "example-cluster", "example-deployer", ""))
+	}
 	for _, authInfo := range loaded.AuthInfos {
 		assert.Empty(t, authInfo.Token)
 	}

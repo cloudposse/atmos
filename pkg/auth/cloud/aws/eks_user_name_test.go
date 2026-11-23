@@ -25,7 +25,7 @@ func TestEKSKubeUserName_MatchesWrittenUser(t *testing.T) {
 			name:     "account and identity",
 			arn:      "arn:aws:eks:us-east-2:111111111111:cluster/prod",
 			identity: "prod-admin",
-			want:     "atmos-eks-prod-us-east-2-111111111111-prod-admin",
+			want:     "atmos-eks-prod-us-east-2-111111111111-prod-admin-038e7eb8",
 		},
 		{
 			name: "no identity",
@@ -36,7 +36,7 @@ func TestEKSKubeUserName_MatchesWrittenUser(t *testing.T) {
 			name:     "ARN that cannot be parsed keeps the identity",
 			arn:      "not-an-arn",
 			identity: "prod-admin",
-			want:     "atmos-eks-prod-us-east-2-prod-admin",
+			want:     "atmos-eks-prod-us-east-2-prod-admin-366c0570",
 		},
 	}
 
@@ -63,11 +63,14 @@ func TestEKSKubeUserNames(t *testing.T) {
 	const arn = "arn:aws:eks:us-east-2:111111111111:cluster/prod"
 
 	assert.Equal(t, []string{
+		"atmos-acme-eks-prod-us-east-2-111111111111-admin-2bb64d81",
 		"atmos-acme-eks-prod-us-east-2-111111111111-admin",
+		"atmos-eks-prod-us-east-2-111111111111-admin-48b9c2fe",
 		"atmos-eks-prod-us-east-2-111111111111-admin",
 		"atmos-eks-prod-us-east-2",
 	}, EKSKubeUserNames(arn, "prod", "us-east-2", "admin", kube.RealmScope{Realm: "acme"}))
 	assert.Equal(t, []string{
+		"atmos-eks-prod-us-east-2-111111111111-admin-48b9c2fe",
 		"atmos-eks-prod-us-east-2-111111111111-admin",
 		"atmos-eks-prod-us-east-2",
 	}, EKSKubeUserNames(arn, "prod", "us-east-2", "admin", kube.RealmScope{Realm: ""}))
@@ -98,7 +101,9 @@ func TestEKSKubeUserNames_LegacyRealms(t *testing.T) {
 	const derived = "462813558259d41c"
 
 	assert.Equal(t, []string{
+		"atmos-eks-prod-us-east-2-111111111111-admin-48b9c2fe",
 		"atmos-eks-prod-us-east-2-111111111111-admin",
+		"atmos-" + derived + "-eks-prod-us-east-2-111111111111-admin-5fbce2d3",
 		"atmos-" + derived + "-eks-prod-us-east-2-111111111111-admin",
 		"atmos-eks-prod-us-east-2",
 	}, EKSKubeUserNames(clusterARN, "prod", "us-east-2", "admin", kube.RealmScope{LegacyRealms: []string{derived}}))

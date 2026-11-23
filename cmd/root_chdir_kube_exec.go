@@ -108,10 +108,19 @@ func flagTakesSeparateValue(arg string) bool {
 		return false
 	}
 	for _, flag := range flags.GlobalFlagsRegistry().All() {
-		if (isShorthand && flag.GetShorthand() == name) || (!isShorthand && flag.GetName() == name) {
+		if globalFlagMatches(flag, name, isShorthand) {
 			_, isBool := flag.(*flags.BoolFlag)
 			return !isBool && flag.GetNoOptDefVal() == ""
 		}
 	}
 	return false
+}
+
+// globalFlagMatches reports whether flag is the one called name, compared by
+// shorthand when isShorthand is set and by long name otherwise.
+func globalFlagMatches(flag flags.Flag, name string, isShorthand bool) bool {
+	if isShorthand {
+		return flag.GetShorthand() == name
+	}
+	return flag.GetName() == name
 }

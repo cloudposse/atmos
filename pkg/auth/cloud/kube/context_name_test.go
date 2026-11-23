@@ -85,6 +85,7 @@ func TestOwnedUserNames(t *testing.T) {
 	t.Run("realm adds the pre-realm name", func(t *testing.T) {
 		info := realmClusterInfo(testRealm)
 		assert.Equal(t, []string{
+			"atmos-acme-eks-dev-cluster-us-east-2-30ea62b8",
 			"atmos-acme-eks-dev-cluster-us-east-2",
 			"atmos-eks-dev-cluster-us-east-2",
 			testLegacyUser,
@@ -337,4 +338,37 @@ func TestRemoveClusterConfig_KeepsContextOfOtherUser(t *testing.T) {
 	assert.Equal(t, testOtherUser, config.Contexts["dev-eks"].AuthInfo)
 	assert.Contains(t, config.Clusters, info.ID)
 	assert.Equal(t, "dev-eks", config.CurrentContext)
+}
+
+// TestWriteClusterConfig_MigratesUnhashedUserNames verifies that the unhashed
+// realm- and identity-scoped user names earlier builds wrote are still treated
+// as owned: the context is migrated and the old user removed, in both modes.
+func TestWriteClusterConfig_MigratesUnhashedUserNames(t *testing.T) {
+	for _, mode := range []string{"merge", "error"} {
+		t.Run(mode, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "kubeconfig")
+			info := realmClusterInfo(testRealm)
+			info.Identity = "dev-admin"
+			unhashed := UnhashedUserName(info)
+			require.NotEqual(t, unhashed, UserName(info))
+			addTestContext(t, path, info.ID, info.ID, unhashed)
+			// Error mode only migrates when the existing cluster is identical.
+			seeded := loadTestKubeconfig(t, path)
+			seeded.Clusters[info.ID] = BuildClusterConfig(info, "").Clusters[info.ID]
+			require.NoError(t, clientcmd.WriteToFile(*seeded, path))
+			mgr, err := NewKubeconfigManager(path, "")
+			require.NoError(t, err)
+
+			changed, err := mgr.WriteClusterConfig(info, "", mode)
+			require.NoError(t, err)
+			assert.True(t, changed)
+
+			config := loadTestKubeconfig(t, path)
+			newContext := "acme/" + info.ID
+			assert.NotContains(t, config.Contexts, info.ID)
+			assert.Equal(t, UserName(info), config.Contexts[newContext].AuthInfo)
+			assert.NotContains(t, config.AuthInfos, unhashed)
+			assert.Contains(t, config.AuthInfos, UserName(info))
+		})
+	}
 }
