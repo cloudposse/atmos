@@ -60,6 +60,8 @@ var processEnvMu sync.Mutex
 // WithIsolatedAWSEnv, LoadIsolatedAWSConfig or LoadAtmosManagedAWSConfig while
 // holding it.
 func LockAWSProcessEnv() func() {
+	defer perf.Track(nil, "aws.LockAWSProcessEnv")()
+
 	processEnvMu.Lock()
 	return processEnvMu.Unlock
 }
