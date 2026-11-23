@@ -18,6 +18,7 @@ var GCPEnvironmentVariables = []string{
 	"CLOUDSDK_CONFIG",
 	"CLOUDSDK_ACTIVE_CONFIG_NAME",
 	"GOOGLE_OAUTH_ACCESS_TOKEN",
+	"CLOUDSDK_AUTH_ACCESS_TOKEN",
 	"GOOGLE_CLOUD_REGION",
 	"CLOUDSDK_COMPUTE_REGION",
 	"GOOGLE_CLOUD_ZONE",
@@ -27,15 +28,20 @@ var GCPEnvironmentVariables = []string{
 // gcpCredentialOverrideEnvironmentVariables are ambient variables that make
 // Google tools authenticate as someone other than the Atmos identity, even when
 // GOOGLE_OAUTH_ACCESS_TOKEN is set: Terraform's google provider credentials and
-// impersonation, and gcloud's account, access-token, impersonation, and
+// impersonation, its project, region, and zone, and gcloud's account, access-token, impersonation, and
 // credential-file overrides.
 var gcpCredentialOverrideEnvironmentVariables = []string{
 	"GOOGLE_CREDENTIALS",
 	"GOOGLE_CLOUD_KEYFILE_JSON",
 	"GCLOUD_KEYFILE_JSON",
 	"GOOGLE_IMPERSONATE_SERVICE_ACCOUNT",
+	"GOOGLE_BACKEND_IMPERSONATE_SERVICE_ACCOUNT",
+	"GOOGLE_PROJECT",
+	"GOOGLE_REGION",
+	"GCLOUD_REGION",
+	"GOOGLE_ZONE",
+	"GCLOUD_ZONE",
 	"CLOUDSDK_CORE_ACCOUNT",
-	"CLOUDSDK_AUTH_ACCESS_TOKEN",
 	"CLOUDSDK_AUTH_ACCESS_TOKEN_FILE",
 	"CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT",
 	"CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
@@ -194,6 +200,8 @@ func GetEnvironmentVariablesForIdentity(realm, providerName, identityName string
 		// because our ADC file format (authorized_user without refresh_token) causes
 		// Google Cloud SDK to fail with "refresh token must be provided".
 		env["GOOGLE_OAUTH_ACCESS_TOKEN"] = gcpAuth.AccessToken
+		// gcloud reads its access token from CLOUDSDK_AUTH_ACCESS_TOKEN, not the Terraform variable.
+		env["CLOUDSDK_AUTH_ACCESS_TOKEN"] = gcpAuth.AccessToken
 	} else {
 		// No access token available, fall back to file-based credentials.
 		// If CredentialsFile is explicitly set in gcpAuth, use it; otherwise use default path.

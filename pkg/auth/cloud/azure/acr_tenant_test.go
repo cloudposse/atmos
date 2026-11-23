@@ -477,6 +477,22 @@ func TestCredentialsForACRTenant_AmbiguousAccountsByTenant(t *testing.T) {
 		assert.Equal(t, accounts[1].HomeAccountID, got.HomeAccountID)
 	})
 
+	t.Run("oid selects a B2B guest account by its tenant-local account ID", func(t *testing.T) {
+		const guestOID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+		guestAccounts := []public.Account{
+			{HomeAccountID: oidA + "." + testIdentityTenant, LocalAccountID: oidA, Realm: testIdentityTenant},
+			{HomeAccountID: oidB + ".home-tenant", LocalAccountID: guestOID, Realm: testIdentityTenant},
+		}
+		ctrl := gomock.NewController(t)
+		client := NewMockacrTenantTokenClient(ctrl)
+		client.EXPECT().Accounts(gomock.Any()).Return(guestAccounts, nil)
+
+		claims := map[string]any{"tid": testIdentityTenant, "oid": guestOID}
+		got, err := cachedAccountFor(t.Context(), client, credsFor(claims), claims)
+		require.NoError(t, err)
+		assert.Equal(t, guestAccounts[1].HomeAccountID, got.HomeAccountID)
+	})
+
 	t.Run("no oid is ambiguous", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		client := NewMockacrTenantTokenClient(ctrl)

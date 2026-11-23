@@ -215,8 +215,10 @@ func cachedAccountFor(ctx context.Context, client acrTenantTokenClient, azureCre
 }
 
 // accountsForObjectID narrows accounts to those whose home account ID
-// ("{oid}.{tid}") starts with the token's oid claim. Without an oid claim nothing
-// matches, so the caller treats the selection as ambiguous.
+// ("{oid}.{tid}") starts with the token's oid claim, or whose tenant-local account
+// ID equals it. The latter covers B2B guests, whose oid in the resource tenant
+// differs from the home-tenant object ID in the home account ID. Without an oid
+// claim nothing matches, so the caller treats the selection as ambiguous.
 func accountsForObjectID(accounts []public.Account, claims map[string]interface{}) []public.Account {
 	oid, _ := claims["oid"].(string)
 	if oid == "" {
@@ -224,7 +226,8 @@ func accountsForObjectID(accounts []public.Account, claims map[string]interface{
 	}
 	var matched []public.Account
 	for i := range accounts {
-		if strings.HasPrefix(strings.ToLower(accounts[i].HomeAccountID), strings.ToLower(oid)+".") {
+		if strings.HasPrefix(strings.ToLower(accounts[i].HomeAccountID), strings.ToLower(oid)+".") ||
+			strings.EqualFold(accounts[i].LocalAccountID, oid) {
 			matched = append(matched, accounts[i])
 		}
 	}

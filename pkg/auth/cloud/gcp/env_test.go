@@ -197,6 +197,7 @@ func TestGetEnvironmentVariablesForIdentity_WithAccessToken(t *testing.T) {
 	env, err := GetEnvironmentVariablesForIdentity(testRealm, providerName, "token-id", gcpAuth)
 	require.NoError(t, err)
 	assert.Equal(t, "ya29.access-token", env["GOOGLE_OAUTH_ACCESS_TOKEN"])
+	assert.Equal(t, "ya29.access-token", env["CLOUDSDK_AUTH_ACCESS_TOKEN"])
 	_, hasADC := env["GOOGLE_APPLICATION_CREDENTIALS"]
 	assert.False(t, hasADC, "GOOGLE_APPLICATION_CREDENTIALS should not be set when access token is available")
 }
