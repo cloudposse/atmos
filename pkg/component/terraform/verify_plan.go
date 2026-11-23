@@ -1,0 +1,322 @@
+package terraform
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"maps"
+	"os"
+	"path/filepath"
+	"slices"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/plandiff"
+)
+
+// VerifyPlanfile verifies that a stored planfile matches the current state before applying.
+// It generates a fresh plan and compares it to the stored one using the plan-diff infrastructure.
+// The storedPlanFile parameter is the path to the stored planfile to verify against.
+// On a match (or when mode is warn) info.PlanFile is set to the fresh planfile path and
+// info.UseTerraformPlan is set to true so the subsequent apply uses the verified fresh plan.
+// The stored planfile is cleaned up. When drift is detected and mode is fail, it returns an
+// error wrapping ErrPlanVerificationFailed; when mode is warn, it logs the drift and proceeds.
+func (s *Operations) VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string, mode schema.PlanfileVerifyMode) error {
+	defer perf.Track(nil, "exec.VerifyPlanfile")()
+
+	// Validate stored planfile exists on disk.
+	if _, err := os.Stat(storedPlanFile); os.IsNotExist(err) {
+		return fmt.Errorf("%w: stored planfile does not exist: %s", errUtils.ErrPlanVerificationFailed, storedPlanFile)
+	}
+
+	vc, err := s.resolveVerificationContext(info)
+	if err != nil {
+		return err
+	}
+
+	policy, err := plandiff.Policy(&vc.atmosConfig)
+	if err != nil {
+		return err
+	}
+	plans, err := s.loadStoredAndFreshPlans(&vc.atmosConfig, &vc.processedInfo, vc.componentPath, storedPlanFile)
+	if err != nil {
+		os.Remove(storedPlanFile)
+		return err
+	}
+
+	// Warn about ignore_changes entries that cannot match anything in these plans.
+	plandiff.WarnUnmatchedIgnoreChanges(vc.atmosConfig.Components.Terraform.PlanDiff.IgnoreChanges, plans.stored, plans.fresh)
+
+	// Generate diff. The stored planfile has served its purpose either way.
+	diff, hasDiff := plandiff.Compare(plans.stored, plans.fresh, policy)
+	os.Remove(storedPlanFile)
+
+	return finalizeVerification(info, plans.freshPlanFile, diff, hasDiff, mode)
+}
+
+// verificationContext holds the resolved config, processed component info, and
+// component working directory needed to generate the fresh plan for comparison.
+type verificationContext struct {
+	atmosConfig   schema.AtmosConfiguration
+	processedInfo schema.ConfigAndStacksInfo
+	componentPath string
+}
+
+// resolveVerificationContext initializes the CLI config, processes stacks, and
+// resolves the component working directory used to generate the fresh plan.
+func (s *Operations) resolveVerificationContext(info *schema.ConfigAndStacksInfo) (verificationContext, error) {
+	defer perf.Track(nil, "exec.resolveVerificationContext")()
+
+	vc := verificationContext{}
+
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		return vc, fmt.Errorf("failed to initialize CLI config for plan verification: %w", err)
+	}
+	vc.atmosConfig = atmosConfig
+
+	// Process stacks to resolve component metadata (metadata.component, component_folder_prefix).
+	processedInfo, err := s.host.ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
+	if err != nil {
+		return vc, fmt.Errorf("error processing stacks for plan verification: %w", err)
+	}
+	vc.processedInfo = processedInfo
+
+	vc.componentPath = filepath.Join(atmosConfig.TerraformDirAbsolutePath, processedInfo.ComponentFolderPrefix, processedInfo.FinalComponent)
+
+	// For workdir-enabled components, compute the workdir path from first principles
+	// because ProcessStacks builds a fresh ComponentSection that does not include
+	// WorkdirPathKey (only set by AutoProvisionSource at execution time).
+	if provWorkdir.IsWorkdirEnabled(processedInfo.ComponentSection) {
+		candidate, exists, resolveErr := component.BuildAndResolveWorkdirPath(&atmosConfig, &processedInfo, cfg.TerraformComponentType)
+		if resolveErr != nil {
+			return vc, resolveErr
+		}
+		if exists {
+			vc.componentPath = candidate
+		}
+	}
+
+	return vc, nil
+}
+
+// comparisonPlans holds the parsed stored and fresh plan JSON (and the fresh
+// plan file path) used for the drift comparison.
+type comparisonPlans struct {
+	stored        map[string]interface{}
+	fresh         map[string]interface{}
+	freshPlanFile string
+}
+
+// loadStoredAndFreshPlans returns the parsed JSON of the stored plan and of a
+// freshly generated plan (plus the fresh plan file path) for comparison.
+func (s *Operations) loadStoredAndFreshPlans(atmosConfig *schema.AtmosConfiguration, processedInfo *schema.ConfigAndStacksInfo, componentPath, storedPlanFile string) (comparisonPlans, error) {
+	defer perf.Track(nil, "exec.loadStoredAndFreshPlans")()
+
+	var plans comparisonPlans
+
+	storedPlanJSON, err := s.getTerraformPlanJSON(atmosConfig, processedInfo, componentPath, storedPlanFile)
+	if err != nil {
+		return plans, fmt.Errorf("error getting JSON for stored plan: %w", err)
+	}
+
+	// Generate a fresh plan in the component dir, where terraform expects it, rather than in a temp
+	// dir. For a workdir-enabled component that is its workdir, which componentPath already is.
+	plans.freshPlanFile, err = s.GenerateNewPlanFile(atmosConfig, processedInfo, componentPath, componentPath)
+	if err != nil {
+		return plans, fmt.Errorf("error generating fresh plan for verification: %w", err)
+	}
+
+	freshPlanJSON, err := s.getTerraformPlanJSON(atmosConfig, processedInfo, componentPath, plans.freshPlanFile)
+	if err != nil {
+		return plans, fmt.Errorf("error getting JSON for fresh plan: %w", err)
+	}
+
+	if err := json.Unmarshal([]byte(storedPlanJSON), &plans.stored); err != nil {
+		return plans, fmt.Errorf("error parsing stored plan JSON: %w", err)
+	}
+	if err := json.Unmarshal([]byte(freshPlanJSON), &plans.fresh); err != nil {
+		return plans, fmt.Errorf("error parsing fresh plan JSON: %w", err)
+	}
+
+	return plans, nil
+}
+
+// finalizeVerification applies the verification verdict. On drift with mode fail
+// it returns ErrPlanVerificationFailed; otherwise (match, or drift under warn) it
+// selects the freshly generated plan for the subsequent apply, logging a warning
+// when proceeding despite drift.
+func finalizeVerification(info *schema.ConfigAndStacksInfo, freshPlanFile, diff string, hasDiff bool, mode schema.PlanfileVerifyMode) error {
+	if hasDiff && mode == schema.PlanfileVerifyFail {
+		return fmt.Errorf("%w:\n%s", errUtils.ErrPlanVerificationFailed, diff)
+	}
+
+	// Match, or warn-on-drift: apply the freshly generated plan (current state).
+	info.PlanFile = freshPlanFile
+	info.UseTerraformPlan = true
+
+	if hasDiff {
+		// mode == warn: surface the drift but do not block the deploy.
+		log.Warn("Plan verification detected drift; proceeding because verify mode is 'warn'", "diff", diff)
+	} else {
+		log.Info("Plan verification passed: stored plan matches current state")
+	}
+	return nil
+}
+
+// appliesReviewedPlan reports whether the invocation applies a saved plan of a provider-owned component.
+// Whether its working directory is the reviewed one is checked where the inputs are read, because a
+// working directory accepted only as a verified rebuild has a variable file outside the rebuild digest.
+func appliesReviewedPlan(info *schema.ConfigAndStacksInfo) bool {
+	return !info.DryRun && schema.ConfigurationOwned(info.ComponentSettingsSection) &&
+		usesConfigurationPlan(info) && restoresConfigurationPlan(info)
+}
+
+// reviewedPlanInputs returns the inputs of the variable file that the plan run wrote into the retained
+// working directory. That file is part of the working directory digest recorded with the plan, so its
+// bytes must be the ones read around that comparison: a file a hook or step changed since, or a working
+// directory that was only rebuilt, has no verified inputs, and the hook stops instead of linting the
+// module with none. Secret inputs are never written to the file, so they are absent here. Numbers keep
+// their exact text.
+func reviewedPlanInputs(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	if !info.ConfigurationPlanWorkdirExact {
+		return nil, fmt.Errorf("%w: tflint cannot bind the inputs of a saved plan applied in a rebuilt working directory, because they are not part of what was verified; apply it in the working directory the plan ran in, or drop %s from the hook", errUtils.ErrComponentHookFailed, tflintInputVariablesMarker)
+	}
+	path := ConstructTerraformComponentVarfilePath(config, info)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: the reviewed variable file of the saved plan cannot be read: %w", errUtils.ErrComponentHookFailed, err)
+	}
+	if !bytes.Equal(data, info.ConfigurationPlanVarfile) {
+		return nil, fmt.Errorf("%w: the variable file %s changed after the saved plan was verified", errUtils.ErrComponentHookFailed, path)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var inputs map[string]any
+	if err := decoder.Decode(&inputs); err != nil {
+		return nil, fmt.Errorf("%w: the reviewed variable file %s of the saved plan is not a JSON object: %w", errUtils.ErrComponentHookFailed, path, err)
+	}
+	return inputs, nil
+}
+
+// withoutContent copies files, dropping the bytes of every one.
+func withoutContent(files []schema.ComponentConfigurationFile) []schema.ComponentConfigurationFile {
+	stored := slices.Clone(files)
+	for i := range stored {
+		stored[i].Content = nil
+	}
+	return stored
+}
+
+// restoreSensitiveContent reads the bytes of each sensitive file back from the working directory and
+// restores them only when they are the reviewed ones. The working directory digest excludes some
+// locations, so the reviewed bytes are verified here against the digest recorded with the plan.
+func restoreSensitiveContent(workdir string, files []schema.ComponentConfigurationFile, reviewed string) error {
+	contents, err := readSensitiveFiles(workdir, files)
+	if err != nil {
+		return err
+	}
+	if contents == nil {
+		return nil
+	}
+	// The digest binds absence as well as bytes: a file that was already absent when the plan was
+	// reviewed and is still absent matches, while one that disappeared or appeared since does not.
+	if digestSensitiveContents(contents) != reviewed {
+		if missing, ok := soleMissingSensitiveFile(files, contents); ok {
+			return fmt.Errorf("%w: reviewed generated file %s is missing: %w", errUtils.ErrPlanVerificationFailed, missing, fs.ErrNotExist)
+		}
+		return fmt.Errorf("%w: reviewed generated file changed", errUtils.ErrPlanVerificationFailed)
+	}
+	for i := range files {
+		if files[i].Sensitive {
+			files[i].Content = contents[files[i].Path]
+		}
+	}
+	return nil
+}
+
+// soleMissingSensitiveFile names the file whose disappearance explains a digest mismatch. The digest is
+// one aggregate, so an absent file can be blamed only when it is the single possible cause: no other
+// sensitive file exists whose bytes could have changed, and no other absent file could be the one that
+// went missing. A file its entry removes is absent by design and is never reported.
+func soleMissingSensitiveFile(files []schema.ComponentConfigurationFile, contents map[string][]byte) (string, bool) {
+	var missing []string
+	for i := range files {
+		path := files[i].Path
+		switch {
+		case !files[i].Sensitive:
+		case contents[path] != nil:
+			return "", false
+		case !slices.Contains([]string{"remove", "remove_terragrunt"}, files[i].IfExists):
+			missing = append(missing, path)
+		}
+	}
+	if len(missing) != 1 {
+		return "", false
+	}
+	return missing[0], true
+}
+
+// sensitiveDigest fingerprints the sensitive generated files as they are in the working directory.
+// It is empty when no file is sensitive.
+func sensitiveDigest(workdir string, files []schema.ComponentConfigurationFile) (string, error) {
+	contents, err := readSensitiveFiles(workdir, files)
+	if err != nil || contents == nil {
+		return "", err
+	}
+	return digestSensitiveContents(contents), nil
+}
+
+// readSensitiveFiles reads every sensitive file below workdir, keyed by path. A missing file maps
+// to nil content. It returns nil when no file is sensitive.
+func readSensitiveFiles(workdir string, files []schema.ComponentConfigurationFile) (map[string][]byte, error) {
+	if !slices.ContainsFunc(files, func(file schema.ComponentConfigurationFile) bool { return file.Sensitive }) {
+		return nil, nil
+	}
+	root, err := os.OpenRoot(workdir)
+	if err != nil {
+		return nil, planIOError(err)
+	}
+	defer root.Close()
+	contents := make(map[string][]byte)
+	for i := range files {
+		if !files[i].Sensitive {
+			continue
+		}
+		content, err := root.ReadFile(files[i].Path)
+		if errors.Is(err, fs.ErrNotExist) {
+			contents[files[i].Path] = nil
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: reviewed generated file %s cannot be read: %w", errUtils.ErrPlanVerificationFailed, files[i].Path, err)
+		}
+		if content == nil {
+			content = []byte{}
+		}
+		contents[files[i].Path] = content
+	}
+	return contents, nil
+}
+
+// digestSensitiveContents hashes the paths and bytes of the sensitive files in a stable order.
+func digestSensitiveContents(contents map[string][]byte) string {
+	hash := sha256.New()
+	for _, path := range slices.Sorted(maps.Keys(contents)) {
+		if contents[path] == nil {
+			fmt.Fprintf(hash, "%s\x00absent\n", path)
+			continue
+		}
+		fmt.Fprintf(hash, "%s\x00%x\n", path, sha256.Sum256(contents[path]))
+	}
+	return hex.EncodeToString(hash.Sum(nil))
+}

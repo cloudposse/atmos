@@ -25,6 +25,218 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// LogLevel is the severity of a LogEntry, from most to least verbose.
+type LogLevel int32
+
+const (
+	LogLevel_LOG_LEVEL_UNSPECIFIED LogLevel = 0
+	LogLevel_LOG_LEVEL_TRACE       LogLevel = 1
+	LogLevel_LOG_LEVEL_DEBUG       LogLevel = 2
+	LogLevel_LOG_LEVEL_INFO        LogLevel = 3
+	LogLevel_LOG_LEVEL_WARN        LogLevel = 4
+	LogLevel_LOG_LEVEL_ERROR       LogLevel = 5
+)
+
+// Enum value maps for LogLevel.
+var (
+	LogLevel_name = map[int32]string{
+		0: "LOG_LEVEL_UNSPECIFIED",
+		1: "LOG_LEVEL_TRACE",
+		2: "LOG_LEVEL_DEBUG",
+		3: "LOG_LEVEL_INFO",
+		4: "LOG_LEVEL_WARN",
+		5: "LOG_LEVEL_ERROR",
+	}
+	LogLevel_value = map[string]int32{
+		"LOG_LEVEL_UNSPECIFIED": 0,
+		"LOG_LEVEL_TRACE":       1,
+		"LOG_LEVEL_DEBUG":       2,
+		"LOG_LEVEL_INFO":        3,
+		"LOG_LEVEL_WARN":        4,
+		"LOG_LEVEL_ERROR":       5,
+	}
+)
+
+func (x LogLevel) Enum() *LogLevel {
+	p := new(LogLevel)
+	*p = x
+	return p
+}
+
+func (x LogLevel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LogLevel) Descriptor() protoreflect.EnumDescriptor {
+	return file_atmos_plugin_v1_plugin_proto_enumTypes[0].Descriptor()
+}
+
+func (LogLevel) Type() protoreflect.EnumType {
+	return &file_atmos_plugin_v1_plugin_proto_enumTypes[0]
+}
+
+func (x LogLevel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LogLevel.Descriptor instead.
+func (LogLevel) EnumDescriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{0}
+}
+
+// Severity classifies an ErrorDetail. A WARNING never fails a command: the host
+// prints it on the UI channel and continues. An ERROR fails the commands that
+// target the named unit, or the whole command when no unit is named.
+type Severity int32
+
+const (
+	Severity_SEVERITY_UNSPECIFIED Severity = 0
+	Severity_SEVERITY_ERROR       Severity = 1
+	Severity_SEVERITY_WARNING     Severity = 2
+)
+
+// Enum value maps for Severity.
+var (
+	Severity_name = map[int32]string{
+		0: "SEVERITY_UNSPECIFIED",
+		1: "SEVERITY_ERROR",
+		2: "SEVERITY_WARNING",
+	}
+	Severity_value = map[string]int32{
+		"SEVERITY_UNSPECIFIED": 0,
+		"SEVERITY_ERROR":       1,
+		"SEVERITY_WARNING":     2,
+	}
+)
+
+func (x Severity) Enum() *Severity {
+	p := new(Severity)
+	*p = x
+	return p
+}
+
+func (x Severity) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Severity) Descriptor() protoreflect.EnumDescriptor {
+	return file_atmos_plugin_v1_plugin_proto_enumTypes[1].Descriptor()
+}
+
+func (Severity) Type() protoreflect.EnumType {
+	return &file_atmos_plugin_v1_plugin_proto_enumTypes[1]
+}
+
+func (x Severity) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Severity.Descriptor instead.
+func (Severity) EnumDescriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{1}
+}
+
+type ComponentSource_Kind int32
+
+const (
+	ComponentSource_KIND_UNSPECIFIED ComponentSource_Kind = 0
+	ComponentSource_FILE             ComponentSource_Kind = 1
+	ComponentSource_DIRECTORY        ComponentSource_Kind = 2
+	ComponentSource_GLOB             ComponentSource_Kind = 3
+)
+
+// Enum value maps for ComponentSource_Kind.
+var (
+	ComponentSource_Kind_name = map[int32]string{
+		0: "KIND_UNSPECIFIED",
+		1: "FILE",
+		2: "DIRECTORY",
+		3: "GLOB",
+	}
+	ComponentSource_Kind_value = map[string]int32{
+		"KIND_UNSPECIFIED": 0,
+		"FILE":             1,
+		"DIRECTORY":        2,
+		"GLOB":             3,
+	}
+)
+
+func (x ComponentSource_Kind) Enum() *ComponentSource_Kind {
+	p := new(ComponentSource_Kind)
+	*p = x
+	return p
+}
+
+func (x ComponentSource_Kind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ComponentSource_Kind) Descriptor() protoreflect.EnumDescriptor {
+	return file_atmos_plugin_v1_plugin_proto_enumTypes[2].Descriptor()
+}
+
+func (ComponentSource_Kind) Type() protoreflect.EnumType {
+	return &file_atmos_plugin_v1_plugin_proto_enumTypes[2]
+}
+
+func (x ComponentSource_Kind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ComponentSource_Kind.Descriptor instead.
+func (ComponentSource_Kind) EnumDescriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{34, 0}
+}
+
+type ComponentDependency_Kind int32
+
+const (
+	ComponentDependency_KIND_UNSPECIFIED ComponentDependency_Kind = 0
+	ComponentDependency_ORDER            ComponentDependency_Kind = 1
+	ComponentDependency_OUTPUT           ComponentDependency_Kind = 2
+)
+
+// Enum value maps for ComponentDependency_Kind.
+var (
+	ComponentDependency_Kind_name = map[int32]string{
+		0: "KIND_UNSPECIFIED",
+		1: "ORDER",
+		2: "OUTPUT",
+	}
+	ComponentDependency_Kind_value = map[string]int32{
+		"KIND_UNSPECIFIED": 0,
+		"ORDER":            1,
+		"OUTPUT":           2,
+	}
+)
+
+func (x ComponentDependency_Kind) Enum() *ComponentDependency_Kind {
+	p := new(ComponentDependency_Kind)
+	*p = x
+	return p
+}
+
+func (x ComponentDependency_Kind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ComponentDependency_Kind) Descriptor() protoreflect.EnumDescriptor {
+	return file_atmos_plugin_v1_plugin_proto_enumTypes[3].Descriptor()
+}
+
+func (ComponentDependency_Kind) Type() protoreflect.EnumType {
+	return &file_atmos_plugin_v1_plugin_proto_enumTypes[3]
+}
+
+func (x ComponentDependency_Kind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ComponentDependency_Kind.Descriptor instead.
+func (ComponentDependency_Kind) EnumDescriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{35, 0}
+}
+
 // Invocation identifies the live call authorized to use the Atmos API broker.
 type Invocation struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
@@ -37,8 +249,13 @@ type Invocation struct {
 	Component        string                 `protobuf:"bytes,7,opt,name=component,proto3" json:"component,omitempty"`
 	ComponentType    string                 `protobuf:"bytes,8,opt,name=component_type,json=componentType,proto3" json:"component_type,omitempty"`
 	Interactive      bool                   `protobuf:"varint,9,opt,name=interactive,proto3" json:"interactive,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// The host's effective log level: "trace", "debug", "info", "warn", "error", or "off". Engine log events
+	// are diagnostic chatter, so a plugin returns LogEntry messages only for "debug" and "trace" and none
+	// for any other level, including the Atmos default "warn". Anything the user must act on belongs in a
+	// Diagnostic or an ErrorDetail instead. The host filters entries by its level as well.
+	LogLevel      string `protobuf:"bytes,10,opt,name=log_level,json=logLevel,proto3" json:"log_level,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Invocation) Reset() {
@@ -132,6 +349,13 @@ func (x *Invocation) GetInteractive() bool {
 		return x.Interactive
 	}
 	return false
+}
+
+func (x *Invocation) GetLogLevel() string {
+	if x != nil {
+		return x.LogLevel
+	}
+	return ""
 }
 
 type Credentials struct {
@@ -880,17 +1104,371 @@ func (*AuthenticateEvent_Interaction) isAuthenticateEvent_Event() {}
 
 func (*AuthenticateEvent_Result) isAuthenticateEvent_Event() {}
 
+// SourceLocation points at a position in a user-authored file. Paths are
+// relative to the project root when the file lives below it; line and column
+// are 1-based and zero means unknown.
+type SourceLocation struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	File          string                 `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
+	Line          uint32                 `protobuf:"varint,2,opt,name=line,proto3" json:"line,omitempty"`
+	Column        uint32                 `protobuf:"varint,3,opt,name=column,proto3" json:"column,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SourceLocation) Reset() {
+	*x = SourceLocation{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SourceLocation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SourceLocation) ProtoMessage() {}
+
+func (x *SourceLocation) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SourceLocation.ProtoReflect.Descriptor instead.
+func (*SourceLocation) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *SourceLocation) GetFile() string {
+	if x != nil {
+		return x.File
+	}
+	return ""
+}
+
+func (x *SourceLocation) GetLine() uint32 {
+	if x != nil {
+		return x.Line
+	}
+	return 0
+}
+
+func (x *SourceLocation) GetColumn() uint32 {
+	if x != nil {
+		return x.Column
+	}
+	return 0
+}
+
+// LogEntry is one structured log event from a plugin's engine, for example a Terragrunt logger event.
+// A plugin delivers entries while the call runs through the Log service of the Atmos API, so a slow
+// operation shows progress as it happens. A response carries only the entries that could not be delivered
+// that way, in order, and never an entry that was delivered live. The host renders them through
+// the Atmos logger on the UI channel (stderr), scoped to the component and stack of the call, with secret
+// masking, at the level each entry carries. They are hidden at the Atmos default level and shown with
+// --logs-level=Debug or Trace. Entries never change the outcome of the call and are never written to the
+// data channel.
+// A plugin must not put evaluated values in message or fields; the host masks them anyway.
+type LogEntry struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Level   LogLevel               `protobuf:"varint,1,opt,name=level,proto3,enum=atmos.plugin.v1.LogLevel" json:"level,omitempty"`
+	Message string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// Structured fields of the event, rendered as key/value pairs.
+	Fields map[string]string      `protobuf:"bytes,3,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Time   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=time,proto3" json:"time,omitempty"`
+	// Unit the event is about, relative to the project root, when the engine reports one.
+	Unit          string `protobuf:"bytes,5,opt,name=unit,proto3" json:"unit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogEntry) Reset() {
+	*x = LogEntry{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogEntry) ProtoMessage() {}
+
+func (x *LogEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogEntry.ProtoReflect.Descriptor instead.
+func (*LogEntry) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *LogEntry) GetLevel() LogLevel {
+	if x != nil {
+		return x.Level
+	}
+	return LogLevel_LOG_LEVEL_UNSPECIFIED
+}
+
+func (x *LogEntry) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *LogEntry) GetFields() map[string]string {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+func (x *LogEntry) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
+func (x *LogEntry) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
+}
+
+type LogRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Entries       []*LogEntry            `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogRequest) Reset() {
+	*x = LogRequest{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogRequest) ProtoMessage() {}
+
+func (x *LogRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogRequest.ProtoReflect.Descriptor instead.
+func (*LogRequest) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *LogRequest) GetEntries() []*LogEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+// ErrorDetail is the structured, user-facing description of a plugin failure.
+// A plugin returns it as a gRPC status detail (google.rpc.Status.details) on a
+// failed call, or inside Diagnostic.detail for a per-item failure that must not
+// fail the whole call. The host renders it with the Atmos error builder.
+//
+// Secret safety contract: code, summary, hints, location, unit, stack,
+// config_key, and operation are always shown and MUST NOT contain evaluated
+// values. detail is shown only when user_safe is true. When user_safe is false
+// the host omits detail from the error, names the unit and operation, hints at
+// the debug log level, and records the masked detail in the debug log only.
+// The host also applies secret masking to every field before display.
+type ErrorDetail struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Stable machine-readable identifier such as "unsupported_setting" or "syntax_error".
+	Code string `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// One-line headline naming what failed, for example "Unsupported Terragrunt setting".
+	Summary string `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+	// Longer explanation. Shown only when user_safe is true.
+	Detail string `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
+	// Actionable remedies, shown as hints in order.
+	Hints []string `protobuf:"bytes,4,rep,name=hints,proto3" json:"hints,omitempty"`
+	// Where the problem is authored.
+	Location *SourceLocation `protobuf:"bytes,5,opt,name=location,proto3" json:"location,omitempty"`
+	// Component (unit) name, in Atmos terms.
+	Unit string `protobuf:"bytes,6,opt,name=unit,proto3" json:"unit,omitempty"`
+	// Stack the unit belongs to.
+	Stack string `protobuf:"bytes,7,opt,name=stack,proto3" json:"stack,omitempty"`
+	// Configuration key, setting, or block that caused the failure, for example "terraform_binary".
+	ConfigKey string `protobuf:"bytes,8,opt,name=config_key,json=configKey,proto3" json:"config_key,omitempty"`
+	// True when detail contains no evaluated values and is safe to print.
+	UserSafe bool `protobuf:"varint,9,opt,name=user_safe,json=userSafe,proto3" json:"user_safe,omitempty"`
+	// The operation that failed, such as "discover", "prepare", or "validate".
+	Operation string `protobuf:"bytes,10,opt,name=operation,proto3" json:"operation,omitempty"`
+	// Severity of the problem. Unset means ERROR.
+	Severity Severity `protobuf:"varint,11,opt,name=severity,proto3,enum=atmos.plugin.v1.Severity" json:"severity,omitempty"`
+	// Log entries produced before the failure, in order. Only a failed call's status detail carries them,
+	// so that Debug and Trace output explains the failure. The host renders them like LogEntry messages
+	// of a successful response.
+	Logs          []*LogEntry `protobuf:"bytes,12,rep,name=logs,proto3" json:"logs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ErrorDetail) Reset() {
+	*x = ErrorDetail{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ErrorDetail) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ErrorDetail) ProtoMessage() {}
+
+func (x *ErrorDetail) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ErrorDetail.ProtoReflect.Descriptor instead.
+func (*ErrorDetail) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ErrorDetail) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *ErrorDetail) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+func (x *ErrorDetail) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *ErrorDetail) GetHints() []string {
+	if x != nil {
+		return x.Hints
+	}
+	return nil
+}
+
+func (x *ErrorDetail) GetLocation() *SourceLocation {
+	if x != nil {
+		return x.Location
+	}
+	return nil
+}
+
+func (x *ErrorDetail) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
+}
+
+func (x *ErrorDetail) GetStack() string {
+	if x != nil {
+		return x.Stack
+	}
+	return ""
+}
+
+func (x *ErrorDetail) GetConfigKey() string {
+	if x != nil {
+		return x.ConfigKey
+	}
+	return ""
+}
+
+func (x *ErrorDetail) GetUserSafe() bool {
+	if x != nil {
+		return x.UserSafe
+	}
+	return false
+}
+
+func (x *ErrorDetail) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *ErrorDetail) GetSeverity() Severity {
+	if x != nil {
+		return x.Severity
+	}
+	return Severity_SEVERITY_UNSPECIFIED
+}
+
+func (x *ErrorDetail) GetLogs() []*LogEntry {
+	if x != nil {
+		return x.Logs
+	}
+	return nil
+}
+
+// Diagnostic describes one problem. field and message keep their original meaning;
+// detail adds the structured form and takes precedence when present.
 type Diagnostic struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Field         string                 `protobuf:"bytes,1,opt,name=field,proto3" json:"field,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Detail        *ErrorDetail           `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Diagnostic) Reset() {
 	*x = Diagnostic{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[12]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -902,7 +1480,7 @@ func (x *Diagnostic) String() string {
 func (*Diagnostic) ProtoMessage() {}
 
 func (x *Diagnostic) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[12]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -915,7 +1493,7 @@ func (x *Diagnostic) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Diagnostic.ProtoReflect.Descriptor instead.
 func (*Diagnostic) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{12}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Diagnostic) GetField() string {
@@ -932,6 +1510,13 @@ func (x *Diagnostic) GetMessage() string {
 	return ""
 }
 
+func (x *Diagnostic) GetDetail() *ErrorDetail {
+	if x != nil {
+		return x.Detail
+	}
+	return nil
+}
+
 type ValidateResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Diagnostics   []*Diagnostic          `protobuf:"bytes,1,rep,name=diagnostics,proto3" json:"diagnostics,omitempty"`
@@ -941,7 +1526,7 @@ type ValidateResponse struct {
 
 func (x *ValidateResponse) Reset() {
 	*x = ValidateResponse{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[13]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -953,7 +1538,7 @@ func (x *ValidateResponse) String() string {
 func (*ValidateResponse) ProtoMessage() {}
 
 func (x *ValidateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[13]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -966,7 +1551,7 @@ func (x *ValidateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateResponse.ProtoReflect.Descriptor instead.
 func (*ValidateResponse) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{13}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ValidateResponse) GetDiagnostics() []*Diagnostic {
@@ -986,7 +1571,7 @@ type Unsupported struct {
 
 func (x *Unsupported) Reset() {
 	*x = Unsupported{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[14]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -998,7 +1583,7 @@ func (x *Unsupported) String() string {
 func (*Unsupported) ProtoMessage() {}
 
 func (x *Unsupported) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[14]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1011,7 +1596,7 @@ func (x *Unsupported) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Unsupported.ProtoReflect.Descriptor instead.
 func (*Unsupported) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{14}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Unsupported) GetOperation() string {
@@ -1038,7 +1623,7 @@ type RefreshRequest struct {
 
 func (x *RefreshRequest) Reset() {
 	*x = RefreshRequest{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[15]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1050,7 +1635,7 @@ func (x *RefreshRequest) String() string {
 func (*RefreshRequest) ProtoMessage() {}
 
 func (x *RefreshRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[15]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1063,7 +1648,7 @@ func (x *RefreshRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshRequest.ProtoReflect.Descriptor instead.
 func (*RefreshRequest) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{15}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RefreshRequest) GetProvider() *ProviderRequest {
@@ -1093,7 +1678,7 @@ type RefreshResponse struct {
 
 func (x *RefreshResponse) Reset() {
 	*x = RefreshResponse{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[16]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1105,7 +1690,7 @@ func (x *RefreshResponse) String() string {
 func (*RefreshResponse) ProtoMessage() {}
 
 func (x *RefreshResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[16]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1118,7 +1703,7 @@ func (x *RefreshResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshResponse.ProtoReflect.Descriptor instead.
 func (*RefreshResponse) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{16}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RefreshResponse) GetResult() isRefreshResponse_Result {
@@ -1171,7 +1756,7 @@ type EnvironmentResponse struct {
 
 func (x *EnvironmentResponse) Reset() {
 	*x = EnvironmentResponse{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[17]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1183,7 +1768,7 @@ func (x *EnvironmentResponse) String() string {
 func (*EnvironmentResponse) ProtoMessage() {}
 
 func (x *EnvironmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[17]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1196,7 +1781,7 @@ func (x *EnvironmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnvironmentResponse.ProtoReflect.Descriptor instead.
 func (*EnvironmentResponse) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{17}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *EnvironmentResponse) GetEnvironment() map[string]string {
@@ -1216,7 +1801,7 @@ type PrepareEnvironmentRequest struct {
 
 func (x *PrepareEnvironmentRequest) Reset() {
 	*x = PrepareEnvironmentRequest{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[18]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1228,7 +1813,7 @@ func (x *PrepareEnvironmentRequest) String() string {
 func (*PrepareEnvironmentRequest) ProtoMessage() {}
 
 func (x *PrepareEnvironmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[18]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1241,7 +1826,7 @@ func (x *PrepareEnvironmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrepareEnvironmentRequest.ProtoReflect.Descriptor instead.
 func (*PrepareEnvironmentRequest) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{18}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *PrepareEnvironmentRequest) GetProvider() *ProviderRequest {
@@ -1270,7 +1855,7 @@ type CredentialPath struct {
 
 func (x *CredentialPath) Reset() {
 	*x = CredentialPath{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[19]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1282,7 +1867,7 @@ func (x *CredentialPath) String() string {
 func (*CredentialPath) ProtoMessage() {}
 
 func (x *CredentialPath) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[19]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1295,7 +1880,7 @@ func (x *CredentialPath) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CredentialPath.ProtoReflect.Descriptor instead.
 func (*CredentialPath) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{19}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CredentialPath) GetLocation() string {
@@ -1335,7 +1920,7 @@ type PathsResponse struct {
 
 func (x *PathsResponse) Reset() {
 	*x = PathsResponse{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[20]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1347,7 +1932,7 @@ func (x *PathsResponse) String() string {
 func (*PathsResponse) ProtoMessage() {}
 
 func (x *PathsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[20]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1360,7 +1945,7 @@ func (x *PathsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PathsResponse.ProtoReflect.Descriptor instead.
 func (*PathsResponse) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{20}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *PathsResponse) GetPaths() []*CredentialPath {
@@ -1380,7 +1965,7 @@ type IdentityAuthenticateRequest struct {
 
 func (x *IdentityAuthenticateRequest) Reset() {
 	*x = IdentityAuthenticateRequest{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[21]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1392,7 +1977,7 @@ func (x *IdentityAuthenticateRequest) String() string {
 func (*IdentityAuthenticateRequest) ProtoMessage() {}
 
 func (x *IdentityAuthenticateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[21]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1405,7 +1990,7 @@ func (x *IdentityAuthenticateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityAuthenticateRequest.ProtoReflect.Descriptor instead.
 func (*IdentityAuthenticateRequest) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{21}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *IdentityAuthenticateRequest) GetIdentity() *IdentityRequest {
@@ -1432,7 +2017,7 @@ type IdentityPrepareRequest struct {
 
 func (x *IdentityPrepareRequest) Reset() {
 	*x = IdentityPrepareRequest{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[22]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1444,7 +2029,7 @@ func (x *IdentityPrepareRequest) String() string {
 func (*IdentityPrepareRequest) ProtoMessage() {}
 
 func (x *IdentityPrepareRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[22]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1457,7 +2042,7 @@ func (x *IdentityPrepareRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityPrepareRequest.ProtoReflect.Descriptor instead.
 func (*IdentityPrepareRequest) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{22}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *IdentityPrepareRequest) GetIdentity() *IdentityRequest {
@@ -1487,7 +2072,7 @@ type CommandRequest struct {
 
 func (x *CommandRequest) Reset() {
 	*x = CommandRequest{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[23]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1499,7 +2084,7 @@ func (x *CommandRequest) String() string {
 func (*CommandRequest) ProtoMessage() {}
 
 func (x *CommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[23]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1512,7 +2097,7 @@ func (x *CommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandRequest.ProtoReflect.Descriptor instead.
 func (*CommandRequest) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{23}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *CommandRequest) GetInvocation() *Invocation {
@@ -1552,7 +2137,7 @@ type CommandExit struct {
 
 func (x *CommandExit) Reset() {
 	*x = CommandExit{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[24]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1564,7 +2149,7 @@ func (x *CommandExit) String() string {
 func (*CommandExit) ProtoMessage() {}
 
 func (x *CommandExit) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[24]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1577,7 +2162,7 @@ func (x *CommandExit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandExit.ProtoReflect.Descriptor instead.
 func (*CommandExit) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{24}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *CommandExit) GetCode() uint32 {
@@ -1601,7 +2186,7 @@ type CommandEvent struct {
 
 func (x *CommandEvent) Reset() {
 	*x = CommandEvent{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[25]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1613,7 +2198,7 @@ func (x *CommandEvent) String() string {
 func (*CommandEvent) ProtoMessage() {}
 
 func (x *CommandEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[25]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1626,7 +2211,7 @@ func (x *CommandEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandEvent.ProtoReflect.Descriptor instead.
 func (*CommandEvent) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{25}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *CommandEvent) GetEvent() isCommandEvent_Event {
@@ -1685,11 +2270,1994 @@ func (*CommandEvent_Stderr) isCommandEvent_Event() {}
 
 func (*CommandEvent_Exit) isCommandEvent_Event() {}
 
+// ComponentValue uses cty's JSON type encoding and MessagePack value encoding.
+// Unlike protobuf.Struct, it preserves exact numbers, nulls, unknowns, and
+// collection types. Marks are removed from MessagePack and carried as paths.
+// An empty sensitive path marks the entire value. Never log these payloads.
+type ComponentValue struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TypeJson       []byte                 `protobuf:"bytes,1,opt,name=type_json,json=typeJson,proto3" json:"type_json,omitempty"`
+	Msgpack        []byte                 `protobuf:"bytes,2,opt,name=msgpack,proto3" json:"msgpack,omitempty"`
+	SensitivePaths []*ComponentValuePath  `protobuf:"bytes,3,rep,name=sensitive_paths,json=sensitivePaths,proto3" json:"sensitive_paths,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ComponentValue) Reset() {
+	*x = ComponentValue{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentValue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentValue) ProtoMessage() {}
+
+func (x *ComponentValue) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentValue.ProtoReflect.Descriptor instead.
+func (*ComponentValue) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ComponentValue) GetTypeJson() []byte {
+	if x != nil {
+		return x.TypeJson
+	}
+	return nil
+}
+
+func (x *ComponentValue) GetMsgpack() []byte {
+	if x != nil {
+		return x.Msgpack
+	}
+	return nil
+}
+
+func (x *ComponentValue) GetSensitivePaths() []*ComponentValuePath {
+	if x != nil {
+		return x.SensitivePaths
+	}
+	return nil
+}
+
+type ComponentValuePath struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Steps         []*ComponentValueStep  `protobuf:"bytes,1,rep,name=steps,proto3" json:"steps,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComponentValuePath) Reset() {
+	*x = ComponentValuePath{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentValuePath) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentValuePath) ProtoMessage() {}
+
+func (x *ComponentValuePath) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentValuePath.ProtoReflect.Descriptor instead.
+func (*ComponentValuePath) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ComponentValuePath) GetSteps() []*ComponentValueStep {
+	if x != nil {
+		return x.Steps
+	}
+	return nil
+}
+
+type ComponentValueStep struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Selector:
+	//
+	//	*ComponentValueStep_Attribute
+	//	*ComponentValueStep_Index
+	Selector      isComponentValueStep_Selector `protobuf_oneof:"selector"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComponentValueStep) Reset() {
+	*x = ComponentValueStep{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentValueStep) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentValueStep) ProtoMessage() {}
+
+func (x *ComponentValueStep) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentValueStep.ProtoReflect.Descriptor instead.
+func (*ComponentValueStep) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *ComponentValueStep) GetSelector() isComponentValueStep_Selector {
+	if x != nil {
+		return x.Selector
+	}
+	return nil
+}
+
+func (x *ComponentValueStep) GetAttribute() string {
+	if x != nil {
+		if x, ok := x.Selector.(*ComponentValueStep_Attribute); ok {
+			return x.Attribute
+		}
+	}
+	return ""
+}
+
+func (x *ComponentValueStep) GetIndex() *ComponentValue {
+	if x != nil {
+		if x, ok := x.Selector.(*ComponentValueStep_Index); ok {
+			return x.Index
+		}
+	}
+	return nil
+}
+
+type isComponentValueStep_Selector interface {
+	isComponentValueStep_Selector()
+}
+
+type ComponentValueStep_Attribute struct {
+	Attribute string `protobuf:"bytes,1,opt,name=attribute,proto3,oneof"`
+}
+
+type ComponentValueStep_Index struct {
+	Index *ComponentValue `protobuf:"bytes,2,opt,name=index,proto3,oneof"`
+}
+
+func (*ComponentValueStep_Attribute) isComponentValueStep_Selector() {}
+
+func (*ComponentValueStep_Index) isComponentValueStep_Selector() {}
+
+// Coordinates are logical identities, independent of generated/cache paths.
+// Native HCL adaptation has type terraform and engine terraform or opentofu.
+type ComponentAddress struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Stack         string                 `protobuf:"bytes,1,opt,name=stack,proto3" json:"stack,omitempty"`
+	Component     string                 `protobuf:"bytes,2,opt,name=component,proto3" json:"component,omitempty"`
+	ComponentType string                 `protobuf:"bytes,3,opt,name=component_type,json=componentType,proto3" json:"component_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComponentAddress) Reset() {
+	*x = ComponentAddress{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentAddress) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentAddress) ProtoMessage() {}
+
+func (x *ComponentAddress) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentAddress.ProtoReflect.Descriptor instead.
+func (*ComponentAddress) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ComponentAddress) GetStack() string {
+	if x != nil {
+		return x.Stack
+	}
+	return ""
+}
+
+func (x *ComponentAddress) GetComponent() string {
+	if x != nil {
+		return x.Component
+	}
+	return ""
+}
+
+func (x *ComponentAddress) GetComponentType() string {
+	if x != nil {
+		return x.ComponentType
+	}
+	return ""
+}
+
+// Paths are relative to root_directory in the requested revision. A directory
+// watch includes additions/deletions; a file list alone cannot represent it.
+type ComponentSource struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Kind          ComponentSource_Kind   `protobuf:"varint,2,opt,name=kind,proto3,enum=atmos.plugin.v1.ComponentSource_Kind" json:"kind,omitempty"`
+	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComponentSource) Reset() {
+	*x = ComponentSource{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentSource) ProtoMessage() {}
+
+func (x *ComponentSource) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentSource.ProtoReflect.Descriptor instead.
+func (*ComponentSource) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *ComponentSource) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *ComponentSource) GetKind() ComponentSource_Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return ComponentSource_KIND_UNSPECIFIED
+}
+
+func (x *ComponentSource) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type ComponentDependency struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Target        *ComponentAddress        `protobuf:"bytes,1,opt,name=target,proto3" json:"target,omitempty"`
+	Kind          ComponentDependency_Kind `protobuf:"varint,2,opt,name=kind,proto3,enum=atmos.plugin.v1.ComponentDependency_Kind" json:"kind,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComponentDependency) Reset() {
+	*x = ComponentDependency{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentDependency) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentDependency) ProtoMessage() {}
+
+func (x *ComponentDependency) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentDependency.ProtoReflect.Descriptor instead.
+func (*ComponentDependency) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *ComponentDependency) GetTarget() *ComponentAddress {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *ComponentDependency) GetKind() ComponentDependency_Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return ComponentDependency_KIND_UNSPECIFIED
+}
+
+type DiscoveredComponent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Address       *ComponentAddress      `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	Provider      string                 `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`
+	Engine        string                 `protobuf:"bytes,3,opt,name=engine,proto3" json:"engine,omitempty"`
+	Source        string                 `protobuf:"bytes,4,opt,name=source,proto3" json:"source,omitempty"`
+	Configuration *ComponentValue        `protobuf:"bytes,5,opt,name=configuration,proto3" json:"configuration,omitempty"`
+	Sources       []*ComponentSource     `protobuf:"bytes,6,rep,name=sources,proto3" json:"sources,omitempty"`
+	Dependencies  []*ComponentDependency `protobuf:"bytes,7,rep,name=dependencies,proto3" json:"dependencies,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiscoveredComponent) Reset() {
+	*x = DiscoveredComponent{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscoveredComponent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscoveredComponent) ProtoMessage() {}
+
+func (x *DiscoveredComponent) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscoveredComponent.ProtoReflect.Descriptor instead.
+func (*DiscoveredComponent) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *DiscoveredComponent) GetAddress() *ComponentAddress {
+	if x != nil {
+		return x.Address
+	}
+	return nil
+}
+
+func (x *DiscoveredComponent) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *DiscoveredComponent) GetEngine() string {
+	if x != nil {
+		return x.Engine
+	}
+	return ""
+}
+
+func (x *DiscoveredComponent) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *DiscoveredComponent) GetConfiguration() *ComponentValue {
+	if x != nil {
+		return x.Configuration
+	}
+	return nil
+}
+
+func (x *DiscoveredComponent) GetSources() []*ComponentSource {
+	if x != nil {
+		return x.Sources
+	}
+	return nil
+}
+
+func (x *DiscoveredComponent) GetDependencies() []*ComponentDependency {
+	if x != nil {
+		return x.Dependencies
+	}
+	return nil
+}
+
+// Omission denies effects. The host must enforce the same policy on API calls;
+// this declaration is not an operating-system sandbox for trusted plugin code.
+type ComponentEffects struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Commands      bool                   `protobuf:"varint,1,opt,name=commands,proto3" json:"commands,omitempty"`
+	Network       bool                   `protobuf:"varint,2,opt,name=network,proto3" json:"network,omitempty"`
+	Secrets       bool                   `protobuf:"varint,3,opt,name=secrets,proto3" json:"secrets,omitempty"`
+	Writes        bool                   `protobuf:"varint,4,opt,name=writes,proto3" json:"writes,omitempty"`
+	StateReads    bool                   `protobuf:"varint,5,opt,name=state_reads,json=stateReads,proto3" json:"state_reads,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComponentEffects) Reset() {
+	*x = ComponentEffects{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentEffects) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentEffects) ProtoMessage() {}
+
+func (x *ComponentEffects) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentEffects.ProtoReflect.Descriptor instead.
+func (*ComponentEffects) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *ComponentEffects) GetCommands() bool {
+	if x != nil {
+		return x.Commands
+	}
+	return false
+}
+
+func (x *ComponentEffects) GetNetwork() bool {
+	if x != nil {
+		return x.Network
+	}
+	return false
+}
+
+func (x *ComponentEffects) GetSecrets() bool {
+	if x != nil {
+		return x.Secrets
+	}
+	return false
+}
+
+func (x *ComponentEffects) GetWrites() bool {
+	if x != nil {
+		return x.Writes
+	}
+	return false
+}
+
+func (x *ComponentEffects) GetStateReads() bool {
+	if x != nil {
+		return x.StateReads
+	}
+	return false
+}
+
+// Provider options have already passed host parsing/precedence. Map presence
+// distinguishes an unset option from an explicit false, zero, or empty value.
+// These are not Terraform argv. The provider validates supported semantics.
+type ComponentOperation struct {
+	state   protoimpl.MessageState     `protogen:"open.v1"`
+	Command string                     `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
+	Mode    string                     `protobuf:"bytes,2,opt,name=mode,proto3" json:"mode,omitempty"`
+	Options map[string]*ComponentValue `protobuf:"bytes,3,rep,name=options,proto3" json:"options,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Resolved engine arguments are distinct from provider options. They let
+	// configuration semantics inspect flags such as plan/apply -destroy.
+	TerraformArguments []string `protobuf:"bytes,4,rep,name=terraform_arguments,json=terraformArguments,proto3" json:"terraform_arguments,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *ComponentOperation) Reset() {
+	*x = ComponentOperation{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentOperation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentOperation) ProtoMessage() {}
+
+func (x *ComponentOperation) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentOperation.ProtoReflect.Descriptor instead.
+func (*ComponentOperation) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *ComponentOperation) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
+func (x *ComponentOperation) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *ComponentOperation) GetOptions() map[string]*ComponentValue {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+func (x *ComponentOperation) GetTerraformArguments() []string {
+	if x != nil {
+		return x.TerraformArguments
+	}
+	return nil
+}
+
+type DiscoverComponentsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Invocation    *Invocation            `protobuf:"bytes,1,opt,name=invocation,proto3" json:"invocation,omitempty"`
+	Provider      string                 `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`
+	RootDirectory string                 `protobuf:"bytes,3,opt,name=root_directory,json=rootDirectory,proto3" json:"root_directory,omitempty"`
+	Revision      string                 `protobuf:"bytes,4,opt,name=revision,proto3" json:"revision,omitempty"`
+	IncludePaths  []string               `protobuf:"bytes,5,rep,name=include_paths,json=includePaths,proto3" json:"include_paths,omitempty"`
+	ExcludePaths  []string               `protobuf:"bytes,6,rep,name=exclude_paths,json=excludePaths,proto3" json:"exclude_paths,omitempty"`
+	// Explicit imports and automatic discovery share one evaluator.
+	Imports   []string            `protobuf:"bytes,7,rep,name=imports,proto3" json:"imports,omitempty"`
+	Operation *ComponentOperation `protobuf:"bytes,8,opt,name=operation,proto3" json:"operation,omitempty"`
+	Effects   *ComponentEffects   `protobuf:"bytes,9,opt,name=effects,proto3" json:"effects,omitempty"`
+	// Provider settings are distinct from resolved component configuration.
+	ProviderConfiguration *ComponentValue `protobuf:"bytes,10,opt,name=provider_configuration,json=providerConfiguration,proto3" json:"provider_configuration,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *DiscoverComponentsRequest) Reset() {
+	*x = DiscoverComponentsRequest{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscoverComponentsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscoverComponentsRequest) ProtoMessage() {}
+
+func (x *DiscoverComponentsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscoverComponentsRequest.ProtoReflect.Descriptor instead.
+func (*DiscoverComponentsRequest) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *DiscoverComponentsRequest) GetInvocation() *Invocation {
+	if x != nil {
+		return x.Invocation
+	}
+	return nil
+}
+
+func (x *DiscoverComponentsRequest) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *DiscoverComponentsRequest) GetRootDirectory() string {
+	if x != nil {
+		return x.RootDirectory
+	}
+	return ""
+}
+
+func (x *DiscoverComponentsRequest) GetRevision() string {
+	if x != nil {
+		return x.Revision
+	}
+	return ""
+}
+
+func (x *DiscoverComponentsRequest) GetIncludePaths() []string {
+	if x != nil {
+		return x.IncludePaths
+	}
+	return nil
+}
+
+func (x *DiscoverComponentsRequest) GetExcludePaths() []string {
+	if x != nil {
+		return x.ExcludePaths
+	}
+	return nil
+}
+
+func (x *DiscoverComponentsRequest) GetImports() []string {
+	if x != nil {
+		return x.Imports
+	}
+	return nil
+}
+
+func (x *DiscoverComponentsRequest) GetOperation() *ComponentOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return nil
+}
+
+func (x *DiscoverComponentsRequest) GetEffects() *ComponentEffects {
+	if x != nil {
+		return x.Effects
+	}
+	return nil
+}
+
+func (x *DiscoverComponentsRequest) GetProviderConfiguration() *ComponentValue {
+	if x != nil {
+		return x.ProviderConfiguration
+	}
+	return nil
+}
+
+type DiscoverComponentsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Healthy components. One failing component must not hide the others.
+	Components []*DiscoveredComponent `protobuf:"bytes,1,rep,name=components,proto3" json:"components,omitempty"`
+	// Per-component failures. A diagnostic whose detail names a unit and stack is
+	// reported only to commands that target that component; others keep working.
+	// A diagnostic without a unit is a project-level failure.
+	Diagnostics []*Diagnostic `protobuf:"bytes,2,rep,name=diagnostics,proto3" json:"diagnostics,omitempty"`
+	// Engine log events produced while discovering. See LogEntry.
+	Logs          []*LogEntry `protobuf:"bytes,3,rep,name=logs,proto3" json:"logs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiscoverComponentsResponse) Reset() {
+	*x = DiscoverComponentsResponse{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscoverComponentsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscoverComponentsResponse) ProtoMessage() {}
+
+func (x *DiscoverComponentsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscoverComponentsResponse.ProtoReflect.Descriptor instead.
+func (*DiscoverComponentsResponse) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *DiscoverComponentsResponse) GetComponents() []*DiscoveredComponent {
+	if x != nil {
+		return x.Components
+	}
+	return nil
+}
+
+func (x *DiscoverComponentsResponse) GetDiagnostics() []*Diagnostic {
+	if x != nil {
+		return x.Diagnostics
+	}
+	return nil
+}
+
+func (x *DiscoverComponentsResponse) GetLogs() []*LogEntry {
+	if x != nil {
+		return x.Logs
+	}
+	return nil
+}
+
+type ComponentRequest struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Invocation            *Invocation            `protobuf:"bytes,1,opt,name=invocation,proto3" json:"invocation,omitempty"`
+	Provider              string                 `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`
+	Address               *ComponentAddress      `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"`
+	RootDirectory         string                 `protobuf:"bytes,4,opt,name=root_directory,json=rootDirectory,proto3" json:"root_directory,omitempty"`
+	Source                string                 `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
+	Operation             *ComponentOperation    `protobuf:"bytes,6,opt,name=operation,proto3" json:"operation,omitempty"`
+	Effects               *ComponentEffects      `protobuf:"bytes,7,opt,name=effects,proto3" json:"effects,omitempty"`
+	Configuration         *ComponentValue        `protobuf:"bytes,8,opt,name=configuration,proto3" json:"configuration,omitempty"`
+	ProviderConfiguration *ComponentValue        `protobuf:"bytes,9,opt,name=provider_configuration,json=providerConfiguration,proto3" json:"provider_configuration,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *ComponentRequest) Reset() {
+	*x = ComponentRequest{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentRequest) ProtoMessage() {}
+
+func (x *ComponentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentRequest.ProtoReflect.Descriptor instead.
+func (*ComponentRequest) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *ComponentRequest) GetInvocation() *Invocation {
+	if x != nil {
+		return x.Invocation
+	}
+	return nil
+}
+
+func (x *ComponentRequest) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *ComponentRequest) GetAddress() *ComponentAddress {
+	if x != nil {
+		return x.Address
+	}
+	return nil
+}
+
+func (x *ComponentRequest) GetRootDirectory() string {
+	if x != nil {
+		return x.RootDirectory
+	}
+	return ""
+}
+
+func (x *ComponentRequest) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *ComponentRequest) GetOperation() *ComponentOperation {
+	if x != nil {
+		return x.Operation
+	}
+	return nil
+}
+
+func (x *ComponentRequest) GetEffects() *ComponentEffects {
+	if x != nil {
+		return x.Effects
+	}
+	return nil
+}
+
+func (x *ComponentRequest) GetConfiguration() *ComponentValue {
+	if x != nil {
+		return x.Configuration
+	}
+	return nil
+}
+
+func (x *ComponentRequest) GetProviderConfiguration() *ComponentValue {
+	if x != nil {
+		return x.ProviderConfiguration
+	}
+	return nil
+}
+
+type ComponentStateIdentity struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	BackendType string                 `protobuf:"bytes,1,opt,name=backend_type,json=backendType,proto3" json:"backend_type,omitempty"`
+	Backend     *ComponentValue        `protobuf:"bytes,2,opt,name=backend,proto3" json:"backend,omitempty"`
+	Workspace   string                 `protobuf:"bytes,3,opt,name=workspace,proto3" json:"workspace,omitempty"`
+	// Relative backend paths are interpreted against this directory. It can be
+	// different from the directory where Atmos prepares Terraform execution.
+	WorkingDirectory string `protobuf:"bytes,4,opt,name=working_directory,json=workingDirectory,proto3" json:"working_directory,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ComponentStateIdentity) Reset() {
+	*x = ComponentStateIdentity{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentStateIdentity) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentStateIdentity) ProtoMessage() {}
+
+func (x *ComponentStateIdentity) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentStateIdentity.ProtoReflect.Descriptor instead.
+func (*ComponentStateIdentity) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *ComponentStateIdentity) GetBackendType() string {
+	if x != nil {
+		return x.BackendType
+	}
+	return ""
+}
+
+func (x *ComponentStateIdentity) GetBackend() *ComponentValue {
+	if x != nil {
+		return x.Backend
+	}
+	return nil
+}
+
+func (x *ComponentStateIdentity) GetWorkspace() string {
+	if x != nil {
+		return x.Workspace
+	}
+	return ""
+}
+
+func (x *ComponentStateIdentity) GetWorkingDirectory() string {
+	if x != nil {
+		return x.WorkingDirectory
+	}
+	return ""
+}
+
+type ComponentGeneratedFile struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Path    string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Content []byte                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	// The adapter must reject unknown ownership policies, never overwrite by
+	// default. Content is evaluated bytes, not another template language.
+	IfExists  string `protobuf:"bytes,3,opt,name=if_exists,json=ifExists,proto3" json:"if_exists,omitempty"`
+	Sensitive bool   `protobuf:"varint,4,opt,name=sensitive,proto3" json:"sensitive,omitempty"`
+	// Optional POSIX permission bits. Zero means the host default (0644, or 0600
+	// for sensitive files). The host keeps only owner/group/other read and
+	// execute bits plus owner write, and ignores the field on Windows.
+	Mode uint32 `protobuf:"varint,5,opt,name=mode,proto3" json:"mode,omitempty"`
+	// True only for a literal file copied from beside the configuration unit,
+	// never for an explicit generate block. Absent means normal policy handling.
+	UnitFileCopy  bool `protobuf:"varint,6,opt,name=unit_file_copy,json=unitFileCopy,proto3" json:"unit_file_copy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComponentGeneratedFile) Reset() {
+	*x = ComponentGeneratedFile{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentGeneratedFile) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentGeneratedFile) ProtoMessage() {}
+
+func (x *ComponentGeneratedFile) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentGeneratedFile.ProtoReflect.Descriptor instead.
+func (*ComponentGeneratedFile) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *ComponentGeneratedFile) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *ComponentGeneratedFile) GetContent() []byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *ComponentGeneratedFile) GetIfExists() string {
+	if x != nil {
+		return x.IfExists
+	}
+	return ""
+}
+
+func (x *ComponentGeneratedFile) GetSensitive() bool {
+	if x != nil {
+		return x.Sensitive
+	}
+	return false
+}
+
+func (x *ComponentGeneratedFile) GetMode() uint32 {
+	if x != nil {
+		return x.Mode
+	}
+	return 0
+}
+
+func (x *ComponentGeneratedFile) GetUnitFileCopy() bool {
+	if x != nil {
+		return x.UnitFileCopy
+	}
+	return false
+}
+
+// Evaluated command metadata; the host executes it with the invocation's
+// environment, toolchain, cancellation, and I/O. Lists retain declaration order.
+type ComponentExecutionConfiguration struct {
+	state          protoimpl.MessageState     `protogen:"open.v1"`
+	ExtraArguments []*ComponentExtraArguments `protobuf:"bytes,1,rep,name=extra_arguments,json=extraArguments,proto3" json:"extra_arguments,omitempty"`
+	BeforeHooks    []*ComponentHook           `protobuf:"bytes,2,rep,name=before_hooks,json=beforeHooks,proto3" json:"before_hooks,omitempty"`
+	AfterHooks     []*ComponentHook           `protobuf:"bytes,3,rep,name=after_hooks,json=afterHooks,proto3" json:"after_hooks,omitempty"`
+	ErrorHooks     []*ComponentHook           `protobuf:"bytes,4,rep,name=error_hooks,json=errorHooks,proto3" json:"error_hooks,omitempty"`
+	// Metadata evaluated as the apply command would see it. Providers set it when
+	// preparing a plan whose execution depends on the command, so a saved plan
+	// applied later runs the apply-time hooks recorded with the reviewed plan.
+	// Unset means the plan-time metadata applies unchanged; an empty message
+	// means apply adds nothing.
+	Apply         *ComponentExecutionConfiguration `protobuf:"bytes,5,opt,name=apply,proto3" json:"apply,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComponentExecutionConfiguration) Reset() {
+	*x = ComponentExecutionConfiguration{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentExecutionConfiguration) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentExecutionConfiguration) ProtoMessage() {}
+
+func (x *ComponentExecutionConfiguration) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentExecutionConfiguration.ProtoReflect.Descriptor instead.
+func (*ComponentExecutionConfiguration) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *ComponentExecutionConfiguration) GetExtraArguments() []*ComponentExtraArguments {
+	if x != nil {
+		return x.ExtraArguments
+	}
+	return nil
+}
+
+func (x *ComponentExecutionConfiguration) GetBeforeHooks() []*ComponentHook {
+	if x != nil {
+		return x.BeforeHooks
+	}
+	return nil
+}
+
+func (x *ComponentExecutionConfiguration) GetAfterHooks() []*ComponentHook {
+	if x != nil {
+		return x.AfterHooks
+	}
+	return nil
+}
+
+func (x *ComponentExecutionConfiguration) GetErrorHooks() []*ComponentHook {
+	if x != nil {
+		return x.ErrorHooks
+	}
+	return nil
+}
+
+func (x *ComponentExecutionConfiguration) GetApply() *ComponentExecutionConfiguration {
+	if x != nil {
+		return x.Apply
+	}
+	return nil
+}
+
+type ComponentExtraArguments struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Commands         []string               `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
+	Arguments        []string               `protobuf:"bytes,2,rep,name=arguments,proto3" json:"arguments,omitempty"`
+	RequiredVarFiles []string               `protobuf:"bytes,3,rep,name=required_var_files,json=requiredVarFiles,proto3" json:"required_var_files,omitempty"`
+	OptionalVarFiles []string               `protobuf:"bytes,4,rep,name=optional_var_files,json=optionalVarFiles,proto3" json:"optional_var_files,omitempty"`
+	Environment      map[string]string      `protobuf:"bytes,5,rep,name=environment,proto3" json:"environment,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ComponentExtraArguments) Reset() {
+	*x = ComponentExtraArguments{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentExtraArguments) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentExtraArguments) ProtoMessage() {}
+
+func (x *ComponentExtraArguments) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentExtraArguments.ProtoReflect.Descriptor instead.
+func (*ComponentExtraArguments) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *ComponentExtraArguments) GetCommands() []string {
+	if x != nil {
+		return x.Commands
+	}
+	return nil
+}
+
+func (x *ComponentExtraArguments) GetArguments() []string {
+	if x != nil {
+		return x.Arguments
+	}
+	return nil
+}
+
+func (x *ComponentExtraArguments) GetRequiredVarFiles() []string {
+	if x != nil {
+		return x.RequiredVarFiles
+	}
+	return nil
+}
+
+func (x *ComponentExtraArguments) GetOptionalVarFiles() []string {
+	if x != nil {
+		return x.OptionalVarFiles
+	}
+	return nil
+}
+
+func (x *ComponentExtraArguments) GetEnvironment() map[string]string {
+	if x != nil {
+		return x.Environment
+	}
+	return nil
+}
+
+type ComponentHook struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Name     string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Commands []string               `protobuf:"bytes,2,rep,name=commands,proto3" json:"commands,omitempty"`
+	Execute  []string               `protobuf:"bytes,3,rep,name=execute,proto3" json:"execute,omitempty"`
+	// Empty means the provisioned module directory; relative paths resolve there.
+	WorkingDirectory string `protobuf:"bytes,4,opt,name=working_directory,json=workingDirectory,proto3" json:"working_directory,omitempty"`
+	RunOnError       bool   `protobuf:"varint,5,opt,name=run_on_error,json=runOnError,proto3" json:"run_on_error,omitempty"`
+	SuppressStdout   bool   `protobuf:"varint,6,opt,name=suppress_stdout,json=suppressStdout,proto3" json:"suppress_stdout,omitempty"`
+	// Error hooks run when any pattern matches the errors from preceding phases.
+	OnErrors      []string `protobuf:"bytes,7,rep,name=on_errors,json=onErrors,proto3" json:"on_errors,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComponentHook) Reset() {
+	*x = ComponentHook{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentHook) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentHook) ProtoMessage() {}
+
+func (x *ComponentHook) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentHook.ProtoReflect.Descriptor instead.
+func (*ComponentHook) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *ComponentHook) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ComponentHook) GetCommands() []string {
+	if x != nil {
+		return x.Commands
+	}
+	return nil
+}
+
+func (x *ComponentHook) GetExecute() []string {
+	if x != nil {
+		return x.Execute
+	}
+	return nil
+}
+
+func (x *ComponentHook) GetWorkingDirectory() string {
+	if x != nil {
+		return x.WorkingDirectory
+	}
+	return ""
+}
+
+func (x *ComponentHook) GetRunOnError() bool {
+	if x != nil {
+		return x.RunOnError
+	}
+	return false
+}
+
+func (x *ComponentHook) GetSuppressStdout() bool {
+	if x != nil {
+		return x.SuppressStdout
+	}
+	return false
+}
+
+func (x *ComponentHook) GetOnErrors() []string {
+	if x != nil {
+		return x.OnErrors
+	}
+	return nil
+}
+
+type PrepareComponentResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Engine           string                 `protobuf:"bytes,1,opt,name=engine,proto3" json:"engine,omitempty"`
+	WorkingDirectory string                 `protobuf:"bytes,2,opt,name=working_directory,json=workingDirectory,proto3" json:"working_directory,omitempty"`
+	ModuleSource     string                 `protobuf:"bytes,3,opt,name=module_source,json=moduleSource,proto3" json:"module_source,omitempty"`
+	// The evaluated variables of the unit, an object. Numbers keep their exact decimal value, null and
+	// empty collections are preserved, and the value is wholly known: an unknown value is a plugin bug and
+	// the host rejects it naming the input. sensitive_paths mark every input path the unit declared
+	// sensitive. The host masks those values in all output and logs and keeps them out of variable files,
+	// exactly like secrets.
+	Inputs       *ComponentValue           `protobuf:"bytes,4,opt,name=inputs,proto3" json:"inputs,omitempty"`
+	State        *ComponentStateIdentity   `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
+	Files        []*ComponentGeneratedFile `protobuf:"bytes,6,rep,name=files,proto3" json:"files,omitempty"`
+	Dependencies []*ComponentDependency    `protobuf:"bytes,7,rep,name=dependencies,proto3" json:"dependencies,omitempty"`
+	Sources      []*ComponentSource        `protobuf:"bytes,8,rep,name=sources,proto3" json:"sources,omitempty"`
+	Diagnostics  []*Diagnostic             `protobuf:"bytes,9,rep,name=diagnostics,proto3" json:"diagnostics,omitempty"`
+	// A returned generated file owns the backend block. The host must not also
+	// emit its default backend file.
+	BackendGenerated bool                             `protobuf:"varint,10,opt,name=backend_generated,json=backendGenerated,proto3" json:"backend_generated,omitempty"`
+	Execution        *ComponentExecutionConfiguration `protobuf:"bytes,11,opt,name=execution,proto3" json:"execution,omitempty"`
+	// Maps each input name to the authored file, line, and column that produced
+	// its value, for provenance reporting. Missing entries mean unknown origin.
+	InputOrigins map[string]*SourceLocation `protobuf:"bytes,12,rep,name=input_origins,json=inputOrigins,proto3" json:"input_origins,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Fields 13-18 carry Terragrunt settings that decide how the host runs the unit. The host reads
+	// terraform_binary, errors, exclude, iam, and feature_flags (13-16 and 18). It does not read
+	// encryption (17) yet. A plugin that cannot honor a setting must reject it with an ErrorDetail
+	// instead of returning a value the host would silently ignore.
+	// Engine executable selected by terraform_binary. Empty means the engine of the component.
+	TerraformBinary string `protobuf:"bytes,13,opt,name=terraform_binary,json=terraformBinary,proto3" json:"terraform_binary,omitempty"`
+	// errors block: retry and ignore policies. The host applies them around the engine subprocess.
+	Errors *ComponentErrorsConfiguration `protobuf:"bytes,14,opt,name=errors,proto3" json:"errors,omitempty"`
+	// exclude block, set only when its condition holds and it applies to the current operation.
+	// The host skips the operation for the component and runs nothing. See ComponentExclude.
+	Exclude *ComponentExclude `protobuf:"bytes,15,opt,name=exclude,proto3" json:"exclude,omitempty"`
+	// iam_role, iam_assume_role_session_name, iam_assume_role_duration, iam_web_identity_token.
+	// The host assumes the role, never the plugin.
+	Iam *ComponentIam `protobuf:"bytes,16,opt,name=iam,proto3" json:"iam,omitempty"`
+	// encryption block as opaque, provider-defined data. The host ignores it.
+	Encryption *ComponentValue `protobuf:"bytes,17,opt,name=encryption,proto3" json:"encryption,omitempty"`
+	// Feature flag name to its evaluated value rendered as a string. The plugin has already applied
+	// the flags while evaluating the unit, so they are reflected in every other field. The host keeps
+	// them with the prepared configuration for display and no host behavior depends on them. A plugin
+	// may leave this field unset.
+	FeatureFlags map[string]string `protobuf:"bytes,18,rep,name=feature_flags,json=featureFlags,proto3" json:"feature_flags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Engine log events produced while preparing. See LogEntry.
+	Logs []*LogEntry `protobuf:"bytes,22,rep,name=logs,proto3" json:"logs,omitempty"`
+	// Authorization for an archive returned by a module registry. This value is
+	// sensitive and may be sent only to module_source_auth_origin.
+	ModuleSourceAuthorization *ComponentValue `protobuf:"bytes,19,opt,name=module_source_authorization,json=moduleSourceAuthorization,proto3" json:"module_source_authorization,omitempty"`
+	ModuleSourceAuthOrigin    string          `protobuf:"bytes,20,opt,name=module_source_auth_origin,json=moduleSourceAuthOrigin,proto3" json:"module_source_auth_origin,omitempty"`
+	// Time spent resolving a tfr:// source, including its bounded retries.
+	RegistryResolutionNanos uint64 `protobuf:"varint,21,opt,name=registry_resolution_nanos,json=registryResolutionNanos,proto3" json:"registry_resolution_nanos,omitempty"`
+	// True when an errors-block ignore policy matched a failure the plugin hit while preparing the unit,
+	// for example a registry resolution failure, so no source could be resolved. The host ends the unit's
+	// run successfully without executing it, as it does for an ignored source fetch. The remaining fields
+	// describe the unit as written.
+	RunIgnored bool `protobuf:"varint,23,opt,name=run_ignored,json=runIgnored,proto3" json:"run_ignored,omitempty"`
+	// Name of the ignore policy that matched. Set with run_ignored.
+	IgnoredPolicy string `protobuf:"bytes,24,opt,name=ignored_policy,json=ignoredPolicy,proto3" json:"ignored_policy,omitempty"`
+	// Message of the ignore policy that matched. Set with run_ignored.
+	IgnoredMessage string `protobuf:"bytes,25,opt,name=ignored_message,json=ignoredMessage,proto3" json:"ignored_message,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *PrepareComponentResponse) Reset() {
+	*x = PrepareComponentResponse{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareComponentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareComponentResponse) ProtoMessage() {}
+
+func (x *PrepareComponentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareComponentResponse.ProtoReflect.Descriptor instead.
+func (*PrepareComponentResponse) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *PrepareComponentResponse) GetEngine() string {
+	if x != nil {
+		return x.Engine
+	}
+	return ""
+}
+
+func (x *PrepareComponentResponse) GetWorkingDirectory() string {
+	if x != nil {
+		return x.WorkingDirectory
+	}
+	return ""
+}
+
+func (x *PrepareComponentResponse) GetModuleSource() string {
+	if x != nil {
+		return x.ModuleSource
+	}
+	return ""
+}
+
+func (x *PrepareComponentResponse) GetInputs() *ComponentValue {
+	if x != nil {
+		return x.Inputs
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetState() *ComponentStateIdentity {
+	if x != nil {
+		return x.State
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetFiles() []*ComponentGeneratedFile {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetDependencies() []*ComponentDependency {
+	if x != nil {
+		return x.Dependencies
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetSources() []*ComponentSource {
+	if x != nil {
+		return x.Sources
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetDiagnostics() []*Diagnostic {
+	if x != nil {
+		return x.Diagnostics
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetBackendGenerated() bool {
+	if x != nil {
+		return x.BackendGenerated
+	}
+	return false
+}
+
+func (x *PrepareComponentResponse) GetExecution() *ComponentExecutionConfiguration {
+	if x != nil {
+		return x.Execution
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetInputOrigins() map[string]*SourceLocation {
+	if x != nil {
+		return x.InputOrigins
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetTerraformBinary() string {
+	if x != nil {
+		return x.TerraformBinary
+	}
+	return ""
+}
+
+func (x *PrepareComponentResponse) GetErrors() *ComponentErrorsConfiguration {
+	if x != nil {
+		return x.Errors
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetExclude() *ComponentExclude {
+	if x != nil {
+		return x.Exclude
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetIam() *ComponentIam {
+	if x != nil {
+		return x.Iam
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetEncryption() *ComponentValue {
+	if x != nil {
+		return x.Encryption
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetFeatureFlags() map[string]string {
+	if x != nil {
+		return x.FeatureFlags
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetLogs() []*LogEntry {
+	if x != nil {
+		return x.Logs
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetModuleSourceAuthorization() *ComponentValue {
+	if x != nil {
+		return x.ModuleSourceAuthorization
+	}
+	return nil
+}
+
+func (x *PrepareComponentResponse) GetModuleSourceAuthOrigin() string {
+	if x != nil {
+		return x.ModuleSourceAuthOrigin
+	}
+	return ""
+}
+
+func (x *PrepareComponentResponse) GetRegistryResolutionNanos() uint64 {
+	if x != nil {
+		return x.RegistryResolutionNanos
+	}
+	return 0
+}
+
+func (x *PrepareComponentResponse) GetRunIgnored() bool {
+	if x != nil {
+		return x.RunIgnored
+	}
+	return false
+}
+
+func (x *PrepareComponentResponse) GetIgnoredPolicy() string {
+	if x != nil {
+		return x.IgnoredPolicy
+	}
+	return ""
+}
+
+func (x *PrepareComponentResponse) GetIgnoredMessage() string {
+	if x != nil {
+		return x.IgnoredMessage
+	}
+	return ""
+}
+
+// ComponentErrorsConfiguration mirrors the Terragrunt errors block. The host retries or ignores a failed
+// engine command according to these policies, in declaration order.
+type ComponentErrorsConfiguration struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Retry         []*ComponentRetryPolicy  `protobuf:"bytes,1,rep,name=retry,proto3" json:"retry,omitempty"`
+	Ignore        []*ComponentIgnorePolicy `protobuf:"bytes,2,rep,name=ignore,proto3" json:"ignore,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComponentErrorsConfiguration) Reset() {
+	*x = ComponentErrorsConfiguration{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentErrorsConfiguration) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentErrorsConfiguration) ProtoMessage() {}
+
+func (x *ComponentErrorsConfiguration) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentErrorsConfiguration.ProtoReflect.Descriptor instead.
+func (*ComponentErrorsConfiguration) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *ComponentErrorsConfiguration) GetRetry() []*ComponentRetryPolicy {
+	if x != nil {
+		return x.Retry
+	}
+	return nil
+}
+
+func (x *ComponentErrorsConfiguration) GetIgnore() []*ComponentIgnorePolicy {
+	if x != nil {
+		return x.Ignore
+	}
+	return nil
+}
+
+type ComponentRetryPolicy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Regular expressions matched against command errors.
+	RetryableErrors      []string `protobuf:"bytes,2,rep,name=retryable_errors,json=retryableErrors,proto3" json:"retryable_errors,omitempty"`
+	MaxAttempts          uint32   `protobuf:"varint,3,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
+	SleepIntervalSeconds uint32   `protobuf:"varint,4,opt,name=sleep_interval_seconds,json=sleepIntervalSeconds,proto3" json:"sleep_interval_seconds,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *ComponentRetryPolicy) Reset() {
+	*x = ComponentRetryPolicy{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentRetryPolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentRetryPolicy) ProtoMessage() {}
+
+func (x *ComponentRetryPolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentRetryPolicy.ProtoReflect.Descriptor instead.
+func (*ComponentRetryPolicy) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *ComponentRetryPolicy) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ComponentRetryPolicy) GetRetryableErrors() []string {
+	if x != nil {
+		return x.RetryableErrors
+	}
+	return nil
+}
+
+func (x *ComponentRetryPolicy) GetMaxAttempts() uint32 {
+	if x != nil {
+		return x.MaxAttempts
+	}
+	return 0
+}
+
+func (x *ComponentRetryPolicy) GetSleepIntervalSeconds() uint32 {
+	if x != nil {
+		return x.SleepIntervalSeconds
+	}
+	return 0
+}
+
+type ComponentIgnorePolicy struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Regular expressions matched against command errors.
+	IgnorableErrors []string `protobuf:"bytes,2,rep,name=ignorable_errors,json=ignorableErrors,proto3" json:"ignorable_errors,omitempty"`
+	Message         string   `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	// Extra signals written for the caller, keyed by name.
+	Signals       map[string]*ComponentValue `protobuf:"bytes,4,rep,name=signals,proto3" json:"signals,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComponentIgnorePolicy) Reset() {
+	*x = ComponentIgnorePolicy{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentIgnorePolicy) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentIgnorePolicy) ProtoMessage() {}
+
+func (x *ComponentIgnorePolicy) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentIgnorePolicy.ProtoReflect.Descriptor instead.
+func (*ComponentIgnorePolicy) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *ComponentIgnorePolicy) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ComponentIgnorePolicy) GetIgnorableErrors() []string {
+	if x != nil {
+		return x.IgnorableErrors
+	}
+	return nil
+}
+
+func (x *ComponentIgnorePolicy) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *ComponentIgnorePolicy) GetSignals() map[string]*ComponentValue {
+	if x != nil {
+		return x.Signals
+	}
+	return nil
+}
+
+// ComponentExclude mirrors the Terragrunt exclude block for the operation being prepared. It does not
+// carry no_run: the plugin applies no_run itself. The plugin sets the PrepareComponentResponse.exclude
+// field only when the host must not run the command, and then actions equals that command. A response
+// without the field means run the command. exclude_dependencies is informational for the host's graph.
+type ComponentExclude struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Evaluated "if" condition. The host skips the operation when it is true and the field is set.
+	Condition bool `protobuf:"varint,1,opt,name=condition,proto3" json:"condition,omitempty"`
+	// Commands the exclusion applies to; "all" and "all_except_output" are plugin vocabulary.
+	Actions             []string `protobuf:"bytes,2,rep,name=actions,proto3" json:"actions,omitempty"`
+	ExcludeDependencies bool     `protobuf:"varint,3,opt,name=exclude_dependencies,json=excludeDependencies,proto3" json:"exclude_dependencies,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ComponentExclude) Reset() {
+	*x = ComponentExclude{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentExclude) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentExclude) ProtoMessage() {}
+
+func (x *ComponentExclude) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentExclude.ProtoReflect.Descriptor instead.
+func (*ComponentExclude) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *ComponentExclude) GetCondition() bool {
+	if x != nil {
+		return x.Condition
+	}
+	return false
+}
+
+func (x *ComponentExclude) GetActions() []string {
+	if x != nil {
+		return x.Actions
+	}
+	return nil
+}
+
+func (x *ComponentExclude) GetExcludeDependencies() bool {
+	if x != nil {
+		return x.ExcludeDependencies
+	}
+	return false
+}
+
+// ComponentIam mirrors the Terragrunt IAM settings. The host assumes the role for the unit's commands, on
+// top of the credentials of the invocation, unless an Atmos identity is selected explicitly.
+// The web identity token is a secret and must be carried as a sensitive value.
+type ComponentIam struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Role             string                 `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
+	SessionName      string                 `protobuf:"bytes,2,opt,name=session_name,json=sessionName,proto3" json:"session_name,omitempty"`
+	DurationSeconds  uint32                 `protobuf:"varint,3,opt,name=duration_seconds,json=durationSeconds,proto3" json:"duration_seconds,omitempty"`
+	WebIdentityToken *ComponentValue        `protobuf:"bytes,4,opt,name=web_identity_token,json=webIdentityToken,proto3" json:"web_identity_token,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ComponentIam) Reset() {
+	*x = ComponentIam{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentIam) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentIam) ProtoMessage() {}
+
+func (x *ComponentIam) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentIam.ProtoReflect.Descriptor instead.
+func (*ComponentIam) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *ComponentIam) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *ComponentIam) GetSessionName() string {
+	if x != nil {
+		return x.SessionName
+	}
+	return ""
+}
+
+func (x *ComponentIam) GetDurationSeconds() uint32 {
+	if x != nil {
+		return x.DurationSeconds
+	}
+	return 0
+}
+
+func (x *ComponentIam) GetWebIdentityToken() *ComponentValue {
+	if x != nil {
+		return x.WebIdentityToken
+	}
+	return nil
+}
+
+type ResolveComponentStateResponse struct {
+	state       protoimpl.MessageState  `protogen:"open.v1"`
+	State       *ComponentStateIdentity `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	Sources     []*ComponentSource      `protobuf:"bytes,2,rep,name=sources,proto3" json:"sources,omitempty"`
+	Diagnostics []*Diagnostic           `protobuf:"bytes,3,rep,name=diagnostics,proto3" json:"diagnostics,omitempty"`
+	// Engine log events produced while resolving. See LogEntry.
+	Logs          []*LogEntry `protobuf:"bytes,4,rep,name=logs,proto3" json:"logs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveComponentStateResponse) Reset() {
+	*x = ResolveComponentStateResponse{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveComponentStateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveComponentStateResponse) ProtoMessage() {}
+
+func (x *ResolveComponentStateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveComponentStateResponse.ProtoReflect.Descriptor instead.
+func (*ResolveComponentStateResponse) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *ResolveComponentStateResponse) GetState() *ComponentStateIdentity {
+	if x != nil {
+		return x.State
+	}
+	return nil
+}
+
+func (x *ResolveComponentStateResponse) GetSources() []*ComponentSource {
+	if x != nil {
+		return x.Sources
+	}
+	return nil
+}
+
+func (x *ResolveComponentStateResponse) GetDiagnostics() []*Diagnostic {
+	if x != nil {
+		return x.Diagnostics
+	}
+	return nil
+}
+
+func (x *ResolveComponentStateResponse) GetLogs() []*LogEntry {
+	if x != nil {
+		return x.Logs
+	}
+	return nil
+}
+
 var File_atmos_plugin_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
-	"\x1catmos/plugin/v1/plugin.proto\x12\x0fatmos.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa8\x03\n" +
+	"\x1catmos/plugin/v1/plugin.proto\x12\x0fatmos.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc5\x03\n" +
 	"\n" +
 	"Invocation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
@@ -1700,7 +4268,9 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x05stack\x18\x06 \x01(\tR\x05stack\x12\x1c\n" +
 	"\tcomponent\x18\a \x01(\tR\tcomponent\x12%\n" +
 	"\x0ecomponent_type\x18\b \x01(\tR\rcomponentType\x12 \n" +
-	"\vinteractive\x18\t \x01(\bR\vinteractive\x1a>\n" +
+	"\vinteractive\x18\t \x01(\bR\vinteractive\x12\x1b\n" +
+	"\tlog_level\x18\n" +
+	" \x01(\tR\blogLevel\x1a>\n" +
 	"\x10EnvironmentEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb0\x01\n" +
@@ -1768,11 +4338,43 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\bprogress\x18\x01 \x01(\v2\x19.atmos.plugin.v1.ProgressH\x00R\bprogress\x12@\n" +
 	"\vinteraction\x18\x02 \x01(\v2\x1c.atmos.plugin.v1.InteractionH\x00R\vinteraction\x126\n" +
 	"\x06result\x18\x03 \x01(\v2\x1c.atmos.plugin.v1.CredentialsH\x00R\x06resultB\a\n" +
-	"\x05event\"<\n" +
+	"\x05event\"P\n" +
+	"\x0eSourceLocation\x12\x12\n" +
+	"\x04file\x18\x01 \x01(\tR\x04file\x12\x12\n" +
+	"\x04line\x18\x02 \x01(\rR\x04line\x12\x16\n" +
+	"\x06column\x18\x03 \x01(\rR\x06column\"\x93\x02\n" +
+	"\bLogEntry\x12/\n" +
+	"\x05level\x18\x01 \x01(\x0e2\x19.atmos.plugin.v1.LogLevelR\x05level\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12=\n" +
+	"\x06fields\x18\x03 \x03(\v2%.atmos.plugin.v1.LogEntry.FieldsEntryR\x06fields\x12.\n" +
+	"\x04time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x12\n" +
+	"\x04unit\x18\x05 \x01(\tR\x04unit\x1a9\n" +
+	"\vFieldsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"A\n" +
+	"\n" +
+	"LogRequest\x123\n" +
+	"\aentries\x18\x01 \x03(\v2\x19.atmos.plugin.v1.LogEntryR\aentries\"\x90\x03\n" +
+	"\vErrorDetail\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
+	"\asummary\x18\x02 \x01(\tR\asummary\x12\x16\n" +
+	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x14\n" +
+	"\x05hints\x18\x04 \x03(\tR\x05hints\x12;\n" +
+	"\blocation\x18\x05 \x01(\v2\x1f.atmos.plugin.v1.SourceLocationR\blocation\x12\x12\n" +
+	"\x04unit\x18\x06 \x01(\tR\x04unit\x12\x14\n" +
+	"\x05stack\x18\a \x01(\tR\x05stack\x12\x1d\n" +
+	"\n" +
+	"config_key\x18\b \x01(\tR\tconfigKey\x12\x1b\n" +
+	"\tuser_safe\x18\t \x01(\bR\buserSafe\x12\x1c\n" +
+	"\toperation\x18\n" +
+	" \x01(\tR\toperation\x125\n" +
+	"\bseverity\x18\v \x01(\x0e2\x19.atmos.plugin.v1.SeverityR\bseverity\x12-\n" +
+	"\x04logs\x18\f \x03(\v2\x19.atmos.plugin.v1.LogEntryR\x04logs\"r\n" +
 	"\n" +
 	"Diagnostic\x12\x14\n" +
 	"\x05field\x18\x01 \x01(\tR\x05field\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"Q\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
+	"\x06detail\x18\x03 \x01(\v2\x1c.atmos.plugin.v1.ErrorDetailR\x06detail\"Q\n" +
 	"\x10ValidateResponse\x12=\n" +
 	"\vdiagnostics\x18\x01 \x03(\v2\x1b.atmos.plugin.v1.DiagnosticR\vdiagnostics\"C\n" +
 	"\vUnsupported\x12\x1c\n" +
@@ -1825,10 +4427,214 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x06stdout\x18\x01 \x01(\fH\x00R\x06stdout\x12\x18\n" +
 	"\x06stderr\x18\x02 \x01(\fH\x00R\x06stderr\x122\n" +
 	"\x04exit\x18\x03 \x01(\v2\x1c.atmos.plugin.v1.CommandExitH\x00R\x04exitB\a\n" +
-	"\x05event2\x9f\x01\n" +
+	"\x05event\"\x95\x01\n" +
+	"\x0eComponentValue\x12\x1b\n" +
+	"\ttype_json\x18\x01 \x01(\fR\btypeJson\x12\x18\n" +
+	"\amsgpack\x18\x02 \x01(\fR\amsgpack\x12L\n" +
+	"\x0fsensitive_paths\x18\x03 \x03(\v2#.atmos.plugin.v1.ComponentValuePathR\x0esensitivePaths\"O\n" +
+	"\x12ComponentValuePath\x129\n" +
+	"\x05steps\x18\x01 \x03(\v2#.atmos.plugin.v1.ComponentValueStepR\x05steps\"y\n" +
+	"\x12ComponentValueStep\x12\x1e\n" +
+	"\tattribute\x18\x01 \x01(\tH\x00R\tattribute\x127\n" +
+	"\x05index\x18\x02 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueH\x00R\x05indexB\n" +
+	"\n" +
+	"\bselector\"m\n" +
+	"\x10ComponentAddress\x12\x14\n" +
+	"\x05stack\x18\x01 \x01(\tR\x05stack\x12\x1c\n" +
+	"\tcomponent\x18\x02 \x01(\tR\tcomponent\x12%\n" +
+	"\x0ecomponent_type\x18\x03 \x01(\tR\rcomponentType\"\xb9\x01\n" +
+	"\x0fComponentSource\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x129\n" +
+	"\x04kind\x18\x02 \x01(\x0e2%.atmos.plugin.v1.ComponentSource.KindR\x04kind\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"?\n" +
+	"\x04Kind\x12\x14\n" +
+	"\x10KIND_UNSPECIFIED\x10\x00\x12\b\n" +
+	"\x04FILE\x10\x01\x12\r\n" +
+	"\tDIRECTORY\x10\x02\x12\b\n" +
+	"\x04GLOB\x10\x03\"\xc4\x01\n" +
+	"\x13ComponentDependency\x129\n" +
+	"\x06target\x18\x01 \x01(\v2!.atmos.plugin.v1.ComponentAddressR\x06target\x12=\n" +
+	"\x04kind\x18\x02 \x01(\x0e2).atmos.plugin.v1.ComponentDependency.KindR\x04kind\"3\n" +
+	"\x04Kind\x12\x14\n" +
+	"\x10KIND_UNSPECIFIED\x10\x00\x12\t\n" +
+	"\x05ORDER\x10\x01\x12\n" +
+	"\n" +
+	"\x06OUTPUT\x10\x02\"\xeb\x02\n" +
+	"\x13DiscoveredComponent\x12;\n" +
+	"\aaddress\x18\x01 \x01(\v2!.atmos.plugin.v1.ComponentAddressR\aaddress\x12\x1a\n" +
+	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x16\n" +
+	"\x06engine\x18\x03 \x01(\tR\x06engine\x12\x16\n" +
+	"\x06source\x18\x04 \x01(\tR\x06source\x12E\n" +
+	"\rconfiguration\x18\x05 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\rconfiguration\x12:\n" +
+	"\asources\x18\x06 \x03(\v2 .atmos.plugin.v1.ComponentSourceR\asources\x12H\n" +
+	"\fdependencies\x18\a \x03(\v2$.atmos.plugin.v1.ComponentDependencyR\fdependencies\"\x9b\x01\n" +
+	"\x10ComponentEffects\x12\x1a\n" +
+	"\bcommands\x18\x01 \x01(\bR\bcommands\x12\x18\n" +
+	"\anetwork\x18\x02 \x01(\bR\anetwork\x12\x18\n" +
+	"\asecrets\x18\x03 \x01(\bR\asecrets\x12\x16\n" +
+	"\x06writes\x18\x04 \x01(\bR\x06writes\x12\x1f\n" +
+	"\vstate_reads\x18\x05 \x01(\bR\n" +
+	"stateReads\"\x9c\x02\n" +
+	"\x12ComponentOperation\x12\x18\n" +
+	"\acommand\x18\x01 \x01(\tR\acommand\x12\x12\n" +
+	"\x04mode\x18\x02 \x01(\tR\x04mode\x12J\n" +
+	"\aoptions\x18\x03 \x03(\v20.atmos.plugin.v1.ComponentOperation.OptionsEntryR\aoptions\x12/\n" +
+	"\x13terraform_arguments\x18\x04 \x03(\tR\x12terraformArguments\x1a[\n" +
+	"\fOptionsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\x05value:\x028\x01\"\xf3\x03\n" +
+	"\x19DiscoverComponentsRequest\x12;\n" +
+	"\n" +
+	"invocation\x18\x01 \x01(\v2\x1b.atmos.plugin.v1.InvocationR\n" +
+	"invocation\x12\x1a\n" +
+	"\bprovider\x18\x02 \x01(\tR\bprovider\x12%\n" +
+	"\x0eroot_directory\x18\x03 \x01(\tR\rrootDirectory\x12\x1a\n" +
+	"\brevision\x18\x04 \x01(\tR\brevision\x12#\n" +
+	"\rinclude_paths\x18\x05 \x03(\tR\fincludePaths\x12#\n" +
+	"\rexclude_paths\x18\x06 \x03(\tR\fexcludePaths\x12\x18\n" +
+	"\aimports\x18\a \x03(\tR\aimports\x12A\n" +
+	"\toperation\x18\b \x01(\v2#.atmos.plugin.v1.ComponentOperationR\toperation\x12;\n" +
+	"\aeffects\x18\t \x01(\v2!.atmos.plugin.v1.ComponentEffectsR\aeffects\x12V\n" +
+	"\x16provider_configuration\x18\n" +
+	" \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\x15providerConfiguration\"\xd0\x01\n" +
+	"\x1aDiscoverComponentsResponse\x12D\n" +
+	"\n" +
+	"components\x18\x01 \x03(\v2$.atmos.plugin.v1.DiscoveredComponentR\n" +
+	"components\x12=\n" +
+	"\vdiagnostics\x18\x02 \x03(\v2\x1b.atmos.plugin.v1.DiagnosticR\vdiagnostics\x12-\n" +
+	"\x04logs\x18\x03 \x03(\v2\x19.atmos.plugin.v1.LogEntryR\x04logs\"\x86\x04\n" +
+	"\x10ComponentRequest\x12;\n" +
+	"\n" +
+	"invocation\x18\x01 \x01(\v2\x1b.atmos.plugin.v1.InvocationR\n" +
+	"invocation\x12\x1a\n" +
+	"\bprovider\x18\x02 \x01(\tR\bprovider\x12;\n" +
+	"\aaddress\x18\x03 \x01(\v2!.atmos.plugin.v1.ComponentAddressR\aaddress\x12%\n" +
+	"\x0eroot_directory\x18\x04 \x01(\tR\rrootDirectory\x12\x16\n" +
+	"\x06source\x18\x05 \x01(\tR\x06source\x12A\n" +
+	"\toperation\x18\x06 \x01(\v2#.atmos.plugin.v1.ComponentOperationR\toperation\x12;\n" +
+	"\aeffects\x18\a \x01(\v2!.atmos.plugin.v1.ComponentEffectsR\aeffects\x12E\n" +
+	"\rconfiguration\x18\b \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\rconfiguration\x12V\n" +
+	"\x16provider_configuration\x18\t \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\x15providerConfiguration\"\xc1\x01\n" +
+	"\x16ComponentStateIdentity\x12!\n" +
+	"\fbackend_type\x18\x01 \x01(\tR\vbackendType\x129\n" +
+	"\abackend\x18\x02 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\abackend\x12\x1c\n" +
+	"\tworkspace\x18\x03 \x01(\tR\tworkspace\x12+\n" +
+	"\x11working_directory\x18\x04 \x01(\tR\x10workingDirectory\"\xbb\x01\n" +
+	"\x16ComponentGeneratedFile\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\fR\acontent\x12\x1b\n" +
+	"\tif_exists\x18\x03 \x01(\tR\bifExists\x12\x1c\n" +
+	"\tsensitive\x18\x04 \x01(\bR\tsensitive\x12\x12\n" +
+	"\x04mode\x18\x05 \x01(\rR\x04mode\x12$\n" +
+	"\x0eunit_file_copy\x18\x06 \x01(\bR\funitFileCopy\"\x81\x03\n" +
+	"\x1fComponentExecutionConfiguration\x12Q\n" +
+	"\x0fextra_arguments\x18\x01 \x03(\v2(.atmos.plugin.v1.ComponentExtraArgumentsR\x0eextraArguments\x12A\n" +
+	"\fbefore_hooks\x18\x02 \x03(\v2\x1e.atmos.plugin.v1.ComponentHookR\vbeforeHooks\x12?\n" +
+	"\vafter_hooks\x18\x03 \x03(\v2\x1e.atmos.plugin.v1.ComponentHookR\n" +
+	"afterHooks\x12?\n" +
+	"\verror_hooks\x18\x04 \x03(\v2\x1e.atmos.plugin.v1.ComponentHookR\n" +
+	"errorHooks\x12F\n" +
+	"\x05apply\x18\x05 \x01(\v20.atmos.plugin.v1.ComponentExecutionConfigurationR\x05apply\"\xcc\x02\n" +
+	"\x17ComponentExtraArguments\x12\x1a\n" +
+	"\bcommands\x18\x01 \x03(\tR\bcommands\x12\x1c\n" +
+	"\targuments\x18\x02 \x03(\tR\targuments\x12,\n" +
+	"\x12required_var_files\x18\x03 \x03(\tR\x10requiredVarFiles\x12,\n" +
+	"\x12optional_var_files\x18\x04 \x03(\tR\x10optionalVarFiles\x12[\n" +
+	"\venvironment\x18\x05 \x03(\v29.atmos.plugin.v1.ComponentExtraArguments.EnvironmentEntryR\venvironment\x1a>\n" +
+	"\x10EnvironmentEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xee\x01\n" +
+	"\rComponentHook\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
+	"\bcommands\x18\x02 \x03(\tR\bcommands\x12\x18\n" +
+	"\aexecute\x18\x03 \x03(\tR\aexecute\x12+\n" +
+	"\x11working_directory\x18\x04 \x01(\tR\x10workingDirectory\x12 \n" +
+	"\frun_on_error\x18\x05 \x01(\bR\n" +
+	"runOnError\x12'\n" +
+	"\x0fsuppress_stdout\x18\x06 \x01(\bR\x0esuppressStdout\x12\x1b\n" +
+	"\ton_errors\x18\a \x03(\tR\bonErrors\"\xfd\f\n" +
+	"\x18PrepareComponentResponse\x12\x16\n" +
+	"\x06engine\x18\x01 \x01(\tR\x06engine\x12+\n" +
+	"\x11working_directory\x18\x02 \x01(\tR\x10workingDirectory\x12#\n" +
+	"\rmodule_source\x18\x03 \x01(\tR\fmoduleSource\x127\n" +
+	"\x06inputs\x18\x04 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\x06inputs\x12=\n" +
+	"\x05state\x18\x05 \x01(\v2'.atmos.plugin.v1.ComponentStateIdentityR\x05state\x12=\n" +
+	"\x05files\x18\x06 \x03(\v2'.atmos.plugin.v1.ComponentGeneratedFileR\x05files\x12H\n" +
+	"\fdependencies\x18\a \x03(\v2$.atmos.plugin.v1.ComponentDependencyR\fdependencies\x12:\n" +
+	"\asources\x18\b \x03(\v2 .atmos.plugin.v1.ComponentSourceR\asources\x12=\n" +
+	"\vdiagnostics\x18\t \x03(\v2\x1b.atmos.plugin.v1.DiagnosticR\vdiagnostics\x12+\n" +
+	"\x11backend_generated\x18\n" +
+	" \x01(\bR\x10backendGenerated\x12N\n" +
+	"\texecution\x18\v \x01(\v20.atmos.plugin.v1.ComponentExecutionConfigurationR\texecution\x12`\n" +
+	"\rinput_origins\x18\f \x03(\v2;.atmos.plugin.v1.PrepareComponentResponse.InputOriginsEntryR\finputOrigins\x12)\n" +
+	"\x10terraform_binary\x18\r \x01(\tR\x0fterraformBinary\x12E\n" +
+	"\x06errors\x18\x0e \x01(\v2-.atmos.plugin.v1.ComponentErrorsConfigurationR\x06errors\x12;\n" +
+	"\aexclude\x18\x0f \x01(\v2!.atmos.plugin.v1.ComponentExcludeR\aexclude\x12/\n" +
+	"\x03iam\x18\x10 \x01(\v2\x1d.atmos.plugin.v1.ComponentIamR\x03iam\x12?\n" +
+	"\n" +
+	"encryption\x18\x11 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\n" +
+	"encryption\x12`\n" +
+	"\rfeature_flags\x18\x12 \x03(\v2;.atmos.plugin.v1.PrepareComponentResponse.FeatureFlagsEntryR\ffeatureFlags\x12-\n" +
+	"\x04logs\x18\x16 \x03(\v2\x19.atmos.plugin.v1.LogEntryR\x04logs\x12_\n" +
+	"\x1bmodule_source_authorization\x18\x13 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\x19moduleSourceAuthorization\x129\n" +
+	"\x19module_source_auth_origin\x18\x14 \x01(\tR\x16moduleSourceAuthOrigin\x12:\n" +
+	"\x19registry_resolution_nanos\x18\x15 \x01(\x04R\x17registryResolutionNanos\x12\x1f\n" +
+	"\vrun_ignored\x18\x17 \x01(\bR\n" +
+	"runIgnored\x12%\n" +
+	"\x0eignored_policy\x18\x18 \x01(\tR\rignoredPolicy\x12'\n" +
+	"\x0fignored_message\x18\x19 \x01(\tR\x0eignoredMessage\x1a`\n" +
+	"\x11InputOriginsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.atmos.plugin.v1.SourceLocationR\x05value:\x028\x01\x1a?\n" +
+	"\x11FeatureFlagsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9b\x01\n" +
+	"\x1cComponentErrorsConfiguration\x12;\n" +
+	"\x05retry\x18\x01 \x03(\v2%.atmos.plugin.v1.ComponentRetryPolicyR\x05retry\x12>\n" +
+	"\x06ignore\x18\x02 \x03(\v2&.atmos.plugin.v1.ComponentIgnorePolicyR\x06ignore\"\xae\x01\n" +
+	"\x14ComponentRetryPolicy\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12)\n" +
+	"\x10retryable_errors\x18\x02 \x03(\tR\x0fretryableErrors\x12!\n" +
+	"\fmax_attempts\x18\x03 \x01(\rR\vmaxAttempts\x124\n" +
+	"\x16sleep_interval_seconds\x18\x04 \x01(\rR\x14sleepIntervalSeconds\"\x9c\x02\n" +
+	"\x15ComponentIgnorePolicy\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12)\n" +
+	"\x10ignorable_errors\x18\x02 \x03(\tR\x0fignorableErrors\x12\x18\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage\x12M\n" +
+	"\asignals\x18\x04 \x03(\v23.atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntryR\asignals\x1a[\n" +
+	"\fSignalsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\x05value:\x028\x01\"}\n" +
+	"\x10ComponentExclude\x12\x1c\n" +
+	"\tcondition\x18\x01 \x01(\bR\tcondition\x12\x18\n" +
+	"\aactions\x18\x02 \x03(\tR\aactions\x121\n" +
+	"\x14exclude_dependencies\x18\x03 \x01(\bR\x13excludeDependencies\"\xbf\x01\n" +
+	"\fComponentIam\x12\x12\n" +
+	"\x04role\x18\x01 \x01(\tR\x04role\x12!\n" +
+	"\fsession_name\x18\x02 \x01(\tR\vsessionName\x12)\n" +
+	"\x10duration_seconds\x18\x03 \x01(\rR\x0fdurationSeconds\x12M\n" +
+	"\x12web_identity_token\x18\x04 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\x10webIdentityToken\"\x88\x02\n" +
+	"\x1dResolveComponentStateResponse\x12=\n" +
+	"\x05state\x18\x01 \x01(\v2'.atmos.plugin.v1.ComponentStateIdentityR\x05state\x12:\n" +
+	"\asources\x18\x02 \x03(\v2 .atmos.plugin.v1.ComponentSourceR\asources\x12=\n" +
+	"\vdiagnostics\x18\x03 \x03(\v2\x1b.atmos.plugin.v1.DiagnosticR\vdiagnostics\x12-\n" +
+	"\x04logs\x18\x04 \x03(\v2\x19.atmos.plugin.v1.LogEntryR\x04logs*\x8c\x01\n" +
+	"\bLogLevel\x12\x19\n" +
+	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fLOG_LEVEL_TRACE\x10\x01\x12\x13\n" +
+	"\x0fLOG_LEVEL_DEBUG\x10\x02\x12\x12\n" +
+	"\x0eLOG_LEVEL_INFO\x10\x03\x12\x12\n" +
+	"\x0eLOG_LEVEL_WARN\x10\x04\x12\x13\n" +
+	"\x0fLOG_LEVEL_ERROR\x10\x05*N\n" +
+	"\bSeverity\x12\x18\n" +
+	"\x14SEVERITY_UNSPECIFIED\x10\x00\x12\x12\n" +
+	"\x0eSEVERITY_ERROR\x10\x01\x12\x14\n" +
+	"\x10SEVERITY_WARNING\x10\x022\x9f\x01\n" +
 	"\x04Info\x12O\n" +
 	"\bDescribe\x12 .atmos.plugin.v1.DescribeRequest\x1a!.atmos.plugin.v1.DescribeResponse\x12F\n" +
-	"\tConfigure\x12!.atmos.plugin.v1.ConfigureRequest\x1a\x16.google.protobuf.Empty2\xd3\x04\n" +
+	"\tConfigure\x12!.atmos.plugin.v1.ConfigureRequest\x1a\x16.google.protobuf.Empty2C\n" +
+	"\x03Log\x12<\n" +
+	"\x05Write\x12\x1b.atmos.plugin.v1.LogRequest\x1a\x16.google.protobuf.Empty2\xd3\x04\n" +
 	"\fAuthProvider\x12O\n" +
 	"\bValidate\x12 .atmos.plugin.v1.ProviderRequest\x1a!.atmos.plugin.v1.ValidateResponse\x12V\n" +
 	"\fAuthenticate\x12 .atmos.plugin.v1.ProviderRequest\x1a\".atmos.plugin.v1.AuthenticateEvent0\x01\x12L\n" +
@@ -1845,7 +4651,15 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x05Paths\x12 .atmos.plugin.v1.IdentityRequest\x1a\x1e.atmos.plugin.v1.PathsResponse\x12c\n" +
 	"\x12PrepareEnvironment\x12'.atmos.plugin.v1.IdentityPrepareRequest\x1a$.atmos.plugin.v1.EnvironmentResponse2S\n" +
 	"\bCommands\x12G\n" +
-	"\x03Run\x12\x1f.atmos.plugin.v1.CommandRequest\x1a\x1d.atmos.plugin.v1.CommandEvent0\x01B@Z>github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1;pluginv1b\x06proto3"
+	"\x03Run\x12\x1f.atmos.plugin.v1.CommandRequest\x1a\x1d.atmos.plugin.v1.CommandEvent0\x012y\n" +
+	"\x12ComponentDiscovery\x12c\n" +
+	"\bDiscover\x12*.atmos.plugin.v1.DiscoverComponentsRequest\x1a+.atmos.plugin.v1.DiscoverComponentsResponse2g\n" +
+	"\x13ComponentValidation\x12P\n" +
+	"\bValidate\x12!.atmos.plugin.v1.ComponentRequest\x1a!.atmos.plugin.v1.ValidateResponse2o\n" +
+	"\x14ComponentPreparation\x12W\n" +
+	"\aPrepare\x12!.atmos.plugin.v1.ComponentRequest\x1a).atmos.plugin.v1.PrepareComponentResponse2n\n" +
+	"\x0eComponentState\x12\\\n" +
+	"\aResolve\x12!.atmos.plugin.v1.ComponentRequest\x1a..atmos.plugin.v1.ResolveComponentStateResponseB@Z>github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1;pluginv1b\x06proto3"
 
 var (
 	file_atmos_plugin_v1_plugin_proto_rawDescOnce sync.Once
@@ -1860,118 +4674,232 @@ func file_atmos_plugin_v1_plugin_proto_rawDescGZIP() []byte {
 }
 
 var (
-	file_atmos_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
-	file_atmos_plugin_v1_plugin_proto_goTypes  = []any{
-		(*Invocation)(nil),                  // 0: atmos.plugin.v1.Invocation
-		(*Credentials)(nil),                 // 1: atmos.plugin.v1.Credentials
-		(*ServiceVersionRange)(nil),         // 2: atmos.plugin.v1.ServiceVersionRange
-		(*Export)(nil),                      // 3: atmos.plugin.v1.Export
-		(*DescribeRequest)(nil),             // 4: atmos.plugin.v1.DescribeRequest
-		(*DescribeResponse)(nil),            // 5: atmos.plugin.v1.DescribeResponse
-		(*ConfigureRequest)(nil),            // 6: atmos.plugin.v1.ConfigureRequest
-		(*ProviderRequest)(nil),             // 7: atmos.plugin.v1.ProviderRequest
-		(*IdentityRequest)(nil),             // 8: atmos.plugin.v1.IdentityRequest
-		(*Progress)(nil),                    // 9: atmos.plugin.v1.Progress
-		(*Interaction)(nil),                 // 10: atmos.plugin.v1.Interaction
-		(*AuthenticateEvent)(nil),           // 11: atmos.plugin.v1.AuthenticateEvent
-		(*Diagnostic)(nil),                  // 12: atmos.plugin.v1.Diagnostic
-		(*ValidateResponse)(nil),            // 13: atmos.plugin.v1.ValidateResponse
-		(*Unsupported)(nil),                 // 14: atmos.plugin.v1.Unsupported
-		(*RefreshRequest)(nil),              // 15: atmos.plugin.v1.RefreshRequest
-		(*RefreshResponse)(nil),             // 16: atmos.plugin.v1.RefreshResponse
-		(*EnvironmentResponse)(nil),         // 17: atmos.plugin.v1.EnvironmentResponse
-		(*PrepareEnvironmentRequest)(nil),   // 18: atmos.plugin.v1.PrepareEnvironmentRequest
-		(*CredentialPath)(nil),              // 19: atmos.plugin.v1.CredentialPath
-		(*PathsResponse)(nil),               // 20: atmos.plugin.v1.PathsResponse
-		(*IdentityAuthenticateRequest)(nil), // 21: atmos.plugin.v1.IdentityAuthenticateRequest
-		(*IdentityPrepareRequest)(nil),      // 22: atmos.plugin.v1.IdentityPrepareRequest
-		(*CommandRequest)(nil),              // 23: atmos.plugin.v1.CommandRequest
-		(*CommandExit)(nil),                 // 24: atmos.plugin.v1.CommandExit
-		(*CommandEvent)(nil),                // 25: atmos.plugin.v1.CommandEvent
-		nil,                                 // 26: atmos.plugin.v1.Invocation.EnvironmentEntry
-		nil,                                 // 27: atmos.plugin.v1.ConfigureRequest.BrokerIdsEntry
-		nil,                                 // 28: atmos.plugin.v1.Interaction.FieldsEntry
-		nil,                                 // 29: atmos.plugin.v1.EnvironmentResponse.EnvironmentEntry
-		nil,                                 // 30: atmos.plugin.v1.PrepareEnvironmentRequest.EnvironmentEntry
-		nil,                                 // 31: atmos.plugin.v1.IdentityPrepareRequest.EnvironmentEntry
-		(*timestamppb.Timestamp)(nil),       // 32: google.protobuf.Timestamp
-		(*structpb.Struct)(nil),             // 33: google.protobuf.Struct
-		(*emptypb.Empty)(nil),               // 34: google.protobuf.Empty
+	file_atmos_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+	file_atmos_plugin_v1_plugin_proto_msgTypes  = make([]protoimpl.MessageInfo, 66)
+	file_atmos_plugin_v1_plugin_proto_goTypes   = []any{
+		LogLevel(0),                             // 0: atmos.plugin.v1.LogLevel
+		Severity(0),                             // 1: atmos.plugin.v1.Severity
+		ComponentSource_Kind(0),                 // 2: atmos.plugin.v1.ComponentSource.Kind
+		ComponentDependency_Kind(0),             // 3: atmos.plugin.v1.ComponentDependency.Kind
+		(*Invocation)(nil),                      // 4: atmos.plugin.v1.Invocation
+		(*Credentials)(nil),                     // 5: atmos.plugin.v1.Credentials
+		(*ServiceVersionRange)(nil),             // 6: atmos.plugin.v1.ServiceVersionRange
+		(*Export)(nil),                          // 7: atmos.plugin.v1.Export
+		(*DescribeRequest)(nil),                 // 8: atmos.plugin.v1.DescribeRequest
+		(*DescribeResponse)(nil),                // 9: atmos.plugin.v1.DescribeResponse
+		(*ConfigureRequest)(nil),                // 10: atmos.plugin.v1.ConfigureRequest
+		(*ProviderRequest)(nil),                 // 11: atmos.plugin.v1.ProviderRequest
+		(*IdentityRequest)(nil),                 // 12: atmos.plugin.v1.IdentityRequest
+		(*Progress)(nil),                        // 13: atmos.plugin.v1.Progress
+		(*Interaction)(nil),                     // 14: atmos.plugin.v1.Interaction
+		(*AuthenticateEvent)(nil),               // 15: atmos.plugin.v1.AuthenticateEvent
+		(*SourceLocation)(nil),                  // 16: atmos.plugin.v1.SourceLocation
+		(*LogEntry)(nil),                        // 17: atmos.plugin.v1.LogEntry
+		(*LogRequest)(nil),                      // 18: atmos.plugin.v1.LogRequest
+		(*ErrorDetail)(nil),                     // 19: atmos.plugin.v1.ErrorDetail
+		(*Diagnostic)(nil),                      // 20: atmos.plugin.v1.Diagnostic
+		(*ValidateResponse)(nil),                // 21: atmos.plugin.v1.ValidateResponse
+		(*Unsupported)(nil),                     // 22: atmos.plugin.v1.Unsupported
+		(*RefreshRequest)(nil),                  // 23: atmos.plugin.v1.RefreshRequest
+		(*RefreshResponse)(nil),                 // 24: atmos.plugin.v1.RefreshResponse
+		(*EnvironmentResponse)(nil),             // 25: atmos.plugin.v1.EnvironmentResponse
+		(*PrepareEnvironmentRequest)(nil),       // 26: atmos.plugin.v1.PrepareEnvironmentRequest
+		(*CredentialPath)(nil),                  // 27: atmos.plugin.v1.CredentialPath
+		(*PathsResponse)(nil),                   // 28: atmos.plugin.v1.PathsResponse
+		(*IdentityAuthenticateRequest)(nil),     // 29: atmos.plugin.v1.IdentityAuthenticateRequest
+		(*IdentityPrepareRequest)(nil),          // 30: atmos.plugin.v1.IdentityPrepareRequest
+		(*CommandRequest)(nil),                  // 31: atmos.plugin.v1.CommandRequest
+		(*CommandExit)(nil),                     // 32: atmos.plugin.v1.CommandExit
+		(*CommandEvent)(nil),                    // 33: atmos.plugin.v1.CommandEvent
+		(*ComponentValue)(nil),                  // 34: atmos.plugin.v1.ComponentValue
+		(*ComponentValuePath)(nil),              // 35: atmos.plugin.v1.ComponentValuePath
+		(*ComponentValueStep)(nil),              // 36: atmos.plugin.v1.ComponentValueStep
+		(*ComponentAddress)(nil),                // 37: atmos.plugin.v1.ComponentAddress
+		(*ComponentSource)(nil),                 // 38: atmos.plugin.v1.ComponentSource
+		(*ComponentDependency)(nil),             // 39: atmos.plugin.v1.ComponentDependency
+		(*DiscoveredComponent)(nil),             // 40: atmos.plugin.v1.DiscoveredComponent
+		(*ComponentEffects)(nil),                // 41: atmos.plugin.v1.ComponentEffects
+		(*ComponentOperation)(nil),              // 42: atmos.plugin.v1.ComponentOperation
+		(*DiscoverComponentsRequest)(nil),       // 43: atmos.plugin.v1.DiscoverComponentsRequest
+		(*DiscoverComponentsResponse)(nil),      // 44: atmos.plugin.v1.DiscoverComponentsResponse
+		(*ComponentRequest)(nil),                // 45: atmos.plugin.v1.ComponentRequest
+		(*ComponentStateIdentity)(nil),          // 46: atmos.plugin.v1.ComponentStateIdentity
+		(*ComponentGeneratedFile)(nil),          // 47: atmos.plugin.v1.ComponentGeneratedFile
+		(*ComponentExecutionConfiguration)(nil), // 48: atmos.plugin.v1.ComponentExecutionConfiguration
+		(*ComponentExtraArguments)(nil),         // 49: atmos.plugin.v1.ComponentExtraArguments
+		(*ComponentHook)(nil),                   // 50: atmos.plugin.v1.ComponentHook
+		(*PrepareComponentResponse)(nil),        // 51: atmos.plugin.v1.PrepareComponentResponse
+		(*ComponentErrorsConfiguration)(nil),    // 52: atmos.plugin.v1.ComponentErrorsConfiguration
+		(*ComponentRetryPolicy)(nil),            // 53: atmos.plugin.v1.ComponentRetryPolicy
+		(*ComponentIgnorePolicy)(nil),           // 54: atmos.plugin.v1.ComponentIgnorePolicy
+		(*ComponentExclude)(nil),                // 55: atmos.plugin.v1.ComponentExclude
+		(*ComponentIam)(nil),                    // 56: atmos.plugin.v1.ComponentIam
+		(*ResolveComponentStateResponse)(nil),   // 57: atmos.plugin.v1.ResolveComponentStateResponse
+		nil,                                     // 58: atmos.plugin.v1.Invocation.EnvironmentEntry
+		nil,                                     // 59: atmos.plugin.v1.ConfigureRequest.BrokerIdsEntry
+		nil,                                     // 60: atmos.plugin.v1.Interaction.FieldsEntry
+		nil,                                     // 61: atmos.plugin.v1.LogEntry.FieldsEntry
+		nil,                                     // 62: atmos.plugin.v1.EnvironmentResponse.EnvironmentEntry
+		nil,                                     // 63: atmos.plugin.v1.PrepareEnvironmentRequest.EnvironmentEntry
+		nil,                                     // 64: atmos.plugin.v1.IdentityPrepareRequest.EnvironmentEntry
+		nil,                                     // 65: atmos.plugin.v1.ComponentOperation.OptionsEntry
+		nil,                                     // 66: atmos.plugin.v1.ComponentExtraArguments.EnvironmentEntry
+		nil,                                     // 67: atmos.plugin.v1.PrepareComponentResponse.InputOriginsEntry
+		nil,                                     // 68: atmos.plugin.v1.PrepareComponentResponse.FeatureFlagsEntry
+		nil,                                     // 69: atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntry
+		(*timestamppb.Timestamp)(nil),           // 70: google.protobuf.Timestamp
+		(*structpb.Struct)(nil),                 // 71: google.protobuf.Struct
+		(*emptypb.Empty)(nil),                   // 72: google.protobuf.Empty
 	}
 )
 
 var file_atmos_plugin_v1_plugin_proto_depIdxs = []int32{
-	32, // 0: atmos.plugin.v1.Invocation.deadline:type_name -> google.protobuf.Timestamp
-	26, // 1: atmos.plugin.v1.Invocation.environment:type_name -> atmos.plugin.v1.Invocation.EnvironmentEntry
-	32, // 2: atmos.plugin.v1.Credentials.expires_at:type_name -> google.protobuf.Timestamp
-	33, // 3: atmos.plugin.v1.Credentials.data:type_name -> google.protobuf.Struct
-	2,  // 4: atmos.plugin.v1.DescribeRequest.host_supported:type_name -> atmos.plugin.v1.ServiceVersionRange
-	2,  // 5: atmos.plugin.v1.DescribeResponse.services:type_name -> atmos.plugin.v1.ServiceVersionRange
-	3,  // 6: atmos.plugin.v1.DescribeResponse.exports:type_name -> atmos.plugin.v1.Export
-	27, // 7: atmos.plugin.v1.ConfigureRequest.broker_ids:type_name -> atmos.plugin.v1.ConfigureRequest.BrokerIdsEntry
-	33, // 8: atmos.plugin.v1.ConfigureRequest.settings:type_name -> google.protobuf.Struct
-	0,  // 9: atmos.plugin.v1.ProviderRequest.invocation:type_name -> atmos.plugin.v1.Invocation
-	33, // 10: atmos.plugin.v1.ProviderRequest.spec:type_name -> google.protobuf.Struct
-	0,  // 11: atmos.plugin.v1.IdentityRequest.invocation:type_name -> atmos.plugin.v1.Invocation
-	33, // 12: atmos.plugin.v1.IdentityRequest.spec:type_name -> google.protobuf.Struct
-	33, // 13: atmos.plugin.v1.IdentityRequest.principal:type_name -> google.protobuf.Struct
-	28, // 14: atmos.plugin.v1.Interaction.fields:type_name -> atmos.plugin.v1.Interaction.FieldsEntry
-	9,  // 15: atmos.plugin.v1.AuthenticateEvent.progress:type_name -> atmos.plugin.v1.Progress
-	10, // 16: atmos.plugin.v1.AuthenticateEvent.interaction:type_name -> atmos.plugin.v1.Interaction
-	1,  // 17: atmos.plugin.v1.AuthenticateEvent.result:type_name -> atmos.plugin.v1.Credentials
-	12, // 18: atmos.plugin.v1.ValidateResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
-	7,  // 19: atmos.plugin.v1.RefreshRequest.provider:type_name -> atmos.plugin.v1.ProviderRequest
-	1,  // 20: atmos.plugin.v1.RefreshRequest.current:type_name -> atmos.plugin.v1.Credentials
-	1,  // 21: atmos.plugin.v1.RefreshResponse.credentials:type_name -> atmos.plugin.v1.Credentials
-	14, // 22: atmos.plugin.v1.RefreshResponse.unsupported:type_name -> atmos.plugin.v1.Unsupported
-	29, // 23: atmos.plugin.v1.EnvironmentResponse.environment:type_name -> atmos.plugin.v1.EnvironmentResponse.EnvironmentEntry
-	7,  // 24: atmos.plugin.v1.PrepareEnvironmentRequest.provider:type_name -> atmos.plugin.v1.ProviderRequest
-	30, // 25: atmos.plugin.v1.PrepareEnvironmentRequest.environment:type_name -> atmos.plugin.v1.PrepareEnvironmentRequest.EnvironmentEntry
-	19, // 26: atmos.plugin.v1.PathsResponse.paths:type_name -> atmos.plugin.v1.CredentialPath
-	8,  // 27: atmos.plugin.v1.IdentityAuthenticateRequest.identity:type_name -> atmos.plugin.v1.IdentityRequest
-	1,  // 28: atmos.plugin.v1.IdentityAuthenticateRequest.upstream:type_name -> atmos.plugin.v1.Credentials
-	8,  // 29: atmos.plugin.v1.IdentityPrepareRequest.identity:type_name -> atmos.plugin.v1.IdentityRequest
-	31, // 30: atmos.plugin.v1.IdentityPrepareRequest.environment:type_name -> atmos.plugin.v1.IdentityPrepareRequest.EnvironmentEntry
-	0,  // 31: atmos.plugin.v1.CommandRequest.invocation:type_name -> atmos.plugin.v1.Invocation
-	33, // 32: atmos.plugin.v1.CommandRequest.settings:type_name -> google.protobuf.Struct
-	24, // 33: atmos.plugin.v1.CommandEvent.exit:type_name -> atmos.plugin.v1.CommandExit
-	4,  // 34: atmos.plugin.v1.Info.Describe:input_type -> atmos.plugin.v1.DescribeRequest
-	6,  // 35: atmos.plugin.v1.Info.Configure:input_type -> atmos.plugin.v1.ConfigureRequest
-	7,  // 36: atmos.plugin.v1.AuthProvider.Validate:input_type -> atmos.plugin.v1.ProviderRequest
-	7,  // 37: atmos.plugin.v1.AuthProvider.Authenticate:input_type -> atmos.plugin.v1.ProviderRequest
-	15, // 38: atmos.plugin.v1.AuthProvider.Refresh:input_type -> atmos.plugin.v1.RefreshRequest
-	7,  // 39: atmos.plugin.v1.AuthProvider.Logout:input_type -> atmos.plugin.v1.ProviderRequest
-	7,  // 40: atmos.plugin.v1.AuthProvider.Environment:input_type -> atmos.plugin.v1.ProviderRequest
-	7,  // 41: atmos.plugin.v1.AuthProvider.Paths:input_type -> atmos.plugin.v1.ProviderRequest
-	18, // 42: atmos.plugin.v1.AuthProvider.PrepareEnvironment:input_type -> atmos.plugin.v1.PrepareEnvironmentRequest
-	8,  // 43: atmos.plugin.v1.AuthIdentity.Validate:input_type -> atmos.plugin.v1.IdentityRequest
-	21, // 44: atmos.plugin.v1.AuthIdentity.Authenticate:input_type -> atmos.plugin.v1.IdentityAuthenticateRequest
-	8,  // 45: atmos.plugin.v1.AuthIdentity.Logout:input_type -> atmos.plugin.v1.IdentityRequest
-	8,  // 46: atmos.plugin.v1.AuthIdentity.Environment:input_type -> atmos.plugin.v1.IdentityRequest
-	8,  // 47: atmos.plugin.v1.AuthIdentity.Paths:input_type -> atmos.plugin.v1.IdentityRequest
-	22, // 48: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:input_type -> atmos.plugin.v1.IdentityPrepareRequest
-	23, // 49: atmos.plugin.v1.Commands.Run:input_type -> atmos.plugin.v1.CommandRequest
-	5,  // 50: atmos.plugin.v1.Info.Describe:output_type -> atmos.plugin.v1.DescribeResponse
-	34, // 51: atmos.plugin.v1.Info.Configure:output_type -> google.protobuf.Empty
-	13, // 52: atmos.plugin.v1.AuthProvider.Validate:output_type -> atmos.plugin.v1.ValidateResponse
-	11, // 53: atmos.plugin.v1.AuthProvider.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
-	16, // 54: atmos.plugin.v1.AuthProvider.Refresh:output_type -> atmos.plugin.v1.RefreshResponse
-	34, // 55: atmos.plugin.v1.AuthProvider.Logout:output_type -> google.protobuf.Empty
-	17, // 56: atmos.plugin.v1.AuthProvider.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	20, // 57: atmos.plugin.v1.AuthProvider.Paths:output_type -> atmos.plugin.v1.PathsResponse
-	17, // 58: atmos.plugin.v1.AuthProvider.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	13, // 59: atmos.plugin.v1.AuthIdentity.Validate:output_type -> atmos.plugin.v1.ValidateResponse
-	11, // 60: atmos.plugin.v1.AuthIdentity.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
-	34, // 61: atmos.plugin.v1.AuthIdentity.Logout:output_type -> google.protobuf.Empty
-	17, // 62: atmos.plugin.v1.AuthIdentity.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	20, // 63: atmos.plugin.v1.AuthIdentity.Paths:output_type -> atmos.plugin.v1.PathsResponse
-	17, // 64: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	25, // 65: atmos.plugin.v1.Commands.Run:output_type -> atmos.plugin.v1.CommandEvent
-	50, // [50:66] is the sub-list for method output_type
-	34, // [34:50] is the sub-list for method input_type
-	34, // [34:34] is the sub-list for extension type_name
-	34, // [34:34] is the sub-list for extension extendee
-	0,  // [0:34] is the sub-list for field type_name
+	70,  // 0: atmos.plugin.v1.Invocation.deadline:type_name -> google.protobuf.Timestamp
+	58,  // 1: atmos.plugin.v1.Invocation.environment:type_name -> atmos.plugin.v1.Invocation.EnvironmentEntry
+	70,  // 2: atmos.plugin.v1.Credentials.expires_at:type_name -> google.protobuf.Timestamp
+	71,  // 3: atmos.plugin.v1.Credentials.data:type_name -> google.protobuf.Struct
+	6,   // 4: atmos.plugin.v1.DescribeRequest.host_supported:type_name -> atmos.plugin.v1.ServiceVersionRange
+	6,   // 5: atmos.plugin.v1.DescribeResponse.services:type_name -> atmos.plugin.v1.ServiceVersionRange
+	7,   // 6: atmos.plugin.v1.DescribeResponse.exports:type_name -> atmos.plugin.v1.Export
+	59,  // 7: atmos.plugin.v1.ConfigureRequest.broker_ids:type_name -> atmos.plugin.v1.ConfigureRequest.BrokerIdsEntry
+	71,  // 8: atmos.plugin.v1.ConfigureRequest.settings:type_name -> google.protobuf.Struct
+	4,   // 9: atmos.plugin.v1.ProviderRequest.invocation:type_name -> atmos.plugin.v1.Invocation
+	71,  // 10: atmos.plugin.v1.ProviderRequest.spec:type_name -> google.protobuf.Struct
+	4,   // 11: atmos.plugin.v1.IdentityRequest.invocation:type_name -> atmos.plugin.v1.Invocation
+	71,  // 12: atmos.plugin.v1.IdentityRequest.spec:type_name -> google.protobuf.Struct
+	71,  // 13: atmos.plugin.v1.IdentityRequest.principal:type_name -> google.protobuf.Struct
+	60,  // 14: atmos.plugin.v1.Interaction.fields:type_name -> atmos.plugin.v1.Interaction.FieldsEntry
+	13,  // 15: atmos.plugin.v1.AuthenticateEvent.progress:type_name -> atmos.plugin.v1.Progress
+	14,  // 16: atmos.plugin.v1.AuthenticateEvent.interaction:type_name -> atmos.plugin.v1.Interaction
+	5,   // 17: atmos.plugin.v1.AuthenticateEvent.result:type_name -> atmos.plugin.v1.Credentials
+	0,   // 18: atmos.plugin.v1.LogEntry.level:type_name -> atmos.plugin.v1.LogLevel
+	61,  // 19: atmos.plugin.v1.LogEntry.fields:type_name -> atmos.plugin.v1.LogEntry.FieldsEntry
+	70,  // 20: atmos.plugin.v1.LogEntry.time:type_name -> google.protobuf.Timestamp
+	17,  // 21: atmos.plugin.v1.LogRequest.entries:type_name -> atmos.plugin.v1.LogEntry
+	16,  // 22: atmos.plugin.v1.ErrorDetail.location:type_name -> atmos.plugin.v1.SourceLocation
+	1,   // 23: atmos.plugin.v1.ErrorDetail.severity:type_name -> atmos.plugin.v1.Severity
+	17,  // 24: atmos.plugin.v1.ErrorDetail.logs:type_name -> atmos.plugin.v1.LogEntry
+	19,  // 25: atmos.plugin.v1.Diagnostic.detail:type_name -> atmos.plugin.v1.ErrorDetail
+	20,  // 26: atmos.plugin.v1.ValidateResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
+	11,  // 27: atmos.plugin.v1.RefreshRequest.provider:type_name -> atmos.plugin.v1.ProviderRequest
+	5,   // 28: atmos.plugin.v1.RefreshRequest.current:type_name -> atmos.plugin.v1.Credentials
+	5,   // 29: atmos.plugin.v1.RefreshResponse.credentials:type_name -> atmos.plugin.v1.Credentials
+	22,  // 30: atmos.plugin.v1.RefreshResponse.unsupported:type_name -> atmos.plugin.v1.Unsupported
+	62,  // 31: atmos.plugin.v1.EnvironmentResponse.environment:type_name -> atmos.plugin.v1.EnvironmentResponse.EnvironmentEntry
+	11,  // 32: atmos.plugin.v1.PrepareEnvironmentRequest.provider:type_name -> atmos.plugin.v1.ProviderRequest
+	63,  // 33: atmos.plugin.v1.PrepareEnvironmentRequest.environment:type_name -> atmos.plugin.v1.PrepareEnvironmentRequest.EnvironmentEntry
+	27,  // 34: atmos.plugin.v1.PathsResponse.paths:type_name -> atmos.plugin.v1.CredentialPath
+	12,  // 35: atmos.plugin.v1.IdentityAuthenticateRequest.identity:type_name -> atmos.plugin.v1.IdentityRequest
+	5,   // 36: atmos.plugin.v1.IdentityAuthenticateRequest.upstream:type_name -> atmos.plugin.v1.Credentials
+	12,  // 37: atmos.plugin.v1.IdentityPrepareRequest.identity:type_name -> atmos.plugin.v1.IdentityRequest
+	64,  // 38: atmos.plugin.v1.IdentityPrepareRequest.environment:type_name -> atmos.plugin.v1.IdentityPrepareRequest.EnvironmentEntry
+	4,   // 39: atmos.plugin.v1.CommandRequest.invocation:type_name -> atmos.plugin.v1.Invocation
+	71,  // 40: atmos.plugin.v1.CommandRequest.settings:type_name -> google.protobuf.Struct
+	32,  // 41: atmos.plugin.v1.CommandEvent.exit:type_name -> atmos.plugin.v1.CommandExit
+	35,  // 42: atmos.plugin.v1.ComponentValue.sensitive_paths:type_name -> atmos.plugin.v1.ComponentValuePath
+	36,  // 43: atmos.plugin.v1.ComponentValuePath.steps:type_name -> atmos.plugin.v1.ComponentValueStep
+	34,  // 44: atmos.plugin.v1.ComponentValueStep.index:type_name -> atmos.plugin.v1.ComponentValue
+	2,   // 45: atmos.plugin.v1.ComponentSource.kind:type_name -> atmos.plugin.v1.ComponentSource.Kind
+	37,  // 46: atmos.plugin.v1.ComponentDependency.target:type_name -> atmos.plugin.v1.ComponentAddress
+	3,   // 47: atmos.plugin.v1.ComponentDependency.kind:type_name -> atmos.plugin.v1.ComponentDependency.Kind
+	37,  // 48: atmos.plugin.v1.DiscoveredComponent.address:type_name -> atmos.plugin.v1.ComponentAddress
+	34,  // 49: atmos.plugin.v1.DiscoveredComponent.configuration:type_name -> atmos.plugin.v1.ComponentValue
+	38,  // 50: atmos.plugin.v1.DiscoveredComponent.sources:type_name -> atmos.plugin.v1.ComponentSource
+	39,  // 51: atmos.plugin.v1.DiscoveredComponent.dependencies:type_name -> atmos.plugin.v1.ComponentDependency
+	65,  // 52: atmos.plugin.v1.ComponentOperation.options:type_name -> atmos.plugin.v1.ComponentOperation.OptionsEntry
+	4,   // 53: atmos.plugin.v1.DiscoverComponentsRequest.invocation:type_name -> atmos.plugin.v1.Invocation
+	42,  // 54: atmos.plugin.v1.DiscoverComponentsRequest.operation:type_name -> atmos.plugin.v1.ComponentOperation
+	41,  // 55: atmos.plugin.v1.DiscoverComponentsRequest.effects:type_name -> atmos.plugin.v1.ComponentEffects
+	34,  // 56: atmos.plugin.v1.DiscoverComponentsRequest.provider_configuration:type_name -> atmos.plugin.v1.ComponentValue
+	40,  // 57: atmos.plugin.v1.DiscoverComponentsResponse.components:type_name -> atmos.plugin.v1.DiscoveredComponent
+	20,  // 58: atmos.plugin.v1.DiscoverComponentsResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
+	17,  // 59: atmos.plugin.v1.DiscoverComponentsResponse.logs:type_name -> atmos.plugin.v1.LogEntry
+	4,   // 60: atmos.plugin.v1.ComponentRequest.invocation:type_name -> atmos.plugin.v1.Invocation
+	37,  // 61: atmos.plugin.v1.ComponentRequest.address:type_name -> atmos.plugin.v1.ComponentAddress
+	42,  // 62: atmos.plugin.v1.ComponentRequest.operation:type_name -> atmos.plugin.v1.ComponentOperation
+	41,  // 63: atmos.plugin.v1.ComponentRequest.effects:type_name -> atmos.plugin.v1.ComponentEffects
+	34,  // 64: atmos.plugin.v1.ComponentRequest.configuration:type_name -> atmos.plugin.v1.ComponentValue
+	34,  // 65: atmos.plugin.v1.ComponentRequest.provider_configuration:type_name -> atmos.plugin.v1.ComponentValue
+	34,  // 66: atmos.plugin.v1.ComponentStateIdentity.backend:type_name -> atmos.plugin.v1.ComponentValue
+	49,  // 67: atmos.plugin.v1.ComponentExecutionConfiguration.extra_arguments:type_name -> atmos.plugin.v1.ComponentExtraArguments
+	50,  // 68: atmos.plugin.v1.ComponentExecutionConfiguration.before_hooks:type_name -> atmos.plugin.v1.ComponentHook
+	50,  // 69: atmos.plugin.v1.ComponentExecutionConfiguration.after_hooks:type_name -> atmos.plugin.v1.ComponentHook
+	50,  // 70: atmos.plugin.v1.ComponentExecutionConfiguration.error_hooks:type_name -> atmos.plugin.v1.ComponentHook
+	48,  // 71: atmos.plugin.v1.ComponentExecutionConfiguration.apply:type_name -> atmos.plugin.v1.ComponentExecutionConfiguration
+	66,  // 72: atmos.plugin.v1.ComponentExtraArguments.environment:type_name -> atmos.plugin.v1.ComponentExtraArguments.EnvironmentEntry
+	34,  // 73: atmos.plugin.v1.PrepareComponentResponse.inputs:type_name -> atmos.plugin.v1.ComponentValue
+	46,  // 74: atmos.plugin.v1.PrepareComponentResponse.state:type_name -> atmos.plugin.v1.ComponentStateIdentity
+	47,  // 75: atmos.plugin.v1.PrepareComponentResponse.files:type_name -> atmos.plugin.v1.ComponentGeneratedFile
+	39,  // 76: atmos.plugin.v1.PrepareComponentResponse.dependencies:type_name -> atmos.plugin.v1.ComponentDependency
+	38,  // 77: atmos.plugin.v1.PrepareComponentResponse.sources:type_name -> atmos.plugin.v1.ComponentSource
+	20,  // 78: atmos.plugin.v1.PrepareComponentResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
+	48,  // 79: atmos.plugin.v1.PrepareComponentResponse.execution:type_name -> atmos.plugin.v1.ComponentExecutionConfiguration
+	67,  // 80: atmos.plugin.v1.PrepareComponentResponse.input_origins:type_name -> atmos.plugin.v1.PrepareComponentResponse.InputOriginsEntry
+	52,  // 81: atmos.plugin.v1.PrepareComponentResponse.errors:type_name -> atmos.plugin.v1.ComponentErrorsConfiguration
+	55,  // 82: atmos.plugin.v1.PrepareComponentResponse.exclude:type_name -> atmos.plugin.v1.ComponentExclude
+	56,  // 83: atmos.plugin.v1.PrepareComponentResponse.iam:type_name -> atmos.plugin.v1.ComponentIam
+	34,  // 84: atmos.plugin.v1.PrepareComponentResponse.encryption:type_name -> atmos.plugin.v1.ComponentValue
+	68,  // 85: atmos.plugin.v1.PrepareComponentResponse.feature_flags:type_name -> atmos.plugin.v1.PrepareComponentResponse.FeatureFlagsEntry
+	17,  // 86: atmos.plugin.v1.PrepareComponentResponse.logs:type_name -> atmos.plugin.v1.LogEntry
+	34,  // 87: atmos.plugin.v1.PrepareComponentResponse.module_source_authorization:type_name -> atmos.plugin.v1.ComponentValue
+	53,  // 88: atmos.plugin.v1.ComponentErrorsConfiguration.retry:type_name -> atmos.plugin.v1.ComponentRetryPolicy
+	54,  // 89: atmos.plugin.v1.ComponentErrorsConfiguration.ignore:type_name -> atmos.plugin.v1.ComponentIgnorePolicy
+	69,  // 90: atmos.plugin.v1.ComponentIgnorePolicy.signals:type_name -> atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntry
+	34,  // 91: atmos.plugin.v1.ComponentIam.web_identity_token:type_name -> atmos.plugin.v1.ComponentValue
+	46,  // 92: atmos.plugin.v1.ResolveComponentStateResponse.state:type_name -> atmos.plugin.v1.ComponentStateIdentity
+	38,  // 93: atmos.plugin.v1.ResolveComponentStateResponse.sources:type_name -> atmos.plugin.v1.ComponentSource
+	20,  // 94: atmos.plugin.v1.ResolveComponentStateResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
+	17,  // 95: atmos.plugin.v1.ResolveComponentStateResponse.logs:type_name -> atmos.plugin.v1.LogEntry
+	34,  // 96: atmos.plugin.v1.ComponentOperation.OptionsEntry.value:type_name -> atmos.plugin.v1.ComponentValue
+	16,  // 97: atmos.plugin.v1.PrepareComponentResponse.InputOriginsEntry.value:type_name -> atmos.plugin.v1.SourceLocation
+	34,  // 98: atmos.plugin.v1.ComponentIgnorePolicy.SignalsEntry.value:type_name -> atmos.plugin.v1.ComponentValue
+	8,   // 99: atmos.plugin.v1.Info.Describe:input_type -> atmos.plugin.v1.DescribeRequest
+	10,  // 100: atmos.plugin.v1.Info.Configure:input_type -> atmos.plugin.v1.ConfigureRequest
+	18,  // 101: atmos.plugin.v1.Log.Write:input_type -> atmos.plugin.v1.LogRequest
+	11,  // 102: atmos.plugin.v1.AuthProvider.Validate:input_type -> atmos.plugin.v1.ProviderRequest
+	11,  // 103: atmos.plugin.v1.AuthProvider.Authenticate:input_type -> atmos.plugin.v1.ProviderRequest
+	23,  // 104: atmos.plugin.v1.AuthProvider.Refresh:input_type -> atmos.plugin.v1.RefreshRequest
+	11,  // 105: atmos.plugin.v1.AuthProvider.Logout:input_type -> atmos.plugin.v1.ProviderRequest
+	11,  // 106: atmos.plugin.v1.AuthProvider.Environment:input_type -> atmos.plugin.v1.ProviderRequest
+	11,  // 107: atmos.plugin.v1.AuthProvider.Paths:input_type -> atmos.plugin.v1.ProviderRequest
+	26,  // 108: atmos.plugin.v1.AuthProvider.PrepareEnvironment:input_type -> atmos.plugin.v1.PrepareEnvironmentRequest
+	12,  // 109: atmos.plugin.v1.AuthIdentity.Validate:input_type -> atmos.plugin.v1.IdentityRequest
+	29,  // 110: atmos.plugin.v1.AuthIdentity.Authenticate:input_type -> atmos.plugin.v1.IdentityAuthenticateRequest
+	12,  // 111: atmos.plugin.v1.AuthIdentity.Logout:input_type -> atmos.plugin.v1.IdentityRequest
+	12,  // 112: atmos.plugin.v1.AuthIdentity.Environment:input_type -> atmos.plugin.v1.IdentityRequest
+	12,  // 113: atmos.plugin.v1.AuthIdentity.Paths:input_type -> atmos.plugin.v1.IdentityRequest
+	30,  // 114: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:input_type -> atmos.plugin.v1.IdentityPrepareRequest
+	31,  // 115: atmos.plugin.v1.Commands.Run:input_type -> atmos.plugin.v1.CommandRequest
+	43,  // 116: atmos.plugin.v1.ComponentDiscovery.Discover:input_type -> atmos.plugin.v1.DiscoverComponentsRequest
+	45,  // 117: atmos.plugin.v1.ComponentValidation.Validate:input_type -> atmos.plugin.v1.ComponentRequest
+	45,  // 118: atmos.plugin.v1.ComponentPreparation.Prepare:input_type -> atmos.plugin.v1.ComponentRequest
+	45,  // 119: atmos.plugin.v1.ComponentState.Resolve:input_type -> atmos.plugin.v1.ComponentRequest
+	9,   // 120: atmos.plugin.v1.Info.Describe:output_type -> atmos.plugin.v1.DescribeResponse
+	72,  // 121: atmos.plugin.v1.Info.Configure:output_type -> google.protobuf.Empty
+	72,  // 122: atmos.plugin.v1.Log.Write:output_type -> google.protobuf.Empty
+	21,  // 123: atmos.plugin.v1.AuthProvider.Validate:output_type -> atmos.plugin.v1.ValidateResponse
+	15,  // 124: atmos.plugin.v1.AuthProvider.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
+	24,  // 125: atmos.plugin.v1.AuthProvider.Refresh:output_type -> atmos.plugin.v1.RefreshResponse
+	72,  // 126: atmos.plugin.v1.AuthProvider.Logout:output_type -> google.protobuf.Empty
+	25,  // 127: atmos.plugin.v1.AuthProvider.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	28,  // 128: atmos.plugin.v1.AuthProvider.Paths:output_type -> atmos.plugin.v1.PathsResponse
+	25,  // 129: atmos.plugin.v1.AuthProvider.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	21,  // 130: atmos.plugin.v1.AuthIdentity.Validate:output_type -> atmos.plugin.v1.ValidateResponse
+	15,  // 131: atmos.plugin.v1.AuthIdentity.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
+	72,  // 132: atmos.plugin.v1.AuthIdentity.Logout:output_type -> google.protobuf.Empty
+	25,  // 133: atmos.plugin.v1.AuthIdentity.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	28,  // 134: atmos.plugin.v1.AuthIdentity.Paths:output_type -> atmos.plugin.v1.PathsResponse
+	25,  // 135: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	33,  // 136: atmos.plugin.v1.Commands.Run:output_type -> atmos.plugin.v1.CommandEvent
+	44,  // 137: atmos.plugin.v1.ComponentDiscovery.Discover:output_type -> atmos.plugin.v1.DiscoverComponentsResponse
+	21,  // 138: atmos.plugin.v1.ComponentValidation.Validate:output_type -> atmos.plugin.v1.ValidateResponse
+	51,  // 139: atmos.plugin.v1.ComponentPreparation.Prepare:output_type -> atmos.plugin.v1.PrepareComponentResponse
+	57,  // 140: atmos.plugin.v1.ComponentState.Resolve:output_type -> atmos.plugin.v1.ResolveComponentStateResponse
+	120, // [120:141] is the sub-list for method output_type
+	99,  // [99:120] is the sub-list for method input_type
+	99,  // [99:99] is the sub-list for extension type_name
+	99,  // [99:99] is the sub-list for extension extendee
+	0,   // [0:99] is the sub-list for field type_name
 }
 
 func init() { file_atmos_plugin_v1_plugin_proto_init() }
@@ -1984,27 +4912,32 @@ func file_atmos_plugin_v1_plugin_proto_init() {
 		(*AuthenticateEvent_Interaction)(nil),
 		(*AuthenticateEvent_Result)(nil),
 	}
-	file_atmos_plugin_v1_plugin_proto_msgTypes[16].OneofWrappers = []any{
+	file_atmos_plugin_v1_plugin_proto_msgTypes[20].OneofWrappers = []any{
 		(*RefreshResponse_Credentials)(nil),
 		(*RefreshResponse_Unsupported)(nil),
 	}
-	file_atmos_plugin_v1_plugin_proto_msgTypes[25].OneofWrappers = []any{
+	file_atmos_plugin_v1_plugin_proto_msgTypes[29].OneofWrappers = []any{
 		(*CommandEvent_Stdout)(nil),
 		(*CommandEvent_Stderr)(nil),
 		(*CommandEvent_Exit)(nil),
+	}
+	file_atmos_plugin_v1_plugin_proto_msgTypes[32].OneofWrappers = []any{
+		(*ComponentValueStep_Attribute)(nil),
+		(*ComponentValueStep_Index)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atmos_plugin_v1_plugin_proto_rawDesc), len(file_atmos_plugin_v1_plugin_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   32,
+			NumEnums:      4,
+			NumMessages:   66,
 			NumExtensions: 0,
-			NumServices:   4,
+			NumServices:   9,
 		},
 		GoTypes:           file_atmos_plugin_v1_plugin_proto_goTypes,
 		DependencyIndexes: file_atmos_plugin_v1_plugin_proto_depIdxs,
+		EnumInfos:         file_atmos_plugin_v1_plugin_proto_enumTypes,
 		MessageInfos:      file_atmos_plugin_v1_plugin_proto_msgTypes,
 	}.Build()
 	File_atmos_plugin_v1_plugin_proto = out.File

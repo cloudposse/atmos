@@ -393,3 +393,46 @@ func TestS3DownloadRemovesPartialFile(t *testing.T) {
 	assert.NoFileExists(t, dst)
 	assert.Equal(t, 1, client.gets)
 }
+
+// TestS3SourceUsesAssumedRoleSession checks that an assumed-role session replaces the auth context's
+// credentials for a source download, and that a context without one keeps the auth context's credentials.
+func TestS3SourceUsesAssumedRoleSession(t *testing.T) {
+	root := t.TempDir()
+	var mu sync.Mutex
+	var seen []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen = append(seen, r.Header.Get("Authorization"))
+		mu.Unlock()
+		_, _ = fmt.Fprint(w, "Resources: {}\n")
+	}))
+	defer server.Close()
+	credentialFile := filepath.Join(root, "base.credentials")
+	require.NoError(t, os.WriteFile(credentialFile, []byte("[source]\naws_access_key_id = BASEKEY\naws_secret_access_key = synthetic\n"), 0o600))
+	auth := &schema.AWSAuthContext{Profile: "source", CredentialsFile: credentialFile, ConfigFile: filepath.Join(root, "absent-config"), Region: "us-east-2"}
+	download := func(ctx context.Context, name string) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		client := &getter.Client{Ctx: ctx, Src: "s3::" + server.URL + "/bucket/template.yaml?region=us-east-2", Dst: filepath.Join(root, name), Mode: getter.ClientModeAny, Getters: map[string]getter.Getter{"s3": NewGetter(ctx)}}
+		require.NoError(t, client.Get())
+	}
+
+	base := WithAuthContext(context.Background(), auth)
+	download(WithSession(base, map[string]string{"AWS_ACCESS_KEY_ID": "ASIAROLE", "AWS_SECRET_ACCESS_KEY": "role-secret", "AWS_SESSION_TOKEN": "role-token"}), "role")
+	mu.Lock()
+	require.NotEmpty(t, seen)
+	for _, header := range seen {
+		assert.Contains(t, header, "Credential=ASIAROLE/")
+	}
+	seen = nil
+	mu.Unlock()
+
+	download(WithSession(base, map[string]string{"AWS_PROFILE": ""}), "base")
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotEmpty(t, seen)
+	for _, header := range seen {
+		assert.Contains(t, header, "Credential=BASEKEY/")
+	}
+}

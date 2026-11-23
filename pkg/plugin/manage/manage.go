@@ -65,7 +65,9 @@ func (m *Manager) Add(ctx context.Context, options AddOptions) error {
 		}
 		alias := plan.alias
 		if alias == "" {
-			alias = strings.ReplaceAll(entry.Plugin, "/", "-")
+			if alias, err = m.defaultAlias(entry.Plugin); err != nil {
+				return nil, err
+			}
 			if err := m.checkDerivedAlias(alias, options.Source, file); err != nil {
 				return nil, err
 			}

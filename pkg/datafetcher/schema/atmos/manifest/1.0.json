@@ -2690,6 +2690,10 @@
               "type": "string",
               "description": "Terraform/OpenTofu/Helmfile component"
             },
+            "working_directory": {
+              "type": "string",
+              "description": "Explicit source working directory. Relative paths are resolved from the Atmos base path when overriding an enabled workdir."
+            },
             "description": {
               "type": "string",
               "description": "Human-readable component description"
@@ -2709,6 +2713,10 @@
                   }
                 }
               ]
+            },
+            "source_subdir": {
+              "type": "string",
+              "description": "Module subdirectory within the copied source root. Sibling modules remain available in the workdir."
             },
             "terraform_workspace": {
               "type": "string",

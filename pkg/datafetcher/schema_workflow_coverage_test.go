@@ -85,7 +85,7 @@ func workflowDefinitionProps(t *testing.T, defName string) map[string]struct{} {
 // authoredYAMLKeys returns the set of YAML keys a struct authors, read from `yaml` struct tags
 // (skipping `-` and empty tags), plus any extra keys decoded by a custom UnmarshalYAML.
 func authoredYAMLKeys(rt reflect.Type, extra ...string) map[string]struct{} {
-	if rt.Kind() == reflect.Ptr {
+	if rt.Kind() == reflect.Pointer {
 		rt = rt.Elem()
 	}
 	out := make(map[string]struct{}, rt.NumField())

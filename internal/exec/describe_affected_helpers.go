@@ -4,12 +4,15 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/ci"
 	g "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -299,8 +302,12 @@ func ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 		return nil, nil, nil, "", err
 	}
 
-	// Deferred cleanup ensures worktree is always removed.
-	defer cleanupWorktree(localRepoInfo.LocalWorktreePath, worktreePath)
+	// Deferred cleanup ensures worktree is always removed, including when the process is
+	// interrupted: SIGINT and SIGTERM skip deferred functions, so the worktree and its
+	// `.git/worktrees` registration would otherwise leak.
+	cleanup := sync.OnceFunc(func() { cleanupWorktree(localRepoInfo.LocalWorktreePath, worktreePath) })
+	defer removeOnSignal(cleanup)()
+	defer cleanup()
 
 	// Open the worktree as a git repository.
 	remoteRepo, err := g.OpenWorktreeAwareRepo(worktreePath)
@@ -336,6 +343,15 @@ func ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 	}
 
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
+}
+
+// affectedSignalCleanups removes describe-affected worktrees when the process is interrupted.
+var affectedSignalCleanups = g.NewWorktreeSignalCleanups(os.Exit)
+
+// removeOnSignal registers a worktree cleanup for SIGINT and SIGTERM. Call the returned function
+// after normal cleanup.
+func removeOnSignal(cleanup func()) func() {
+	return affectedSignalCleanups.Register(cleanup)
 }
 
 // cleanupWorktree removes a git worktree and its parent temp directory.
@@ -436,4 +452,113 @@ func ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
 	}
 
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
+}
+
+// GetAffectedComponents retrieves the list of affected components based on the
+// provided arguments, dispatching to the right git-target resolution mode
+// (repo path / clone-and-diff / local ref checkout). Exported so other
+// affected-target dispatchers (e.g. `atmos terraform lint --affected`) reuse
+// this switch instead of re-declaring it against the same three
+// ExecuteDescribeAffectedWith* functions. The args.ErrorMode field selects how recoverable
+// discovery errors are handled; an empty or "strict" mode keeps the historical fail-fast behavior.
+func GetAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+	defer perf.Track(nil, "exec.GetAffectedComponents")()
+
+	if args == nil {
+		return nil, errUtils.ErrNilParam
+	}
+	errOptions, collector := ErrorOptionsFromMode(args.ErrorMode)
+	defer PrintErrorModeSummary(args.ErrorMode, collector)
+	return GetAffectedComponentsWithOptions(args, errOptions)
+}
+
+// GetAffectedComponentsWithOptions is GetAffectedComponents plus opt-in graceful degradation
+// for recoverable per-value YAML function errors (see DescribeStacksErrorOptions), dispatching
+// to the *WithOptions variant of whichever git-target resolution mode applies.
+//
+//nolint:gocritic // Preserve the existing value-based options API shared by describe entry points.
+func GetAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) ([]schema.Affected, error) {
+	defer perf.Track(nil, "exec.GetAffectedComponentsWithOptions")()
+
+	if args == nil {
+		return nil, errUtils.ErrNilParam
+	}
+	return dispatchAffectedComponentsWithOptions(args, errOptions)
+}
+
+// dispatchAffectedComponentsWithOptions is GetAffectedComponentsWithOptions's git-target
+// dispatch switch, split out so the exported entry point stays a short nil-check + delegate.
+//
+//nolint:gocritic // Forward the value-based options consistently with the describe entry points below.
+func dispatchAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) ([]schema.Affected, error) {
+	ref, sha := affectedComparisonRevision(args)
+	switch {
+	case args.RepoPath != "":
+		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
+			args.CLIConfig,
+			args.RepoPath,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+			args.affectedFilter(),
+			args.AuthManager,
+			args.AuthDisabled,
+			errOptions,
+		)
+		return affectedList, err
+	case args.CloneTargetRef:
+		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCloneWithOptions(
+			args.CLIConfig,
+			ref,
+			sha,
+			args.SSHKeyPath,
+			args.SSHKeyPassword,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+			args.affectedFilter(),
+			args.AuthManager,
+			args.AuthDisabled,
+			errOptions,
+		)
+		return affectedList, err
+	default:
+		affectedList, _, _, _, err := ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
+			args.CLIConfig,
+			ref,
+			sha,
+			args.TargetBranch,
+			args.IncludeSpaceliftAdminStacks,
+			args.IncludeSettings,
+			args.Stack,
+			args.ProcessTemplates,
+			args.ProcessYamlFunctions,
+			args.Skip,
+			args.affectedFilter(),
+			args.AuthManager,
+			args.AuthDisabled,
+			errOptions,
+		)
+		return affectedList, err
+	}
+}
+
+// affectedComparisonRevision returns the Ref and SHA to compare against. A non-empty Base
+// takes precedence over both, matching the --base flag: a commit SHA selects that commit
+// (keeping Ref as the clone target), and anything else selects that ref.
+func affectedComparisonRevision(args *DescribeAffectedCmdArgs) (string, string) {
+	switch {
+	case args.Base == "":
+		return args.Ref, args.SHA
+	case ci.IsCommitSHA(args.Base):
+		return args.Ref, args.Base
+	default:
+		return args.Base, ""
+	}
 }

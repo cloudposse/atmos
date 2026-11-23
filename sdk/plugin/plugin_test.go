@@ -34,13 +34,17 @@ func TestNativePluginRegistersDeclaredServices(t *testing.T) {
 				if !enabled {
 					return Services{}
 				}
-				return Services{Provider: &pluginv1.UnimplementedAuthProviderServer{}, Identity: &pluginv1.UnimplementedAuthIdentityServer{}, Commands: &pluginv1.UnimplementedCommandsServer{}}
+				return Services{
+					Provider: &pluginv1.UnimplementedAuthProviderServer{}, Identity: &pluginv1.UnimplementedAuthIdentityServer{}, Commands: &pluginv1.UnimplementedCommandsServer{},
+					Discovery: &pluginv1.UnimplementedComponentDiscoveryServer{}, Validation: &pluginv1.UnimplementedComponentValidationServer{},
+					Preparation: &pluginv1.UnimplementedComponentPreparationServer{}, State: &pluginv1.UnimplementedComponentStateServer{},
+				}
 			}}}
 			if err := native.GRPCServer(nil, server); err != nil {
 				t.Fatal(err)
 			}
 			services := server.GetServiceInfo()
-			for _, name := range []string{"atmos.plugin.v1.AuthProvider", "atmos.plugin.v1.AuthIdentity", "atmos.plugin.v1.Commands"} {
+			for _, name := range []string{"atmos.plugin.v1.AuthProvider", "atmos.plugin.v1.AuthIdentity", "atmos.plugin.v1.Commands", "atmos.plugin.v1.ComponentDiscovery", "atmos.plugin.v1.ComponentValidation", "atmos.plugin.v1.ComponentPreparation", "atmos.plugin.v1.ComponentState"} {
 				if _, exists := services[name]; exists != enabled {
 					t.Fatalf("service %s registration mismatch: %v", name, services)
 				}

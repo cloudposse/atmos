@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -22,21 +23,7 @@ import (
 // the non-existent remainder. The plain filepath.EvalSymlinks errors on
 // missing paths, and unused helmfile/packer default dirs routinely do not exist.
 func evalSymlinksBestEffort(path string) string {
-	remainder := ""
-	current := path
-	for {
-		resolved, err := filepath.EvalSymlinks(current)
-		if err == nil {
-			return filepath.Join(resolved, remainder)
-		}
-		parent := filepath.Dir(current)
-		if parent == current {
-			// Nothing along the path resolves — return the input unchanged.
-			return path
-		}
-		remainder = filepath.Join(filepath.Base(current), remainder)
-		current = parent
-	}
+	return filesystem.EvalSymlinksBestEffort(path)
 }
 
 // rebaseOnePathOntoWorktree maps one absolute config path from the local repo
@@ -153,6 +140,7 @@ func executeDescribeAffected(
 	}
 
 	// Save current paths before modification.
+	currentConfigurations := atmosConfig.ComponentConfigurations
 	currentBasePath := atmosConfig.BasePath
 	currentBasePathAbsolute := atmosConfig.BasePathAbsolute
 	currentStacksBaseAbsolutePath := atmosConfig.StacksBaseAbsolutePath
@@ -168,6 +156,7 @@ func executeDescribeAffected(
 	// This is redundant with (but does not replace) the explicit restore further below,
 	// which must run before findAffected is called with the original (HEAD) paths.
 	defer func() {
+		atmosConfig.ComponentConfigurations = currentConfigurations
 		atmosConfig.BasePath = currentBasePath
 		atmosConfig.BasePathAbsolute = currentBasePathAbsolute
 		atmosConfig.StacksBaseAbsolutePath = currentStacksBaseAbsolutePath
@@ -184,6 +173,10 @@ func executeDescribeAffected(
 	// resolve files relative to the base path in the remote repo (fix for
 	// GitHub issue #2090).
 	if err := rebaseConfigPathsOntoWorktree(atmosConfig, localRepoFileSystemPathAbs, remoteRepoFileSystemPath); err != nil {
+		return nil, nil, nil, err
+	}
+
+	if err := rebaseConfigurationDiscovery(atmosConfig); err != nil {
 		return nil, nil, nil, err
 	}
 
@@ -213,11 +206,14 @@ func executeDescribeAffected(
 		}
 		// No stack manifests found in BASE (e.g. greenfield branch introducing Atmos for the first time,
 		// or BASE branch uses a different stack structure). Treat BASE as empty: all HEAD stacks are new.
-		log.Warn(
-			"No Atmos stack manifests found in BASE; treating BASE as empty (all HEAD components will be reported as affected)",
-			"hint", "This is expected for greenfield branches or when the base branch does not yet use Atmos",
-			"error", err,
-		)
+		// A provider-only project can still have a complete BASE inventory.
+		if atmosConfig.ComponentConfigurations == nil {
+			log.Warn(
+				"No Atmos stack manifests found in BASE; treating BASE as empty (all HEAD components will be reported as affected)",
+				"hint", "This is expected for greenfield branches or when the base branch does not yet use Atmos",
+				"error", err,
+			)
+		}
 		remoteStackFiles.AbsolutePaths = []string{}
 	}
 	atmosConfig.StackConfigFilesAbsolutePaths = remoteStackFiles.AbsolutePaths
@@ -254,6 +250,7 @@ func executeDescribeAffected(
 	}
 
 	// Restore atmosConfig.
+	atmosConfig.ComponentConfigurations = currentConfigurations
 	atmosConfig.BasePath = currentBasePath
 	atmosConfig.BasePathAbsolute = currentBasePathAbsolute
 	atmosConfig.StacksBaseAbsolutePath = currentStacksBaseAbsolutePath

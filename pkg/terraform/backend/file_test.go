@@ -4,11 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -69,4 +71,98 @@ func TestGenerateFileConfiguration(t *testing.T) {
 			assert.JSONEq(t, test.want, string(content))
 		})
 	}
+}
+
+func TestHostBackendOwnership(t *testing.T) {
+	for _, mode := range []string{"unchanged", "modified", "unrecorded", "symlink", "missing", "corrupt receipt"} {
+		t.Run(mode, func(t *testing.T) {
+			dir := t.TempDir()
+			config := &schema.AtmosConfiguration{}
+			config.Components.Terraform.AutoGenerateBackendFile = true
+			info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{}}}
+			require.NoError(t, GenerateFile(config, info, dir))
+			path := filepath.Join(dir, hostBackendName)
+			switch mode {
+			case "modified":
+				require.NoError(t, os.WriteFile(path, []byte("user changes"), 0o600))
+			case "unrecorded":
+				require.NoError(t, os.Remove(filepath.Join(dir, hostBackendReceipt)))
+			case "symlink":
+				require.NoError(t, os.Rename(path, filepath.Join(dir, "user.tf.json")))
+				require.NoError(t, os.Symlink("user.tf.json", path))
+			case "missing":
+				require.NoError(t, os.Remove(path))
+			case "corrupt receipt":
+				require.NoError(t, os.WriteFile(filepath.Join(dir, hostBackendReceipt), []byte("invalid"), 0o600))
+			}
+			err := RemoveHostBackend(dir)
+			if mode == "modified" || mode == "symlink" || mode == "corrupt receipt" {
+				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+				assert.FileExists(t, path)
+			} else {
+				require.NoError(t, err)
+				if mode == "unrecorded" {
+					assert.FileExists(t, path)
+				} else {
+					assert.NoFileExists(t, path)
+				}
+			}
+		})
+	}
+}
+
+// A provider-owned backend whose ownership receipt cannot be written fails with the backend
+// generation error and keeps the filesystem cause.
+func TestGenerateFileWrapsReceiptFailures(t *testing.T) {
+	dir := t.TempDir()
+	// A file where the receipt directory belongs makes the receipt impossible to create.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".atmos"), nil, 0o600))
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand: "plan", ComponentBackendType: "local", ComponentBackendSection: map[string]any{"path": "state.tfstate"},
+		ComponentSettingsSection: map[string]any{"configuration": map[string]any{"provider": "terragrunt"}},
+	}
+	err := GenerateFile(config, info, dir)
+	require.ErrorIs(t, err, errUtils.ErrBackendFileGeneration)
+	require.ErrorContains(t, err, "backend.tf.json")
+	var pathErr *os.PathError
+	require.ErrorAs(t, err, &pathErr, "the filesystem cause is preserved")
+}
+
+// Filesystem failures while relinquishing the host backend are classified with repository
+// sentinels and keep their causes; a missing receipt is still not an error.
+func TestRemoveHostBackendWrapsFilesystemFailures(t *testing.T) {
+	err := RemoveHostBackend(filepath.Join(t.TempDir(), "absent"))
+	require.ErrorIs(t, err, errUtils.ErrOpenFile)
+	require.ErrorIs(t, err, os.ErrNotExist)
+
+	require.NoError(t, RemoveHostBackend(t.TempDir()), "no receipt means nothing to remove")
+
+	dir := t.TempDir()
+	// A directory where the receipt file belongs cannot be read as a receipt.
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".atmos", "host-backend.sha256"), 0o700))
+	err = RemoveHostBackend(dir)
+	require.ErrorIs(t, err, errUtils.ErrReadFile)
+	require.ErrorContains(t, err, "host-backend.sha256")
+}
+
+// The generated backend and its receipt are written under the workdir lock that RemoveHostBackend's
+// batch holds, so a backend written after a digest check cannot be removed by that handoff.
+func TestGenerateFileWaitsForWorkdirLock(t *testing.T) {
+	dir := t.TempDir()
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{}}}
+	path := filepath.Join(dir, hostBackendName)
+	done := make(chan error, 1)
+	require.NoError(t, configuration.WithWorkdirLock(dir, func() error {
+		go func() { done <- GenerateFile(config, info, dir) }()
+		time.Sleep(100 * time.Millisecond)
+		assert.NoFileExists(t, path, "the write waits for the lock holder")
+		return nil
+	}))
+	require.NoError(t, <-done)
+	assert.FileExists(t, path)
+	assert.FileExists(t, filepath.Join(dir, hostBackendReceipt))
 }

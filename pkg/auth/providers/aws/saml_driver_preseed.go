@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/playwright-community/playwright-go"
+	"github.com/mxschmitt/playwright-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
@@ -35,7 +35,11 @@ import (
 // driver directory from the official npm registry and nodejs.org instead
 // (mirroring what newer playwright-go releases do). With the directory seeded,
 // playwright-go's isUpToDateDriver() check passes and its dead download path
-// never runs — for Atmos's own install call and for saml2aws's internal one.
+// never runs — for Atmos's own install call and for the vendored saml2aws browser provider.
+//
+// The playwright-go v0.6401+ releases download from the same npm and nodejs.org sources itself,
+// but does not verify what it downloads. The pre-seed is kept because it checks the
+// npm tarball's sha512 integrity before extracting it.
 const (
 	// Node.js runtime version downloaded alongside the playwright-core package
 	// when no PLAYWRIGHT_NODEJS_PATH is provided.
@@ -50,6 +54,9 @@ const (
 	windowsOS = "windows"
 )
 
+// playwrightPackageDir is the npm package directory inside the driver directory (it holds cli.js).
+const playwrightPackageDir = "package"
+
 // Download hosts are variables so tests can point them at local servers.
 var (
 	npmRegistryBase = "https://registry.npmjs.org"
@@ -58,10 +65,22 @@ var (
 	preseedHTTPClient = &http.Client{Timeout: preseedDownloadTimeout}
 )
 
+// externalPlaywrightCLI reports whether PLAYWRIGHT_CLI_PATH selects an externally managed driver CLI.
+// In that case playwright-go neither downloads nor patches the driver, so Atmos must not either.
+func externalPlaywrightCLI() bool {
+	return os.Getenv("PLAYWRIGHT_CLI_PATH") != "" //nolint:forbidigo // Third-party (playwright-go) env var, read the same way the library reads it.
+}
+
 // ensurePlaywrightDriver pre-seeds playwright-go's default driver directory
 // (<cache>/ms-playwright-go/<version>, or PLAYWRIGHT_DRIVER_PATH) with
 // package/cli.js from the playwright-core npm package and a Node.js binary.
-// It is a fast no-op when the driver is already present.
+// It is a fast no-op when the driver is already present. The bundled CLI is not
+// fetched when PLAYWRIGHT_CLI_PATH selects an external CLI, since it would go unused;
+// the Node.js runtime is still prepared because the external CLI runs on it.
+//
+// A failed attempt does not leave a partial driver behind: Playwright treats an existing
+// package/cli.js as a complete driver and would never run its own downloader for it.
+// Seeding and its rollback run under a cross-process lock on the driver directory.
 func ensurePlaywrightDriver() error {
 	defer perf.Track(nil, "aws.ensurePlaywrightDriver")()
 
@@ -71,14 +90,152 @@ func ensurePlaywrightDriver() error {
 		return fmt.Errorf("%w: %w", errUtils.ErrPlaywrightDriverSeed, err)
 	}
 	driverDir := opts.DriverDirectory
+	if playwrightDriverSeeded(driverDir) {
+		// Fast path without a lock, so an installed driver in a read-only directory keeps working.
+		return nil
+	}
 
-	if _, err := os.Stat(filepath.Join(driverDir, "package", "cli.js")); err != nil {
-		if err := seedPlaywrightCore(driverDir, driver.Version); err != nil {
+	return withDriverSeedLock(driverDir, func() error {
+		return seedPlaywrightDriver(driverDir, driver.Version)
+	})
+}
+
+// seedPlaywrightDriver seeds the missing parts of the driver. It runs under the driver seed lock, so
+// its check for package/cli.js sees a package that another process finished while this one waited,
+// and its rollback can never remove a package that another process seeded.
+func seedPlaywrightDriver(driverDir, version string) error {
+	seededCore := false
+	if !externalPlaywrightCLI() && !fileExists(playwrightDriverCLI(driverDir)) {
+		seededCore = true
+		if err := seedPlaywrightCore(driverDir, version); err != nil {
+			removeSeededPackage(driverDir)
 			return err
 		}
 	}
 
-	return seedNodeBinary(driverDir)
+	if err := seedNodeBinary(driverDir); err != nil {
+		if seededCore {
+			// The driver must be seeded together with its Node.js runtime, or not at all, so Playwright's
+			// own downloader can still run (it is skipped once cli.js exists).
+			removeSeededPackage(driverDir)
+		}
+		return err
+	}
+	return nil
+}
+
+// playwrightBundleReplacements are the compatibility patches playwright-go v0.6401 applies to
+// package/lib/coreBundle.js after a driver download. Keep them in sync with playwright-go's
+// patchDriverBundle when upgrading it.
+var playwrightBundleReplacements = []struct {
+	original string
+	patched  string
+}{
+	{"pageError.location.url", `pageError.location?.url || ""`},
+	{"pageError.location.lineNumber", "pageError.location?.lineNumber || 0"},
+	{"pageError.location.columnNumber", "pageError.location?.columnNumber || 0"},
+}
+
+// patchPlaywrightDriver applies playwright-go's compatibility patches to the driver
+// bundle (package/lib/coreBundle.js). The playwright-go library only patches inside
+// DownloadDriver, which Install calls but Run does not. A pre-seeded driver is
+// therefore unpatched until a browser download runs, and that never happens when
+// the required browser is already installed or a custom browser is configured.
+//
+// The patch is applied here instead of through DownloadDriver: playwright-go rewrites
+// the bundle in place, so a failed write would truncate the live copy, and DownloadDriver
+// downloads an unverified driver if the cache entry disappears in the meantime. This
+// version writes a staged copy and renames it over the bundle, and never downloads.
+// It is a no-op without a driver in the driver directory.
+func patchPlaywrightDriver() error {
+	defer perf.Track(nil, "aws.patchPlaywrightDriver")()
+
+	if externalPlaywrightCLI() {
+		// playwright-go never patches an external driver.
+		return nil
+	}
+
+	opts := &playwright.RunOptions{}
+	if _, err := playwright.NewDriver(opts); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPlaywrightDriverSeed, err)
+	}
+	if !fileExists(playwrightDriverCLI(opts.DriverDirectory)) {
+		return nil
+	}
+	if err := patchDriverBundle(filepath.Join(opts.DriverDirectory, playwrightPackageDir, "lib", "coreBundle.js")); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPlaywrightDriverSeed, err)
+	}
+	return nil
+}
+
+// patchDriverBundle applies playwrightBundleReplacements to the bundle at bundlePath. An already
+// patched bundle is left untouched, and a bundle without the expected code is rejected.
+// The patched content is published with an atomic rename of a staged file in the same directory,
+// so concurrent readers and a failed write never see a truncated bundle.
+func patchDriverBundle(bundlePath string) error {
+	data, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return fmt.Errorf("%w: could not read driver bundle: %w", errUtils.ErrPlaywrightDriverPatch, err)
+	}
+	info, err := os.Stat(bundlePath)
+	if err != nil {
+		return fmt.Errorf("%w: could not stat driver bundle: %w", errUtils.ErrPlaywrightDriverPatch, err)
+	}
+
+	data, changed, err := applyBundleReplacements(data)
+	if err != nil || !changed {
+		return err
+	}
+
+	staged, err := os.CreateTemp(filepath.Dir(bundlePath), ".coreBundle-*.tmp")
+	if err != nil {
+		return fmt.Errorf("%w: could not stage the patched driver bundle: %w", errUtils.ErrPlaywrightDriverPatch, err)
+	}
+	stagedPath := staged.Name()
+	if err := writeStagedBundle(staged, data, info.Mode().Perm()); err != nil {
+		os.Remove(stagedPath)
+		return err
+	}
+	if err := os.Rename(stagedPath, bundlePath); err != nil {
+		os.Remove(stagedPath)
+		return fmt.Errorf("%w: could not publish the patched driver bundle: %w", errUtils.ErrPlaywrightDriverPatch, err)
+	}
+	return nil
+}
+
+// applyBundleReplacements applies playwrightBundleReplacements to data. It reports whether anything
+// changed, and fails when a pattern is present in neither its original nor its patched form.
+func applyBundleReplacements(data []byte) ([]byte, bool, error) {
+	changed := false
+	for _, replacement := range playwrightBundleReplacements {
+		original := []byte(replacement.original)
+		patched := []byte(replacement.patched)
+		if !bytes.Contains(data, original) && !bytes.Contains(data, patched) {
+			return nil, false, fmt.Errorf("%w: expected pageError location pattern %q or %q",
+				errUtils.ErrPlaywrightDriverBundle, replacement.original, replacement.patched)
+		}
+		if bytes.Contains(data, original) {
+			data = bytes.ReplaceAll(data, original, patched)
+			changed = true
+		}
+	}
+	return data, changed, nil
+}
+
+// writeStagedBundle writes data to the staged file, applies mode and closes it.
+func writeStagedBundle(staged *os.File, data []byte, mode os.FileMode) error {
+	if _, err := staged.Write(data); err != nil {
+		staged.Close()
+		return fmt.Errorf("%w: could not write the patched driver bundle: %w", errUtils.ErrPlaywrightDriverPatch, err)
+	}
+	if err := staged.Chmod(mode); err != nil {
+		staged.Close()
+		return fmt.Errorf("%w: could not set the patched driver bundle mode: %w", errUtils.ErrPlaywrightDriverPatch, err)
+	}
+	if err := staged.Close(); err != nil {
+		return fmt.Errorf("%w: could not write the patched driver bundle: %w", errUtils.ErrPlaywrightDriverPatch, err)
+	}
+	return nil
 }
 
 // seedPlaywrightCore downloads playwright-core from the npm registry, verifies
@@ -130,11 +287,11 @@ func npmPackageDist(name, version string) (tarballURL, integrity string, err err
 func verifyNpmIntegrity(body []byte, integrity string) error {
 	digest, ok := strings.CutPrefix(integrity, "sha512-")
 	if !ok {
-		return fmt.Errorf("%w: unsupported npm integrity value %q", errUtils.ErrPlaywrightDriverSeed, integrity)
+		return fmt.Errorf("%w: %w: unsupported npm integrity value %q", errUtils.ErrPlaywrightDriverSeed, errUtils.ErrPlaywrightDriverIntegrity, integrity)
 	}
 	sum := sha512.Sum512(body)
 	if base64.StdEncoding.EncodeToString(sum[:]) != digest {
-		return fmt.Errorf("%w: npm tarball integrity mismatch (expected %s)", errUtils.ErrPlaywrightDriverSeed, integrity)
+		return fmt.Errorf("%w: %w: npm tarball integrity mismatch (expected %s)", errUtils.ErrPlaywrightDriverSeed, errUtils.ErrPlaywrightDriverIntegrity, integrity)
 	}
 	return nil
 }
@@ -170,26 +327,36 @@ func extractNpmPackage(tgz []byte, driverDir string) error {
 		if err != nil {
 			return fmt.Errorf("could not read playwright-core archive: %w", err)
 		}
-		// npm tarballs nest everything under a top-level "package/" directory,
-		// which is exactly the layout playwright-go expects on disk.
-		if header.Typeflag != tar.TypeReg || !strings.HasPrefix(header.Name, "package/") {
-			continue
-		}
-		// safeDriverJoin's returned absolute path isn't used since writes go
-		// through root by relative name instead; only the validation matters here.
-		if _, err := safeDriverJoin(driverDir, header.Name); err != nil {
+		wrote, err := extractNpmEntry(root, driverDir, header, tarReader)
+		if err != nil {
 			return err
 		}
-		relPath := filepath.FromSlash(header.Name)
-		if err := writePreseedFile(root, relPath, tarReader, header.FileInfo().Mode()); err != nil {
-			return err
-		}
-		extracted = true
+		extracted = extracted || wrote
 	}
 	if !extracted {
 		return fmt.Errorf("%w: no files extracted from playwright-core archive", errUtils.ErrPlaywrightDriverSeed)
 	}
 	return nil
+}
+
+// extractNpmEntry writes one regular file from the npm tarball into the driver directory.
+// It reports whether the entry was written; entries outside "package/" are skipped.
+func extractNpmEntry(root *os.Root, driverDir string, header *tar.Header, content io.Reader) (bool, error) {
+	// npm tarballs nest everything under a top-level "package/" directory,
+	// which is exactly the layout playwright-go expects on disk.
+	if header.Typeflag != tar.TypeReg || !strings.HasPrefix(header.Name, "package/") {
+		return false, nil
+	}
+	// safeDriverJoin's returned absolute path isn't used since writes go
+	// through root by relative name instead; only the validation matters here.
+	if _, err := safeDriverJoin(driverDir, header.Name); err != nil {
+		return false, err
+	}
+	relPath := filepath.FromSlash(header.Name)
+	if err := writePreseedFile(root, relPath, content, header.FileInfo().Mode()); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // seedNodeBinary places a Node.js binary at <driverDir>/node[.exe], verifying
@@ -198,15 +365,11 @@ func extractNpmPackage(tgz []byte, driverDir string) error {
 // platforms without compatible prebuilt nodejs.org binaries) or the binary
 // already exists.
 func seedNodeBinary(driverDir string) error {
-	if os.Getenv("PLAYWRIGHT_NODEJS_PATH") != "" { //nolint:forbidigo // Third-party (playwright-go) env var, read the same way the library reads it.
+	if externalPlaywrightNode() {
 		return nil
 	}
-	nodeName := "node"
-	if runtime.GOOS == windowsOS {
-		nodeName = "node.exe"
-	}
-	nodePath := filepath.Join(driverDir, nodeName)
-	if _, err := os.Stat(nodePath); err == nil {
+	nodeName := playwrightNodeName()
+	if fileExists(filepath.Join(driverDir, nodeName)) {
 		return nil
 	}
 
@@ -250,7 +413,7 @@ func verifyNodeChecksum(body []byte, archiveName string) error {
 		if len(fields) == 2 && fields[1] == archiveName {
 			sum := sha256.Sum256(body)
 			if hex.EncodeToString(sum[:]) != fields[0] {
-				return fmt.Errorf("%w: checksum mismatch for %s", errUtils.ErrPlaywrightDriverSeed, archiveName)
+				return fmt.Errorf("%w: %w: checksum mismatch for %s", errUtils.ErrPlaywrightDriverSeed, errUtils.ErrPlaywrightDriverIntegrity, archiveName)
 			}
 			return nil
 		}
@@ -403,6 +566,8 @@ func writePreseedFile(root *os.Root, relPath string, reader io.Reader, mode os.F
 	}
 	if _, err := io.Copy(outFile, reader); err != nil {
 		outFile.Close()
+		// A half-written file must not look like a finished one (a truncated Node.js binary is skipped as present).
+		_ = root.Remove(relPath)
 		return fmt.Errorf("could not write file: %w", err)
 	}
 	return outFile.Close()

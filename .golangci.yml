@@ -69,6 +69,9 @@ linters:
         provider-agnostic-auth:
           files:
             - "$all"
+            # Acceptance AWS credential checks and Floci SSM fixtures are AWS-specific.
+            - "!**/tests/preconditions.go"
+            - "!**/tests/terraform_floci_dag_test.go"
             - "!**/pkg/auth/providers/**"
             - "!**/pkg/store/providers/**"
             - "!**/pkg/auth/identities/**"
@@ -112,6 +115,11 @@ linters:
             # Only this cloud-specific leaf imports the SDK; the parent downloader stays generic.
             - "!**/pkg/downloader/s3/**"
             - "!**/pkg/github/**"
+            # The Terragrunt plugin bridge resolves the AWS identity of an invocation for Terragrunt's own
+            # AWS calls (get_aws_account_id, S3 dependency state). It is an AWS-specific leaf of a separate
+            # module that cannot import the Atmos auth packages.
+            - "!**/plugins/terragrunt/bridge/aws.go"
+            - "!**/plugins/terragrunt/bridge/aws_test.go"
             # The S3 deployment Mage target is an AWS-specific build tool and
             # intentionally uses the AWS SDK instead of shelling out to a CLI.
             - "!**/magefiles/s3/**"
@@ -447,6 +455,29 @@ linters:
           - lintroller
         path: ^magefiles/
         text: "perf\\.Track"
+      # Vendored fork of the unmaintained saml2aws library (MIT, see its ATTRIBUTIONS.md).
+      # Atmos style and convention linters are relaxed for the upstream code; correctness
+      # linters (govet, staticcheck, unused, errorlint, bodyclose, nilerr, gosec) still apply.
+      - linters:
+          - cyclop
+          - depguard
+          - dogsled
+          - dupl
+          - err113
+          - forbidigo
+          - funlen
+          - gocognit
+          - gocritic
+          - godot
+          - importas
+          - lintroller
+          - nestif
+          - paralleltest
+          - revive
+          - tparallel
+          - unparam
+          - whitespace
+        path: ^pkg/auth/providers/aws/saml2aws/
     paths:
       - experiments/.*
       - third_party$

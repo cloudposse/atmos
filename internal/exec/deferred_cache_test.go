@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -65,10 +66,10 @@ func TestDeferredTargetDoesNotReuseCallerAuthContext(t *testing.T) {
 	require.Same(t, prior, resolvedTargetAuthContext(ac, nil, prior, false), "eager execution retains its fallback")
 	authdeferred.ConfigureAuth(ac, "")
 	require.Nil(t, resolvedTargetAuthContext(ac, nil, prior, false))
-	manager := &authContextWrapper{stackInfo: &schema.ConfigAndStacksInfo{}}
+	manager := &terraformcomponent.AuthContextWrapper{StackInfo: &schema.ConfigAndStacksInfo{}}
 	require.Nil(t, resolvedTargetAuthContext(ac, manager, prior, false))
 	resolved := &schema.AuthContext{AWS: &schema.AWSAuthContext{Profile: "resolved-account"}}
-	manager.stackInfo.AuthContext = resolved
+	manager.StackInfo.AuthContext = resolved
 	require.Same(t, resolved, resolvedTargetAuthContext(ac, manager, prior, false))
 	require.Nil(t, resolvedTargetAuthContext(ac, manager, prior, true), "disabled auth must discard all Atmos contexts")
 }
@@ -171,7 +172,7 @@ func TestDeferredStateCacheSkipsFailuresAndSeparatesIdentities(t *testing.T) {
 	ac, factory, path := setupDeferredCacheTarget(t)
 	factory.EXPECT().Create(ac, gomock.Any(), "dev").Return(nil, nil).Times(2)
 	load := func(profile string, skip bool) (any, error) {
-		var parent auth.AuthManager = &authContextWrapper{stackInfo: deferredCacheParent(profile)}
+		var parent auth.AuthManager = &terraformcomponent.AuthContextWrapper{StackInfo: deferredCacheParent(profile)}
 		return GetTerraformState(ac, "!terraform.state", "dev", "target", "id", skip, nil, parent)
 	}
 	_, err := load("first", false)

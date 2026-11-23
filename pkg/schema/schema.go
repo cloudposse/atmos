@@ -112,6 +112,11 @@ type ConfigMetadata struct {
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
+	// ComponentConfigurations belongs to this invocation and is never serialized.
+	ComponentConfigurations ComponentConfigurationRuntime `yaml:"-" json:"-" mapstructure:"-"`
+	// ComponentProviderOptions are the provider options the user set for this invocation, by provider section.
+	ComponentProviderOptions map[string]map[string]ComponentProviderOption `yaml:"-" json:"-" mapstructure:"-"`
+
 	Scaffold *ScaffoldConfiguration `yaml:"scaffold,omitempty" json:"scaffold,omitempty" mapstructure:"scaffold"`
 	// ScaffoldConfigLoaded distinguishes an empty effective catalog from a
 	// configuration constructed by a caller that still needs catalog discovery.
@@ -764,6 +769,9 @@ type SourceSettings struct {
 }
 
 type Terraform struct {
+	// ConfigurationProviders contains opt-in configuration formats such as Terragrunt.
+	ConfigurationProviders map[string]ComponentConfiguration `yaml:",inline" json:"-" mapstructure:",remain"`
+
 	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
 	AppendUserAgent         string `yaml:"append_user_agent" json:"append_user_agent" mapstructure:"append_user_agent"`
@@ -1791,6 +1799,19 @@ type Components struct {
 //
 // Returns the configuration and true if found, nil and false otherwise.
 func (c *Components) GetComponentConfig(componentType string) (any, bool) {
+	if config, ok := c.builtinComponentConfig(componentType); ok {
+		return config, true
+	}
+
+	// Check plugin types.
+	if config, ok := c.Plugins[componentType]; ok {
+		return config, true
+	}
+	return nil, false
+}
+
+// builtinComponentConfig returns the type-safe configuration for built-in component types.
+func (c *Components) builtinComponentConfig(componentType string) (any, bool) {
 	switch componentType {
 	case "terraform":
 		return c.Terraform, true
@@ -1809,9 +1830,7 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 	case "aws/cloudformation":
 		return c.CloudFormation, true
 	default:
-		// Check plugin types.
-		config, ok := c.Plugins[componentType]
-		return config, ok
+		return nil, false
 	}
 }
 
@@ -2151,6 +2170,11 @@ type ConfigAndStacksInfo struct {
 	ComponentEnvSection       AtmosSectionMapType
 	ComponentAuthSection      AtmosSectionMapType
 	ComponentEnvList          []string
+	// SourceAuthorization is an invocation-only header for a resolved registry archive.
+	SourceAuthorization *SourceAuthorization `json:"-" yaml:"-" mapstructure:"-"`
+	// IAMSession is the invocation-only AWS session of a role the component configuration assumed.
+	// In-process source downloads use it so they run as the same principal as the component's commands.
+	IAMSession map[string]string `json:"-" yaml:"-" mapstructure:"-"`
 	// TerraformSecretVarKeys holds the set of top-level keys in ComponentVarsSection
 	// whose value contains a resolved secret (detected via the masker). These variables
 	// are excluded from the on-disk Terraform varfile and injected at runtime as
@@ -2159,11 +2183,22 @@ type ConfigAndStacksInfo struct {
 	// before auth credentials are registered) to keep the varfile-write and env-assembly
 	// steps consistent.
 	TerraformSecretVarKeys map[string]bool
+	// PreparedSensitiveInputKeys preserves plugin sensitivity even for empty input values.
+	PreparedSensitiveInputKeys map[string]bool
+	// TerraformSecretVarKeysComputed reports that TerraformSecretVarKeys was computed for the current
+	// ComponentVarsSection. An empty TerraformSecretVarKeys alone cannot tell "no secret inputs" from
+	// "not classified yet", and consumers that expose inputs must treat the latter as secret.
+	TerraformSecretVarKeysComputed bool
+	// ConfigurationSensitiveInputKeys retains provider-declared sensitivity independently of masking.
+	ConfigurationSensitiveInputKeys map[string]bool
 	// SanitizedEnv holds the sanitized process environment from auth.
 	// When set, subprocess execution uses this instead of re-reading os.Environ(),
 	// which would reintroduce problematic vars (e.g., IRSA credentials on EKS pods).
 	SanitizedEnv            []string
 	ComponentBackendSection AtmosSectionMapType
+	// BackendFileGeneration is the prepared component's invocation-local choice.
+	// Nil retains the project-wide auto_generate_backend_file default.
+	BackendFileGeneration *bool `json:"-" yaml:"-" mapstructure:"-"`
 	// ComponentRetrySection holds the per-component `retry:` block parsed from stack
 	// manifests. When non-nil and `Conditions` is populated, each subprocess invocation
 	// in the terraform execution pipeline (init, workspace, main) is retried independently
@@ -2248,6 +2283,17 @@ type ConfigAndStacksInfo struct {
 	UseTerraformPlan        bool
 	PlanFile                string
 	StoredPlanFile          string
+	// ConfigurationPlanImplicit retains implicit selection after restoration fills PlanFile.
+	ConfigurationPlanImplicit bool `yaml:"-" json:"-" mapstructure:"-"`
+	// ConfigurationPlanWorkdirExact reports that the working directory of the restored saved plan
+	// matched the reviewed digest byte for byte during this invocation, so its variable file is the
+	// reviewed one. A directory accepted only as a verified rebuild never sets it: the rebuild digest
+	// leaves the variable files out.
+	ConfigurationPlanWorkdirExact bool `yaml:"-" json:"-" mapstructure:"-"`
+	// ConfigurationPlanVarfile holds the bytes of that variable file as they were read around the
+	// digest comparison. A hook binds these bytes, never a later read of the file, so what it consumes is
+	// what the verification covered.
+	ConfigurationPlanVarfile []byte `yaml:"-" json:"-" mapstructure:"-"`
 	// VerifyPlanMode carries the explicit CLI planfile-verify override for `deploy`
 	// (--verify-plan => fail, --verify-plan=false => off; empty when the flag is unset).
 	// It is resolved against config + CI mode via planfile.ResolveVerifyMode at the
@@ -2314,11 +2360,14 @@ type ConfigAndStacksInfo struct {
 	Identity                   string
 	// RequestedIdentity preserves the CLI/environment choice before authentication
 	// stores an auto-selected identity. Nil means Identity has not been rewritten.
-	RequestedIdentity   *string
-	ClusterName         string // EKS cluster name from --cluster-name flag.
-	NeedsPathResolution bool   // True if ComponentFromArg is a path that needs resolution.
-	UIEnabled           bool   // Enable streaming UI mode for terraform commands.
-	UIFlagExplicitlySet bool   // Whether --ui flag was explicitly set (vs. config/default).
+	RequestedIdentity *string
+	// ComponentProviderOptions are the configuration provider options set on the command line or in
+	// the environment, by provider section. Unset options are absent.
+	ComponentProviderOptions map[string]map[string]ComponentProviderOption
+	ClusterName              string // EKS cluster name from --cluster-name flag.
+	NeedsPathResolution      bool   // True if ComponentFromArg is a path that needs resolution.
+	UIEnabled                bool   // Enable streaming UI mode for terraform commands.
+	UIFlagExplicitlySet      bool   // Whether --ui flag was explicitly set (vs. config/default).
 
 	// NodeHooks fires lifecycle hooks around each component in bulk Terraform
 	// and single-component Helmfile runs. Single-component Terraform commands
@@ -2386,6 +2435,12 @@ type ConfigAndStacksInfo struct {
 	// plan/apply's own output (FR-006f, research.md Decision 32). Transient
 	// runtime state — not serialized.
 	ExecMetadataRawOutput string `yaml:"-" json:"-" mapstructure:"-"`
+
+	// ComponentExecution holds hooks and extra arguments that a configuration provider
+	// evaluated for this component. The Terraform pipeline applies them per phase
+	// (implicit init and the requested command match independently). Transient
+	// runtime state — not serialized.
+	ComponentExecution *ComponentExecution `yaml:"-" json:"-" mapstructure:"-"`
 
 	// ExecMetadataRawMetrics holds a *process.ProcessMetrics (pkg/metrics/process)
 	// combining the main plan/apply/deploy subprocess tree's resource usage with

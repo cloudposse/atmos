@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1189,15 +1190,22 @@ func checkDependencyChangesIndexed(
 ) error {
 	// Get file/folder dependencies from dependencies.components or settings.depends_on.
 	deps := getFileFolderDependencies(*componentSection, settingsSection)
+	provider := configuration.WatchPaths(atmosConfig, settingsSection, deps)
+	watchIndex, err := configurationWatchIndex(atmosConfig, settingsSection, filesIndex)
+	if err != nil {
+		return err
+	}
 	if len(deps) > 0 {
+		index, matched := configurationMatchInputs(watchIndex, deps, provider)
 		isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChangedIndexed(
-			filesIndex,
-			deps,
+			index,
+			matched,
 		)
 		if err != nil {
 			return err
 		}
 		if isFolderOrFileChanged {
+			changedFileOrFolder = configuration.ConfiguredDependencyPath(deps, matched, changedFileOrFolder)
 			return addDependencyAffectedItem(
 				affected, atmosConfig, componentName, stackName, componentType,
 				componentSection, changedType, changedFileOrFolder,

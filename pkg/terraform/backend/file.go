@@ -1,8 +1,11 @@
 package backend
 
 import (
+	"fmt"
 	"path/filepath"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -15,7 +18,7 @@ func GenerateFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAnd
 	defer perf.Track(atmosConfig, "backend.GenerateFile")()
 
 	// Terraform tests use their own state and do not need a generated backend.
-	if info.SubCommand == "test" || !atmosConfig.Components.Terraform.AutoGenerateBackendFile {
+	if info.SubCommand == "test" || !schema.GenerateBackendFile(atmosConfig, info) {
 		return nil
 	}
 	// Auto-generate backend file.
@@ -28,7 +31,21 @@ func GenerateFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAnd
 	if err != nil {
 		return err
 	}
-	return u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode)
+	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
+		return u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode)
+	}
+	// The write and its receipt share the workdir lock with RemoveHostBackend, so a handoff never
+	// removes a backend written after it verified the receipt.
+	err = configuration.WithWorkdirLock(workingDir, func() error {
+		if err := u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode); err != nil {
+			return err
+		}
+		return recordHostBackend(workingDir)
+	})
+	if err != nil {
+		return fmt.Errorf("%w: write %s and record ownership: %w", errUtils.ErrBackendFileGeneration, backendFileName, err)
+	}
+	return nil
 }
 
 const backendFileMode = 0o600

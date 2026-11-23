@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "provider": {
+      "const": "terragrunt"
+    },
+    "mode": {
+      "enum": [
+        "native",
+        "executable"
+      ],
+      "description": "native adapts units to Atmos; executable runs each unit with the pinned terragrunt executable."
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "boolean",
+          "number",
+          "string"
+        ]
+      },
+      "description": "Feature flag overrides applied to every unit, by feature name. TG_FEATURE overrides these per name."
+    },
+    "discovery": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "included_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Project-relative patterns that scope automatic discovery. Defaults to every unit below the project root (`**`) when discovery is enabled."
+        },
+        "excluded_paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "enabled"
+  ],
+  "additionalProperties": false
+}

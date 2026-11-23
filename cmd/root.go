@@ -61,7 +61,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/secret"
 	stackcmd "github.com/cloudposse/atmos/cmd/stack"
 	_ "github.com/cloudposse/atmos/cmd/store"
-	_ "github.com/cloudposse/atmos/cmd/terraform"
+	terraformcmd "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	terraformcache "github.com/cloudposse/atmos/cmd/terraform/cache"
 	"github.com/cloudposse/atmos/cmd/terraform/workdir"
@@ -112,11 +112,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/proexec"
 	atmosprofile "github.com/cloudposse/atmos/pkg/profile"
 	"github.com/cloudposse/atmos/pkg/profiler"
+	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/startup"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
@@ -1755,6 +1757,10 @@ func Execute() error {
 	atmosGit.ResetRootTagCache()
 	defer atmosGit.ResetRootTagCache()
 	defer initcmd.SetAtmosConfig(nil)
+	tfoutput.ResetWorkdirProvisionCache()
+	defer tfoutput.ResetWorkdirProvisionCache()
+	restoreSourceInvocation := source.BeginInvocation()
+	defer restoreSourceInvocation()
 	executionID, restoreInvocation := proexec.BeginInvocation()
 	defer restoreInvocation()
 	defer perf.Track(&atmosConfig, "cmd.Execute")()
@@ -1910,6 +1916,11 @@ func Execute() error {
 
 		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
 		if err != nil {
+			return err
+		}
+
+		// Provider options come from static package metadata and must exist before Cobra parses flags.
+		if err = terraformcmd.RegisterProviderFlags(&atmosConfig, os.Args[1:]); err != nil {
 			return err
 		}
 	}

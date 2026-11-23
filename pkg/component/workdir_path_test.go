@@ -579,6 +579,100 @@ func TestBuildAndResolveWorkdirPath_PathTraversalPropagates(t *testing.T) {
 
 // ProvisionAndResolveComponentPath ──────────────────────────────────────────.
 
+func TestProvisionAndResolveComponentPathDryRunDoesNotCreateSourceOrWorkdir(t *testing.T) {
+	for _, source := range []bool{false, true} {
+		t.Run(map[bool]string{false: "local", true: "source"}[source], func(t *testing.T) {
+			base := t.TempDir()
+			section := map[string]any{
+				"component": "vpc", "atmos_component": "vpc", "atmos_stack": "dev",
+				"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+			}
+			if source {
+				section["source"] = map[string]any{"uri": "./does-not-exist"}
+			}
+			info := &schema.ConfigAndStacksInfo{DryRun: true, FinalComponent: "vpc", Stack: "dev", ComponentSection: section}
+			path, exists, err := ProvisionAndResolveComponentPath(context.Background(), provisioner.OutputWriters{}, &schema.AtmosConfiguration{BasePath: base}, info, cfg.TerraformComponentType, filepath.Join(base, "components", "vpc"))
+			require.NoError(t, err)
+			assert.False(t, exists)
+			assert.NotEmpty(t, path)
+			entries, err := os.ReadDir(base)
+			require.NoError(t, err)
+			assert.Empty(t, entries, "dry-run must not download source or create an empty workdir")
+		})
+	}
+}
+
+func TestResolveRetainedWorkdirRecordsPathWithoutProvisioning(t *testing.T) {
+	base := t.TempDir()
+	fallback := filepath.Join(base, "components", "vpc")
+	config := &schema.AtmosConfiguration{BasePath: base}
+	section := map[string]any{
+		"component": "vpc", "atmos_component": "vpc", "atmos_stack": "dev",
+		"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+		"source":    map[string]any{"uri": "./module"},
+	}
+	info := &schema.ConfigAndStacksInfo{FinalComponent: "vpc", Stack: "dev", ComponentSection: section}
+
+	path, err := ResolveRetainedWorkdir(config, info, cfg.TerraformComponentType, fallback)
+
+	require.NoError(t, err)
+	assert.Equal(t, path, section[provWorkdir.WorkdirPathKey], "the retained workdir becomes the component's working directory")
+	assert.Contains(t, filepath.ToSlash(path), "/.workdir/terraform/dev-vpc-")
+	entries, err := os.ReadDir(base)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "locating a retained workdir must not create or download anything")
+
+	// A reviewed plan ran with the provider's module source. Without a discovered source, an
+	// enabled workdir still follows source target rules, including an explicit working_directory.
+	chosen := filepath.Join(base, "chosen")
+	unsourced := &schema.ConfigAndStacksInfo{FinalComponent: "vpc", Stack: "dev", ComponentSection: map[string]any{
+		"component": "vpc", "atmos_component": "vpc", "atmos_stack": "dev",
+		"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+		"metadata":  map[string]any{"working_directory": chosen},
+	}}
+	path, err = ResolveRetainedWorkdir(config, unsourced, cfg.TerraformComponentType, fallback)
+	require.NoError(t, err)
+	assert.Equal(t, chosen, path)
+	assert.Equal(t, chosen, unsourced.ComponentSection[provWorkdir.WorkdirPathKey])
+	entries, err = os.ReadDir(base)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "locating a retained workdir must not create or download anything")
+
+	// Without a workdir the component keeps its own directory and nothing is recorded.
+	plain := &schema.ConfigAndStacksInfo{FinalComponent: "vpc", Stack: "dev", ComponentSection: map[string]any{}}
+	path, err = ResolveRetainedWorkdir(config, plain, cfg.TerraformComponentType, base)
+	require.NoError(t, err)
+	assert.Equal(t, base, path)
+	assert.NotContains(t, plain.ComponentSection, provWorkdir.WorkdirPathKey)
+}
+
+// A retained workdir is located again for each phase of a command. Replacing the selected path with the
+// workdir root also clears the applied marker, so the next resolution selects source_subdir again
+// instead of returning the root.
+func TestResolveRetainedWorkdirSelectsSourceSubdirOnEveryCall(t *testing.T) {
+	base := t.TempDir()
+	fallback := filepath.Join(base, "components", "vpc")
+	config := &schema.AtmosConfiguration{BasePath: base}
+	section := map[string]any{
+		"component": "vpc", "atmos_component": "vpc", "atmos_stack": "dev",
+		"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+		"source":    map[string]any{"uri": "./module"},
+		"metadata":  map[string]any{"source_subdir": "modules/app"},
+	}
+	info := &schema.ConfigAndStacksInfo{FinalComponent: "vpc", Stack: "dev", ComponentSection: section}
+	root, err := provWorkdir.BuildPath(base, cfg.TerraformComponentType, "vpc", "dev", section)
+	require.NoError(t, err)
+	module := filepath.Join(root, "modules", "app")
+	require.NoError(t, os.MkdirAll(module, 0o755))
+
+	for call := 1; call <= 2; call++ {
+		path, err := ResolveRetainedWorkdir(config, info, cfg.TerraformComponentType, fallback)
+		require.NoError(t, err)
+		assert.Equal(t, module, path, "call %d selects the source subdirectory", call)
+		assert.Equal(t, module, section[provWorkdir.WorkdirPathKey], "call %d records the selected path", call)
+	}
+}
+
 // TestProvisionAndResolveComponentPath_NoSourceReturnsFallback verifies the
 // short-circuit when no source is configured: the orchestrator must skip
 // AutoProvisionSource entirely and report whether the fallback exists.
@@ -895,6 +989,25 @@ func TestWrapWorkdirProvisionError(t *testing.T) {
 			}
 			require.ErrorIs(t, got, tt.err)
 			assert.Contains(t, got.Error(), tt.wantContains)
+		})
+	}
+}
+
+func TestDryRunDefersMissingPath(t *testing.T) {
+	source := map[string]any{"source": map[string]any{"uri": "github.com/acme/mod"}}
+	tests := []struct {
+		name string
+		info *schema.ConfigAndStacksInfo
+		want bool
+	}{
+		{"dry run with a source component", &schema.ConfigAndStacksInfo{DryRun: true, ComponentSection: source}, true},
+		{"dry run without a source", &schema.ConfigAndStacksInfo{DryRun: true, ComponentSection: map[string]any{}}, false},
+		{"real run with a source component", &schema.ConfigAndStacksInfo{ComponentSection: source}, false},
+		{"nil info", nil, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, DryRunDefersMissingPath(test.info))
 		})
 	}
 }
