@@ -357,6 +357,7 @@ func (m *manager) authenticateResolvedIdentity(ctx context.Context, identityName
 				Err()
 			return nil, wrappedErr
 		}
+		m.recordExternalStepDigest(identityName, finalCreds)
 
 		// Trigger linked integrations (non-fatal).
 		m.triggerIntegrations(ctx, identityName, finalCreds)

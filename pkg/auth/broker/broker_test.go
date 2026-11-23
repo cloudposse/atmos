@@ -31,13 +31,13 @@ func (f *fakeProvider) Provision(context.Context, *schema.AtmosConfiguration) (m
 	return f.env, f.err
 }
 
-// resetRegistry clears the package-global registry and once guard for test isolation.
+// resetRegistry clears the package-global registry and run state for test isolation.
 // Safe because tests in this package run in the same process and are not parallel.
 func resetRegistry() {
 	registryMu.Lock()
 	registry = nil
 	registryMu.Unlock()
-	ensureOnce = sync.Once{}
+	resetEnsureStateForTest()
 	resetBrokeredForTest()
 }
 
@@ -105,7 +105,7 @@ func TestEnsureCredentials_ProcessOnce(t *testing.T) {
 	EnsureCredentials(context.Background(), cfg)
 	EnsureCredentials(context.Background(), cfg)
 
-	assert.Equal(t, 1, p.provisioned, "EnsureCredentials must provision at most once per process")
+	assert.Equal(t, 1, p.provisioned, "EnsureCredentials must not re-provision within the refresh interval")
 }
 
 func TestEnsureCredentials_NoProviders(t *testing.T) {
@@ -165,7 +165,7 @@ func TestHasBrokeredCredentials_FalseWhenExportFails(t *testing.T) {
 	assert.False(t, HasBrokeredCredentials(), "no variable was exported, so nothing is brokered")
 }
 
-// TestEnsureCredentials_ConcurrentProvisionOnce proves the sync.Once happens-before barrier:
+// TestEnsureCredentials_ConcurrentProvisionOnce proves the ensureMu happens-before barrier:
 // concurrent callers provision exactly once AND every caller observes the exported env after
 // EnsureCredentials returns (the credential is in place before any caller proceeds to clone).
 // Run under -race to catch ordering regressions if vendoring is ever parallelized.

@@ -17,6 +17,7 @@ import (
 	authregistry "github.com/cloudposse/atmos/pkg/auth/registry"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/signals"
 )
 
 // Compile-time sentinels for the schema fields referenced by these tests.
@@ -247,4 +248,116 @@ func TestWithIsolatedIdentityRealmScopesOnlyTarget(t *testing.T) {
 	require.NoError(t, parent.WithIsolatedIdentity(t.Context(), "store", func(context.Context, *schema.AuthContext) error { return nil }))
 	require.NotEmpty(t, realms)
 	assert.True(t, strings.HasPrefix(realms[len(realms)-1], "operation-"), "the last realm assigned to the target must be its operation realm")
+}
+
+// TestWithIsolatedIdentityAcquisitionHasNoShortHardLimit reproduces #3720 finding 1.2:
+// an interactive login (device code, browser OIDC) during a store operation must not
+// be cut off by a fixed 45-second limit when the caller set no deadline.
+func TestWithIsolatedIdentityAcquisitionHasNoShortHardLimit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	identity := types.NewMockIdentity(ctrl)
+	expectScopedIdentityBasics(identity)
+	parent := registerScopedOperationIdentity(t, identity)
+
+	identity.EXPECT().Authenticate(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ types.ICredentials) (types.ICredentials, error) {
+		require.NoError(t, ctx.Err())
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok, "acquisition must keep a hard ceiling")
+		assert.Greater(t, time.Until(deadline), 5*time.Minute, "an uncancelled caller must allow an interactive login")
+		return &types.AWSCredentials{AccessKeyID: "synthetic"}, nil
+	})
+	identity.EXPECT().PostAuthenticate(gomock.Any(), gomock.Any()).Return(nil)
+	identity.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	require.NoError(t, parent.WithIsolatedIdentity(t.Context(), "store", func(context.Context, *schema.AuthContext) error { return nil }))
+}
+
+// TestWithIsolatedIdentityAcquisitionGraceStartsOnCallerCancellation verifies the
+// acquisition keeps custody for a bounded grace period after the caller cancels
+// (a server may already have minted credentials) and then stops.
+func TestWithIsolatedIdentityAcquisitionGraceStartsOnCallerCancellation(t *testing.T) {
+	const grace = 100 * time.Millisecond
+	previous := operationAcquisitionGrace
+	operationAcquisitionGrace = grace
+	t.Cleanup(func() { operationAcquisitionGrace = previous })
+
+	ctrl := gomock.NewController(t)
+	identity := types.NewMockIdentity(ctrl)
+	expectScopedIdentityBasics(identity)
+	parent := registerScopedOperationIdentity(t, identity)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	identity.EXPECT().Authenticate(gomock.Any(), gomock.Any()).DoAndReturn(func(acquire context.Context, _ types.ICredentials) (types.ICredentials, error) {
+		cancel()
+		<-ctx.Done()
+		require.NoError(t, acquire.Err(), "acquisition must survive the caller's cancellation during the grace period")
+		cancelled := time.Now()
+		select {
+		case <-acquire.Done():
+		case <-time.After(10 * time.Second):
+			t.Fatal("acquisition must stop after the grace period")
+		}
+		assert.GreaterOrEqual(t, time.Since(cancelled), grace/2, "grace must start at cancellation, not be skipped")
+		return nil, acquire.Err()
+	})
+	identity.EXPECT().Logout(gomock.Any()).Return(nil)
+
+	called := false
+	err := parent.WithIsolatedIdentity(ctx, "store", func(context.Context, *schema.AuthContext) error {
+		called = true
+		return nil
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	assert.False(t, called, "a cancelled acquisition must never dispatch the operation")
+}
+
+// TestOperationAcquisitionContextStopsWithoutCallerCancellation verifies the release
+// function ends the acquisition context and its watcher when the caller never cancels.
+func TestOperationAcquisitionContextStopsWithoutCallerCancellation(t *testing.T) {
+	acquire, release := operationAcquisitionContext(t.Context(), time.Hour, time.Hour)
+	require.NoError(t, acquire.Err())
+	release()
+	require.ErrorIs(t, acquire.Err(), context.Canceled)
+}
+
+// TestOperationAcquisitionContextReleaseDuringGrace verifies a caller cancellation does
+// not end the acquisition before the grace period, and releasing it during the grace
+// period ends it immediately.
+func TestOperationAcquisitionContextReleaseDuringGrace(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	acquire, release := operationAcquisitionContext(ctx, time.Hour, time.Hour)
+	assert.True(t, signals.OwnsCleanup(acquire), "acquisition retains cleanup custody")
+	cancel()
+	<-ctx.Done()
+	require.NoError(t, acquire.Err(), "the grace period keeps the acquisition alive after caller cancellation")
+	release()
+	require.ErrorIs(t, acquire.Err(), context.Canceled)
+}
+
+// TestWithIsolatedIdentityResolvesCaseInsensitiveNames reproduces #3720 finding 1.1: a
+// store configured with the YAML spelling of an identity ("Automation") must resolve
+// through IdentityCaseMap the same way Authenticate and AuthenticateIsolated do.
+func TestWithIsolatedIdentityResolvesCaseInsensitiveNames(t *testing.T) {
+	resetProcessCredentialCache()
+	t.Cleanup(resetProcessCredentialCache)
+	parent := isolatedTestManager(t).(*manager)
+	parent.config.IdentityCaseMap = map[string]string{"deployer": "deployer", "automation": "Automation"}
+
+	called := false
+	err := parent.WithIsolatedIdentity(t.Context(), "Automation", func(_ context.Context, auth *schema.AuthContext) error {
+		called = true
+		if auth == nil || auth.AWS == nil {
+			return errUtils.ErrNilParam
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	assert.True(t, called, "the operation must run for a case-insensitive identity name")
+
+	err = parent.WithIsolatedIdentity(t.Context(), "Missing", func(context.Context, *schema.AuthContext) error {
+		t.Fatal("the operation must not run for an unknown identity")
+		return nil
+	})
+	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
 }

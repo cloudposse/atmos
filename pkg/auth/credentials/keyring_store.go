@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/keyring"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -18,17 +20,25 @@ import (
 type keyringCredentialStore struct {
 	kr        keyring.Keyring
 	storeType string
+	// explicitRealm is the realm the store's config says was configured explicitly, so it is never
+	// mistaken for the auto realm (see keyring_legacy_auto_realm.go). Empty when unknown.
+	explicitRealm string
 }
 
 // Store stores credentials for the given alias within the specified realm.
 func (s *keyringCredentialStore) Store(alias string, creds types.ICredentials, realm string) error {
 	defer perf.Track(nil, "credentials.keyringCredentialStore.Store")()
 
+	return s.storeEnvelope(alias, creds, realm, "")
+}
+
+// storeEnvelope persists credentials, and an optional configuration digest, in the envelope.
+func (s *keyringCredentialStore) storeEnvelope(alias string, creds types.ICredentials, realm, digest string) error {
 	typ, raw, err := marshalCredential(creds)
 	if err != nil {
 		return err
 	}
-	data, err := json.Marshal(&credentialEnvelope{Type: typ, Data: raw})
+	data, err := json.Marshal(&credentialEnvelope{Type: typ, Data: raw, ConfigDigest: digest})
 	if err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
 	}
@@ -42,19 +52,65 @@ func (s *keyringCredentialStore) Store(alias string, creds types.ICredentials, r
 func (s *keyringCredentialStore) Retrieve(alias string, realm string) (types.ICredentials, error) {
 	defer perf.Track(nil, "credentials.keyringCredentialStore.Retrieve")()
 
+	creds, _, err := s.retrieveEnvelope(alias, realm)
+	return creds, err
+}
+
+// retrieveEnvelope reads the envelope stored for alias within realm and returns its credentials
+// and configuration digest ("" for envelopes written without one).
+func (s *keyringCredentialStore) retrieveEnvelope(alias, realm string) (types.ICredentials, string, error) {
 	data, err := s.kr.Get(buildKeyringKey(alias, realm))
+	// Read-fallback migration: entries written before the "__" realm separator are still
+	// found, but only when the old key cannot belong to another realm and alias split.
+	fromLegacy := false
+	if errors.Is(err, keyring.ErrNotFound) && s.legacyKeyIsUnambiguous(alias, realm) {
+		data, err = s.kr.Get(legacyRealmKeyringKey(alias, realm))
+		fromLegacy = err == nil
+	}
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
-			return nil, errors.Join(ErrCredentialStore, ErrCredentialsNotFound)
+			return nil, "", errors.Join(ErrCredentialStore, ErrCredentialsNotFound)
 		}
-		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve credentials: %w", err))
+		return nil, "", errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve credentials: %w", err))
 	}
 
 	var env credentialEnvelope
 	if err := json.Unmarshal([]byte(data), &env); err != nil {
-		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal credential envelope: %w", err))
+		return nil, "", errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal credential envelope: %w", err))
 	}
-	return unmarshalCredential(env)
+	creds, err := unmarshalCredential(env)
+	if err != nil {
+		return nil, "", err
+	}
+	// Only an entry that decodes is moved, so a corrupt legacy entry is never propagated.
+	if fromLegacy {
+		s.migrateLegacyRealmEntry(alias, realm, data)
+	}
+	return creds, env.ConfigDigest, nil
+}
+
+// migrateLegacyRealmEntry rewrites an entry read through the unambiguous previous-layout
+// fallback under the current key and then deletes the legacy key, so later reads no longer
+// depend on the fallback. It is best effort and never fails the read: on any error the legacy
+// key is kept and the fallback keeps serving it. The entry is copied unchanged, and it is not
+// copied when the current key already exists (written by another process since the first
+// read), so fresh credentials are never overwritten by older ones.
+func (s *keyringCredentialStore) migrateLegacyRealmEntry(alias, realm, data string) {
+	current, legacy := buildKeyringKey(alias, realm), legacyRealmKeyringKey(alias, realm)
+	exists, err := s.kr.Has(current)
+	if err != nil || exists {
+		log.Debug("Not migrating legacy keyring entry", "alias", alias, "realm", realm, "currentExists", exists, "error", err)
+		return
+	}
+	if err := s.kr.Set(current, data); err != nil {
+		log.Debug("Failed to migrate legacy keyring entry; keeping the legacy key", "alias", alias, "realm", realm, "error", err)
+		return
+	}
+	if err := s.kr.Delete(legacy); err != nil {
+		log.Debug("Failed to delete migrated legacy keyring entry", "alias", alias, "realm", realm, "error", err)
+		return
+	}
+	log.Debug("Migrated legacy keyring entry to the current key layout", "alias", alias, "realm", realm)
 }
 
 // Delete deletes credentials for the given alias within the specified realm. It is idempotent.
@@ -63,6 +119,14 @@ func (s *keyringCredentialStore) Delete(alias string, realm string) error {
 
 	if err := s.kr.Delete(buildKeyringKey(alias, realm)); err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials: %w", err))
+	}
+	s.deleteExternalConfigDigest(alias, realm)
+	// Also remove the previous-layout entry Retrieve would fall back to, so a deleted
+	// credential cannot resurface. An ambiguous old key may belong to another realm and is kept.
+	if s.legacyKeyIsUnambiguous(alias, realm) {
+		if err := s.kr.Delete(legacyRealmKeyringKey(alias, realm)); err != nil {
+			return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete legacy credentials: %w", err))
+		}
 	}
 	return nil
 }
@@ -79,7 +143,7 @@ func (s *keyringCredentialStore) List(realm string) ([]string, error) {
 		}
 		return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to list credentials: %w", err))
 	}
-	return filterRealmKeys(keys, realm), nil
+	return s.filterRealmKeys(keys, realm), nil
 }
 
 // IsExpired checks if credentials for the given alias are expired within the specified realm.
@@ -130,17 +194,32 @@ func (s *keyringCredentialStore) SetAny(key string, value interface{}) error {
 }
 
 // filterRealmKeys reduces a flat list of realm-scoped keyring keys to aliases. With a realm it
-// returns aliases under "atmos_<realm>_"; with an empty realm it strips only the "atmos_" prefix
-// (so callers see "realm_alias"), matching the historical List behavior.
-func filterRealmKeys(keys []string, realm string) []string {
-	prefix := KeyringRealmPrefix + KeyringSeparator
-	if realm != "" {
-		prefix += realm + KeyringSeparator
-	}
+// returns aliases under "atmos_<realm>__" plus unambiguous previous-layout aliases under
+// "atmos_<realm>_" (see legacyKeyIsUnambiguous), each once; with an empty realm it strips
+// only the "atmos_" prefix (so callers see "realm__alias"), matching the historical List behavior.
+func (s *keyringCredentialStore) filterRealmKeys(keys []string, realm string) []string {
+	base := KeyringRealmPrefix + KeyringSeparator
 	aliases := make([]string, 0, len(keys))
+	if realm == "" {
+		for _, key := range keys {
+			if alias, ok := strings.CutPrefix(key, base); ok && alias != "" {
+				aliases = append(aliases, alias)
+			}
+		}
+		return aliases
+	}
+	current := base + realm + KeyringRealmAliasSeparator
+	legacy := base + realm + KeyringSeparator
+	seen := make(map[string]bool, len(keys))
 	for _, key := range keys {
-		if len(key) > len(prefix) && key[:len(prefix)] == prefix {
-			aliases = append(aliases, key[len(prefix):])
+		alias, ok := strings.CutPrefix(key, current)
+		if !ok {
+			alias, ok = strings.CutPrefix(key, legacy)
+			ok = ok && s.legacyKeyIsUnambiguous(alias, realm)
+		}
+		if ok && alias != "" && !seen[alias] {
+			seen[alias] = true
+			aliases = append(aliases, alias)
 		}
 	}
 	return aliases
