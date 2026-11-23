@@ -158,7 +158,14 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 		}
 
 		if err := dockerConfig.WriteAuth(loginServer, result.Username, result.Password); err != nil {
-			return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+			notice, managed := docker.HelperManagedNotice(err)
+			if !managed {
+				return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+			}
+			// config.json routes this registry to a helper that gets credentials
+			// itself, so there is nothing to write.
+			ui.Info("ACR login: " + notice)
+			continue
 		}
 
 		// Log success with actual expiration time, when known.

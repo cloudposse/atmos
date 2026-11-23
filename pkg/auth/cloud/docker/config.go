@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -30,20 +30,21 @@ const (
 
 // ConfigManager manages Docker config.json for ECR authentication.
 // It uses file locking to prevent concurrent modification.
+//
+// The file is round-tripped losslessly: only the target registry's auths entry
+// changes, and every other key (credsStore, credHelpers, currentContext,
+// plugins, proxies, per-registry identitytoken, unknown keys) is preserved.
+// When Docker would read the registry's credentials from a credential helper
+// (credHelpers[registry] or credsStore), the credentials are stored in that
+// helper, as `docker login` does, because Docker ignores inline auths then.
 type ConfigManager struct {
 	configDir  string
 	configPath string
 	mu         sync.Mutex
-}
-
-// dockerConfig represents the Docker config.json structure.
-type dockerConfig struct {
-	Auths map[string]authEntry `json:"auths,omitempty"`
-}
-
-// authEntry represents a single auth entry in Docker config.
-type authEntry struct {
-	Auth string `json:"auth,omitempty"`
+	// helper runs Docker credential helpers. Nil means the default PATH-based runner.
+	helper CredentialHelper
+	// warn emits user-facing warnings. Nil means ui.Warning (stderr).
+	warn func(string)
 }
 
 // NewConfigManager creates a new Docker config manager using the default Docker config path.
@@ -63,6 +64,7 @@ func NewConfigManager() (*ConfigManager, error) {
 	return &ConfigManager{
 		configDir:  configDir,
 		configPath: filepath.Join(configDir, configFileName),
+		helper:     newExecCredentialHelper(),
 	}, nil
 }
 
@@ -87,34 +89,86 @@ func getDockerConfigDir() string {
 }
 
 // WriteAuth writes ECR authorization to Docker config.
-// The auth entry is stored as base64(username:password).
+// The auth entry is stored as base64(username:password). When Docker resolves the
+// registry through a credential helper (credHelpers[registry] or credsStore), the
+// credentials are stored in that helper instead and only an empty placeholder
+// entry is written to auths, matching `docker login`. A helper failure is returned
+// as ErrDockerCredentialHelper and leaves config.json unchanged; when the helper
+// does not implement store (it gets credentials itself, like
+// docker-credential-ecr-login), the error also matches
+// ErrDockerCredentialHelperStoreUnsupported and HelperManagedNotice returns the
+// message callers show instead of failing. If config.json
+// cannot be saved after a successful helper store, the stored credential is
+// erased again so it is not orphaned in the helper. After a successful write it
+// warns (without failing) when DOCKER_AUTH_CONFIG is set, because Docker reads
+// credentials from that variable before config.json.
 func (m *ConfigManager) WriteAuth(registry, username, password string) error {
 	defer perf.Track(nil, "docker.ConfigManager.WriteAuth")()
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	return m.withConfigLock(func() error {
-		// Load existing config or create new one.
-		config, err := m.loadConfig()
-		if err != nil {
-			return err
+	// Store under the bare hostname, as `docker login https://host/` does, so a
+	// scheme or trailing slash cannot create a key Docker never looks up.
+	registry = convertToHostname(registry)
+
+	if err := m.withConfigLock(func() error {
+		return m.writeAuthLocked(registry, username, password)
+	}); err != nil {
+		return err
+	}
+
+	// The login succeeded, but Docker may still not use it in this shell.
+	if msg := dockerAuthConfigWarning(registry); msg != "" {
+		m.warner()(msg)
+	}
+	return nil
+}
+
+// writeAuthLocked is the body of WriteAuth; the caller holds the config lock.
+func (m *ConfigManager) writeAuthLocked(registry, username, password string) error {
+	// Load existing config or create new one.
+	config, err := m.loadConfig()
+	if err != nil {
+		return err
+	}
+
+	if helper := config.credentialHelperFor(registry); helper != "" {
+		// Docker ignores inline auths for this registry, so writing them would
+		// make the login silently ineffective. Store through the helper.
+		if err := m.credentialHelper().Store(helper, registry, username, password); err != nil {
+			if errors.Is(err, errUtils.ErrDockerCredentialHelperStoreUnsupported) {
+				// The helper gets credentials itself; see HelperManagedNotice.
+				return &helperManagedError{registry: registry, helper: helper, err: err}
+			}
+			return withHelperHint(err, helper)
 		}
-
-		// Encode credentials as base64(username:password).
-		authValue := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-
-		// Set auth for the registry.
-		if config.Auths == nil {
-			config.Auths = make(map[string]authEntry)
+		config.setAuth(registry, helperPlaceholderEntry)
+		if err := m.saveConfig(config); err != nil {
+			return m.rollbackHelperStore(err, helper, registry)
 		}
-		config.Auths[registry] = authEntry{Auth: authValue}
+		return nil
+	}
 
-		return m.saveConfig(config)
-	})
+	// Encode credentials as base64(username:password).
+	authValue := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+
+	// Set auth for the registry.
+	config.setAuth(registry, inlineAuthEntry(authValue))
+
+	return m.saveConfig(config)
 }
 
 // RemoveAuth removes ECR authorization from Docker config.
+// It reverses WriteAuth: the registry's auths entry is deleted and, when Docker
+// resolves the registry through a credential helper, the credentials are erased
+// from that helper. Registries without an auths entry are left alone, so the
+// helper is never asked to erase credentials Atmos (or `docker login`) did not
+// record. If a helper erase fails, that registry's entry is kept so the logout
+// can be retried, and the error is returned. Like `docker logout`, a registry is
+// normalized to its hostname and every auths key Docker reads for that host is
+// removed, including legacy "https://host" or "host/v2/" keys; each key is erased
+// from the helper Docker resolves for that exact key.
 func (m *ConfigManager) RemoveAuth(registries ...string) error {
 	defer perf.Track(nil, "docker.ConfigManager.RemoveAuth")()
 
@@ -129,12 +183,60 @@ func (m *ConfigManager) RemoveAuth(registries ...string) error {
 		}
 
 		// Remove auth entries for specified registries.
+		var helperErrs []error
+		changed := false
 		for _, registry := range registries {
-			delete(config.Auths, registry)
+			// Match every key Docker reads for this host, legacy variants included.
+			for _, key := range config.authKeysFor(convertToHostname(registry)) {
+				if helper := config.credentialHelperFor(key); helper != "" {
+					if err := m.credentialHelper().Erase(helper, key); err != nil {
+						helperErrs = append(helperErrs, withHelperHint(err, helper))
+						continue
+					}
+				}
+				config.removeAuth(key)
+				changed = true
+			}
 		}
 
-		return m.saveConfig(config)
+		if changed {
+			if err := m.saveConfig(config); err != nil {
+				helperErrs = append(helperErrs, err)
+			}
+		}
+		return errors.Join(helperErrs...)
 	})
+}
+
+// rollbackHelperStore undoes a helper store whose config.json save failed.
+// Without the auths placeholder, RemoveAuth would never erase the credential
+// and it would be orphaned in the helper (for example the OS keychain), so it is
+// erased on a best-effort basis. The save error is always returned, joined
+// with the erase error when the rollback also fails.
+func (m *ConfigManager) rollbackHelperStore(saveErr error, helper, registry string) error {
+	if err := m.credentialHelper().Erase(helper, registry); err != nil {
+		return errors.Join(saveErr, withHelperHint(err, helper))
+	}
+	return saveErr
+}
+
+// credentialHelper returns the configured credential helper runner.
+func (m *ConfigManager) credentialHelper() CredentialHelper {
+	if m.helper == nil {
+		return newExecCredentialHelper()
+	}
+	return m.helper
+}
+
+// withHelperHint classifies a credential helper failure as ErrDockerCredentialHelper
+// and makes it actionable.
+func withHelperHint(err error, helper string) error {
+	if !errors.Is(err, errUtils.ErrDockerCredentialHelper) {
+		err = fmt.Errorf("%w: %w", errUtils.ErrDockerCredentialHelper, err)
+	}
+	return fmt.Errorf("%w (config.json routes this registry to %s%s via credsStore/credHelpers, so Docker ignores inline auths for it; "+
+		"make sure that helper is installed and supports store/erase, or map the registry to inline auths with an empty credHelpers entry)",
+		err, credentialHelperPrefix, helper)
 }
 
 func (m *ConfigManager) withConfigLock(fn func() error) error {
@@ -172,43 +274,42 @@ func (m *ConfigManager) GetAuthenticatedRegistries() ([]string, error) {
 		return nil, err
 	}
 
-	registries := make([]string, 0, len(config.Auths))
-	for registry := range config.Auths {
-		registries = append(registries, registry)
-	}
-	return registries, nil
+	return config.registries(), nil
 }
 
 // loadConfig loads the Docker config from file or returns empty config if not exists.
-func (m *ConfigManager) loadConfig() (*dockerConfig, error) {
+func (m *ConfigManager) loadConfig() (*rawConfig, error) {
 	data, err := os.ReadFile(m.configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &dockerConfig{Auths: make(map[string]authEntry)}, nil
+			return newRawConfig(), nil
 		}
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrDockerConfigRead, err)
 	}
 
-	var config dockerConfig
-	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("%w: invalid JSON: %w", errUtils.ErrDockerConfigRead, err)
-	}
-
-	if config.Auths == nil {
-		config.Auths = make(map[string]authEntry)
-	}
-
-	return &config, nil
+	return parseRawConfig(data)
 }
 
-// saveConfig writes the Docker config to file.
-func (m *ConfigManager) saveConfig(config *dockerConfig) error {
-	data, err := json.MarshalIndent(config, "", "  ")
+// saveConfig writes the Docker config to file atomically (temp file + rename).
+// A symlinked config.json is updated through the link, and an existing file
+// keeps its permission bits; a new file is created with 0600.
+func (m *ConfigManager) saveConfig(config *rawConfig) error {
+	data, err := config.marshal()
 	if err != nil {
 		return fmt.Errorf("%w: failed to marshal config: %w", errUtils.ErrDockerConfigWrite, err)
 	}
 
-	if err := os.WriteFile(m.configPath, data, dockerConfigFilePerm); err != nil {
+	target := m.configPath
+	if resolved, err := filepath.EvalSymlinks(target); err == nil {
+		target = resolved
+	}
+
+	perm := os.FileMode(dockerConfigFilePerm)
+	if info, err := os.Stat(target); err == nil && info.Mode().IsRegular() {
+		perm = info.Mode().Perm()
+	}
+
+	if err := filesystem.NewOSFileSystem().WriteFileAtomic(target, data, perm); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
 	}
 
