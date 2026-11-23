@@ -24,10 +24,23 @@ func AWSMaterializer(name string, config *schema.Identity) Materializer {
 	return &awsMaterializer{name: name, provider: provider}
 }
 
-type awsMaterializer struct{ name, provider, realm, region string }
+type awsMaterializer struct {
+	name, provider, realm, region string
+	// manager resolves the root provider's spec.files.base_path; nil keeps the default location.
+	manager types.AuthManager
+}
 
 //nolint:lintroller // Trivial accessor, pure lookup, factory option, or delegation; exempt under repository tracking policy.
 func (a *awsMaterializer) SetRealm(realm string) { a.realm = realm }
+
+// SetManager lets a fresh process resolve the files base path before reuse or logout.
+//
+//nolint:lintroller // Trivial accessor, pure lookup, factory option, or delegation; exempt under repository tracking policy.
+func (a *awsMaterializer) SetManager(manager types.AuthManager) { a.manager = manager }
+
+// basePath is where the root provider reports and removes AWS files, so the identity
+// writes, reads, and deletes them there too.
+func (a *awsMaterializer) basePath() string { return awsIdentity.FilesBasePath(a.manager, a.name) }
 
 func (a *awsMaterializer) Apply(ctx context.Context, params *types.PostAuthenticateParams) error {
 	defer perf.Track(nil, "auth.awsMaterializer.Apply")()
@@ -43,12 +56,16 @@ func (a *awsMaterializer) Apply(ctx context.Context, params *types.PostAuthentic
 		return errUtils.ErrInvalidAuthConfig
 	}
 	a.provider, a.realm, a.region = params.ProviderName, params.Realm, credentials.Region
-	if err := awsCloud.SetupFiles(a.provider, a.name, credentials, "", a.realm); err != nil {
+	if params.Manager != nil {
+		a.manager = params.Manager
+	}
+	basePath := a.basePath()
+	if err := awsCloud.SetupFiles(a.provider, a.name, credentials, basePath, a.realm); err != nil {
 		return err
 	}
 	if err := awsCloud.SetAuthContext(&awsCloud.SetAuthContextParams{
 		AuthContext: params.AuthContext, StackInfo: params.StackInfo, ProviderName: a.provider,
-		IdentityName: a.name, Credentials: credentials, Manager: params.Manager, Realm: a.realm,
+		IdentityName: a.name, Credentials: credentials, BasePath: basePath, Manager: params.Manager, Realm: a.realm,
 	}); err != nil {
 		return err
 	}
@@ -58,7 +75,7 @@ func (a *awsMaterializer) Apply(ctx context.Context, params *types.PostAuthentic
 func (a *awsMaterializer) Environment() (map[string]string, error) {
 	defer perf.Track(nil, "auth.awsMaterializer.Environment")()
 
-	manager, err := awsCloud.NewAWSFileManager("", a.realm)
+	manager, err := awsCloud.NewAWSFileManager(a.basePath(), a.realm)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +92,7 @@ func (a *awsMaterializer) Environment() (map[string]string, error) {
 func (a *awsMaterializer) Paths() ([]types.Path, error) {
 	defer perf.Track(nil, "auth.awsMaterializer.Paths")()
 
-	manager, err := awsCloud.NewAWSFileManager("", a.realm)
+	manager, err := awsCloud.NewAWSFileManager(a.basePath(), a.realm)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +108,7 @@ func (a *awsMaterializer) Logout(ctx context.Context) error {
 	if a.provider == "" {
 		return nil
 	}
-	manager, err := awsCloud.NewAWSFileManager("", a.realm)
+	manager, err := awsCloud.NewAWSFileManager(a.basePath(), a.realm)
 	if err != nil {
 		return err
 	}

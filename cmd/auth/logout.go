@@ -824,12 +824,12 @@ func performLogoutAllRealms(ctx context.Context, atmosConfig *schema.AtmosConfig
 			// To clear all keyring entries across all realms, use List() to enumerate.
 			if atmosConfig.Auth.Identities != nil {
 				store := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
+				aliases := make([]string, 0, len(atmosConfig.Auth.Identities))
 				for alias := range atmosConfig.Auth.Identities {
-					if err := store.Delete(alias, realmName); err != nil {
-						// Log but don't fail - keyring entries may not exist.
-						log.Debug("Failed to delete keyring entry", "alias", alias, "realm", realmName, "error", err)
-					}
+					aliases = append(aliases, alias)
 				}
+				// Log but don't fail - keyring entries may not exist.
+				deleteRealmKeyringEntries(store, aliases, realmName)
 			}
 		}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -101,6 +102,11 @@ type manager struct {
 	chain []string
 	// realm provides credential isolation between different repositories.
 	realm realm.RealmInfo
+	// integrationFailures records non-fatal auto_provision integration failures so ambient
+	// credential brokers can report them (see IntegrationFailures) without making interactive
+	// authentication fail.
+	integrationFailures   []error
+	integrationFailuresMu sync.Mutex
 }
 
 // resolveIdentityName performs case-insensitive identity name lookup.
@@ -357,6 +363,7 @@ func (m *manager) authenticateResolvedIdentity(ctx context.Context, identityName
 				Err()
 			return nil, wrappedErr
 		}
+		m.recordExternalStepDigest(identityName, finalCreds)
 
 		// Trigger linked integrations (non-fatal).
 		m.triggerIntegrations(ctx, identityName, finalCreds)

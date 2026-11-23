@@ -10639,7 +10639,7 @@
               "type": "null"
             }
           ],
-          "description": "Name is the Azure Container Registry name (required for azure/acr).\nThe login server is Name + \".azurecr.io\"."
+          "description": "Name is the Azure Container Registry name (required for azure/acr).\nThe login server is Name + \".azurecr.io\" in the public cloud, \".azurecr.us\" in\nUS Government and \".azurecr.cn\" in China, following the cloud_environment of\nthe identity's provider."
         },
         "tenant_id": {
           "anyOf": [

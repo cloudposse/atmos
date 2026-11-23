@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/auth/cachepaths"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -73,8 +74,11 @@ func (d *defaultCacheStorage) ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
+// WriteFile replaces the cache file atomically (temporary file and rename), so
+// a concurrent reader, such as another kubectl exec-plugin call, sees either
+// the old or the new token and never a truncated file.
 func (d *defaultCacheStorage) WriteFile(path string, data []byte, perm os.FileMode) error {
-	return os.WriteFile(path, data, perm)
+	return filesystem.NewOSFileSystem().WriteFileAtomic(path, data, perm)
 }
 
 func (d *defaultCacheStorage) Remove(path string) error {

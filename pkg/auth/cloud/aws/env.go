@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -46,6 +47,25 @@ var problematicAWSEnvVars = []string{
 	// Note: AWS_REGION is intentionally NOT in this list as it's safe to inherit.
 }
 
+// processEnvMu serializes every temporary change Atmos auth makes to the AWS_*
+// variables of the process environment. Those variables are process-wide, so
+// without one lock a WithIsolatedAWSEnv call running next to the identity
+// credentials loader could see the loader's AWS_PROFILE, clear it mid-load, or
+// restore the wrong "original" value and leave it set for the rest of the run.
+var processEnvMu sync.Mutex
+
+// LockAWSProcessEnv acquires the lock that serializes temporary changes to the
+// AWS_* process environment and returns the function that releases it. Hold it
+// for the whole set, use and restore sequence. It is not reentrant: do not call
+// WithIsolatedAWSEnv, LoadIsolatedAWSConfig or LoadAtmosManagedAWSConfig while
+// holding it.
+func LockAWSProcessEnv() func() {
+	defer perf.Track(nil, "aws.LockAWSProcessEnv")()
+
+	processEnvMu.Lock()
+	return processEnvMu.Unlock
+}
+
 // WithIsolatedAWSEnv temporarily clears problematic AWS environment variables,
 // executes the provided function, then restores the original values.
 //
@@ -61,6 +81,10 @@ var problematicAWSEnvVars = []string{
 //	})
 func WithIsolatedAWSEnv(fn func() error) error {
 	defer perf.Track(nil, "pkg/auth/cloud/aws.WithIsolatedAWSEnv")()
+
+	// Hold the process-environment lock for the whole clear, fn and restore
+	// sequence. fn must not change the AWS_* environment itself.
+	defer LockAWSProcessEnv()()
 
 	// Save original values and track which variables are being ignored.
 	originalValues := make(map[string]string)
@@ -158,6 +182,9 @@ func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadO
 
 	var cfg aws.Config
 	var err error
+
+	// Hold the process-environment lock while credential variables are cleared.
+	defer LockAWSProcessEnv()()
 
 	// Only clear credential environment variables, not file paths or profile.
 	// This allows SDK to load from Atmos-managed files using AWS_PROFILE.

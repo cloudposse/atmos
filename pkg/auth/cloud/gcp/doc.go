@@ -13,10 +13,12 @@
 //	│       └── application_default_credentials.json
 //	└── config/
 //	    └── <identity-name>/
-//	        ├── active_config
-//	        ├── configurations/
-//	        │   └── config_atmos
-//	        └── properties
+//	        └── configurations/
+//	            └── config_atmos
+//
+// The config directory is exported as CLOUDSDK_CONFIG and the named configuration
+// "atmos" is selected with CLOUDSDK_ACTIVE_CONFIG_NAME, so gcloud reads its
+// project/region properties from configurations/config_atmos.
 //
 // Environment Variables:
 //

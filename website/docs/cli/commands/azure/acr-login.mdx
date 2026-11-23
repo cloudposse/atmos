@@ -40,6 +40,9 @@ atmos azure acr login --registry myregistry.azurecr.io
 atmos azure acr login \
   --registry myregistry.azurecr.io \
   --registry otherregistry.azurecr.io
+
+# Login to an Azure Government registry (uses an ambient US Government token)
+atmos azure acr login --registry myregistry.azurecr.us
 ```
 
 ## Arguments
@@ -63,9 +66,9 @@ atmos azure acr login \
 
   <dt>`--registry` <em>(alias `-r`)</em></dt>
   <dd>
-    Explicit ACR registry login server URL(s) for ad-hoc login. This mode uses ambient Azure credentials (the Azure SDK default credential chain: environment variables, managed identity, workload identity, Azure CLI) — not Atmos identities. Can be specified multiple times for multiple registries.
+    Explicit ACR registry login server URL(s) for ad-hoc login. This mode uses ambient Azure credentials (the Azure SDK default credential chain: environment variables, managed identity, workload identity, Azure CLI), not Atmos identities. Can be specified multiple times for multiple registries.
 
-    Format: `{name}.azurecr.io`
+    Format: `{name}.azurecr.io` (Azure Commercial), `{name}.azurecr.us` (Azure Government) or `{name}.azurecr.cn` (Azure China). The suffix selects the cloud whose ambient token is requested. See [Sovereign Clouds](#sovereign-clouds).
   </dd>
 </dl>
 
@@ -108,8 +111,8 @@ auth:
 | `kind` | Yes | - | Must be `azure/acr` |
 | `via.identity` | Yes | - | Name of identity providing Azure credentials |
 | `spec.auto_provision` | No | `true` | Auto-trigger on identity login |
-| `spec.registry.name` | Yes | - | ACR registry name (login server = `{name}.azurecr.io`) |
-| `spec.registry.tenant_id` | No | identity's tenant | Override the AAD tenant used for the OAuth2 token exchange |
+| `spec.registry.name` | Yes | - | ACR registry name. The login server is `{name}.azurecr.io`, or `{name}.azurecr.us` / `{name}.azurecr.cn` when the identity's provider sets `cloud_environment` (see [Sovereign Clouds](#sovereign-clouds)) |
+| `spec.registry.tenant_id` | No | identity's tenant | Tenant ID (GUID) or verified domain of the Entra ID tenant the registry belongs to, when it differs from the identity's tenant. Atmos gets a token in that tenant for the token exchange (see [Registries in Another Tenant](#registries-in-another-tenant)) |
 
 ## How It Works
 
@@ -135,9 +138,81 @@ When you use `--identity`:
 
 When you use `--registry`:
 
-1. Atmos uses ambient Azure credentials (the Azure SDK default credential chain).
-2. Exchanges the token for each registry's login server.
-3. Writes credentials to Docker config (`~/.docker/config.json`).
+1. Atmos validates every registry and maps its suffix to an Azure cloud.
+2. Gets an ambient Azure token (the Azure SDK default credential chain) for each cloud's Azure Resource Manager scope, once per cloud.
+3. Exchanges that token for each registry's login server.
+4. Writes credentials to Docker config (`~/.docker/config.json`).
+
+## Sovereign Clouds
+
+ACR login servers carry the cloud in their DNS suffix:
+
+| Cloud | `cloud_environment` | ACR login server |
+|-------|---------------------|------------------|
+| Commercial | `public` (default) | `{name}.azurecr.io` |
+| US Government / GCC High | `usgovernment` | `{name}.azurecr.us` |
+| China (Mooncake) | `china` | `{name}.azurecr.cn` |
+
+A registry only accepts an Azure AD token issued by its own cloud, so Atmos keeps the two aligned:
+
+- **Integrations** build the login server from `spec.registry.name` and the `cloud_environment` of the identity's provider. With `cloud_environment: usgovernment`, `name: myregistry` logs in to `myregistry.azurecr.us`.
+- **`--registry`** reads the cloud from the login server suffix and requests the ambient token from that cloud's login endpoint, for that cloud's Azure Resource Manager scope. When the ambient credential is the Azure CLI, the CLI must be signed in to the same cloud (for example `az cloud set --name AzureUSGovernment` before `az login`).
+
+```yaml
+auth:
+  providers:
+    azure-gov:
+      kind: azure/device-code
+      spec:
+        tenant_id: 00000000-0000-0000-0000-000000000000
+        cloud_environment: usgovernment
+
+  identities:
+    azure-gov-dev:
+      kind: azure/subscription
+      via:
+        provider: azure-gov
+      principal:
+        subscription_id: 11111111-1111-1111-1111-111111111111
+
+  integrations:
+    gov/acr:
+      kind: azure/acr
+      via:
+        identity: azure-gov-dev
+      spec:
+        registry:
+          name: myregistry            # Logs in to myregistry.azurecr.us
+```
+
+Logging out of the identity removes the registry's Docker credentials for every cloud suffix, because logout runs without the provider's credentials.
+
+## Registries in Another Tenant
+
+A registry accepts only an Azure AD token issued by its own Entra ID tenant, and the token exchange sends that token together with the tenant that issued it (as `az acr login` does). When the registry lives in a different tenant than the identity's provider, for example when the signed-in user is a guest in the registry's tenant, set `spec.registry.tenant_id` to the registry's tenant:
+
+```yaml
+auth:
+  integrations:
+    partner/acr:
+      kind: azure/acr
+      via:
+        identity: azure-dev
+      spec:
+        registry:
+          name: partnerregistry
+          tenant_id: 22222222-2222-2222-2222-222222222222   # Or a verified domain, e.g. partner.onmicrosoft.com
+```
+
+With `tenant_id` set, Atmos:
+
+1. Validates the value when the integration is loaded. It must be a tenant ID (a GUID) or a domain name such as `partner.onmicrosoft.com`.
+2. Uses the identity's credentials unchanged when `tenant_id` is the identity's own tenant.
+3. Otherwise gets a new Azure Resource Manager token in that tenant from the identity's cached sign-in (the refresh token the provider stored at login), from the login endpoint of the provider's `cloud_environment`, and exchanges that token with the registry's tenant.
+
+Getting a token in another tenant without a new sign-in only works for identities whose provider is `azure/device-code` or `azure/interactive`, and only if the signed-in account is a member or guest of the registry's tenant. For `azure/cli` and `azure/oidc` providers, Atmos fails with an error instead of exchanging a token from the wrong tenant. In that case, use an identity whose provider `tenant_id` is the registry's tenant and leave `spec.registry.tenant_id` unset. If the registry's tenant requires its own sign-in (for example Conditional Access or MFA), the login also fails with a hint to configure a provider for that tenant.
+
+Explicit `--registry` mode has no tenant option. It always exchanges the ambient token with the tenant that issued it.
 
 ## Credential Storage
 
@@ -146,6 +221,8 @@ ACR credentials are written to `~/.docker/config.json` by default, the standard 
 - Docker commands work immediately after login without additional configuration
 - Credentials are merged with existing entries in your Docker config
 - Respects `DOCKER_CONFIG` environment variable if set
+
+When `credHelpers` (or `credsStore`) in `config.json` routes the registry to a credential helper, the credentials are stored through that helper, because Docker ignores inline credentials for it. When the registry is routed to a helper that gets credentials itself and cannot store them, both an `azure/acr` integration and an explicit `--registry` login print a note that Docker uses that helper, and write nothing.
 
 ## Auto-Provisioning
 
@@ -180,5 +257,5 @@ integrations:
 
 ## See Also
 
-- [Auth Login Command](/cli/commands/auth/login) — Authenticate with identities (triggers auto-provisioned integrations)
-- [Auth Configuration](/cli/configuration/auth) — Configure providers, identities, and integrations
+- [Auth Login Command](/cli/commands/auth/login) - Authenticate with identities (triggers auto-provisioned integrations)
+- [Auth Configuration](/cli/configuration/auth) - Configure providers, identities, and integrations

@@ -30,6 +30,11 @@ func TestGitHubSTSHasFreshState(t *testing.T) {
 			want:   true,
 		},
 		{
+			name:   "a token that expires before the next broker refresh is stale",
+			tokens: []stsToken{{Host: "github.com", Owner: "acme", Token: "ghs_a", ExpiresAt: rfc3339(time.Now().Add(10 * time.Minute))}},
+			want:   false,
+		},
+		{
 			name:   "an expired token makes state stale",
 			tokens: []stsToken{{Host: "github.com", Owner: "acme", Token: "ghs_a", ExpiresAt: past}},
 			want:   false,

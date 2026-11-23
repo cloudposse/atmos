@@ -2,19 +2,36 @@ package azure
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/cache"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // msalCache implements cache.ExportReplace for MSAL token cache.
 // It stores tokens in ~/.azure/msal_token_cache.json for compatibility with Azure CLI.
+//
+// The file can be shared with other processes: for the empty realm it is the Azure
+// CLI's own cache, and several Atmos processes may use one realm cache. So the
+// file is never reset or overwritten wholesale. Replace and Export each run under
+// the msal-extensions lock (see withMSALCacheFileLock), and Export is a
+// read-modify-write that applies only the entries MSAL changed since Replace.
 type msalCache struct {
 	cachePath string
+
+	// mu guards base. MSAL may run several Replace calls concurrently.
+	mu sync.Mutex
+	// base is the state MSAL loaded in the last Replace (or wrote in the last
+	// Export). Nil means MSAL holds nothing loaded from disk.
+	base msalCacheState
 }
 
 // resolveMSALCachePath returns the on-disk MSAL token cache path for a realm.
@@ -94,31 +111,57 @@ func RemoveMSALCache(realm string) error {
 }
 
 // Replace loads the cache from disk into memory.
+//
+// A UTF-8 BOM is stripped first. A cache that is not a JSON object, or that MSAL
+// cannot load, is not loaded: authentication continues without cached tokens (and
+// a warning), and Export will not overwrite the file.
 func (c *msalCache) Replace(ctx context.Context, u cache.Unmarshaler, hints cache.ReplaceHints) error {
 	// Check context cancellation.
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	return withFileLock(ctx, c.cachePath, func() error {
+	return withMSALCacheFileLock(ctx, c.cachePath, func() error {
 		data, err := os.ReadFile(c.cachePath)
 		if err != nil {
 			if os.IsNotExist(err) {
 				log.Debug("MSAL cache file does not exist, starting with empty cache", "path", c.cachePath)
+				c.setBase(nil)
 				return nil
 			}
 			return fmt.Errorf("failed to read MSAL cache: %w", err)
 		}
-		if err := u.Unmarshal(data); err != nil {
-			log.Debug("Failed to unmarshal MSAL cache, starting fresh", "error", err)
+
+		data = normalizeMSALCacheBytes(data)
+		state, err := decodeMSALCacheState(data)
+		if err != nil {
+			c.setBase(nil)
+			log.Warn("Ignoring an MSAL token cache that is not valid JSON; tokens will not be cached until the file is repaired or removed",
+				"path", c.cachePath, "error", err)
 			return nil
 		}
+		if len(data) == 0 {
+			c.setBase(nil)
+			return nil
+		}
+		if err := u.Unmarshal(data); err != nil {
+			// MSAL starts from an empty cache; Export still keeps every entry on disk.
+			c.setBase(nil)
+			log.Warn("MSAL could not load the token cache; continuing without cached tokens", "path", c.cachePath, "error", err)
+			return nil
+		}
+		c.setBase(state)
 		log.Debug("Loaded MSAL cache from disk", "path", c.cachePath, "size", len(data))
 		return nil
 	})
 }
 
 // Export writes the cache from memory to disk.
+//
+// It re-reads the file under the lock and writes it back with only the entries
+// MSAL changed since Replace (see mergeMSALCacheState), atomically. If the file on
+// disk is not valid JSON, nothing is written and a warning is logged, so a damaged
+// cache (which may be the user's own `az login` cache) is never replaced.
 func (c *msalCache) Export(ctx context.Context, m cache.Marshaler, hints cache.ExportHints) error {
 	// Check context cancellation.
 	if err := ctx.Err(); err != nil {
@@ -130,14 +173,47 @@ func (c *msalCache) Export(ctx context.Context, m cache.Marshaler, hints cache.E
 	if err != nil {
 		return fmt.Errorf("failed to marshal MSAL cache: %w", err)
 	}
+	ours, err := decodeMSALCacheState(normalizeMSALCacheBytes(data))
+	if err != nil {
+		return fmt.Errorf("failed to marshal MSAL cache: %w", err)
+	}
 
-	return withFileLock(ctx, c.cachePath, func() error {
-		if err := os.WriteFile(c.cachePath, data, FilePermissions); err != nil {
+	return withMSALCacheFileLock(ctx, c.cachePath, func() error {
+		current, err := readMSALCacheState(c.cachePath)
+		if errors.Is(err, errUtils.ErrAzureMSALCacheUnparseable) {
+			log.Warn("Not saving tokens to an MSAL token cache that is not valid JSON; repair or remove the file", "path", c.cachePath, "error", err)
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		merged, err := json.MarshalIndent(mergeMSALCacheState(current, c.getBase(), ours), "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal MSAL cache: %w", err)
+		}
+		if err := credentialFileSystem.WriteFileAtomic(c.cachePath, merged, FilePermissions); err != nil {
 			return fmt.Errorf("failed to write MSAL cache: %w", err)
 		}
-		log.Debug("Exported MSAL cache to disk", "path", c.cachePath, "size", len(data))
+		// MSAL's in-memory state now matches what was just persisted for its entries.
+		c.setBase(ours)
+		log.Debug("Exported MSAL cache to disk", "path", c.cachePath, "size", len(merged))
 		return nil
 	})
+}
+
+// setBase records the state MSAL holds from disk.
+func (c *msalCache) setBase(state msalCacheState) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.base = state
+}
+
+// getBase returns the state MSAL holds from disk.
+func (c *msalCache) getBase() msalCacheState {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.base
 }
 
 // GetCachePath returns the path to the MSAL cache file.

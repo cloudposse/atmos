@@ -118,7 +118,7 @@ func TestGetPropertiesFilePath(t *testing.T) {
 
 	path, err := GetPropertiesFilePath(testRealm, providerName, "test-id")
 	require.NoError(t, err)
-	expected := filepath.Join(tmp, "atmos", testRealm, GCPSubdir, providerName, ConfigSubdir, "test-id", PropertiesFileName)
+	expected := filepath.Join(tmp, "atmos", testRealm, GCPSubdir, providerName, ConfigSubdir, "test-id", ConfigurationsSubdir, "config_atmos")
 	assert.Equal(t, filepath.ToSlash(expected), filepath.ToSlash(path))
 }
 

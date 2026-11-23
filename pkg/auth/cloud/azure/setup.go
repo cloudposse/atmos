@@ -352,33 +352,23 @@ type msalCacheUpdate struct {
 func updateMSALCache(params *msalCacheUpdate) error {
 	msalCachePath := filepath.Join(params.Home, ".azure", "msal_token_cache.json")
 
-	// Load existing cache or create new one.
-	cache, err := loadMSALCache(msalCachePath)
-	if err != nil {
-		return err
-	}
+	// Load, populate, and write the cache under one msal-extensions compatible lock.
+	return UpdateAzureCLIMSALCache(msalCachePath, func(cache map[string]interface{}) error {
+		// Initialize cache sections and populate with tokens.
+		sections := initializeCacheSections(cache)
 
-	// Initialize cache sections and populate with tokens.
-	sections := initializeCacheSections(cache)
-
-	if params.IsServicePrincipal {
-		// Service principal uses different MSAL cache format.
-		addServicePrincipalTokens(sections, params)
-	} else {
-		// User authentication uses standard format.
-		addUserAccountAndTokens(sections, params)
-		// Copy refresh tokens from the Atmos realm cache so az can self-mint
-		// any audience and survive access-token expiry.
-		CopyAtmosRefreshTokensInto(cache, params.Home, params.Realm, params.HomeAccountID)
-	}
-
-	// Write updated cache.
-	updatedData, err := json.MarshalIndent(cache, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal MSAL cache: %w", err)
-	}
-
-	return writeMSALCacheToFile(msalCachePath, updatedData)
+		if params.IsServicePrincipal {
+			// Service principal uses different MSAL cache format.
+			addServicePrincipalTokens(sections, params)
+		} else {
+			// User authentication uses standard format.
+			addUserAccountAndTokens(sections, params)
+			// Copy refresh tokens from the Atmos realm cache so az can self-mint
+			// any audience and survive access-token expiry.
+			CopyAtmosRefreshTokensInto(cache, params.Home, params.Realm, params.HomeAccountID)
+		}
+		return nil
+	})
 }
 
 // msalCacheSections holds all MSAL cache sections.
@@ -564,41 +554,6 @@ func addOptionalTokens(accessTokenSection map[string]interface{}, params *msalCa
 	}
 }
 
-// loadMSALCache loads existing MSAL cache from file or creates a new empty cache.
-func loadMSALCache(msalCachePath string) (map[string]interface{}, error) {
-	data, err := os.ReadFile(msalCachePath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("failed to read MSAL cache: %w", err)
-		}
-		return make(map[string]interface{}), nil
-	}
-
-	var cache map[string]interface{}
-	if err := json.Unmarshal(data, &cache); err != nil {
-		return nil, fmt.Errorf("failed to parse MSAL cache: %w", err)
-	}
-
-	return cache, nil
-}
-
-// writeMSALCacheToFile writes MSAL cache data to file with locking.
-func writeMSALCacheToFile(msalCachePath string, data []byte) error {
-	// Ensure .azure directory exists.
-	azureDir := filepath.Dir(msalCachePath)
-	if err := os.MkdirAll(azureDir, DirPermissions); err != nil {
-		return fmt.Errorf("failed to create .azure directory: %w", err)
-	}
-
-	return withFileLock(context.Background(), msalCachePath, func() error {
-		if err := os.WriteFile(msalCachePath, data, FilePermissions); err != nil {
-			return fmt.Errorf("failed to write MSAL cache: %w", err)
-		}
-		log.Debug("Updated Azure CLI MSAL token cache", "path", msalCachePath)
-		return nil
-	})
-}
-
 // tokenCacheParams holds parameters for adding a token to MSAL cache.
 type tokenCacheParams struct {
 	Token         string
@@ -698,11 +653,17 @@ func updateAzureProfile(home string, params ProfileUpdateParams) error {
 
 // UpdateSubscriptionsInProfile updates the subscriptions array in an Azure profile.
 // It sets the specified subscription as default and marks all others as not default.
+// Without a subscription ID there is nothing to make default, so the existing entries
+// (including the user's own `az account set` default) are returned unchanged.
 func UpdateSubscriptionsInProfile(profile map[string]interface{}, params ProfileUpdateParams) []interface{} {
 	// Get subscriptions array.
 	subscriptionsRaw, ok := profile["subscriptions"].([]interface{})
 	if !ok {
 		subscriptionsRaw = []interface{}{}
+	}
+
+	if params.SubscriptionID == "" {
+		return subscriptionsRaw
 	}
 
 	// Determine user type based on authentication method.

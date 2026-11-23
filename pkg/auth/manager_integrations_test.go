@@ -484,3 +484,34 @@ func TestManager_ExecuteIdentityIntegrations_Errors(t *testing.T) {
 		})
 	}
 }
+
+// TestManager_TriggerIntegrations_RecordsFailures asserts that a failed auto-provisioned
+// integration stays non-fatal (triggerIntegrations returns nothing) but is reported through
+// IntegrationFailures so ambient brokers can treat the run as failed.
+func TestManager_TriggerIntegrations_RecordsFailures(t *testing.T) {
+	resetProcessIntegrationCache()
+	t.Cleanup(resetProcessIntegrationCache)
+
+	authConfig := &schema.AuthConfig{
+		Realm:      "test-realm",
+		Providers:  map[string]schema.Provider{},
+		Identities: map[string]schema.Identity{"dev": {Kind: "aws/user"}},
+		Integrations: map[string]schema.Integration{
+			// Unregistered kind makes integration creation fail.
+			"broken": {Kind: "test/unregistered-kind", Via: &schema.IntegrationVia{Identity: "dev"}},
+		},
+	}
+	am, err := NewAuthManager(authConfig, credentials.NewCredentialStoreWithConfig(authConfig), validation.NewValidator(), nil, "")
+	require.NoError(t, err)
+	m, ok := am.(*manager)
+	require.True(t, ok)
+
+	require.NoError(t, m.IntegrationFailures(), "no failures before any integration runs")
+
+	m.triggerIntegrations(context.Background(), "dev", nil)
+
+	failures := m.IntegrationFailures()
+	require.Error(t, failures)
+	assert.ErrorIs(t, failures, errUtils.ErrIntegrationFailed)
+	assert.Contains(t, failures.Error(), "broken")
+}

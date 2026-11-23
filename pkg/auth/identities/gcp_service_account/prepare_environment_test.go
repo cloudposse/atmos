@@ -110,3 +110,52 @@ func TestPrepareEnvironment_ExpiredStoredCredentials(t *testing.T) {
 	assert.Nil(t, env)
 	assert.Contains(t, err.Error(), "expired-identity")
 }
+
+// TestPrepareEnvironment_ScrubsCallerGCPEnvironment verifies the caller's own GCP
+// credentials and location settings are not passed through next to the Atmos token:
+// GOOGLE_APPLICATION_CREDENTIALS (or an impersonation/credential override) would make
+// tools authenticate as someone else, and CLOUDSDK_COMPUTE_* would mix the caller's
+// region/zone into the identity's project.
+func TestPrepareEnvironment_ScrubsCallerGCPEnvironment(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	id := newPrepareEnvIdentity("sa-identity", "principal-project")
+	writeIdentityADC(t, "sa-identity", "ya29.stored-token", time.Now().Add(time.Hour))
+
+	input := map[string]string{
+		"PATH":                                      "/usr/bin",
+		"GOOGLE_APPLICATION_CREDENTIALS":            "/home/me/personal-key.json",
+		"CLOUDSDK_COMPUTE_REGION":                   "caller-region",
+		"CLOUDSDK_COMPUTE_ZONE":                     "caller-zone",
+		"GOOGLE_CLOUD_REGION":                       "caller-region",
+		"GOOGLE_CLOUD_ZONE":                         "caller-zone",
+		"GOOGLE_CLOUD_PROJECT":                      "caller-project",
+		"GOOGLE_CREDENTIALS":                        "{\"type\":\"service_account\"}",
+		"GOOGLE_IMPERSONATE_SERVICE_ACCOUNT":        "other@caller.iam.gserviceaccount.com",
+		"CLOUDSDK_AUTH_ACCESS_TOKEN_FILE":           "/home/me/token",
+		"CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT": "other@caller.iam.gserviceaccount.com",
+		"CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE":    "/home/me/override.json",
+		"CLOUDSDK_CORE_ACCOUNT":                     "me@example.com",
+	}
+	env, err := id.PrepareEnvironment(context.Background(), input)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ya29.stored-token", env["GOOGLE_OAUTH_ACCESS_TOKEN"])
+	assert.Equal(t, "principal-project", env["GOOGLE_CLOUD_PROJECT"])
+	assert.Equal(t, "/usr/bin", env["PATH"], "unrelated variables are kept")
+	for _, key := range []string{
+		"GOOGLE_APPLICATION_CREDENTIALS",
+		"CLOUDSDK_COMPUTE_REGION",
+		"CLOUDSDK_COMPUTE_ZONE",
+		"GOOGLE_CLOUD_REGION",
+		"GOOGLE_CLOUD_ZONE",
+		"GOOGLE_CREDENTIALS",
+		"GOOGLE_IMPERSONATE_SERVICE_ACCOUNT",
+		"CLOUDSDK_AUTH_ACCESS_TOKEN_FILE",
+		"CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT",
+		"CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+		"CLOUDSDK_CORE_ACCOUNT",
+	} {
+		assert.NotContains(t, env, key, "caller's %s must not leak into the identity environment", key)
+	}
+	assert.Equal(t, "/home/me/personal-key.json", input["GOOGLE_APPLICATION_CREDENTIALS"], "the input map must not be mutated")
+}
