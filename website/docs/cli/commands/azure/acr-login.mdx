@@ -147,7 +147,7 @@ ACR credentials are written to `~/.docker/config.json` by default, the standard 
 - Credentials are merged with existing entries in your Docker config
 - Respects `DOCKER_CONFIG` environment variable if set
 
-When `credHelpers` (or `credsStore`) in `config.json` routes the registry to a credential helper, the credentials are stored through that helper, because Docker ignores inline credentials for it. An `azure/acr` integration whose registry is routed to a helper that gets credentials itself and cannot store them prints a note that Docker uses that helper, and writes nothing.
+When `credHelpers` (or `credsStore`) in `config.json` routes the registry to a credential helper, the credentials are stored through that helper, because Docker ignores inline credentials for it. When the registry is routed to a helper that gets credentials itself and cannot store them, both an `azure/acr` integration and an explicit `--registry` login print a note that Docker uses that helper, and write nothing.
 
 ## Auto-Provisioning
 
