@@ -147,6 +147,9 @@ func TestBuildKubeClusterInfo_WithIdentity(t *testing.T) {
 	assert.Equal(t, "arn:aws:eks:us-east-2:123456789012:cluster/dev-cluster", clusterInfo.ID)
 	assert.Equal(t, "us-east-2", clusterInfo.Region)
 	assert.Equal(t, "eks", clusterInfo.UserPrefix)
+	assert.Equal(t, "123456789012", clusterInfo.AccountID)
+	assert.Equal(t, "dev-admin", clusterInfo.Identity)
+	assert.Equal(t, "atmos-eks-dev-cluster-us-east-2-123456789012-dev-admin-48550b25", kube.UserName(clusterInfo))
 	assert.Equal(t, []string{"aws", "eks", "token", "--cluster-name", "dev-cluster", "--region", "us-east-2", "--identity=dev-admin"}, clusterInfo.ExecArgs)
 	require.Len(t, clusterInfo.ExecEnv, 2)
 	assert.Equal(t, "ATMOS_IDENTITY", clusterInfo.ExecEnv[0].Name)
@@ -201,7 +204,7 @@ func TestDescribeCluster_ResolvedRegion(t *testing.T) {
 			clusterInfo, err := BuildKubeClusterInfo(info, "foo")
 			require.NoError(t, err)
 			config := kube.BuildClusterConfig(clusterInfo, "")
-			user := config.AuthInfos["atmos-eks-bar-"+tt.want]
+			user := config.AuthInfos[config.Contexts[config.CurrentContext].AuthInfo]
 			require.NotNil(t, user)
 			assert.Equal(t, []string{"aws", "eks", "token", "--cluster-name", "bar", "--region", tt.want, "--identity=foo"}, user.Exec.Args)
 		})
@@ -231,7 +234,7 @@ func TestBuildKubeClusterInfo_WorkingDirectory(t *testing.T) {
 	t.Chdir(t.TempDir())
 	config, err := clientcmd.LoadFromFile(path)
 	require.NoError(t, err)
-	user := config.AuthInfos["atmos-eks-bar-eu-central-1"]
+	user := config.AuthInfos[kube.UserName(info)]
 	require.NotNil(t, user)
 	env := map[string]string{}
 	for _, entry := range user.Exec.Env {

@@ -207,9 +207,11 @@ func processEarlyChdirFlag() error {
 	chdir := parseChdirFromArgs()
 
 	// If flag is not set, check environment variable.
+	fromEnv := false
 	if chdir == "" {
 		//nolint:forbidigo // Must use os.Getenv: chdir is processed before Viper configuration loads.
 		chdir = os.Getenv("ATMOS_CHDIR")
+		fromEnv = true
 	}
 
 	if chdir == "" {
@@ -229,17 +231,14 @@ func processEarlyChdirFlag() error {
 		return fmt.Errorf("%w: invalid chdir path: %s", errUtils.ErrPathResolution, chdir)
 	}
 
-	// Verify the directory exists before attempting to change to it.
-	stat, err := os.Stat(absPath)
+	// Verify the directory exists before changing to it (see checkChdirTarget for the kube exec fallback).
+	skip, err := checkChdirTarget(absPath, fromEnv)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("%w: directory does not exist: %s", errUtils.ErrWorkdirNotExist, absPath)
-		}
-		return fmt.Errorf("%w: failed to access directory: %s", errUtils.ErrStatFile, absPath)
+		return err
 	}
-
-	if !stat.IsDir() {
-		return fmt.Errorf("%w: not a directory: %s", errUtils.ErrWorkdirNotExist, absPath)
+	if skip {
+		chdirProcessed = true
+		return nil
 	}
 
 	// Change to the specified directory (updates PWD so subprocesses and
@@ -284,9 +283,11 @@ func processChdirFlag(cmd *cobra.Command) error {
 	}
 	// If flag is not set, check environment variable.
 	// Note: chdir is not supported in atmos.yaml since it must be processed before atmos.yaml is loaded.
+	fromEnv := false
 	if chdir == "" {
 		//nolint:forbidigo // Must use os.Getenv: chdir is processed before Viper configuration loads.
 		chdir = os.Getenv("ATMOS_CHDIR")
+		fromEnv = true
 	}
 
 	if chdir == "" {
@@ -306,17 +307,14 @@ func processChdirFlag(cmd *cobra.Command) error {
 		return fmt.Errorf("%w: invalid chdir path: %s", errUtils.ErrPathResolution, chdir)
 	}
 
-	// Verify the directory exists before attempting to change to it.
-	stat, err := os.Stat(absPath)
+	// Verify the directory exists before changing to it (see checkChdirTarget for the kube exec fallback).
+	skip, err := checkChdirTarget(absPath, fromEnv)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("%w: directory does not exist: %s", errUtils.ErrWorkdirNotExist, absPath)
-		}
-		return fmt.Errorf("%w: failed to access directory: %s", errUtils.ErrStatFile, absPath)
+		return err
 	}
-
-	if !stat.IsDir() {
-		return fmt.Errorf("%w: not a directory: %s", errUtils.ErrWorkdirNotExist, absPath)
+	if skip {
+		chdirProcessed = true
+		return nil
 	}
 
 	// Change to the specified directory (updates PWD so subprocesses and

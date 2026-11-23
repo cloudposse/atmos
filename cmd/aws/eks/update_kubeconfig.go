@@ -45,6 +45,9 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 		}
 
 		flags := cmd.Flags()
+		// --dry-run must not write the kubeconfig or run side effects such as
+		// ECR logins on the Go SDK paths; the legacy path passes it to the AWS CLI.
+		dryRun, _ := flags.GetBool("dry-run")
 
 		// If --integration is specified, use Go SDK path via auth manager.
 		// Forward --kubeconfig/--alias (and the KUBECONFIG/ATMOS_KUBECONFIG env vars bound to
@@ -54,6 +57,9 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 		if integration != "" {
 			kubeconfig := v.GetString("eks.kubeconfig")
 			alias, _ := flags.GetString("alias")
+			if dryRun {
+				return executeEKSUpdateKubeconfigViaIntegrationDryRun(integration, kubeconfig, alias)
+			}
 			return executeEKSUpdateKubeconfigViaIntegration(integration, kubeconfig, alias)
 		}
 
@@ -68,7 +74,9 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 			region, _ := flags.GetString("region")
 			kubeconfig, _ := flags.GetString("kubeconfig")
 			alias, _ := flags.GetString("alias")
-			return executeEKSUpdateKubeconfigDirect(name, region, kubeconfig, alias, identity)
+			return runEKSUpdateKubeconfigDirect(&eksDirectRequest{
+				clusterName: name, region: region, kubeconfigPath: kubeconfig, alias: alias, identityName: identity, dryRun: dryRun,
+			})
 		}
 
 		// Legacy path: delegate to internal/exec for AWS CLI-based update.

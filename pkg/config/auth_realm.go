@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -23,23 +24,23 @@ func setAuthRealm(atmosConfig *schema.AtmosConfiguration) {
 
 	if envRealm := configEnvValue(authRealmEnvVar); envRealm != "" {
 		atmosConfig.Auth.Realm = envRealm
-		atmosConfig.Auth.RealmSource = "env"
+		atmosConfig.Auth.RealmSource = realm.SourceEnv
 		return
 	}
 
 	if atmosConfig.Auth.Realm != "" {
-		atmosConfig.Auth.RealmSource = "config"
+		atmosConfig.Auth.RealmSource = realm.SourceConfig
 		return
 	}
 
 	if atmosConfig.CliConfigPath != "" {
 		atmosConfig.Auth.Realm = hashRealmFromPath(atmosConfig.CliConfigPath)
-		atmosConfig.Auth.RealmSource = "config-path"
+		atmosConfig.Auth.RealmSource = realm.SourceConfigPath
 		return
 	}
 
 	atmosConfig.Auth.Realm = "default"
-	atmosConfig.Auth.RealmSource = "default"
+	atmosConfig.Auth.RealmSource = realm.SourceDefault
 }
 
 func hashRealmFromPath(path string) string {

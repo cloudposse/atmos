@@ -3,6 +3,7 @@ package integrations
 import (
 	"context"
 
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -48,8 +49,23 @@ type IntegrationConfig struct {
 	// Realm is the credential isolation realm. Integrations that persist secret
 	// material to disk (e.g., github/sts) use it to scope their state paths so
 	// minted credentials are isolated per repository/customer environment.
-	// Integrations that don't need it (aws/ecr, aws/eks) may ignore it.
+	// Kubeconfig integrations (aws/eks, azure/aks, gcp/gke) use it to scope
+	// their kube user and context names, but only when RealmExplicit reports
+	// true. Integrations that don't need it (aws/ecr) may ignore it.
 	Realm string
+	// RealmSource is how Realm was determined: realm.SourceEnv or
+	// realm.SourceConfig for a realm set by ATMOS_AUTH_REALM or auth.realm, or
+	// realm.SourceAuto for one Atmos derived because none is configured (a hash
+	// of the atmos.yaml path). Empty counts as explicit, for callers that set
+	// Realm directly.
+	RealmSource string
+}
+
+// RealmExplicit reports whether Realm was configured explicitly, so names that
+// users type (kube contexts) and see (kube users) may include it. A derived
+// realm still isolates credentials, but must not change those names.
+func (c *IntegrationConfig) RealmExplicit() bool {
+	return c.Realm != "" && realm.IsExplicitSource(c.RealmSource)
 }
 
 // IntegrationFactory creates integrations from configuration.

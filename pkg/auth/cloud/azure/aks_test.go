@@ -2,6 +2,7 @@ package azure
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -289,9 +290,11 @@ func TestBuildKubeClusterInfo_WithIdentity(t *testing.T) {
 	assert.Equal(t, "myRG", clusterInfo.Region)
 	assert.Equal(t, "aks", clusterInfo.UserPrefix)
 	assert.Equal(t, []string{"azure", "aks", "token", "--cluster-name", "mycluster", "--resource-group", "myRG", "--server-id", "custom-server-id", "--subscription-id", "sub-123", "--identity=azure-dev"}, clusterInfo.ExecArgs)
-	require.Len(t, clusterInfo.ExecEnv, 1)
+	require.Len(t, clusterInfo.ExecEnv, 2)
 	assert.Equal(t, "ATMOS_IDENTITY", clusterInfo.ExecEnv[0].Name)
 	assert.Equal(t, "azure-dev", clusterInfo.ExecEnv[0].Value)
+	assert.Equal(t, "ATMOS_CHDIR", clusterInfo.ExecEnv[1].Name)
+	assert.True(t, filepath.IsAbs(clusterInfo.ExecEnv[1].Value))
 }
 
 func TestAKSServerScopeFromContext(t *testing.T) {
@@ -310,7 +313,8 @@ func TestBuildKubeClusterInfo_WithoutIdentity(t *testing.T) {
 	clusterInfo := BuildKubeClusterInfo(info, "")
 
 	assert.Equal(t, []string{"azure", "aks", "token", "--cluster-name", "mycluster", "--resource-group", "myRG"}, clusterInfo.ExecArgs)
-	assert.Empty(t, clusterInfo.ExecEnv)
+	require.Len(t, clusterInfo.ExecEnv, 1, "only ATMOS_CHDIR is set without an identity")
+	assert.Equal(t, "ATMOS_CHDIR", clusterInfo.ExecEnv[0].Name)
 }
 
 func TestGetToken_Success(t *testing.T) {
