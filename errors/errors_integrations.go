@@ -391,4 +391,7 @@ var (
 	ErrLSPNoServerForFile       = errors.New("no LSP server found for file")
 	ErrLSPRPCError              = errors.New("RPC error")
 	ErrLSPNoContentLengthHeader = errors.New("no Content-Length header found")
+	// ErrEKSClusterAmbiguous is returned when a kubeconfig holds several EKS
+	// clusters that match an integration and none can be attributed to it.
+	ErrEKSClusterAmbiguous = errors.New("EKS cluster in kubeconfig is ambiguous")
 )

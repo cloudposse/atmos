@@ -137,12 +137,14 @@ func TestBuildKubeClusterInfo(t *testing.T) {
 	assert.Equal(t, "example-project-us-central1", got.Region)
 	assert.Equal(t, "gke", got.UserPrefix)
 	assert.Equal(t, []string{"gcp", "gke", "token", "--identity=example-deployer"}, got.ExecArgs)
-	require.Len(t, got.ExecEnv, 1)
+	require.Len(t, got.ExecEnv, 2)
 	assert.Equal(t, "ATMOS_IDENTITY", got.ExecEnv[0].Name)
 	assert.Equal(t, "example-deployer", got.ExecEnv[0].Value)
+	assert.Equal(t, "ATMOS_CHDIR", got.ExecEnv[1].Name)
+	assert.True(t, filepath.IsAbs(got.ExecEnv[1].Value))
 
 	config := kube.BuildClusterConfig(got, "example")
-	authInfo := config.AuthInfos["atmos-gke-example-cluster-example-project-us-central1"]
+	authInfo := config.AuthInfos["atmos-gke-example-cluster-example-project-us-central1-example-deployer"]
 	require.NotNil(t, authInfo)
 	require.NotNil(t, authInfo.Exec)
 	assert.Empty(t, authInfo.Token)
@@ -171,7 +173,13 @@ func TestGKEKubeconfigUpdateModesAndNoOp(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, changed)
 
-	_, err = mgr.WriteClusterConfig(info, "example", "error")
+	// Error mode accepts an identical re-run and rejects a real difference.
+	changed, err = mgr.WriteClusterConfig(info, "example", "error")
+	require.NoError(t, err)
+	assert.False(t, changed)
+	conflicting := *info
+	conflicting.Endpoint = "https://changed.example.invalid"
+	_, err = mgr.WriteClusterConfig(&conflicting, "example", "error")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
 
@@ -222,8 +230,8 @@ func TestGKEKubeconfigDistinctProjectsDoNotCollide(t *testing.T) {
 	assert.Len(t, loaded.Clusters, 2)
 	assert.Len(t, loaded.Contexts, 2)
 	assert.Len(t, loaded.AuthInfos, 2)
-	assert.Contains(t, loaded.AuthInfos, "atmos-gke-example-cluster-example-project-a-us-central1")
-	assert.Contains(t, loaded.AuthInfos, "atmos-gke-example-cluster-example-project-b-us-central1")
+	assert.Contains(t, loaded.AuthInfos, "atmos-gke-example-cluster-example-project-a-us-central1-example-deployer")
+	assert.Contains(t, loaded.AuthInfos, "atmos-gke-example-cluster-example-project-b-us-central1-example-deployer")
 	for _, authInfo := range loaded.AuthInfos {
 		assert.Empty(t, authInfo.Token)
 	}

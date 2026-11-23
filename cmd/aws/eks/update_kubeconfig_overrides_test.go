@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -43,6 +44,7 @@ type fakeEKSAuthManager struct {
 	execErr      error
 	whoami       *types.WhoamiInfo
 	authErr      error
+	realm        string
 }
 
 func (f *fakeEKSAuthManager) ExecuteIntegration(_ context.Context, name string, opts ...types.IntegrationOption) error {
@@ -56,6 +58,11 @@ func (f *fakeEKSAuthManager) ExecuteIntegration(_ context.Context, name string, 
 func (f *fakeEKSAuthManager) Authenticate(_ context.Context, name string) (*types.WhoamiInfo, error) {
 	f.gotName = name
 	return f.whoami, f.authErr
+}
+
+// GetRealm returns the configured auth realm.
+func (f *fakeEKSAuthManager) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{Value: f.realm}
 }
 
 // TestExecuteEKSUpdateKubeconfigViaIntegration_ForwardsOverrides is the
@@ -196,9 +203,23 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 		name         string
 		unavailable  bool
 		writeFailure bool
-		wantErr      error
+		realm        string
+		// realmSource is how pkg/config resolved the realm (AuthConfig.RealmSource).
+		realmSource   string
+		alias         string
+		wantUser      string
+		wantContext   string
+		wantExecRealm string
+		wantErr       error
 	}{
-		{name: "preserves auth context"},
+		{name: "preserves auth context", alias: "bar-context", wantContext: "bar-context", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
+		{name: "realm scopes the user", realm: "acme", alias: "bar-context", wantContext: "bar-context", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo", wantExecRealm: "acme"},
+		{name: "default context without realm is the ARN", wantContext: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
+		{name: "realm prefixes the default context", realm: "acme", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo", wantExecRealm: "acme"},
+		{name: "explicit config realm prefixes the default context", realm: "acme", realmSource: "config", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo", wantExecRealm: "acme"},
+		{name: "env realm prefixes the default context", realm: "acme", realmSource: "env", wantContext: "acme/arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-acme-eks-bar-eu-central-1-123456789012-foo", wantExecRealm: "acme"},
+		{name: "auto realm from the config path keeps the ARN context", realm: "462813558259d41c", realmSource: "config-path", wantContext: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
+		{name: "default realm keeps the ARN context", realm: "default", realmSource: "default", wantContext: "arn:aws:eks:eu-central-1:123456789012:cluster/bar", wantUser: "atmos-eks-bar-eu-central-1-123456789012-foo"},
 		{name: "working directory unavailable", unavailable: true, wantErr: errUtils.ErrWorkingDirAccessFailed},
 		{name: "kubeconfig parent is a file", writeFailure: true, wantErr: errUtils.ErrKubeconfigWrite},
 	} {
@@ -207,8 +228,10 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 				t.Skip("Only Linux reliably fails Getwd after removing the current directory")
 			}
 			restoreEKSSeams(t)
-			initCliConfig = okEKSInitConfig
-			fake := &fakeEKSAuthManager{whoami: &types.WhoamiInfo{Credentials: &types.AWSCredentials{
+			initCliConfig = func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+				return schema.AtmosConfiguration{Auth: schema.AuthConfig{Realm: tt.realm, RealmSource: tt.realmSource}}, nil
+			}
+			fake := &fakeEKSAuthManager{realm: tt.realm, whoami: &types.WhoamiInfo{Credentials: &types.AWSCredentials{
 				AccessKeyID: "test-access-key", SecretAccessKey: "test-secret-key",
 			}}}
 			newAuthManager = func(*schema.AuthConfig, types.CredentialStore, types.Validator, *schema.ConfigAndStacksInfo, string) (types.AuthManager, error) {
@@ -243,7 +266,7 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 				// The existing AWS config is a file, so it cannot contain a kubeconfig.
 				path = filepath.Join(configDir, "config", "kubeconfig")
 			}
-			err = executeEKSUpdateKubeconfigDirect("bar", "", path, "bar-context", "foo")
+			err = executeEKSUpdateKubeconfigDirect("bar", "", path, tt.alias, "foo")
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, errUtils.ErrEKSIntegrationFailed)
 				require.ErrorIs(t, err, tt.wantErr)
@@ -257,8 +280,10 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 			t.Chdir(t.TempDir())
 			config, err := clientcmd.LoadFromFile(path)
 			require.NoError(t, err)
-			assert.Equal(t, "bar-context", config.CurrentContext)
-			user := config.AuthInfos["atmos-eks-bar-eu-central-1"]
+			assert.Equal(t, tt.wantContext, config.CurrentContext)
+			require.Contains(t, config.Contexts, tt.wantContext)
+			assert.Equal(t, tt.wantUser, config.Contexts[tt.wantContext].AuthInfo)
+			user := config.AuthInfos[tt.wantUser]
 			require.NotNil(t, user)
 			assert.Equal(t, []string{"aws", "eks", "token", "--cluster-name", "bar", "--region", "eu-central-1", "--identity=foo"}, user.Exec.Args)
 			env := map[string]string{}
@@ -267,6 +292,7 @@ func TestExecuteEKSUpdateKubeconfigDirect_AuthContext(t *testing.T) {
 			}
 			assert.Equal(t, workingDir, env["ATMOS_CHDIR"])
 			assert.Equal(t, "foo", env["ATMOS_IDENTITY"])
+			assert.Equal(t, tt.wantExecRealm, env["ATMOS_AUTH_REALM"])
 		})
 	}
 }

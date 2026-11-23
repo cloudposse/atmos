@@ -35,6 +35,9 @@ const (
 
 	// eksPresignLifetimeSeconds is the presigned URL lifetime (60 seconds).
 	eksPresignLifetimeSeconds = 60
+
+	// eksUserPrefix distinguishes EKS exec-plugin usernames in a kubeconfig.
+	eksUserPrefix = "eks"
 )
 
 // EKSClusterInfo contains cluster data needed for kubeconfig generation.
@@ -190,10 +193,69 @@ func BuildKubeClusterInfo(info *EKSClusterInfo, identityName string) (*kube.Clus
 		CertificateAuthorityData: info.CertificateAuthorityData,
 		ID:                       info.ARN,
 		Region:                   info.Region,
-		UserPrefix:               "eks",
+		UserPrefix:               eksUserPrefix,
+		AccountID:                clusterAccountID(info.ARN),
+		Identity:                 identityName,
+		LegacyUserNames:          []string{LegacyEKSKubeUserName(info.Name, info.Region)},
 		ExecArgs:                 execArgs,
 		ExecEnv:                  execEnv,
 	}, nil
+}
+
+// EKSKubeUserName returns the kubeconfig exec-plugin username that
+// BuildKubeClusterInfo produces for the cluster with the given ARN, name and
+// region when authenticating as identityName from realm:
+// atmos-[<realm>-]eks-<name>-<region>-<account>-<identity>. The realm, account
+// ID and identity keep contexts for different repositories, accounts or
+// identities from sharing one user.
+func EKSKubeUserName(clusterARN, clusterName, region, identityName, realm string) string {
+	defer perf.Track(nil, "aws.EKSKubeUserName")()
+
+	return kube.UserName(&kube.ClusterInfo{
+		Name:       clusterName,
+		Region:     region,
+		UserPrefix: eksUserPrefix,
+		AccountID:  clusterAccountID(clusterARN),
+		Identity:   identityName,
+		Realm:      realm,
+	})
+}
+
+// EKSKubeUserNames returns EKSKubeUserName followed by the names older
+// versions wrote for the same entry, so cleanup can remove any of them: the
+// name without the realm (when realm is set), the names under each of
+// legacyRealms (see kube.ClusterInfo.LegacyRealms) and the legacy
+// atmos-eks-<name>-<region> name.
+func EKSKubeUserNames(clusterARN, clusterName, region, identityName, realm string, legacyRealms ...string) []string {
+	defer perf.Track(nil, "aws.EKSKubeUserNames")()
+
+	names := []string{EKSKubeUserName(clusterARN, clusterName, region, identityName, realm)}
+	if realm != "" {
+		names = append(names, EKSKubeUserName(clusterARN, clusterName, region, identityName, ""))
+	}
+	for _, legacyRealm := range legacyRealms {
+		names = append(names, EKSKubeUserName(clusterARN, clusterName, region, identityName, legacyRealm))
+	}
+	return append(names, LegacyEKSKubeUserName(clusterName, region))
+}
+
+// LegacyEKSKubeUserName returns the atmos-eks-<name>-<region> username that
+// versions before the account ID and identity were added wrote, so cleanup can
+// still remove entries those versions left in a kubeconfig.
+func LegacyEKSKubeUserName(clusterName, region string) string {
+	defer perf.Track(nil, "aws.LegacyEKSKubeUserName")()
+
+	return kube.UserName(&kube.ClusterInfo{Name: clusterName, Region: region, UserPrefix: eksUserPrefix})
+}
+
+// clusterAccountID returns the account ID in an EKS cluster ARN, or "" when
+// the ARN cannot be parsed.
+func clusterAccountID(clusterARN string) string {
+	parsed, err := arn.Parse(clusterARN)
+	if err != nil {
+		return ""
+	}
+	return parsed.AccountID
 }
 
 // addPresignExpiry returns a middleware that adds X-Amz-Expires to the presigned URL query string.

@@ -114,6 +114,9 @@ func DescribeCluster(ctx context.Context, client GKEClient, projectID, location,
 	}, nil
 }
 
+// gkeUserPrefix distinguishes GKE exec-plugin usernames in a kubeconfig.
+const gkeUserPrefix = "gke"
+
 // ClusterResourceName returns the canonical fully-qualified GKE cluster name.
 func ClusterResourceName(projectID, location, name string) string {
 	return fmt.Sprintf("projects/%s/locations/%s/clusters/%s", projectID, location, name)
@@ -131,17 +134,70 @@ func BuildKubeClusterInfo(info *GKEClusterInfo, identityName string) *kube.Clust
 			Value: identityName,
 		})
 	}
+	execEnv = appendWorkingDirExecEnv(execEnv)
 
 	return &kube.ClusterInfo{
 		Name:                     info.Name,
 		Endpoint:                 info.Endpoint,
 		CertificateAuthorityData: info.CertificateAuthorityData,
 		ID:                       info.ID,
-		Region:                   info.ProjectID + "-" + info.Location,
-		UserPrefix:               "gke",
+		Region:                   gkeUserRegion(info.ProjectID, info.Location),
+		UserPrefix:               gkeUserPrefix,
+		Identity:                 identityName,
+		LegacyUserNames:          []string{LegacyGKEKubeUserName(info.ProjectID, info.Location, info.Name)},
 		ExecArgs:                 execArgs,
 		ExecEnv:                  execEnv,
 	}
+}
+
+// GKEKubeUserName returns the kubeconfig exec-plugin username that
+// BuildKubeClusterInfo produces for a cluster when authenticating as
+// identityName from realm:
+// atmos-[<realm>-]gke-<name>-<project>-<location>[-<identity>]. The realm and
+// identity keep contexts for different repositories or identities from
+// sharing one user.
+func GKEKubeUserName(projectID, location, clusterName, identityName, realm string) string {
+	defer perf.Track(nil, "gcp.GKEKubeUserName")()
+
+	return kube.UserName(&kube.ClusterInfo{
+		Name:       clusterName,
+		Region:     gkeUserRegion(projectID, location),
+		UserPrefix: gkeUserPrefix,
+		Identity:   identityName,
+		Realm:      realm,
+	})
+}
+
+// GKEKubeUserNames returns GKEKubeUserName followed by the names older
+// versions wrote for the same entry, so cleanup can remove any of them: the
+// name without the realm (when realm is set), the names under each of
+// legacyRealms (see kube.ClusterInfo.LegacyRealms) and the legacy name
+// without the identity.
+func GKEKubeUserNames(projectID, location, clusterName, identityName, realm string, legacyRealms ...string) []string {
+	defer perf.Track(nil, "gcp.GKEKubeUserNames")()
+
+	names := []string{GKEKubeUserName(projectID, location, clusterName, identityName, realm)}
+	if realm != "" {
+		names = append(names, GKEKubeUserName(projectID, location, clusterName, identityName, ""))
+	}
+	for _, legacyRealm := range legacyRealms {
+		names = append(names, GKEKubeUserName(projectID, location, clusterName, identityName, legacyRealm))
+	}
+	return append(names, LegacyGKEKubeUserName(projectID, location, clusterName))
+}
+
+// LegacyGKEKubeUserName returns the atmos-gke-<name>-<project>-<location>
+// username that versions before the identity was added wrote, so cleanup can
+// still remove entries those versions left in a kubeconfig.
+func LegacyGKEKubeUserName(projectID, location, clusterName string) string {
+	defer perf.Track(nil, "gcp.LegacyGKEKubeUserName")()
+
+	return GKEKubeUserName(projectID, location, clusterName, "", "")
+}
+
+// gkeUserRegion is the location part of a GKE exec-plugin username.
+func gkeUserRegion(projectID, location string) string {
+	return projectID + "-" + location
 }
 
 // GetToken returns a GCP OAuth2 access token for Kubernetes ExecCredential output.

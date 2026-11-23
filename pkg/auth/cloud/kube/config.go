@@ -51,52 +51,6 @@ const (
 	logKeyNew      = "new"
 )
 
-// ClusterInfo is the cloud-agnostic cluster data needed to write a kubeconfig
-// entry. Each cloud package (aws, azure) builds one of these from its own
-// describe-cluster call before handing it to KubeconfigManager.
-type ClusterInfo struct {
-	// Name is the cluster's short name.
-	Name string
-
-	// Endpoint is the cluster's API server URL.
-	Endpoint string
-
-	// CertificateAuthorityData is the base64-encoded CA certificate, as
-	// returned by the cloud API. Decoded the same way for every cloud.
-	CertificateAuthorityData string
-
-	// ID uniquely identifies the cluster and is used as the kubeconfig
-	// cluster map key and default context name: the ARN for EKS, the ARM
-	// resource ID for AKS, or the canonical GKE resource name.
-	ID string
-
-	// Region disambiguates the generated exec-plugin username when the same
-	// cluster name exists in more than one place: the AWS region for EKS,
-	// the resource group for AKS, or the project and location for GKE.
-	Region string
-
-	// UserPrefix distinguishes the exec-plugin username by cloud, e.g. "eks"
-	// or "aks", reproducing the existing "atmos-eks-<name>-<region>" scheme.
-	UserPrefix string
-
-	// AccountID further disambiguates the exec-plugin username for clouds
-	// where Name+Region is not guaranteed unique: Azure resource groups are
-	// scoped per-subscription, so the same cluster name and resource group
-	// can exist in two subscriptions. Leave empty to keep the existing
-	// "atmos-eks-<name>-<region>" AWS/EKS username format unchanged.
-	AccountID string
-
-	// ExecArgs are the fully-built kubectl exec-credential-plugin arguments,
-	// e.g. [aws, eks, token, --cluster-name, X, --region, Y] or
-	// [azure, aks, token, --cluster-name, X, --resource-group, Y]. Built by
-	// the caller so this package stays cloud-agnostic.
-	ExecArgs []string
-
-	// ExecEnv are additional environment variables for the exec plugin, e.g.
-	// ATMOS_IDENTITY.
-	ExecEnv []clientcmdapi.ExecEnvVar
-}
-
 // KubeconfigManager manages kubeconfig files for Kubernetes clusters (EKS, AKS, GKE).
 type KubeconfigManager struct {
 	path string
@@ -174,86 +128,23 @@ func (m *KubeconfigManager) WriteClusterConfig(info *ClusterInfo, alias, updateM
 		return false, fmt.Errorf("%w: failed to create directory %s: %w", errUtils.ErrKubeconfigWrite, dir, err)
 	}
 
+	migration := newContextMigration(info, alias) // Migrates contexts and users older versions wrote.
 	switch updateMode {
 	case "replace":
 		return m.writeIfChanged(newConfig)
 
 	case "error":
-		if err := m.checkErrorModeCollisions(info, alias); err != nil {
+		if err := m.checkErrorModeCollisions(newConfig); err != nil {
 			return false, err
 		}
-		return m.mergeIfChanged(newConfig)
+		return m.mergeIfChanged(newConfig, migration)
 
 	case "merge":
-		return m.mergeIfChanged(newConfig)
+		return m.mergeIfChanged(newConfig, migration)
 
 	default:
 		return false, fmt.Errorf("%w: invalid update mode %q", errUtils.ErrKubeconfigMerge, updateMode)
 	}
-}
-
-// checkErrorModeCollisions checks the on-disk kubeconfig (if any) for
-// cluster and context name collisions, used by WriteClusterConfig in
-// "error" update mode before merging. Returns nil when the file doesn't
-// exist, can't be loaded, or has no colliding entries.
-func (m *KubeconfigManager) checkErrorModeCollisions(info *ClusterInfo, alias string) error {
-	if _, err := os.Stat(m.path); err != nil {
-		return nil //nolint:nilerr // No file yet means no collisions; nothing to check.
-	}
-
-	// File exists, check for cluster, context, and auth info collisions.
-	existing, loadErr := clientcmd.LoadFromFile(m.path)
-	if loadErr != nil {
-		return nil //nolint:nilerr // Unreadable existing file: best-effort check, fall through to merge.
-	}
-
-	if _, exists := existing.Clusters[info.ID]; exists {
-		return fmt.Errorf("%w: cluster %s already exists in %s", errUtils.ErrKubeconfigMerge, info.ID, m.path)
-	}
-
-	// Check context name collision.
-	contextName := info.ID
-	if alias != "" {
-		contextName = alias
-	}
-	if _, exists := existing.Contexts[contextName]; exists {
-		return fmt.Errorf("%w: context %s already exists in %s", errUtils.ErrKubeconfigMerge, contextName, m.path)
-	}
-
-	return nil
-}
-
-// RemoveClusterConfig removes a cluster, context, and user from the kubeconfig.
-// Idempotent: returns nil if entries do not exist.
-func (m *KubeconfigManager) RemoveClusterConfig(clusterARN, contextName, userName string) error {
-	defer perf.Track(nil, "kube.KubeconfigManager.RemoveClusterConfig")()
-
-	// If the file doesn't exist, nothing to clean up.
-	if _, err := os.Stat(m.path); os.IsNotExist(err) {
-		return nil
-	}
-
-	existing, err := clientcmd.LoadFromFile(m.path)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, err)
-	}
-
-	// Remove entries.
-	delete(existing.Clusters, clusterARN)
-	delete(existing.Contexts, contextName)
-	delete(existing.AuthInfos, userName)
-
-	// If current-context points to the removed context, clear it.
-	if existing.CurrentContext == contextName {
-		existing.CurrentContext = ""
-	}
-
-	// If the config is now empty, remove the file.
-	if len(existing.Clusters) == 0 && len(existing.Contexts) == 0 && len(existing.AuthInfos) == 0 {
-		return os.Remove(m.path)
-	}
-
-	return clientcmd.WriteToFile(*existing, m.path)
 }
 
 // ListClusterIDs returns all cluster ARN keys from the kubeconfig file.
@@ -284,11 +175,8 @@ func (m *KubeconfigManager) ListClusterIDs() ([]string, error) {
 func BuildClusterConfig(info *ClusterInfo, alias string) *clientcmdapi.Config {
 	defer perf.Track(nil, "kube.BuildClusterConfig")()
 
-	// Context name defaults to cluster ID, or alias if provided.
-	contextName := info.ID
-	if alias != "" {
-		contextName = alias
-	}
+	// Context name is the alias if provided, else [<realm>/]<cluster ID>.
+	contextName := ContextName(info.ID, alias, info.Realm)
 
 	// User name includes cluster name and region for uniqueness when multiple
 	// clusters share the same identity.
@@ -321,23 +209,12 @@ func BuildClusterConfig(info *ClusterInfo, alias string) *clientcmdapi.Config {
 			APIVersion:      execAPIVersion,
 			Command:         atmosCommand,
 			Args:            info.ExecArgs,
-			Env:             info.ExecEnv,
+			Env:             execEnv(info),
 			InteractiveMode: clientcmdapi.NeverExecInteractiveMode,
 		},
 	}
 
 	return config
-}
-
-// UserName returns the shared exec-plugin username for a cluster entry.
-func UserName(info *ClusterInfo) string {
-	defer perf.Track(nil, "kube.UserName")()
-
-	name := "atmos-" + info.UserPrefix + "-" + info.Name + "-" + info.Region
-	if info.AccountID != "" {
-		name += "-" + info.AccountID
-	}
-	return name
 }
 
 // DefaultKubeconfigPath returns the XDG-compliant default kubeconfig path.
@@ -483,9 +360,10 @@ func (m *KubeconfigManager) writeIfChanged(newConfig *clientcmdapi.Config) (bool
 	return true, nil
 }
 
-// mergeIfChanged merges newConfig into the existing file. Returns changed=false
-// when the merge result would equal the existing on-disk content.
-func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config) (bool, error) {
+// mergeIfChanged merges newConfig into the existing file after applying
+// migration (nil for none). Returns changed=false when the result would equal
+// the existing on-disk content.
+func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config, migration *contextMigration) (bool, error) {
 	// Load existing config if file exists.
 	existing := clientcmdapi.NewConfig()
 	fileExists := false
@@ -505,7 +383,8 @@ func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config) (bool
 	// CRLF handling, internal LocationOfOrigin paths populated during load) in
 	// ways that don't reflect actual content changes and would cause false
 	// positives on the no-op path.
-	if fileExists && !mergeWouldChange(existing, newConfig) {
+	migrated := migration.apply(existing)
+	if fileExists && !migrated && !mergeWouldChange(existing, newConfig) {
 		return m.reconcileMode()
 	}
 
