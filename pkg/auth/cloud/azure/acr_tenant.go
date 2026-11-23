@@ -95,8 +95,15 @@ func CredentialsForACRTenant(ctx context.Context, creds types.ICredentials, tena
 	}
 
 	claims, _ := extractJWTClaims(azureCreds.AccessToken)
-	if isTokenTenant(tenantID, azureCreds.TenantID, claims) {
-		return creds, nil
+	if match, issuer := matchTokenTenant(tenantID, azureCreds.TenantID, claims); match {
+		if strings.EqualFold(issuer, azureCreds.TenantID) {
+			return creds, nil
+		}
+		// The token was issued by the registry's tenant but the credentials record a
+		// different one: the exchange must send the tenant that issued the token.
+		out := *azureCreds
+		out.TenantID = issuer
+		return &out, nil
 	}
 
 	switch azureCreds.AuthMethod {
@@ -107,14 +114,20 @@ func CredentialsForACRTenant(ctx context.Context, creds types.ICredentials, tena
 	}
 }
 
-// isTokenTenant reports whether tenantID is the tenant the identity's token was
-// issued by: the credentials' tenant or the token's tid claim.
-func isTokenTenant(tenantID, credsTenantID string, claims map[string]interface{}) bool {
-	if strings.EqualFold(tenantID, credsTenantID) {
-		return true
-	}
+// matchTokenTenant reports whether tenantID is the tenant the identity's token was
+// issued by and, when it is, the tenant ID the credentials should carry. The token's
+// tid claim is authoritative when present: a credentials tenant that agrees only
+// with a conflicting tenantID is not proof of a match, unless tenantID is a domain
+// name (which cannot be compared with the GUID claim).
+func matchTokenTenant(tenantID, credsTenantID string, claims map[string]interface{}) (bool, string) {
 	tid, _ := claims["tid"].(string)
-	return tid != "" && strings.EqualFold(tenantID, tid)
+	if tid != "" && strings.EqualFold(tenantID, tid) {
+		return true, tid
+	}
+	if strings.EqualFold(tenantID, credsTenantID) && (tid == "" || !acrTenantGUIDPattern.MatchString(tenantID)) {
+		return true, credsTenantID
+	}
+	return false, ""
 }
 
 // acquireACRTenantCredentials mints an ARM-scoped token in tenantID for the cached
@@ -129,7 +142,7 @@ func acquireACRTenantCredentials(ctx context.Context, azureCreds *types.AzureCre
 		return nil, fmt.Errorf("%w: failed to create MSAL client for tenant %s: %w", errUtils.ErrACRAuthFailed, tenantID, err)
 	}
 
-	account, err := cachedAccountFor(ctx, client, azureCreds)
+	account, err := cachedAccountFor(ctx, client, azureCreds, claims)
 	if err != nil {
 		return nil, tenantTokenError(err, tenantID, cloudEnv.Name)
 	}
@@ -167,8 +180,10 @@ func tokenClientID(claims map[string]interface{}) string {
 }
 
 // cachedAccountFor finds the identity's account in the MSAL cache: by its MSAL home
-// account ID when the provider recorded it, otherwise by the identity's tenant.
-func cachedAccountFor(ctx context.Context, client acrTenantTokenClient, azureCreds *types.AzureCredentials) (public.Account, error) {
+// account ID when the provider recorded it, otherwise by the identity's tenant. When
+// several cached accounts share the tenant, the token's oid claim must single out
+// one of them; an ambiguous match fails instead of picking another user's account.
+func cachedAccountFor(ctx context.Context, client acrTenantTokenClient, azureCreds *types.AzureCredentials, claims map[string]interface{}) (public.Account, error) {
 	accounts, err := client.Accounts(ctx)
 	if err != nil {
 		return public.Account{}, err
@@ -176,19 +191,44 @@ func cachedAccountFor(ctx context.Context, client acrTenantTokenClient, azureCre
 	if len(accounts) == 0 {
 		return public.Account{}, errUtils.ErrAzureNoAccountsInCache
 	}
-	for i := range accounts {
-		if azureCreds.HomeAccountID != "" && accounts[i].HomeAccountID == azureCreds.HomeAccountID {
-			return accounts[i], nil
-		}
-	}
-	if azureCreds.HomeAccountID == "" {
+	if azureCreds.HomeAccountID != "" {
 		for i := range accounts {
-			if strings.EqualFold(accounts[i].Realm, azureCreds.TenantID) {
+			if accounts[i].HomeAccountID == azureCreds.HomeAccountID {
 				return accounts[i], nil
 			}
 		}
+		return public.Account{}, fmt.Errorf("%w: %s", errUtils.ErrAzureNoAccountForTenant, azureCreds.TenantID)
 	}
-	return public.Account{}, fmt.Errorf("%w: %s", errUtils.ErrAzureNoAccountForTenant, azureCreds.TenantID)
+	var candidates []public.Account
+	for i := range accounts {
+		if strings.EqualFold(accounts[i].Realm, azureCreds.TenantID) {
+			candidates = append(candidates, accounts[i])
+		}
+	}
+	if len(candidates) > 1 {
+		candidates = accountsForObjectID(candidates, claims)
+	}
+	if len(candidates) != 1 {
+		return public.Account{}, fmt.Errorf("%w: %s", errUtils.ErrAzureNoAccountForTenant, azureCreds.TenantID)
+	}
+	return candidates[0], nil
+}
+
+// accountsForObjectID narrows accounts to those whose home account ID
+// ("{oid}.{tid}") starts with the token's oid claim. Without an oid claim nothing
+// matches, so the caller treats the selection as ambiguous.
+func accountsForObjectID(accounts []public.Account, claims map[string]interface{}) []public.Account {
+	oid, _ := claims["oid"].(string)
+	if oid == "" {
+		return nil
+	}
+	var matched []public.Account
+	for i := range accounts {
+		if strings.HasPrefix(strings.ToLower(accounts[i].HomeAccountID), strings.ToLower(oid)+".") {
+			matched = append(matched, accounts[i])
+		}
+	}
+	return matched
 }
 
 // tenantTokenError explains a failure to mint a token in the registry's tenant.

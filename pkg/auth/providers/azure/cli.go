@@ -152,12 +152,20 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		subscriptionID = tokenResp.Subscription
 	}
 
+	// The token is issued by the tenant az reports (with --subscription it is the
+	// subscription's tenant, which can differ from tenant_id), so never pair the
+	// token with a different configured tenant.
+	tenantID := p.tenantID
+	if tokenResp.Tenant != "" {
+		tenantID = tokenResp.Tenant
+	}
+
 	// Create Azure credentials.
 	creds := &authTypes.AzureCredentials{
 		AccessToken:      tokenResp.AccessToken,
 		TokenType:        tokenResp.TokenType,
 		Expiration:       expiresOn.Format(time.RFC3339),
-		TenantID:         p.tenantID,
+		TenantID:         tenantID,
 		SubscriptionID:   subscriptionID,
 		Location:         p.location,
 		CloudEnvironment: p.cloudEnv.Name,

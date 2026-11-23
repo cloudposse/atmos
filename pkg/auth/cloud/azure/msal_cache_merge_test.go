@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 
@@ -20,6 +21,9 @@ import (
 // processes (simulated by separate cache instances on one file) logging in at the
 // same time each keep their tokens: every Export re-reads the file under the lock.
 func TestMSALCache_ConcurrentExportsKeepEveryEntry(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows FileLock is a no-op, so concurrent writers are not excluded")
+	}
 	cachePath := newRealmCacheFile(t, []byte(`{}`))
 
 	const writers = 8
@@ -140,4 +144,50 @@ func TestMSALCache_ExportOursUnparseable(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to marshal MSAL cache")
 	_, statErr := os.Stat(cachePath)
 	assert.True(t, os.IsNotExist(statErr))
+}
+
+// TestDecodeMSALCacheState_RejectsTrailingData verifies anything after the JSON
+// object other than whitespace is reported as unparseable, so Export never
+// overwrites malformed cache content.
+func TestDecodeMSALCacheState_RejectsTrailingData(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    string
+		wantErr bool
+	}{
+		{"object only", `{"Account":{}}`, false},
+		{"trailing whitespace", "{\"Account\":{}}\n \t", false},
+		{"trailing bracket", `{"Account":{}}]`, true},
+		{"trailing brace", `{"Account":{}}}`, true},
+		{"second object", `{"Account":{}}{}`, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := decodeMSALCacheState([]byte(tt.data))
+			if tt.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrAzureMSALCacheUnparseable)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// TestMergeMSALCacheState_ExplicitEmptyFieldIsUnchanged verifies an entry loaded
+// with an explicit empty field, which MSAL's serializer omits, is not treated as
+// modified, so a refresh another process wrote to disk meanwhile is kept.
+func TestMergeMSALCacheState_ExplicitEmptyFieldIsUnchanged(t *testing.T) {
+	loaded := `{"AccessToken":{"k":{"secret":"old","home_account_id":""}}}`
+	ours := `{"AccessToken":{"k":{"secret":"old"}}}`
+	refreshed := `{"AccessToken":{"k":{"secret":"refreshed","home_account_id":""}}}`
+
+	decode := func(s string) msalCacheState {
+		state, err := decodeMSALCacheState([]byte(s))
+		require.NoError(t, err)
+		return state
+	}
+	got := mergeMSALCacheState(decode(refreshed), decode(loaded), decode(ours))
+
+	entry := got["AccessToken"].(map[string]interface{})["k"].(map[string]interface{})
+	assert.Equal(t, "refreshed", entry["secret"])
 }

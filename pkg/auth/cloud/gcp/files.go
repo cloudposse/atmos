@@ -34,13 +34,13 @@ const (
 	// ConfigurationsSubdir is the gcloud configurations directory.
 	ConfigurationsSubdir = "configurations"
 	// PropertiesFileName is the legacy gcloud properties file at the config root.
-	// gcloud does not read it while a named configuration is active.
+	// The gcloud tool does not read it while a named configuration is active.
 	PropertiesFileName = "properties"
 	// ActiveConfigName is the gcloud named configuration Atmos selects through
-	// CLOUDSDK_ACTIVE_CONFIG_NAME. gcloud loads its properties from
+	// CLOUDSDK_ACTIVE_CONFIG_NAME. The gcloud tool loads its properties from
 	// {CLOUDSDK_CONFIG}/configurations/config_{name}.
 	ActiveConfigName = "atmos"
-	// namedConfigFilePrefix is the prefix gcloud gives named configuration files.
+	// The namedConfigFilePrefix constant is the prefix gcloud gives named configuration files.
 	namedConfigFilePrefix = "config_"
 	// AccessTokenFileName is the filename for the access token file.
 	AccessTokenFileName = "access_token"

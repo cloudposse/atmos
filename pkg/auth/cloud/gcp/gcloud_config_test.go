@@ -17,7 +17,7 @@ import (
 // gcloudActivePropertiesPath mirrors how gcloud resolves the properties file for
 // the active named configuration: CLOUDSDK_ACTIVE_CONFIG_NAME=NAME selects
 // $CLOUDSDK_CONFIG/configurations/config_NAME (see `gcloud topic configurations`).
-// gcloud does not read $CLOUDSDK_CONFIG/properties for a named configuration.
+// The gcloud tool does not read $CLOUDSDK_CONFIG/properties for a named configuration.
 func gcloudActivePropertiesPath(env map[string]string) string {
 	return filepath.Join(env["CLOUDSDK_CONFIG"], "configurations", "config_"+env["CLOUDSDK_ACTIVE_CONFIG_NAME"])
 }

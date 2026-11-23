@@ -199,15 +199,11 @@ func TestCredentialsForACRTenant_IdentityTenantIsUnchanged(t *testing.T) {
 	}{
 		{"same tenant ID", testIdentityTenant, types.AzureAuthMethodCLI},
 		{"same tenant ID other case", strings.ToUpper(testIdentityTenant), types.AzureAuthMethodOIDC},
-		{"token tid claim", testIdentityTenant, types.AzureAuthMethodDeviceCode},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			creds := identityCreds()
 			creds.AuthMethod = tt.method
-			if tt.name == "token tid claim" {
-				creds.TenantID = "contoso.onmicrosoft.com"
-			}
 			got, err := CredentialsForACRTenant(t.Context(), creds, tt.tenantID, "")
 			require.NoError(t, err)
 			assert.Same(t, creds, got)
@@ -418,4 +414,76 @@ func TestACRTenantExchange_SendsRegistryTenant(t *testing.T) {
 	assert.Equal(t, tenantToken, form.Get("access_token"))
 	assert.Equal(t, "myregistry.azurecr.io", form.Get("service"))
 	assert.Equal(t, "access_token", form.Get("grant_type"))
+}
+
+// TestCredentialsForACRTenant_TokenIssuerTenantOverridesCredentialsTenant verifies
+// credentials recording a different tenant than the token's issuer are returned as
+// a copy carrying the issuing tenant, without modifying the input.
+func TestCredentialsForACRTenant_TokenIssuerTenantOverridesCredentialsTenant(t *testing.T) {
+	requests := stubTenantTokenClient(t, nil, errors.New("must not be called"))
+
+	creds := identityCreds()
+	creds.TenantID = testRegistryTenant // Provider tenant A, token issued by tenant B.
+	creds.AccessToken = makeJWTWithClaims(map[string]any{"tid": testIdentityTenant, "appid": testClientID})
+
+	got, err := CredentialsForACRTenant(t.Context(), creds, testIdentityTenant, "")
+	require.NoError(t, err)
+	assert.NotSame(t, creds, got)
+	assert.Equal(t, testIdentityTenant, got.(*types.AzureCredentials).TenantID)
+	assert.Equal(t, testRegistryTenant, creds.TenantID)
+	assert.Empty(t, *requests)
+}
+
+// TestCredentialsForACRTenant_ConflictingMetadataIsNotAMatch verifies a credentials
+// tenant that agrees with the requested tenant does not prove a match when the
+// token was issued by another tenant.
+func TestCredentialsForACRTenant_ConflictingMetadataIsNotAMatch(t *testing.T) {
+	requests := stubTenantTokenClient(t, nil, errors.New("client created"))
+
+	creds := identityCreds()
+	creds.TenantID = testRegistryTenant // Claims say testIdentityTenant.
+	_, err := CredentialsForACRTenant(t.Context(), creds, testRegistryTenant, "")
+	require.Error(t, err)
+	assert.Len(t, *requests, 1)
+}
+
+// TestCredentialsForACRTenant_AmbiguousAccountsByTenant verifies two cached accounts
+// in the identity's tenant are told apart by the token's oid, and an ambiguous
+// match fails instead of selecting the first account.
+func TestCredentialsForACRTenant_AmbiguousAccountsByTenant(t *testing.T) {
+	const (
+		oidA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+		oidB = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+	)
+	accounts := []public.Account{
+		{HomeAccountID: oidA + "." + testIdentityTenant, Realm: testIdentityTenant},
+		{HomeAccountID: oidB + "." + testIdentityTenant, Realm: testIdentityTenant},
+	}
+	credsFor := func(claims map[string]any) *types.AzureCredentials {
+		creds := identityCreds()
+		creds.HomeAccountID = ""
+		creds.AccessToken = makeJWTWithClaims(claims)
+		return creds
+	}
+
+	t.Run("oid selects the principal's account", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		client := NewMockacrTenantTokenClient(ctrl)
+		client.EXPECT().Accounts(gomock.Any()).Return(accounts, nil)
+
+		claims := map[string]any{"tid": testIdentityTenant, "oid": oidB}
+		got, err := cachedAccountFor(t.Context(), client, credsFor(claims), claims)
+		require.NoError(t, err)
+		assert.Equal(t, accounts[1].HomeAccountID, got.HomeAccountID)
+	})
+
+	t.Run("no oid is ambiguous", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		client := NewMockacrTenantTokenClient(ctrl)
+		stubTenantTokenClient(t, client, nil)
+		client.EXPECT().Accounts(gomock.Any()).Return(accounts, nil)
+
+		_, err := CredentialsForACRTenant(t.Context(), credsFor(map[string]any{"tid": testIdentityTenant}), testRegistryTenant, "")
+		require.ErrorIs(t, err, errUtils.ErrAzureNoAccountForTenant)
+	})
 }

@@ -1736,6 +1736,7 @@ func TestUpdateMSALCacheFromCreds_WriteFailureIsNonFatal(t *testing.T) {
 	require.NoError(t, os.MkdirAll(azureDir, 0o700))
 	msalCachePath := filepath.Join(azureDir, "msal_token_cache.json")
 	require.NoError(t, os.WriteFile(AzureCLIMSALCacheLockPath(msalCachePath), nil, 0o600))
+	require.NoError(t, os.WriteFile(msalCachePath+".lock", nil, 0o600))
 	require.NoError(t, os.Chmod(azureDir, 0o500))
 	t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })
 
@@ -1884,6 +1885,7 @@ func TestUpdateAzureCLIFiles_ProfileWriteFailureIsNonFatal(t *testing.T) {
 	// and only the azureProfile.json write fails.
 	msalCachePath := filepath.Join(azureDir, "msal_token_cache.json")
 	require.NoError(t, os.WriteFile(AzureCLIMSALCacheLockPath(msalCachePath), nil, 0o600))
+	require.NoError(t, os.WriteFile(msalCachePath+".lock", nil, 0o600))
 	require.NoError(t, os.Chmod(azureDir, 0o500))
 	t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })
 

@@ -15,6 +15,7 @@ func TestScrubAmbientEnvironment(t *testing.T) {
 		"GOOGLE_OAUTH_ACCESS_TOKEN":          "caller-token",
 		"GOOGLE_CREDENTIALS":                 "{}",
 		"GOOGLE_IMPERSONATE_SERVICE_ACCOUNT": "other@example.iam.gserviceaccount.com",
+		"CLOUDSDK_AUTH_ACCESS_TOKEN":         "caller-sdk-token",
 		"CLOUDSDK_AUTH_ACCESS_TOKEN_FILE":    "/home/me/token",
 	}
 

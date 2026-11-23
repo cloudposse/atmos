@@ -33,7 +33,11 @@ func TestCLIProviderHelperProcess(t *testing.T) {
 		}
 	}
 
-	if _, err := fmt.Fprint(os.Stdout, `{"accessToken":"management-token","expiresOn":"2026-03-17T12:00:00Z","subscription":"sub-456"}`); err != nil {
+	tenantField := ""
+	if tenant := os.Getenv("GO_WANT_AZURE_CLI_TENANT"); tenant != "" {
+		tenantField = fmt.Sprintf(`,"tenant":%q`, tenant)
+	}
+	if _, err := fmt.Fprintf(os.Stdout, `{"accessToken":"management-token","expiresOn":"2026-03-17T12:00:00Z","subscription":"sub-456"%s}`, tenantField); err != nil {
 		os.Exit(1)
 	}
 	os.Exit(0)
@@ -719,4 +723,30 @@ func TestCLIProvider_Environment_SovereignCloud(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCLIProvider_Authenticate_TenantFollowsToken verifies the credentials carry the
+// tenant az reports for the token, not a different configured tenant_id.
+func TestCLIProvider_Authenticate_TenantFollowsToken(t *testing.T) {
+	originalNewCommandContext := newCommandContext
+	t.Cleanup(func() { newCommandContext = originalNewCommandContext })
+	newCommandContext = func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+		cmdArgs := append([]string{"-test.run=^TestCLIProviderHelperProcess$", "--"}, args...)
+		cmd := exec.CommandContext(ctx, os.Args[0], cmdArgs...)
+		cmd.Env = append(os.Environ(), azureCLIHelperEnv+"=1", "GO_WANT_AZURE_CLI_TENANT=subscription-tenant")
+		return cmd
+	}
+
+	provider := &cliProvider{
+		name:           "test",
+		tenantID:       "configured-tenant",
+		subscriptionID: "sub-456",
+		cloudEnv:       azureCloud.GetCloudEnvironment(""),
+	}
+	creds, err := provider.Authenticate(context.Background())
+	require.NoError(t, err)
+
+	azureCreds, ok := creds.(*authTypes.AzureCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "subscription-tenant", azureCreds.TenantID)
 }
