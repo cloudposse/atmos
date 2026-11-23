@@ -71,9 +71,9 @@ func TestActivationRejectsUnavailableManifestAndMissingActivator(t *testing.T) {
 	entry := config.Selection{Path: atmos.Plugins.Packages["fixture"].Path, Local: true}
 	registry := extension.New()
 	require.NoError(t, registry.Register(extension.Descriptor{Capability: "command", Path: []string{"commands"}, Version: 1, Validate: extension.ValidateCommand}))
-	require.ErrorIs(t, activatePackageWithTimeout(t.Context(), "fixture", &entry, registry, 0), errUtils.ErrPluginUnsupportedExtension)
+	require.ErrorIs(t, activatePackageWithLimits(t.Context(), "fixture", &entry, registry, packageLimits{}), errUtils.ErrPluginUnsupportedExtension)
 	require.NoError(t, os.Remove(filepath.Join(entry.Path, "plugin.yaml")))
-	require.ErrorIs(t, activatePackageWithTimeout(t.Context(), "fixture", &entry, registry, 0), errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, activatePackageWithLimits(t.Context(), "fixture", &entry, registry, packageLimits{}), errUtils.ErrPluginInvalidConfig)
 }
 
 func TestCommandConfigurationValidatedBeforeProcessStartup(t *testing.T) {
@@ -156,7 +156,7 @@ func TestActivationStopsWhenMetadataDisappearsOrRegistrationFails(t *testing.T) 
 				},
 				Activate: func(context.Context, *extension.Activation) error { activated = true; return failure },
 			}))
-			err := activatePackageWithTimeout(t.Context(), "fixture", &entry, registry, 0)
+			err := activatePackageWithLimits(t.Context(), "fixture", &entry, registry, packageLimits{})
 			if disappear {
 				require.ErrorIs(t, err, os.ErrNotExist)
 				require.False(t, activated, "metadata must still be readable when deriving the required handshake")

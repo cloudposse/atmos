@@ -66,8 +66,11 @@ func publicVerificationURI(raw string) bool {
 		parsed.RawQuery == "" && !parsed.ForceQuery && parsed.Fragment == ""
 }
 
+// presentDeviceCode writes the device prompt as plain text. It must not go through
+// a Markdown-rendering helper such as ui.Infof: a URI like `/a*b*c/` would be
+// rendered as emphasis and the user would be told to open a different URL.
 func presentDeviceCode(uri, code string) {
 	defer perf.Track(nil, "auth.presentDeviceCode")()
 
-	ui.Infof("Open %s and enter code %s.", uri, code)
+	ui.Writef("Open %s and enter code %s.\n", uri, code)
 }

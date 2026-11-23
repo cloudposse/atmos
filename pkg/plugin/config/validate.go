@@ -101,7 +101,7 @@ func validatePackage(alias string, entry schema.PluginPackage) error {
 			WithHintf("Set plugins.packages.%s.timeout to a positive Go duration such as `5m`, or remove it for no deadline.", alias).
 			Err()
 	}
-	return nil
+	return validateInteractionTimeout(alias, entry)
 }
 
 // validateRelease requires the fields a registry package needs. A package with a path needs neither:

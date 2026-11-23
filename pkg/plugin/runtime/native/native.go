@@ -36,12 +36,15 @@ var handshake = plugin.HandshakeConfig{ProtocolVersion: 1, MagicCookieKey: "ATMO
 type (
 	Option  func(*options)
 	options struct {
-		directory    string
-		environment  []string
-		api          *bridge.Server
-		expected     *pluginv1.DescribeResponse
-		callTimeout  time.Duration
-		startTimeout time.Duration
+		directory        string
+		environment      []string
+		api              *bridge.Server
+		expected         *pluginv1.DescribeResponse
+		callTimeout      time.Duration
+		interactionLimit time.Duration
+		startTimeout     time.Duration
+		// packageAlias is the package's key under plugins.packages, used to name its configuration in errors.
+		packageAlias string
 	}
 )
 
@@ -90,9 +93,14 @@ type Handle struct {
 	// command is the plugin process, kept to stop its process group.
 	command *exec.Cmd
 	// interrupt ends on SIGINT or SIGTERM so in-flight calls stop together with the process.
-	interrupt   *interrupt
-	forget      func()
-	callTimeout time.Duration
+	interrupt        *interrupt
+	forget           func()
+	callTimeout      time.Duration
+	interactionLimit time.Duration
+	// packageAlias is the package's key under plugins.packages; empty when the caller did not name it.
+	packageAlias string
+	// budgets holds the call-timeout budget of each active interactive invocation by its id.
+	budgets sync.Map
 }
 
 // Start launches a plugin with gRPC-only transport and ephemeral mutual TLS.
@@ -102,7 +110,7 @@ func Start(ctx context.Context, executable string, opts ...Option) (*Handle, err
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	settings := options{api: bridge.New(), startTimeout: defaultStartTimeout}
+	settings := options{api: bridge.New(), startTimeout: defaultStartTimeout, interactionLimit: DefaultInteractionLimit}
 	for _, apply := range opts {
 		apply(&settings)
 	}
@@ -129,6 +137,7 @@ func Start(ctx context.Context, executable string, opts ...Option) (*Handle, err
 	}
 	handle.process, handle.api, handle.command = client, settings.api, command
 	handle.interrupt, handle.forget, handle.callTimeout = stopped, forget, settings.callTimeout
+	handle.interactionLimit, handle.packageAlias = settings.interactionLimit, settings.packageAlias
 	startup, cancel := context.WithTimeout(stopped.ctx, settings.startTimeout)
 	defer cancel()
 	if err := handle.describe(startup, settings.expected); err != nil {
@@ -200,22 +209,29 @@ func (h *Handle) configure(ctx context.Context) error {
 
 // Invoke grants API access for one operation and drains callbacks before returning.
 // The operation is cancelled by its caller, by SIGINT or SIGTERM, or by the call timeout;
-// in every case the plugin process is stopped rather than left running.
+// in every case the plugin process is stopped rather than left running. For an interactive
+// invocation the call timeout pauses while Atmos waits for the user (see AwaitUser).
 //
 //nolint:gocritic // Copy the invocation scope so request context changes cannot alias another call.
 func (h *Handle) Invoke(ctx context.Context, scope bridge.Invocation, run func(context.Context, *pluginv1.Invocation) error) error {
 	defer perf.Track(nil, "native.Invoke")()
 
-	callCtx, cancel := h.callContext(ctx)
+	callCtx, work, cancel := h.callContext(ctx, scope.Interactive)
 	defer cancel()
 	scope.Context = callCtx
 	invocation := &pluginv1.Invocation{Id: uuid.NewString(), Attempt: 1, Interactive: scope.Interactive, Deadline: invocationDeadline(callCtx)}
+	if work != nil {
+		// Host APIs that wait for the user, such as a browser callback, pause the same budget.
+		scope.AwaitUser = work.await
+		h.budgets.Store(invocation.Id, work)
+		defer h.budgets.Delete(invocation.Id)
+	}
 	done, err := h.api.Begin(invocation.Id, scope)
 	if err != nil {
 		return err
 	}
 	defer done()
-	return h.finishInvocation(callCtx, run(callCtx, invocation))
+	return h.finishInvocation(callCtx, work, run(callCtx, invocation))
 }
 
 // Close terminates the process, its process group, the broker, and active callback streams.
