@@ -82,6 +82,10 @@ func ExecutePacker(
 		if err != nil {
 			return err
 		}
+		if info.DryRun {
+			printHelmfilePreview(tenv.Resolve(info.Command), []string{info.SubCommand})
+			return nil
+		}
 		return ExecuteShellCommand(
 			atmosConfig,
 			tenv.Resolve(info.Command),

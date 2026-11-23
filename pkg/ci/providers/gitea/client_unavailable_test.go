@@ -60,15 +60,18 @@ func countingServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
 
 func TestUnusableAPIURLDisablesAPIFeaturesWithoutFailing(t *testing.T) {
 	s, hits := countingServer(t)
-	for name, configure := range map[string]func(){
-		"missing":              func() {},
-		"http without opt-in":  func() { t.Setenv("GITHUB_SERVER_URL", s.URL) },
-		"http api url":         func() { t.Setenv("ATMOS_CI_GITEA_API_URL", s.URL+"/api/v1") },
-		"http opt-in disabled": func() { t.Setenv("GITEA_API_URL", s.URL+"/api/v1"); t.Setenv("ATMOS_CI_GITEA_ALLOW_INSECURE", "false") },
+	for name, configure := range map[string]func(*testing.T){
+		"missing":             func(*testing.T) {},
+		"http without opt-in": func(t *testing.T) { t.Setenv("GITHUB_SERVER_URL", s.URL) },
+		"http api url":        func(t *testing.T) { t.Setenv("ATMOS_CI_GITEA_API_URL", s.URL+"/api/v1") },
+		"http opt-in disabled": func(t *testing.T) {
+			t.Setenv("GITEA_API_URL", s.URL+"/api/v1")
+			t.Setenv("ATMOS_CI_GITEA_ALLOW_INSECURE", "false")
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			clearAPIEnv(t)
-			configure()
+			configure(t)
 			t.Setenv("ATMOS_CI_GITEA_TOKEN", "test-token")
 			p := NewProvider()
 

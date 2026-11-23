@@ -319,7 +319,7 @@ func componentPackages(ctx context.Context, atmos *schema.AtmosConfiguration, re
 		if !enabled(&declaration) {
 			continue
 		}
-		exports, known, err := componentPackageExports(alias, state, file)
+		exports, known, err := componentPackageExports(alias, &declaration, state, file)
 		if err != nil {
 			return nil, err
 		}
@@ -370,7 +370,10 @@ func selectComponentOwner(alias string, references []ComponentReference, exports
 	return matched, nil
 }
 
-func componentPackageExports(alias string, state *config.Selections, file *pluginlock.File) (map[ComponentReference]bool, bool, error) {
+// componentPackageExports returns the component exports of one enabled package. The exports are unknown
+// (the boolean is false) when the package is not locked, or when its lock entry no longer matches the
+// declaration, because a drifted entry describes a different version than the one declared.
+func componentPackageExports(alias string, declaration *schema.PluginPackage, state *config.Selections, file *pluginlock.File) (map[ComponentReference]bool, bool, error) {
 	result := make(map[ComponentReference]bool)
 	if local, exists := state.Packages[alias]; exists {
 		definition, err := manifest.Load(local.Path)
@@ -391,6 +394,9 @@ func componentPackageExports(alias string, state *config.Selections, file *plugi
 		return result, true, nil
 	}
 	entry, exists := file.Spec.Packages[alias]
+	if exists && (entry.Source != declaration.Source || entry.Constraint != declaration.Version) {
+		return result, false, nil
+	}
 	for _, export := range entry.Exports {
 		result[ComponentReference{Provider: export.Name, Capability: export.Capability}] = true
 	}

@@ -40,7 +40,8 @@ func ConfigurationProviders(ctx context.Context, atmos *schema.AtmosConfiguratio
 		return nil, false, err
 	}
 	for _, alias := range aliases {
-		exports, known, err := componentPackageExports(alias, state, file)
+		declaration := atmos.Plugins.Packages[alias]
+		exports, known, err := componentPackageExports(alias, &declaration, state, file)
 		if err != nil {
 			return nil, false, err
 		}

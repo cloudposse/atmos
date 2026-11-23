@@ -133,14 +133,36 @@ func TestLockedComponentReferencesAreCapabilityQualified(t *testing.T) {
 	t.Parallel()
 	file := &pluginlock.File{}
 	file.Spec.Packages = map[string]pluginlock.Entry{"fixture": {Exports: []pluginlock.Export{{Capability: "auth.provider", Name: "fixture/hcl"}, {Capability: extension.ComponentState, Name: "fixture/hcl"}}}}
-	exports, known, err := componentPackageExports("fixture", &config.Selections{}, file)
+	exports, known, err := componentPackageExports("fixture", &schema.PluginPackage{}, &config.Selections{}, file)
 	require.NoError(t, err)
 	require.True(t, known)
 	require.False(t, exports[ComponentReference{Provider: "fixture/hcl", Capability: extension.ComponentDiscovery}])
 	require.True(t, exports[ComponentReference{Provider: "fixture/hcl", Capability: extension.ComponentState}])
-	_, known, err = componentPackageExports("missing", &config.Selections{}, file)
+	_, known, err = componentPackageExports("missing", &schema.PluginPackage{}, &config.Selections{}, file)
 	require.NoError(t, err)
 	require.False(t, known)
+}
+
+func TestLockedComponentExportsAreUnknownWhenDeclarationDrifted(t *testing.T) {
+	t.Parallel()
+	file := &pluginlock.File{}
+	file.Spec.Packages = map[string]pluginlock.Entry{"fixture": {Source: "github.com/acme/fixture", Constraint: "1.0.0", Exports: []pluginlock.Export{{Capability: extension.ComponentDiscovery, Name: "fixture/hcl"}}}}
+	reference := ComponentReference{Provider: "fixture/hcl", Capability: extension.ComponentDiscovery}
+
+	exports, known, err := componentPackageExports("fixture", &schema.PluginPackage{Source: "github.com/acme/fixture", Version: "1.0.0"}, &config.Selections{}, file)
+	require.NoError(t, err)
+	require.True(t, known)
+	require.True(t, exports[reference])
+
+	for name, declaration := range map[string]schema.PluginPackage{
+		"version": {Source: "github.com/acme/fixture", Version: "2.0.0"},
+		"source":  {Source: "github.com/acme/other", Version: "1.0.0"},
+	} {
+		exports, known, err = componentPackageExports("fixture", &declaration, &config.Selections{}, file)
+		require.NoError(t, err, name)
+		require.False(t, known, name)
+		require.False(t, exports[reference], name)
+	}
 }
 
 func TestLoadComponentsRestoresReleasedPackageAndReusesLock(t *testing.T) {
