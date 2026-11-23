@@ -455,7 +455,7 @@ func TestManager_TriggerIntegrations_RecordsFailures(t *testing.T) {
 	resetProcessIntegrationCache()
 	t.Cleanup(resetProcessIntegrationCache)
 
-	am, err := NewAuthManager(&schema.AuthConfig{
+	authConfig := &schema.AuthConfig{
 		Realm:      "test-realm",
 		Providers:  map[string]schema.Provider{},
 		Identities: map[string]schema.Identity{"dev": {Kind: "aws/user"}},
@@ -463,7 +463,8 @@ func TestManager_TriggerIntegrations_RecordsFailures(t *testing.T) {
 			// Unregistered kind makes integration creation fail.
 			"broken": {Kind: "test/unregistered-kind", Via: &schema.IntegrationVia{Identity: "dev"}},
 		},
-	}, credentials.NewCredentialStore(), validation.NewValidator(), nil, "")
+	}
+	am, err := NewAuthManager(authConfig, credentials.NewCredentialStoreWithConfig(authConfig), validation.NewValidator(), nil, "")
 	require.NoError(t, err)
 	m, ok := am.(*manager)
 	require.True(t, ok)
