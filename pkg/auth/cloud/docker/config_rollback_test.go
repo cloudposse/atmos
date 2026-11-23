@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -139,6 +140,51 @@ func TestConfigManager_WriteAuth_SaveFailureLeavesUnreadablePreviousCredential(t
 
 	assert.ErrorIs(t, err, errUtils.ErrDockerConfigWrite)
 	assert.NotErrorIs(t, err, errUtils.ErrDockerCredentialHelper)
+}
+
+// TestConfigManager_WriteAuth_StoreFailureRestoresPreviousCredential verifies
+// that a failed helper Store restores the credential the helper held before.
+func TestConfigManager_WriteAuth_StoreFailureRestoresPreviousCredential(t *testing.T) {
+	manager, helper := newMockedManager(t, `{"credsStore": "desktop", "auths": {"`+testECRRegistry+`": {}}}`)
+	gomock.InOrder(
+		helper.EXPECT().Get("desktop", testECRRegistry).Return(&HelperCredential{Username: "old-user", Secret: "old-secret"}, nil),
+		helper.EXPECT().Store("desktop", testECRRegistry, testECRUser, testECRPassword).Return(errFakeHelper),
+		helper.EXPECT().Store("desktop", testECRRegistry, "old-user", "old-secret").Return(nil),
+	)
+
+	err := manager.WriteAuth(testECRRegistry, testECRUser, testECRPassword)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDockerCredentialHelper)
+	assert.ErrorIs(t, err, errFakeHelper)
+}
+
+// TestConfigManager_WriteAuth_StoreFailureRestoreFailure verifies that a failed
+// restore is joined with the Store error.
+func TestConfigManager_WriteAuth_StoreFailureRestoreFailure(t *testing.T) {
+	errRestore := errors.New("restore failed")
+	manager, helper := newMockedManager(t, `{"credsStore": "desktop", "auths": {"`+testECRRegistry+`": {}}}`)
+	gomock.InOrder(
+		helper.EXPECT().Get("desktop", testECRRegistry).Return(&HelperCredential{Username: "old-user", Secret: "old-secret"}, nil),
+		helper.EXPECT().Store("desktop", testECRRegistry, testECRUser, testECRPassword).Return(errFakeHelper),
+		helper.EXPECT().Store("desktop", testECRRegistry, "old-user", "old-secret").Return(errRestore),
+	)
+
+	err := manager.WriteAuth(testECRRegistry, testECRUser, testECRPassword)
+
+	assert.ErrorIs(t, err, errFakeHelper)
+	assert.ErrorIs(t, err, errRestore)
+}
+
+// TestConfigManager_WriteAuth_StoreFailureWithoutPreviousCredential verifies the
+// negative path: with no known prior credential the helper is not touched again.
+func TestConfigManager_WriteAuth_StoreFailureWithoutPreviousCredential(t *testing.T) {
+	manager, helper := newMockedManager(t, `{"credsStore": "desktop"}`)
+	helper.EXPECT().Store("desktop", testECRRegistry, testECRUser, testECRPassword).Return(errFakeHelper)
+
+	err := manager.WriteAuth(testECRRegistry, testECRUser, testECRPassword)
+
+	assert.ErrorIs(t, err, errFakeHelper)
 }
 
 // TestConfigManager_SaveConfig_DanglingSymlinkStaysSymlink verifies that a

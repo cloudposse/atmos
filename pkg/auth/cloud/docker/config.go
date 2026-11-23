@@ -159,7 +159,7 @@ func (m *ConfigManager) writeHelperAuth(config *rawConfig, helper, registry, use
 			// The helper gets credentials itself; see HelperManagedNotice.
 			return &helperManagedError{registry: registry, helper: helper, err: err}
 		}
-		return withHelperHint(err, helper)
+		return m.restoreAfterFailedStore(withHelperHint(err, helper), helper, registry, previous)
 	}
 	config.setAuth(registry, helperPlaceholderEntry)
 	if err := m.saveConfig(config); err != nil {
@@ -245,6 +245,21 @@ func (m *ConfigManager) snapshotHelperCredential(config *rawConfig, helper, regi
 		return helperSnapshot{known: true}
 	}
 	return helperSnapshot{known: true, found: true, username: cred.Username, secret: cred.Secret}
+}
+
+// restoreAfterFailedStore handles a helper Store that returned an error. Some
+// helpers (osxkeychain) delete the old credential before adding the new one, so
+// a failed Store can leave the registry without its working login. When the
+// helper is known to have held a credential, it is restored best-effort and any
+// restore error is joined with storeErr. Otherwise the helper is left alone.
+func (m *ConfigManager) restoreAfterFailedStore(storeErr error, helper, registry string, previous helperSnapshot) error {
+	if !previous.known || !previous.found {
+		return storeErr
+	}
+	if err := m.credentialHelper().Store(helper, registry, previous.username, previous.secret); err != nil {
+		return errors.Join(storeErr, withHelperHint(err, helper))
+	}
+	return storeErr
 }
 
 // rollbackHelperStore undoes a helper store whose config.json save failed, on a
