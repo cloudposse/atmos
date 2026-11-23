@@ -81,12 +81,12 @@ func TestOmittedLogsNoticeOnlyFollowsCancellation(t *testing.T) {
 	handle := &Handle{}
 	failure := errors.New("plugin failed")
 
-	require.NoError(t, handle.finishInvocation(t.Context(), nil))
-	require.ErrorIs(t, handle.finishInvocation(t.Context(), failure), failure)
+	require.NoError(t, handle.finishInvocation(t.Context(), nil, nil))
+	require.ErrorIs(t, handle.finishInvocation(t.Context(), nil, failure), failure)
 	require.Empty(t, shown(), "a completed or plainly failed call has delivered its logs in the response")
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	require.ErrorIs(t, handle.finishInvocation(ctx, failure), failure, "a caller cancellation keeps the original error")
+	require.ErrorIs(t, handle.finishInvocation(ctx, nil, failure), failure, "a caller cancellation keeps the original error")
 	require.Equal(t, []string{omittedLogsNotice}, shown())
 }

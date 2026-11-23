@@ -117,7 +117,7 @@ func (i *identity) Authenticate(ctx context.Context, upstream types.ICredentials
 		if err != nil {
 			return err
 		}
-		envelope, err := receiveCredentials(stream, interactionHandler(call.ctx, call.request.GetInteractive(), presentDeviceCode))
+		envelope, err := receiveCredentials(stream, interactionHandler(call.ctx, call.request.GetInteractive(), presentDeviceCode), call.awaitUser)
 		if err != nil {
 			return err
 		}

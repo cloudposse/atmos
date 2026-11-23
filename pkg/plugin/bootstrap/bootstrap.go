@@ -108,21 +108,42 @@ func validateExecutable(directory, executable string) error {
 	return nil
 }
 
+// packageLimits are the per-package call limits parsed from plugins.packages.<alias>.
+type packageLimits struct {
+	// timeout bounds every call into the plugin; zero means no deadline.
+	timeout time.Duration
+	// interaction bounds an interactive call's user wait; zero means the runtime default.
+	interaction time.Duration
+}
+
+//nolint:gocritic // The declaration is an immutable value from the configuration map.
+func parsePackageLimits(declaration schema.PluginPackage) (packageLimits, error) {
+	timeout, err := config.PackageTimeout(declaration)
+	if err != nil {
+		return packageLimits{}, err
+	}
+	interaction, err := config.PackageInteractionTimeout(declaration)
+	if err != nil {
+		return packageLimits{}, err
+	}
+	return packageLimits{timeout: timeout, interaction: interaction}, nil
+}
+
 func activatePackages(ctx context.Context, state *config.Selections, registry *extension.Registry, declarations map[string]schema.PluginPackage) error {
 	for _, alias := range slices.Sorted(maps.Keys(state.Packages)) {
 		entry := state.Packages[alias]
-		timeout, err := config.PackageTimeout(declarations[alias])
+		limits, err := parsePackageLimits(declarations[alias])
 		if err != nil {
 			return err
 		}
-		if err := activatePackageWithTimeout(ctx, alias, &entry, registry, timeout); err != nil {
+		if err := activatePackageWithLimits(ctx, alias, &entry, registry, limits); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func activatePackageWithTimeout(ctx context.Context, alias string, entry *config.Selection, registry *extension.Registry, timeout time.Duration) error {
+func activatePackageWithLimits(ctx context.Context, alias string, entry *config.Selection, registry *extension.Registry, limits packageLimits) error {
 	definition, err := loadLocalManifest(alias, entry)
 	if err != nil {
 		return err
@@ -144,7 +165,11 @@ func activatePackageWithTimeout(ctx context.Context, alias string, entry *config
 		if !exists || descriptor.Activate == nil {
 			return errUtils.ErrPluginUnsupportedExtension
 		}
-		if err := descriptor.Activate(ctx, &extension.Activation{Binding: binding, Package: definition.Metadata.Name, Executable: filepath.Join(binding.Directory, executable), Description: expected, Timeout: timeout}); err != nil {
+		activation := &extension.Activation{
+			Binding: binding, Package: definition.Metadata.Name, Alias: alias, Executable: filepath.Join(binding.Directory, executable), Description: expected,
+			Timeout: limits.timeout, InteractionLimit: limits.interaction,
+		}
+		if err := descriptor.Activate(ctx, activation); err != nil {
 			return err
 		}
 	}

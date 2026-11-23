@@ -276,6 +276,14 @@ plugins:
   <dt><code>plugins.packages.&lt;alias&gt;.timeout</code></dt>
   <dd>A positive Go duration, such as <code>30s</code> or <code>5m</code>, that bounds every call Atmos makes into the plugin
   (authentication, credential exchange, and commands). Omit it for no deadline. An invalid value fails configuration
+  validation and names the package. During an interactive login, the time Atmos spends waiting for the user to sign in
+  (after a device-code prompt, or for a browser callback) does not count against the timeout. That wait is limited by
+  <code>interaction_timeout</code>, so an interactive call is stopped no later than the timeout plus that limit.</dd>
+  <dt><code>plugins.packages.&lt;alias&gt;.interaction_timeout</code></dt>
+  <dd>A positive Go duration, such as <code>30m</code>, that limits how long an interactive login may wait for the user to
+  finish signing in. Omit it for the default of <code>15m</code>; the maximum is <code>24h</code>. It requires
+  <code>timeout</code>, and it applies only to interactive calls: noninteractive calls keep the <code>timeout</code>
+  deadline. When a sign-in is not finished in time, the error names this setting. An invalid value fails configuration
   validation and names the package.</dd>
   <dt><code>plugins.packages.&lt;alias&gt;.command</code></dt>
   <dd>Selects which command export <code>plugin run</code> starts when a package exports more than one.</dd>

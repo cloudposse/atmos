@@ -89,6 +89,8 @@ func (i *interrupt) fired() bool { return i.received.Load() != nil }
 
 // WithCallTimeout bounds every invocation made through the handle. The deadline is sent to
 // the plugin, and the plugin process is stopped when it passes. Zero or negative disables it.
+// For an interactive invocation, time spent waiting for the user (see Handle.AwaitUser) does not
+// count against the timeout; WithInteractionLimit bounds that wait instead.
 //
 //nolint:lintroller // Trivial accessor, pure lookup, factory option, or delegation; exempt under repository tracking policy.
 func WithCallTimeout(timeout time.Duration) Option {
@@ -97,22 +99,40 @@ func WithCallTimeout(timeout time.Duration) Option {
 
 // callContext merges the caller's context, the handle's interrupt context, and the
 // configured call timeout so cancelling any of them cancels the invocation.
-func (h *Handle) callContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	callCtx, cancel := context.WithCancel(ctx)
+//
+// A noninteractive invocation can never wait for a person, so its deadline is the call timeout.
+// An interactive one gets a hard deadline of the call timeout plus the interaction limit, which is
+// what the plugin sees, and a budget that cancels the call once the plugin has worked for the call
+// timeout outside of user waits. The returned budget is nil when no such budget applies.
+func (h *Handle) callContext(ctx context.Context, interactive bool) (context.Context, *budget, context.CancelFunc) {
+	callCtx, cancel := context.WithCancelCause(ctx)
+	limit := h.callTimeout
+	var work *budget
+	if limit > 0 && interactive {
+		work = newBudget(h.callTimeout, h.interactionLimit, func(bool) { cancel(errUtils.ErrPluginTimeout) })
+		limit = saturatingDurationAdd(limit, h.interactionLimit)
+	}
 	cancelTimeout := func() {}
-	if h.callTimeout > 0 {
+	if limit > 0 {
 		var timeoutCancel context.CancelFunc
-		callCtx, timeoutCancel = context.WithTimeout(callCtx, h.callTimeout)
+		deadline := time.Now().Add(limit)
+		callCtx, timeoutCancel = context.WithDeadline(callCtx, deadline)
 		cancelTimeout = timeoutCancel
+		if work != nil {
+			work.deadline = deadline
+		}
 	}
 	stop := func() bool { return false }
 	if h.interrupt != nil {
-		stop = context.AfterFunc(h.interrupt.ctx, cancel)
+		stop = context.AfterFunc(h.interrupt.ctx, func() { cancel(context.Canceled) })
 	}
-	return callCtx, func() {
+	return callCtx, work, func() {
 		stop()
+		if work != nil {
+			work.stop()
+		}
 		cancelTimeout()
-		cancel()
+		cancel(context.Canceled)
 	}
 }
 
@@ -127,7 +147,10 @@ func invocationDeadline(ctx context.Context) *timestamppb.Timestamp {
 
 // finishInvocation converts interruption and deadline expiry into actionable errors and
 // stops the plugin so it cannot outlive the operation that was abandoned.
-func (h *Handle) finishInvocation(callCtx context.Context, err error) error {
+// An interactive call that reaches its own hard deadline, rather than an earlier one its caller
+// set, spent the interaction limit waiting for the user. That case is reported differently from a
+// plugin that ran out of time. The work budget is nil for calls without an interactive budget.
+func (h *Handle) finishInvocation(callCtx context.Context, work *budget, err error) error {
 	if err == nil {
 		return nil
 	}
@@ -137,10 +160,22 @@ func (h *Handle) finishInvocation(callCtx context.Context, err error) error {
 		warn(omittedLogsNotice)
 		return errors.Join(context.Canceled, errUtils.ExitCodeError{Code: h.interrupt.exitCode(), Silent: true})
 	}
+	// The interactive budget cancels with ErrPluginTimeout as the cause once the plugin's own
+	// work, excluding user waits, has used up the call timeout, or once the user waits have used
+	// up the interaction limit.
+	if errors.Is(context.Cause(callCtx), errUtils.ErrPluginTimeout) {
+		h.Close()
+		warn(omittedLogsNotice)
+		return h.budgetTimeoutError(work)
+	}
 	if deadlineExceeded(callCtx, err) {
 		h.Close()
 		warn(omittedLogsNotice)
-		return timeoutError(callCtx)
+		deadline, ok := callCtx.Deadline()
+		if work != nil && deadline.Equal(work.deadline) {
+			return interactionTimeoutError(deadline, h.interactionLimit, h.packageAlias)
+		}
+		return timeoutError(deadline, ok)
 	}
 	// A caller that cancels the call (for example, after a sibling operation failed) gets the
 	// error unchanged, but the user still learns that the plugin's queued logs may be missing.
@@ -148,6 +183,15 @@ func (h *Handle) finishInvocation(callCtx context.Context, err error) error {
 		warn(omittedLogsNotice)
 	}
 	return err
+}
+
+// budgetTimeoutError reports why the interactive budget ended the call: the user wait ran out
+// (the sign-in error) or the plugin's own work did (the generic timeout error).
+func (h *Handle) budgetTimeoutError(work *budget) error {
+	if work != nil && work.userWaitExhausted() {
+		return interactionTimeoutError(time.Now(), h.interactionLimit, h.packageAlias)
+	}
+	return timeoutError(time.Now(), true)
 }
 
 // deadlineExceeded reports whether a failed call ran out of time. The plugin's gRPC server can
@@ -161,13 +205,25 @@ func deadlineExceeded(callCtx context.Context, err error) bool {
 	return hasDeadline && status.Code(err) == codes.DeadlineExceeded
 }
 
-func timeoutError(ctx context.Context) error {
+func timeoutError(deadline time.Time, known bool) error {
 	builder := errUtils.Build(errors.Join(errUtils.ErrPluginTimeout, context.DeadlineExceeded)).
 		WithHint("The plugin process was stopped when the deadline passed. Run the command again; if the plugin legitimately needs more time, raise its timeout.")
-	if deadline, ok := ctx.Deadline(); ok {
+	if known {
 		builder.WithContext("deadline", deadline.Format(time.RFC3339))
 	}
 	return builder.Err()
+}
+
+// interactionTimeoutError reports an interactive call whose user wait outlasted the interaction limit.
+// The hint names the key that raises the limit; alias is empty when the caller did not name the package.
+func interactionTimeoutError(deadline time.Time, limit time.Duration, alias string) error {
+	if alias == "" {
+		alias = "<alias>"
+	}
+	return errUtils.Build(errors.Join(errUtils.ErrPluginTimeout, context.DeadlineExceeded)).
+		WithHintf("Atmos waited %s for the sign-in to complete and then stopped the plugin. Run the command again and finish signing in before the limit, or raise `plugins.packages.%s.interaction_timeout` if the sign-in needs longer.", limit, alias).
+		WithContext("deadline", deadline.Format(time.RFC3339)).
+		Err()
 }
 
 // startTimeoutError reports a plugin that did not complete its handshake in time.

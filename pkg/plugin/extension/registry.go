@@ -31,8 +31,13 @@ type Activation struct {
 	Package     string
 	Executable  string
 	Description *pluginv1.DescribeResponse
+	// Alias is the package's key under plugins.packages, used to name its configuration in errors.
+	Alias string
 	// Timeout bounds every call into the plugin; zero means no deadline.
 	Timeout time.Duration
+	// InteractionLimit bounds how long an interactive call may wait for the user on top of
+	// Timeout; zero means the runtime default.
+	InteractionLimit time.Duration
 }
 
 // Descriptor supplies extension-specific validation, activation, scaffolding,

@@ -34,6 +34,18 @@ type Invocation struct {
 	Logs        LogSink
 	Namespace   string
 	Interactive bool
+	// AwaitUser marks the call as waiting for the user and returns the function that ends the
+	// wait, so the call timeout does not run while a person signs in. Nil means no such pause;
+	// the native runtime sets it for interactive invocations with a call timeout.
+	AwaitUser func() (resume func())
+}
+
+// awaitUser starts a user wait when the invocation supports pausing its call timeout.
+func (i *Invocation) awaitUser() func() {
+	if i.AwaitUser == nil {
+		return func() {}
+	}
+	return i.AwaitUser()
 }
 
 // Server rejects API requests after their invocation has completed.
