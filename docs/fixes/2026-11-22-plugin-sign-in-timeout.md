@@ -72,12 +72,17 @@ person, so the sign-in wait and the plugin's own work shared one budget.
     own hard deadline passed (a new error whose hint says Atmos waited the limit for the sign-in and names
     `plugins.packages.<alias>.interaction_timeout`); or an earlier deadline set by the caller passed
     (generic timeout hint).
+  - The budget also counts the cumulative time spent in user waits against the interaction limit. When
+    those waits add up to the limit, the call is stopped with the sign-in error, even when `timeout` is
+    far larger, so the wait never exceeds `interaction_timeout` (review follow-up). A budget whose work
+    allowance is already spent when a wait opens expires at once instead of pausing.
   - Noninteractive invocations cannot prompt, so they keep the fixed `timeout` deadline.
 - Tests:
   - Budget unit tests in `pkg/plugin/runtime/native/interaction_test.go`:
     `TestBudgetExpiresAfterTimeoutWithoutUserWait`, `TestBudgetDoesNotCountUserWait`,
     `TestBudgetStaysPausedUntilEveryWaitEnds`, `TestBudgetPausedAtExpiryRunsOutWhenResumed`,
-    `TestStoppedBudgetNeverExpires`, `TestAwaitUserIgnoresUnknownInvocation`.
+    `TestBudgetUsedUpBeforeWaitExpiresInsteadOfPausing`, `TestBudgetWaitIsBoundedByWaitLimitDespiteLargeTimeout`,
+    `TestBudgetWaitLimitAccumulatesAcrossWaits`, `TestStoppedBudgetNeverExpires`, `TestAwaitUserIgnoresUnknownInvocation`.
   - Runtime behavior in the same file: `TestInteractiveCallTimeoutStopsHungPluginBeforeHardDeadline`,
     `TestInteractiveUserWaitIsBoundedByInteractionLimit`,
     `TestInteractiveCallerDeadlineKeepsGenericTimeoutHint`, `TestNoninteractiveCallKeepsCallTimeoutDeadline`.

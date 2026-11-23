@@ -19,7 +19,7 @@ import (
 // budgetProbe starts a one-minute budget whose expiry is observable without a real clock.
 func budgetProbe() (*budget, *atomic.Bool) {
 	var expired atomic.Bool
-	return newBudget(time.Minute, func() { expired.Store(true) }), &expired
+	return newBudget(time.Minute, 24*time.Hour, func(bool) { expired.Store(true) }), &expired
 }
 
 func TestBudgetExpiresAfterTimeoutWithoutUserWait(t *testing.T) {
@@ -71,17 +71,55 @@ func TestBudgetStaysPausedUntilEveryWaitEnds(t *testing.T) {
 	})
 }
 
-func TestBudgetPausedAtExpiryRunsOutWhenResumed(t *testing.T) {
+func TestBudgetUsedUpBeforeWaitExpiresInsteadOfPausing(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		work, expired := budgetProbe()
 		defer work.stop()
-		time.Sleep(time.Minute)
-		// The timer is due but has not been observed; a wait that starts now must not revive it.
+		// Model a timer callback that started but has not acquired the lock: the allowance is spent
+		// while the budget still looks live.
+		work.mu.Lock()
+		work.since = time.Now().Add(-time.Minute)
+		work.mu.Unlock()
 		resume := work.await()
 		synctest.Wait()
-		resume()
+		require.True(t, expired.Load(), "a budget whose work allowance is spent must expire, not pause")
+		require.False(t, work.userWaitExhausted())
+		require.NotPanics(t, resume)
+	})
+}
+
+func TestBudgetWaitIsBoundedByWaitLimitDespiteLargeTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var waitExpired atomic.Bool
+		work := newBudget(30*time.Minute, time.Minute, func(wait bool) { waitExpired.Store(wait) })
+		defer work.stop()
+		_ = work.await()
+		time.Sleep(time.Minute - time.Second)
 		synctest.Wait()
-		require.True(t, expired.Load(), "a budget used up before the wait expires when the wait ends")
+		require.False(t, waitExpired.Load())
+		time.Sleep(time.Second)
+		synctest.Wait()
+		require.True(t, waitExpired.Load(), "the user wait must end at the wait limit, not the work timeout")
+		require.True(t, work.userWaitExhausted())
+	})
+}
+
+func TestBudgetWaitLimitAccumulatesAcrossWaits(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var waitExpired atomic.Bool
+		work := newBudget(30*time.Minute, time.Minute, func(wait bool) { waitExpired.Store(wait) })
+		defer work.stop()
+		work.await()()
+		first := work.await()
+		time.Sleep(40 * time.Second)
+		first()
+		_ = work.await()
+		time.Sleep(19 * time.Second)
+		synctest.Wait()
+		require.False(t, waitExpired.Load(), "only 59 seconds of waiting so far")
+		time.Sleep(time.Second)
+		synctest.Wait()
+		require.True(t, waitExpired.Load(), "cumulative waits reaching the limit end the call")
 	})
 }
 
@@ -148,10 +186,25 @@ func TestInteractiveUserWaitIsBoundedByInteractionLimit(t *testing.T) {
 
 	require.ErrorIs(t, err, errUtils.ErrPluginTimeout)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.GreaterOrEqual(t, time.Since(started), timeout+limit, "the user wait outlasts the timeout until the hard deadline")
+	require.GreaterOrEqual(t, time.Since(started), limit, "the user wait lasts the whole interaction limit")
 	hints := strings.Join(errUtils.AllHints(err), "\n")
 	require.Contains(t, hints, "sign-in", "the error explains the sign-in was not finished")
 	require.Contains(t, hints, "`plugins.packages.corporate.interaction_timeout`", "the hint names the key that raises the limit")
+	pids, pidErr := fakeplugin.PIDs(directory)
+	require.NoError(t, pidErr)
+	requireGone(t, pids)
+}
+
+func TestInteractiveUserWaitEndsAtInteractionLimitDespiteLargeTimeout(t *testing.T) {
+	const limit = 500 * time.Millisecond
+	handle, directory := startFake(t, t.Context(), fakeplugin.ModeHang, WithCallTimeout(30*time.Minute), WithInteractionLimit(limit), WithPackageAlias("corporate"))
+	started := time.Now()
+
+	_, err := runInteractiveHang(t, t.Context(), handle, true)
+
+	require.ErrorIs(t, err, errUtils.ErrPluginTimeout)
+	require.Less(t, time.Since(started), eventually, "the wait ends at the interaction limit, not the 30 minute timeout")
+	require.Contains(t, strings.Join(errUtils.AllHints(err), "\n"), "`plugins.packages.corporate.interaction_timeout`")
 	pids, pidErr := fakeplugin.PIDs(directory)
 	require.NoError(t, pidErr)
 	requireGone(t, pids)
@@ -217,7 +270,7 @@ func TestConfiguredInteractionLimitAllowsSignInLongerThanDefault(t *testing.T) {
 				time.Sleep(userWait)
 				synctest.Wait()
 				if testCase.expired {
-					require.ErrorIs(t, callCtx.Err(), context.DeadlineExceeded, "the default limit ends a 25-minute sign-in")
+					require.ErrorIs(t, context.Cause(callCtx), errUtils.ErrPluginTimeout, "the default limit ends a 25-minute sign-in")
 					resume()
 					return
 				}

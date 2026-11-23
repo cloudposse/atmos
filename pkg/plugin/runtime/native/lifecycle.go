@@ -109,7 +109,7 @@ func (h *Handle) callContext(ctx context.Context, interactive bool) (context.Con
 	limit := h.callTimeout
 	var work *budget
 	if limit > 0 && interactive {
-		work = newBudget(h.callTimeout, func() { cancel(errUtils.ErrPluginTimeout) })
+		work = newBudget(h.callTimeout, h.interactionLimit, func(bool) { cancel(errUtils.ErrPluginTimeout) })
 		limit = saturatingDurationAdd(limit, h.interactionLimit)
 	}
 	cancelTimeout := func() {}
@@ -161,10 +161,14 @@ func (h *Handle) finishInvocation(callCtx context.Context, work *budget, err err
 		return errors.Join(context.Canceled, errUtils.ExitCodeError{Code: h.interrupt.exitCode(), Silent: true})
 	}
 	// The interactive budget cancels with ErrPluginTimeout as the cause once the plugin's own
-	// work, excluding user waits, has used up the call timeout.
+	// work, excluding user waits, has used up the call timeout, or once the user waits have used
+	// up the interaction limit.
 	if errors.Is(context.Cause(callCtx), errUtils.ErrPluginTimeout) {
 		h.Close()
 		warn(omittedLogsNotice)
+		if work != nil && work.userWaitExhausted() {
+			return interactionTimeoutError(time.Now(), h.interactionLimit, h.packageAlias)
+		}
 		return timeoutError(time.Now(), true)
 	}
 	if deadlineExceeded(callCtx, err) {

@@ -55,7 +55,8 @@ func (h *Handle) AwaitUser(invocationID string) (resume func()) {
 }
 
 // budget enforces a call timeout that pauses while the user is being waited on. The work the
-// plugin does stays bounded by the timeout, but a person signing in is not cut off by it.
+// plugin does stays bounded by the timeout, but a person signing in is not cut off by it. The
+// time spent waiting for the user is bounded separately by the interaction limit.
 type budget struct {
 	mu        sync.Mutex
 	remaining time.Duration
@@ -65,14 +66,24 @@ type budget struct {
 	// generation invalidates a timer that fired while its budget was being paused or resumed.
 	generation uint64
 	finished   bool
-	expire     func()
+	// expire runs once, outside the lock, when the budget ends. It reports whether the user wait
+	// ran out, as opposed to the plugin's own work.
+	expire func(waitExhausted bool)
 	// deadline is the invocation's hard deadline: the call timeout plus the interaction limit.
 	deadline time.Time
+	// waitLimit bounds the cumulative time spent waiting for the user; zero or negative means unbounded.
+	waitLimit time.Duration
+	// waited is the user wait already closed; waitSince starts the open wait; waitTimer ends it at the limit.
+	waited          time.Duration
+	waitSince       time.Time
+	waitTimer       *time.Timer
+	exhaustedByWait bool
 }
 
-// newBudget starts counting immediately and calls expire once the time runs out.
-func newBudget(timeout time.Duration, expire func()) *budget {
-	b := &budget{remaining: timeout, since: time.Now(), expire: expire}
+// newBudget starts counting immediately and calls expire once the work time or the user wait
+// time runs out. The user wait is not counted against timeout but against waitLimit.
+func newBudget(timeout, waitLimit time.Duration, expire func(waitExhausted bool)) *budget {
+	b := &budget{remaining: timeout, since: time.Now(), expire: expire, waitLimit: waitLimit}
 	b.timer = b.schedule()
 	return b
 }
@@ -80,33 +91,64 @@ func newBudget(timeout time.Duration, expire func()) *budget {
 // schedule arms a timer for the remaining time; the caller holds the lock or owns b.
 func (b *budget) schedule() *time.Timer {
 	generation := b.generation
-	return time.AfterFunc(max(b.remaining, 0), func() { b.fire(generation) })
+	return time.AfterFunc(max(b.remaining, 0), func() { b.fire(generation, false) })
 }
 
-func (b *budget) fire(generation uint64) {
+// scheduleWait arms a timer for the user wait time left; the caller holds the lock.
+func (b *budget) scheduleWait() *time.Timer {
+	generation := b.generation
+	return time.AfterFunc(max(b.waitLimit-b.waited, 0), func() { b.fire(generation, true) })
+}
+
+// fire ends the budget unless it was paused, resumed, or finished since the timer was armed.
+// A work timer must not end a paused budget; a wait timer must not end a running one.
+func (b *budget) fire(generation uint64, wait bool) {
 	b.mu.Lock()
-	if b.finished || b.waiting > 0 || generation != b.generation {
+	if b.finished || (b.waiting > 0) != wait || generation != b.generation {
 		b.mu.Unlock()
 		return
 	}
 	b.finished = true
+	b.exhaustedByWait = wait
 	b.mu.Unlock()
-	b.expire()
+	b.expire(wait)
 }
 
-// await pauses the budget until every returned resume function has been called.
-func (b *budget) await() func() {
+// userWaitExhausted reports whether the budget ended because the user wait ran out.
+func (b *budget) userWaitExhausted() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	return b.exhaustedByWait
+}
+
+// await pauses the work budget until every returned resume function has been called, and starts
+// counting the user wait against the wait limit. If the work allowance is already spent, the
+// budget ends instead of pausing, so an exhausted budget is never left paused.
+func (b *budget) await() func() {
+	b.mu.Lock()
 	if b.finished {
+		b.mu.Unlock()
 		return func() {}
 	}
 	if b.waiting == 0 {
 		b.timer.Stop()
 		b.generation++
 		b.remaining -= time.Since(b.since)
+		if b.remaining <= 0 {
+			// A timer callback that already started cannot be cancelled, and it would now see a
+			// stale generation, so expire here; the callback runs outside the lock.
+			b.finished = true
+			b.mu.Unlock()
+			b.expire(false)
+			return func() {}
+		}
+		if b.waitLimit > 0 {
+			b.waitSince = time.Now()
+			b.waitTimer = b.scheduleWait()
+		}
 	}
 	b.waiting++
+	b.mu.Unlock()
 	var once sync.Once
 	return func() { once.Do(b.resume) }
 }
@@ -118,14 +160,22 @@ func (b *budget) resume() {
 	if b.waiting > 0 || b.finished {
 		return
 	}
+	if b.waitTimer != nil {
+		b.waitTimer.Stop()
+		b.waited += time.Since(b.waitSince)
+	}
+	b.generation++
 	b.since = time.Now()
 	b.timer = b.schedule()
 }
 
-// stop releases the timer when the invocation ends.
+// stop releases the timers when the invocation ends.
 func (b *budget) stop() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.finished = true
 	b.timer.Stop()
+	if b.waitTimer != nil {
+		b.waitTimer.Stop()
+	}
 }
