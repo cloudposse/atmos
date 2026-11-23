@@ -16,8 +16,8 @@ import (
 // provider section even before its plugin package is installed, so a missing package is reported.
 var builtinProviders = map[string]bool{"terragrunt": true}
 
-// ProviderCatalog lists the configuration providers that the enabled plugin packages export. complete is
-// false when an enabled package's exports cannot be read without installing it.
+// ProviderCatalog lists the configuration providers that the enabled plugin packages export.
+// The boolean result is false when an enabled package's exports cannot be read without installing it.
 type ProviderCatalog func(ctx context.Context, config *schema.AtmosConfiguration) (names map[string]bool, complete bool, err error)
 
 var catalogs = struct {

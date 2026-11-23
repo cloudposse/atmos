@@ -21,19 +21,13 @@ func init() {
 
 // ConfigurationProviders lists the configuration providers that the enabled plugin packages export
 // for component discovery. It reads the lock file for registry packages and the manifest for local
-// builds, and never installs, restores, or starts a package. complete is false when an enabled
+// builds, and never installs, restores, or starts a package. The complete result is false when an enabled
 // package is neither locked nor local, because its exports are unknown until it is installed.
 func ConfigurationProviders(ctx context.Context, atmos *schema.AtmosConfiguration) (map[string]bool, bool, error) {
 	defer perf.Track(atmos, "pluginbootstrap.ConfigurationProviders")()
 
 	names := map[string]bool{}
-	var aliases []string
-	for _, alias := range slices.Sorted(maps.Keys(atmos.Plugins.Packages)) {
-		declaration := atmos.Plugins.Packages[alias]
-		if enabled(&declaration) {
-			aliases = append(aliases, alias)
-		}
-	}
+	aliases := enabledPackageAliases(atmos)
 	if len(aliases) == 0 {
 		return names, true, nil
 	}
@@ -60,4 +54,16 @@ func ConfigurationProviders(ctx context.Context, atmos *schema.AtmosConfiguratio
 		}
 	}
 	return names, true, nil
+}
+
+// enabledPackageAliases returns the sorted aliases of the enabled plugin packages.
+func enabledPackageAliases(atmos *schema.AtmosConfiguration) []string {
+	var aliases []string
+	for _, alias := range slices.Sorted(maps.Keys(atmos.Plugins.Packages)) {
+		declaration := atmos.Plugins.Packages[alias]
+		if enabled(&declaration) {
+			aliases = append(aliases, alias)
+		}
+	}
+	return aliases
 }

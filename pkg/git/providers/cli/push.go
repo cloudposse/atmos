@@ -85,7 +85,7 @@ func (p *Provider) pushWithRetry(ctx context.Context, opts *atmosgit.PushOptions
 	}
 	// The attempt count below already says the attempts ran out, so drop the executor's
 	// generic "max attempts (N) exceeded, last error:" wrapper around the last attempt's error.
-	if last != nil && errors.Unwrap(err) == last {
+	if last != nil && errors.Is(errors.Unwrap(err), last) {
 		err = last
 	}
 	if state.rejected && !errors.Is(err, errUtils.ErrGitPushRejected) {

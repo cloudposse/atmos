@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"strings"
 )
@@ -218,10 +219,7 @@ func (c *AtmosConfiguration) MarkConfigurationOwnership(componentType string, se
 	if (owned && value == true) || (!owned && !marked) {
 		return
 	}
-	updated := make(map[string]any, len(configuration)+1)
-	for key, item := range configuration {
-		updated[key] = item
-	}
+	updated := maps.Clone(configuration)
 	if owned {
 		updated[ConfigurationOwnedKey] = true
 	} else {

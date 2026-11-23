@@ -14,25 +14,27 @@ import (
 func findNullMapKey(value any, path string) (string, bool) {
 	switch typed := value.(type) {
 	case map[string]any:
-		for key, child := range typed {
-			if found, ok := findNullMapKey(child, joinManifestPath(path, key)); ok {
-				return found, true
-			}
-		}
+		return findNullMapKeyIn(typed, path, func(key string) string { return key })
 	case map[any]any:
 		if _, ok := typed[nil]; ok {
 			return path, true
 		}
-		for key, child := range typed {
-			if found, ok := findNullMapKey(child, joinManifestPath(path, fmt.Sprint(key))); ok {
-				return found, true
-			}
-		}
+		return findNullMapKeyIn(typed, path, func(key any) string { return fmt.Sprint(key) })
 	case []any:
 		for i, child := range typed {
 			if found, ok := findNullMapKey(child, path+"["+strconv.Itoa(i)+"]"); ok {
 				return found, true
 			}
+		}
+	}
+	return "", false
+}
+
+// findNullMapKeyIn descends into the values of a mapping, naming each child by its key.
+func findNullMapKeyIn[K comparable](typed map[K]any, path string, name func(K) string) (string, bool) {
+	for key, child := range typed {
+		if found, ok := findNullMapKey(child, joinManifestPath(path, name(key))); ok {
+			return found, true
 		}
 	}
 	return "", false

@@ -63,7 +63,7 @@ components:
 }
 
 // TestUnknownEnabledTerraformSectionIsNotAProvider reproduces an unrecognized map with
-// `enabled: true` under components.terraform. v1.234.1 ignored it; it must not select a
+// `enabled: true` under components.terraform. Version 1.234.1 ignored it; it must not select a
 // configuration provider, fail stack processing, or appear as a provider section.
 func TestUnknownEnabledTerraformSectionIsNotAProvider(t *testing.T) {
 	config, info := configurationProject(t, `    team_defaults:
