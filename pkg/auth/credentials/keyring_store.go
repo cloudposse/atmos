@@ -164,11 +164,18 @@ func (s *keyringCredentialStore) keyBelongsTo(key, alias string) (bool, error) {
 		}
 		return false, err
 	}
+	owner, parsed := envelopeAlias(data)
+	return !parsed || owner == "" || owner == alias, nil
+}
+
+// envelopeAlias returns the alias recorded in a stored credential envelope. The second result is
+// false when the payload is not a JSON envelope; such an entry has no recorded owner.
+func envelopeAlias(data string) (string, bool) {
 	var env credentialEnvelope
-	if err := json.Unmarshal([]byte(data), &env); err != nil {
-		return true, nil
+	if json.Unmarshal([]byte(data), &env) != nil {
+		return "", false
 	}
-	return env.Alias == "" || env.Alias == alias, nil
+	return env.Alias, true
 }
 
 // List returns all stored credential aliases within the specified realm. Backends that cannot
