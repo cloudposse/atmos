@@ -237,11 +237,14 @@ func (m *ConfigManager) snapshotHelperCredential(config *rawConfig, helper, regi
 	if !config.hasAuth(registry) {
 		return helperSnapshot{known: true}
 	}
-	username, secret, found, err := m.credentialHelper().Get(helper, registry)
+	cred, err := m.credentialHelper().Get(helper, registry)
 	if err != nil {
 		return helperSnapshot{}
 	}
-	return helperSnapshot{known: true, found: found, username: username, secret: secret}
+	if cred == nil {
+		return helperSnapshot{known: true}
+	}
+	return helperSnapshot{known: true, found: true, username: cred.Username, secret: cred.Secret}
 }
 
 // rollbackHelperStore undoes a helper store whose config.json save failed, on a

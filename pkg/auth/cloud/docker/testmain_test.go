@@ -104,7 +104,9 @@ func installFakeCredentialHelper(t *testing.T, mode string) string {
 		name += ".exe"
 	}
 	dst := filepath.Join(binDir, name)
-	if err := os.Link(exe, dst); err != nil {
+	// A hard link to the running test binary cannot be deleted on Windows (access denied
+	// during TempDir cleanup), so Windows always gets a real copy.
+	if runtime.GOOS == "windows" || os.Link(exe, dst) != nil {
 		copyFile(t, exe, dst)
 	}
 

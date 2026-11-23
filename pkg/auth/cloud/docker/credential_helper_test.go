@@ -183,12 +183,12 @@ func TestExecCredentialHelper(t *testing.T) {
 	t.Run("get returns the stored credential", func(t *testing.T) {
 		callsDir := installFakeCredentialHelper(t, "ok")
 
-		user, secret, found, err := newExecCredentialHelper().Get(fakeHelperName, testECRRegistry)
+		cred, err := newExecCredentialHelper().Get(fakeHelperName, testECRRegistry)
 
 		require.NoError(t, err)
-		assert.True(t, found)
-		assert.Equal(t, fakeHelperPrevUser, user)
-		assert.Equal(t, fakeHelperPrevSecret, secret)
+		require.NotNil(t, cred)
+		assert.Equal(t, fakeHelperPrevUser, cred.Username)
+		assert.Equal(t, fakeHelperPrevSecret, cred.Secret)
 		calls := readFakeHelperCalls(t, callsDir)
 		require.Len(t, calls, 1)
 		assert.Equal(t, fakeHelperCall{Action: helperActionGet, Input: testECRRegistry}, calls[0])
@@ -197,25 +197,25 @@ func TestExecCredentialHelper(t *testing.T) {
 	t.Run("get of unknown credential is not found", func(t *testing.T) {
 		installFakeCredentialHelper(t, "notfound")
 
-		_, _, found, err := newExecCredentialHelper().Get(fakeHelperName, testECRRegistry)
+		cred, err := newExecCredentialHelper().Get(fakeHelperName, testECRRegistry)
 
 		require.NoError(t, err)
-		assert.False(t, found)
+		assert.Nil(t, cred)
 	})
 
 	t.Run("get from a helper that cannot store is not found", func(t *testing.T) {
 		installFakeCredentialHelper(t, "notimplemented")
 
-		_, _, found, err := newExecCredentialHelper().Get(fakeHelperName, testECRRegistry)
+		cred, err := newExecCredentialHelper().Get(fakeHelperName, testECRRegistry)
 
 		require.NoError(t, err)
-		assert.False(t, found)
+		assert.Nil(t, cred)
 	})
 
 	t.Run("get failure", func(t *testing.T) {
 		installFakeCredentialHelper(t, "fail")
 
-		_, _, _, err := newExecCredentialHelper().Get(fakeHelperName, testECRRegistry)
+		_, err := newExecCredentialHelper().Get(fakeHelperName, testECRRegistry)
 
 		assert.ErrorIs(t, err, errUtils.ErrDockerCredentialHelper)
 	})

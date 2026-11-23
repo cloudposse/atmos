@@ -30,7 +30,7 @@ const (
 	// The reply of a helper that does not
 	// implement an action, such as docker-credential-ecr-login's store.
 	helperNotImplementedMessage = "not implemented"
-	// credentialHelperWaitDelay bounds how long Run waits for the output pipes to
+	// The wait delay (credentialHelperWaitDelay) bounds how long Run waits for the output pipes to
 	// close after the helper exits or is killed by the timeout, so a child process
 	// that inherited stdout or stderr cannot hang the login past its deadline.
 	credentialHelperWaitDelay = 2 * time.Second
@@ -42,13 +42,18 @@ const (
 type CredentialHelper interface {
 	// Store saves username/secret for serverURL in the named helper.
 	Store(helper, serverURL, username, secret string) error
-	// Get returns the username and secret stored for serverURL in the named
-	// helper. found is false, with a nil error, when the helper holds no
-	// credential for serverURL.
-	Get(helper, serverURL string) (username, secret string, found bool, err error)
+	// Get returns the credential stored for serverURL in the named helper. The
+	// credential is nil, with a nil error, when the helper holds none for serverURL.
+	Get(helper, serverURL string) (*HelperCredential, error)
 	// Erase removes the credentials for serverURL from the named helper.
 	// A missing credential is not an error.
 	Erase(helper, serverURL string) error
+}
+
+// HelperCredential is a username and secret held by a credential helper.
+type HelperCredential struct {
+	Username string
+	Secret   string
 }
 
 // helperCredentials is the JSON payload of the credential helper "store" action.
@@ -99,23 +104,23 @@ func (h *execCredentialHelper) Store(helper, serverURL, username, secret string)
 }
 
 // Get reads the credentials through `docker-credential-<helper> get`.
-func (h *execCredentialHelper) Get(helper, serverURL string) (string, string, bool, error) {
+func (h *execCredentialHelper) Get(helper, serverURL string) (*HelperCredential, error) {
 	defer perf.Track(nil, "docker.execCredentialHelper.Get")()
 
 	out, errOut, err := h.run(helper, helperActionGet, []byte(serverURL))
 	if err != nil {
 		// A helper that has no credential, or cannot store at all, holds nothing to restore.
 		if strings.TrimSpace(out) == helperNotFoundMessage || isNotImplementedReply(out, errOut) {
-			return "", "", false, nil
+			return nil, nil
 		}
-		return "", "", false, fmt.Errorf("%w: %s%s get for %s: %w", errUtils.ErrDockerCredentialHelper, credentialHelperPrefix, helper, serverURL, err)
+		return nil, fmt.Errorf("%w: %s%s get for %s: %w", errUtils.ErrDockerCredentialHelper, credentialHelperPrefix, helper, serverURL, err)
 	}
 	var creds helperCredentials
 	if err := json.Unmarshal([]byte(out), &creds); err != nil {
-		return "", "", false, fmt.Errorf("%w: %s%s get for %s returned an unreadable reply: %w",
+		return nil, fmt.Errorf("%w: %s%s get for %s returned an unreadable reply: %w",
 			errUtils.ErrDockerCredentialHelper, credentialHelperPrefix, helper, serverURL, err)
 	}
-	return creds.Username, creds.Secret, true, nil
+	return &HelperCredential{Username: creds.Username, Secret: creds.Secret}, nil
 }
 
 // Erase removes the credentials through `docker-credential-<helper> erase`.

@@ -54,7 +54,9 @@ func installFakeECRCredentialHelper(t *testing.T, name, mode string) {
 	if runtime.GOOS == "windows" {
 		dst += ".exe"
 	}
-	if err := os.Link(exe, dst); err != nil {
+	// A hard link to the running test binary cannot be deleted on Windows (access denied
+	// during TempDir cleanup), so Windows always gets a real copy.
+	if runtime.GOOS == "windows" || os.Link(exe, dst) != nil {
 		data, readErr := os.ReadFile(exe)
 		require.NoError(t, readErr)
 		require.NoError(t, os.WriteFile(dst, data, 0o700))

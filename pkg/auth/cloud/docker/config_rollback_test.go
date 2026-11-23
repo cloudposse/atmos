@@ -65,7 +65,7 @@ func TestConfigManager_WriteAuth_SaveFailureRollbackFailure(t *testing.T) {
 func TestConfigManager_WriteAuth_SaveFailureRestoresPreviousHelperCredential(t *testing.T) {
 	manager, helper := newMockedManager(t, `{"credsStore": "desktop", "auths": {"`+testECRRegistry+`": {}}}`)
 	gomock.InOrder(
-		helper.EXPECT().Get("desktop", testECRRegistry).Return("old-user", "old-secret", true, nil),
+		helper.EXPECT().Get("desktop", testECRRegistry).Return(&HelperCredential{Username: "old-user", Secret: "old-secret"}, nil),
 		helper.EXPECT().Store("desktop", testECRRegistry, testECRUser, testECRPassword).
 			DoAndReturn(func(_, _, _, _ string) error {
 				breakConfigSave(t, manager)
@@ -86,7 +86,7 @@ func TestConfigManager_WriteAuth_SaveFailureRestoresPreviousHelperCredential(t *
 func TestConfigManager_WriteAuth_SaveFailureRestoreFailure(t *testing.T) {
 	manager, helper := newMockedManager(t, `{"credsStore": "desktop", "auths": {"`+testECRRegistry+`": {}}}`)
 	gomock.InOrder(
-		helper.EXPECT().Get("desktop", testECRRegistry).Return("old-user", "old-secret", true, nil),
+		helper.EXPECT().Get("desktop", testECRRegistry).Return(&HelperCredential{Username: "old-user", Secret: "old-secret"}, nil),
 		helper.EXPECT().Store("desktop", testECRRegistry, testECRUser, testECRPassword).
 			DoAndReturn(func(_, _, _, _ string) error {
 				breakConfigSave(t, manager)
@@ -107,7 +107,7 @@ func TestConfigManager_WriteAuth_SaveFailureRestoreFailure(t *testing.T) {
 func TestConfigManager_WriteAuth_SaveFailureErasesWhenListedButEmpty(t *testing.T) {
 	manager, helper := newMockedManager(t, `{"credsStore": "desktop", "auths": {"`+testECRRegistry+`": {}}}`)
 	gomock.InOrder(
-		helper.EXPECT().Get("desktop", testECRRegistry).Return("", "", false, nil),
+		helper.EXPECT().Get("desktop", testECRRegistry).Return(nil, nil),
 		helper.EXPECT().Store("desktop", testECRRegistry, testECRUser, testECRPassword).
 			DoAndReturn(func(_, _, _, _ string) error {
 				breakConfigSave(t, manager)
@@ -127,7 +127,7 @@ func TestConfigManager_WriteAuth_SaveFailureErasesWhenListedButEmpty(t *testing.
 func TestConfigManager_WriteAuth_SaveFailureLeavesUnreadablePreviousCredential(t *testing.T) {
 	manager, helper := newMockedManager(t, `{"credsStore": "desktop", "auths": {"`+testECRRegistry+`": {}}}`)
 	gomock.InOrder(
-		helper.EXPECT().Get("desktop", testECRRegistry).Return("", "", false, errFakeHelper),
+		helper.EXPECT().Get("desktop", testECRRegistry).Return(nil, errFakeHelper),
 		helper.EXPECT().Store("desktop", testECRRegistry, testECRUser, testECRPassword).
 			DoAndReturn(func(_, _, _, _ string) error {
 				breakConfigSave(t, manager)

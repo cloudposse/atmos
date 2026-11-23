@@ -54,14 +54,12 @@ func (mr *MockCredentialHelperMockRecorder) Erase(helper, serverURL any) *gomock
 }
 
 // Get mocks base method.
-func (m *MockCredentialHelper) Get(helper, serverURL string) (string, string, bool, error) {
+func (m *MockCredentialHelper) Get(helper, serverURL string) (*HelperCredential, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", helper, serverURL)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(string)
-	ret2, _ := ret[2].(bool)
-	ret3, _ := ret[3].(error)
-	return ret0, ret1, ret2, ret3
+	ret0, _ := ret[0].(*HelperCredential)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Get indicates an expected call of Get.
