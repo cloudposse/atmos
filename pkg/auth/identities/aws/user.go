@@ -47,6 +47,9 @@ type userIdentity struct {
 	// manager via SetCredentialStore. When nil (e.g. identity constructed
 	// directly in tests), credentialStore() falls back to the default store.
 	credStore types.CredentialStore
+	// legacyPrompter asks whether an ambiguous legacy keyring entry belongs to this identity.
+	// When nil, the production huh prompter is used.
+	legacyPrompter legacyKeyringPrompter
 }
 
 // NewUserIdentity creates a new AWS user identity.
@@ -156,6 +159,10 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 				return webflowCreds, nil
 			}
 			log.Debug("Browser webflow failed", logKeyIdentity, i.name, "error", webflowErr)
+			// Keep the hints about an older keyring entry that may hold this identity's keys.
+			if errors.Is(err, errUtils.ErrAwsUserLegacyKeyringEntryNotAdopted) {
+				return nil, errUtils.JoinPreservingHints(webflowErr, err)
+			}
 			return nil, webflowErr
 		}
 		return nil, err
@@ -227,6 +234,11 @@ func (i *userIdentity) shouldFallBackToWebflow(err error) bool {
 	if errors.Is(err, errUtils.ErrAwsUserKeyringReadFailed) {
 		return false
 	}
+	// The user cancelled a prompt (for example the legacy keyring adoption confirmation); do not
+	// start a second, browser-based authentication flow after they backed out.
+	if errors.Is(err, errUtils.ErrUserAborted) {
+		return false
+	}
 	return true
 }
 
@@ -264,8 +276,23 @@ func (i *userIdentity) resolveLongLivedCredentials(ctx context.Context) (*types.
 // When browser webflow is enabled, credential prompts are skipped so the caller
 // can fall through to browser-based authentication instead.
 func (i *userIdentity) resolveCredentialsFromKeyring(ctx context.Context, yamlMfaArn string) (*types.AWSCredentials, error) {
-	keystoreCreds, keystoreErr := i.credentialsFromStore()
+	credStore := i.credentialStore()
+	keystoreCreds, keystoreErr := i.credentialsFrom(credStore)
 	allowPrompts := types.AllowPrompts(ctx) && !i.isWebflowEnabled()
+
+	// Keys stored by an older version under an ambiguous keyring key are never read
+	// silently; ask the user whether they belong to this identity (see user_legacy_keyring.go).
+	if errors.Is(keystoreErr, errUtils.ErrAwsUserNotConfigured) {
+		adopted, adoptErr := i.adoptAmbiguousLegacyKeyringEntry(ctx, credStore)
+		if adoptErr != nil {
+			return nil, adoptErr
+		}
+		if adopted != nil {
+			// Continue through the validation below: the read-back may return newer session
+			// credentials that another process stored while the confirmation was open.
+			keystoreCreds, keystoreErr = adopted, nil
+		}
+	}
 
 	if keystoreErr != nil {
 		// A real keyring read failure (corrupted entry, deserialization error,
@@ -356,8 +383,12 @@ func (i *userIdentity) credentialsFromConfig() (*types.AWSCredentials, error) {
 // likely DID configure credentials but the keyring is unreadable — falling
 // through to webflow would mask the real problem.
 func (i *userIdentity) credentialsFromStore() (*types.AWSCredentials, error) {
+	return i.credentialsFrom(i.credentialStore())
+}
+
+// credentialsFrom is credentialsFromStore for an already resolved credential store.
+func (i *userIdentity) credentialsFrom(credStore types.CredentialStore) (*types.AWSCredentials, error) {
 	// Use realm for credential isolation between different repositories.
-	credStore := i.credentialStore()
 	retrieved, err := credStore.Retrieve(i.name, i.realm)
 	if err != nil {
 		// Only "not found" maps to "not configured" — every other keyring error

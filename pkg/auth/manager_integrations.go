@@ -111,8 +111,28 @@ func (m *manager) triggerIntegrations(ctx context.Context, identityName string, 
 			// Non-fatal: evict the cache entry so a retry on the next command is possible.
 			processIntegrationCache.Delete(cacheKey)
 			log.Warn("Integration failed", "integration", integrationName, "error", err)
+			m.recordIntegrationFailure(fmt.Errorf(errUtils.ErrWrapWithNameFormat, err, integrationName))
 		}
 	}
+}
+
+// recordIntegrationFailure remembers a non-fatal integration failure for IntegrationFailures.
+func (m *manager) recordIntegrationFailure(err error) {
+	m.integrationFailuresMu.Lock()
+	defer m.integrationFailuresMu.Unlock()
+	m.integrationFailures = append(m.integrationFailures, err)
+}
+
+// IntegrationFailures returns the joined non-fatal integration failures recorded by this manager
+// (nil when none). Integration failures never fail authentication or EnsureIdentityEnvironment;
+// ambient credential brokers read them here so a failed mint is reported as a failed run and
+// retried on the short backoff instead of being treated as a success.
+func (m *manager) IntegrationFailures() error {
+	defer perf.Track(nil, "auth.Manager.IntegrationFailures")()
+
+	m.integrationFailuresMu.Lock()
+	defer m.integrationFailuresMu.Unlock()
+	return errors.Join(m.integrationFailures...)
 }
 
 // findIntegrationsForIdentity returns integration names that reference the given identity.

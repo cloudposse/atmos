@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -31,23 +32,70 @@ const (
 	// KeyringSeparator is the separator used between key components.
 	// Uses underscore instead of colon for Windows compatibility (colons not allowed in filenames).
 	KeyringSeparator = "_"
+
+	// KeyringRealmAliasSeparator separates the realm from the alias in realm-scoped keys.
+	// Realms cannot contain "__" or end with "_" (see realm.Validate), so the first "__"
+	// after the prefix always ends the realm, whatever the alias contains.
+	KeyringRealmAliasSeparator = "__"
+
+	// The logKeyAlias constant is the structured-log key for a credential alias.
+	logKeyAlias = "alias"
+
+	// The logKeyRealm constant is the structured-log key for a credential realm.
+	logKeyRealm = "realm"
 )
 
 // buildKeyringKey creates a realm-scoped keyring key.
-// Format: "atmos_realm_alias" when realm is provided.
+// Format: "atmos_realm__alias" when realm is provided.
 // Falls back to "atmos_alias" for backward compatibility when realm is empty.
 func buildKeyringKey(alias, realm string) string {
-	log.Debug("Building keyring key", "alias", alias, "realm", realm)
+	log.Debug("Building keyring key", logKeyAlias, alias, logKeyRealm, realm)
 	if realm != "" {
-		return KeyringRealmPrefix + KeyringSeparator + realm + KeyringSeparator + alias
+		return KeyringRealmPrefix + KeyringSeparator + realm + KeyringRealmAliasSeparator + alias
 	}
 	return KeyringRealmPrefix + KeyringSeparator + alias
 }
 
+// legacyRealmKeyringKey returns the previous realm-scoped key "atmos_<realm>_<alias>". Both
+// parts may contain "_", so realm "acme" + alias "prod_admin" and realm "acme_prod" + alias
+// "admin" share one key; it is read only when the store's legacyKeyIsUnambiguous holds.
+func legacyRealmKeyringKey(alias, realm string) string {
+	return KeyringRealmPrefix + KeyringSeparator + realm + KeyringSeparator + alias
+}
+
+// legacyRealmKeyIsUnambiguous reports whether the previous-layout key for alias and realm
+// can only have been written for this exact realm and alias: neither contains "_", so no
+// other realm and alias split produces the same key, and the key contains no "__" of the
+// current layout.
+func legacyRealmKeyIsUnambiguous(alias, realm string) bool {
+	return realm != "" && alias != "" && !strings.Contains(realm, KeyringSeparator) && !strings.Contains(alias, KeyringSeparator)
+}
+
+// EmptyRealmKeyIsUnambiguous reports whether the empty-realm (pre-realm) key "atmos_<alias>"
+// can only belong to alias. An alias containing "_" shares its key with a realm-scoped entry
+// of another realm ("prod_admin" is realm "prod" + "admin" in the previous layout, and
+// "prod__admin" is realm "prod" + "admin" in the current one), so realm-scoped callers
+// must not delete that empty-realm key as their own legacy entry.
+func EmptyRealmKeyIsUnambiguous(alias string) bool {
+	return alias != "" && !strings.Contains(alias, KeyringSeparator)
+}
+
 // credentialEnvelope is used to persist interface credentials with type information.
+//
+// ConfigDigest is the SHA-256 of the non-secret effective configuration of the chain step that
+// produced the credentials (see ConfigDigestStore). It is omitted when empty, so envelopes
+// without one omit that field, and older versions decode envelopes with one unchanged because
+// encoding/json ignores unknown fields.
+//
+// Alias is the alias the entry was stored for. It binds the entry to its owner, so a lookup of a
+// different alias that maps to the same keyring key (a v1.234.1 alias such as "_admin" shares
+// "atmos_acme__admin" with the current key of "admin") never returns it. Envelopes written
+// before the field existed have no alias and are accepted for any alias that reaches their key.
 type credentialEnvelope struct {
-	Type string          `json:"type"`
-	Data json.RawMessage `json:"data"`
+	Type         string          `json:"type"`
+	Data         json.RawMessage `json:"data"`
+	ConfigDigest string          `json:"config_digest,omitempty"`
+	Alias        string          `json:"alias,omitempty"`
 }
 
 // NewCredentialStore creates a new credential store instance based on configuration.
@@ -109,6 +157,8 @@ func NewCredentialStoreWithConfig(authConfig *schema.AuthConfig) types.Credentia
 		}
 	}
 
+	// Keep an explicitly configured realm from being mistaken for the auto realm.
+	setExplicitRealm(store, authConfig)
 	return store
 }
 

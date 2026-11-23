@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -125,8 +126,16 @@ func hasCredentialFiles(awsDir string) bool {
 // authentication. This runs in the post-success path of the Authenticate flow,
 // after authenticateChain and PostAuthenticate have completed, so legacy
 // credentials remain as a fallback if authentication fails.
+//
+// The pre-realm key "atmos_<alias>" of an alias containing "_" is also a realm-scoped
+// key of another realm (alias "prod_admin" is realm "prod" + identity "admin"), so such
+// an entry is left in place rather than risk deleting another realm's credentials.
 func (m *manager) deleteLegacyKeyringEntry(alias string) {
 	if m.realm.Value == "" || m.credentialStore == nil {
+		return
+	}
+	if !credentials.EmptyRealmKeyIsUnambiguous(alias) {
+		log.Debug("Keeping legacy keyring entry whose key another realm can share", "alias", alias)
 		return
 	}
 	if err := m.credentialStore.Delete(alias, ""); err != nil {

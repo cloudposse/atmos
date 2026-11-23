@@ -18,6 +18,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/broker"
 	"github.com/cloudposse/atmos/pkg/auth/integrations"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -203,7 +204,10 @@ func (g *GitHubSTSIntegration) Kind() string { return integrations.KindGitHubSTS
 const tokenExpirySkew = 60 * time.Second
 
 // hasFreshState reports whether the persisted state holds tokens that are all still valid
-// (every token present, parseable, and expiring more than tokenExpirySkew in the future).
+// (every token present, parseable, and expiring more than tokenExpirySkew plus the broker
+// refresh interval in the future). The refresh interval is included because a broker run is
+// reused for that long: a token reused with less lifetime left would expire before the next
+// scheduled run and the expired value would stay exported until then.
 // In file mode the on-disk git.config must also exist (Environment emits include.path to it).
 // When true, Execute reuses the existing tokens instead of minting again.
 func (g *GitHubSTSIntegration) hasFreshState() bool {
@@ -214,7 +218,7 @@ func (g *GitHubSTSIntegration) hasFreshState() bool {
 		return false
 	}
 
-	cutoff := time.Now().Add(tokenExpirySkew)
+	cutoff := time.Now().Add(tokenExpirySkew + broker.RefreshInterval())
 	for _, t := range state.Tokens {
 		if t.Token == "" {
 			return false
