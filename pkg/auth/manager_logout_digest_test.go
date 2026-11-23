@@ -52,9 +52,11 @@ func TestManager_Logout_DeletesConfigDigestRecord(t *testing.T) {
 type failingDigestDeleteStore struct {
 	credentials.ConfigDigestStore
 	types.CredentialStore
+	deleteCalls *int
 }
 
-func (failingDigestDeleteStore) DeleteExternalConfigDigest(string, string) error {
+func (s failingDigestDeleteStore) DeleteExternalConfigDigest(string, string) error {
+	*s.deleteCalls++
 	return assert.AnError
 }
 
@@ -63,9 +65,11 @@ func (failingDigestDeleteStore) DeleteExternalConfigDigest(string, string) error
 func TestManager_Logout_DigestDeleteFailureIsNonFatal(t *testing.T) {
 	f := newLogoutKeyringFixture(t, "dev-user")
 	digests := f.seedDigest(t, "dev-user")
-	f.m.credentialStore = failingDigestDeleteStore{ConfigDigestStore: digests, CredentialStore: f.store}
+	deleteCalls := 0
+	f.m.credentialStore = failingDigestDeleteStore{ConfigDigestStore: digests, CredentialStore: f.store, deleteCalls: &deleteCalls}
 
 	require.NoError(t, f.m.Logout(context.Background(), "dev-user", false))
+	require.NotZero(t, deleteCalls, "logout must attempt the digest record delete")
 }
 
 // TestManager_LogoutAll_DeletesConfigDigestRecords covers `atmos auth logout --all`.

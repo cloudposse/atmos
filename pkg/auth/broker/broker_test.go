@@ -199,3 +199,29 @@ func TestEnsureCredentials_ConcurrentProvisionOnce(t *testing.T) {
 	}
 	require.NoError(t, os.Unsetenv(key))
 }
+
+// GIT_CONFIG_COUNT is published after the indexed pairs it counts, so a concurrent subprocess
+// never sees a count larger than the number of complete pairs.
+func TestExportOrder_GitConfigCountLast(t *testing.T) {
+	env := map[string]string{
+		"GIT_CONFIG_COUNT":   "2",
+		"GIT_CONFIG_KEY_0":   "k0",
+		"GIT_CONFIG_VALUE_0": "v0",
+		"GIT_CONFIG_KEY_1":   "k1",
+		"GIT_CONFIG_VALUE_1": "v1",
+		"GH_TOKEN":           "t",
+	}
+
+	order := exportOrder(env)
+
+	require.Len(t, order, len(env))
+	assert.Equal(t, "GIT_CONFIG_COUNT", order[len(order)-1])
+	assert.NotContains(t, order[:len(order)-1], "GIT_CONFIG_COUNT")
+	assert.Equal(t, []string{"GH_TOKEN", "GIT_CONFIG_KEY_0", "GIT_CONFIG_KEY_1", "GIT_CONFIG_VALUE_0", "GIT_CONFIG_VALUE_1", "GIT_CONFIG_COUNT"}, order)
+	// Without a count nothing is appended.
+	assert.Equal(t, []string{"A"}, exportOrder(map[string]string{"A": "1"}))
+}
+
+func TestRefreshInterval_MatchesSchedule(t *testing.T) {
+	assert.Equal(t, refreshInterval, RefreshInterval())
+}

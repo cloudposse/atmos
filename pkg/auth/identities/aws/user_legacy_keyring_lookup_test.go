@@ -19,10 +19,12 @@ var errLegacyLookupFailed = errors.New("keyring backend unavailable")
 // The embedded CredentialStore is never called by the code under test.
 type failingLegacyLookupStore struct {
 	types.CredentialStore
+	lookupCalls int
 	adoptCalled bool
 }
 
 func (s *failingLegacyLookupStore) FindAmbiguousLegacyRealmEntry(string, string) (*atmosCredentials.AmbiguousLegacyRealmEntry, error) {
+	s.lookupCalls++
 	return nil, errLegacyLookupFailed
 }
 
@@ -46,5 +48,6 @@ func TestAdoptAmbiguousLegacyKeyringEntry_LookupFailureKeepsNotFoundHandling(t *
 
 	require.NoError(t, err)
 	assert.Nil(t, creds)
+	assert.Equal(t, 1, store.lookupCalls, "the lookup must run exactly once, otherwise the test proves nothing")
 	assert.False(t, store.adoptCalled, "a failed lookup must never adopt an entry")
 }

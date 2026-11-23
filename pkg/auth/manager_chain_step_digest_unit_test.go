@@ -159,6 +159,49 @@ func TestChainStepFileCache_RecordMustMatchCredentials(t *testing.T) {
 	assert.Equal(t, int32(1), next.mid.callCount.Load(), "files the digest record does not describe must not be reused")
 }
 
+// TestChainStepFileCache_RecordBindsCredentialID verifies the record also names the credential
+// set: files for a different principal with the same expiration are not reused.
+func TestChainStepFileCache_RecordBindsCredentialID(t *testing.T) {
+	store := newStepDigestStore(t)
+	files := &fakeFiles{}
+
+	login := newStepDigestProcess(t, store, prodConfig, fileSessionCreds("mid"), files)
+	login.authenticate(t, "mid")
+	recorded := files.creds.(*types.AWSCredentials)
+
+	// Control: the files the record describes are reused.
+	same := newStepDigestProcess(t, store, prodConfig, fileSessionCreds("mid"), files)
+	same.authenticate(t, "target")
+	assert.Equal(t, int32(0), same.mid.callCount.Load(), "the described files are reused")
+
+	// Another principal's files with an identical expiration.
+	files.creds = &types.AWSCredentials{
+		AccessKeyID: "mid-other-principal", SecretAccessKey: "secret", SessionToken: "session", Expiration: recorded.Expiration,
+	}
+	next := newStepDigestProcess(t, store, prodConfig, fileSessionCreds("mid"), files)
+	next.authenticate(t, "target")
+	assert.Equal(t, int32(1), next.mid.callCount.Load(), "files of another credential set must not be reused")
+}
+
+// TestChainStepFileCache_IntermediateLoginWritesRecord verifies an intermediate step whose
+// credentials live outside the keyring gets its digest record from the login that traversed it,
+// not only from a direct login of that identity.
+func TestChainStepFileCache_IntermediateLoginWritesRecord(t *testing.T) {
+	store := newStepDigestStore(t)
+	digestStore, ok := store.(credentials.ConfigDigestStore)
+	require.True(t, ok)
+
+	p := newStepDigestProcess(t, store, prodConfig, fileSessionCreds("mid"), &fakeFiles{})
+	p.authenticate(t, "target")
+
+	record, err := digestStore.RetrieveExternalConfigDigest("mid", "acme")
+	require.NoError(t, err)
+	assert.Equal(t, "mid", record.CredentialID)
+	want, ok := p.m.namedStepDigest("mid")
+	require.True(t, ok)
+	assert.Equal(t, want, record.Digest)
+}
+
 // unsupportedDigestStore is a digest-capable store that cannot persist digests, like the noop
 // keyring (which persists nothing).
 type unsupportedDigestStore struct {

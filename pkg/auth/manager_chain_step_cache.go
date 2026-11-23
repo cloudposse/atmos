@@ -19,8 +19,10 @@ import (
 //     be overridden by stack or component auth. The step is re-authenticated once and stored
 //     with a digest, so an upgrade costs at most one extra authentication of each such step.
 //   - Credentials an identity keeps in its own files are reused only when the digest record
-//     written after that identity's last login matches both the current configuration and the
-//     credentials' expiration. Files without a record are treated the same way as above.
+//     written after that identity's last login matches the current configuration and the
+//     credentials' expiration and non-secret credential ID. Files without a record are treated
+//     the same way as above. The record is written after the identity's own login (the target of
+//     a login) and after each intermediate step whose credentials are persisted outside the keyring.
 //   - A store that cannot persist digests (a custom store, or the noop keyring, which persists
 //     nothing) keeps the previous name-only behavior, because no digest could ever match.
 
@@ -71,7 +73,7 @@ func (m *manager) recordExternalStepDigest(name string, creds types.ICredentials
 	if !ok {
 		return
 	}
-	record := credentials.ExternalConfigDigest{Digest: digest, Expiration: expirationStamp(creds)}
+	record := credentials.ExternalConfigDigest{Digest: digest, Expiration: expirationStamp(creds), CredentialID: credentialID(creds)}
 	if err := store.StoreExternalConfigDigest(name, m.realm.Value, record); err != nil {
 		log.Debug("Failed to record configuration digest of identity credentials", logKeyIdentity, name, "error", err)
 	}
@@ -111,7 +113,7 @@ func (m *manager) verifyChainStepDigest(chain []string, index int, loaded loaded
 	if loaded.source == credentialSourceIdentityStorage {
 		reason = "identity credential files"
 		record, err := store.RetrieveExternalConfigDigest(name, m.realm.Value)
-		if err != nil || record.Expiration != expirationStamp(loaded.creds) {
+		if err != nil || record.Expiration != expirationStamp(loaded.creds) || record.CredentialID != credentialID(loaded.creds) {
 			got = ""
 		} else {
 			got = record.Digest
@@ -137,4 +139,14 @@ func expirationStamp(creds types.ICredentials) string {
 		return ""
 	}
 	return expiration.UTC().Truncate(time.Second).Format(time.RFC3339)
+}
+
+// credentialID returns the non-secret identifier of a credential set for an ExternalConfigDigest
+// record: the AWS access key ID, which names the principal or session and is not a secret. It is
+// empty for credentials without one.
+func credentialID(creds types.ICredentials) string {
+	if awsCreds, ok := creds.(*types.AWSCredentials); ok {
+		return awsCreds.AccessKeyID
+	}
+	return ""
 }

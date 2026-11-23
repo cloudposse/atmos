@@ -30,10 +30,20 @@ func legacyCleanupCollisionStore(t *testing.T) types.CredentialStore {
 		"type": "oidc",
 		"data": map[string]any{"token": "prod-legacy"},
 	}))
-	got, err := store.Retrieve("reader", "prod")
-	require.NoError(t, err, "the previous-layout entry must be readable before cleanup")
-	require.Equal(t, "prod-legacy", got.(*types.OIDCCredentials).Token)
+	// Check the fixture with a raw-key read: Retrieve would migrate and delete the legacy key.
+	assertLegacyReaderKeyExists(t, store)
 	return store
+}
+
+// assertLegacyReaderKeyExists verifies the previous-layout key "atmos_prod_reader" is still stored.
+func assertLegacyReaderKeyExists(t *testing.T, store types.CredentialStore) {
+	t.Helper()
+	raw, ok := store.(interface {
+		GetAny(key string, dest interface{}) error
+	})
+	require.True(t, ok, "the memory store must expose raw-key reads")
+	var entry map[string]any
+	require.NoError(t, raw.GetAny("atmos_prod_reader", &entry), "the previous-layout key must still exist")
 }
 
 // TestLegacyKeyringCleanup_NeverDeletesAnotherRealm reproduces #3720 finding 3.4 for the
@@ -53,6 +63,7 @@ func TestLegacyKeyringCleanup_NeverDeletesAnotherRealm(t *testing.T) {
 			cleanup(m, "prod_reader")
 			cleanup(m, "prod__admin")
 
+			assertLegacyReaderKeyExists(t, store)
 			got, err := store.Retrieve("reader", "prod")
 			require.NoError(t, err, "realm prod's previous-layout entry must survive realm acme's cleanup")
 			assert.Equal(t, "prod-legacy", got.(*types.OIDCCredentials).Token)

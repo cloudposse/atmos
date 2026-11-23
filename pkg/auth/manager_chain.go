@@ -584,6 +584,13 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 			}
 		}
 
+		// The target records its digest after PostAuthenticate (authenticateResolvedIdentity). An
+		// intermediate step's own login does not run PostAuthenticate, so record it here, or its
+		// persisted credentials would never match a digest and could not be reused.
+		if i < len(m.chain)-1 {
+			m.recordExternalStepDigest(identityStep, currentCreds)
+		}
+
 		log.Debug("Chained identity", "from", m.getChainStepName(i-1), "to", identityStep)
 	}
 

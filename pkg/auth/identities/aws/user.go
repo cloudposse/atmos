@@ -234,6 +234,11 @@ func (i *userIdentity) shouldFallBackToWebflow(err error) bool {
 	if errors.Is(err, errUtils.ErrAwsUserKeyringReadFailed) {
 		return false
 	}
+	// The user cancelled a prompt (for example the legacy keyring adoption confirmation); do not
+	// start a second, browser-based authentication flow after they backed out.
+	if errors.Is(err, errUtils.ErrUserAborted) {
+		return false
+	}
 	return true
 }
 
@@ -283,7 +288,9 @@ func (i *userIdentity) resolveCredentialsFromKeyring(ctx context.Context, yamlMf
 			return nil, adoptErr
 		}
 		if adopted != nil {
-			return i.mergeCredentialsWithYAML(adopted, yamlMfaArn), nil
+			// Continue through the validation below: the read-back may return newer session
+			// credentials that another process stored while the confirmation was open.
+			keystoreCreds, keystoreErr = adopted, nil
 		}
 	}
 

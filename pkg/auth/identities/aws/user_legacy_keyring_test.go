@@ -339,6 +339,35 @@ func TestUserIdentity_LegacyKeyring_PromptFailures(t *testing.T) {
 	})
 }
 
+// An aborted adoption prompt must not start the browser webflow, and a negative path (a plain
+// not-configured error) keeps the webflow fallback.
+func TestUserIdentity_ShouldFallBackToWebflow_AbortedPrompt(t *testing.T) {
+	f := newLegacyKeyringFixture(t, true)
+
+	aborted := fmt.Errorf("%w: confirming the older keyring entry: %w", errUtils.ErrAwsUserNotConfigured, errUtils.ErrUserAborted)
+	assert.False(t, f.identity.shouldFallBackToWebflow(aborted))
+	assert.True(t, f.identity.shouldFallBackToWebflow(errUtils.ErrAwsUserNotConfigured))
+}
+
+// Credentials that appear under the current key while the confirmation is open go through the
+// session-token validation instead of being used as long-lived keys.
+func TestUserIdentity_LegacyKeyring_AdoptedSessionCredentialsAreValidated(t *testing.T) {
+	f := newLegacyKeyringFixture(t, false)
+	f.seedLegacy(t, legacyLongLivedKeys())
+	f.prompter.EXPECT().Available().Return(true)
+	f.prompter.EXPECT().ConfirmAdoption(gomock.Any()).DoAndReturn(func(*legacyKeyringAdoption) (bool, error) {
+		// Another process stores session credentials under the current key meanwhile.
+		require.NoError(t, f.store.Store(legacyTestIdentity,
+			&types.AWSCredentials{AccessKeyID: "ASIAOTHER", SecretAccessKey: "s", SessionToken: "token"}, legacyTestRealm))
+		return true, nil
+	})
+
+	_, err := f.identity.Authenticate(context.Background(), nil)
+
+	require.ErrorIs(t, err, errUtils.ErrAwsUserNotConfigured)
+	assert.Empty(t, f.sts.signedWith(), "session credentials must not be used as long-lived keys")
+}
+
 func TestLegacyKeyringPromptText(t *testing.T) {
 	req := &legacyKeyringAdoption{
 		Identity:    legacyTestIdentity,

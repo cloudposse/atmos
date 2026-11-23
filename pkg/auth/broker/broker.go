@@ -17,6 +17,7 @@ package broker
 import (
 	"context"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -71,6 +72,14 @@ var (
 	// token's brief post-creation auth window (see HasBrokeredCredentials).
 	brokeredCredentials bool
 )
+
+// RefreshInterval returns how long a fully successful broker run is reused before the brokers
+// run again. A broker that reuses persisted short-lived tokens must only reuse tokens that stay
+// valid for at least this long, otherwise a token can expire between two scheduled runs and
+// the expired value stays exported until the next run.
+func RefreshInterval() time.Duration {
+	return refreshInterval
+}
 
 // Register adds a credential broker to the registry. It is safe to call from init().
 func Register(p Provider) {
@@ -155,19 +164,46 @@ func runEnabledBrokers(ctx context.Context, atmosConfig *schema.AtmosConfigurati
 		// Mark brokered only after at least one variable is actually exported: if every
 		// os.Setenv failed there are no usable credentials in the process env, and enabling
 		// downstream auth-retry would be wrong.
-		exported := false
-		for key, value := range env {
-			if err := os.Setenv(key, value); err != nil {
-				log.Warn("Failed to export credential broker variable", "broker", p.Name(), "key", key, "error", err)
-				continue
-			}
-			exported = true
-		}
-		if exported {
+		if exportEnv(p.Name(), env) {
 			markBrokered()
 		}
 	}
 	return ok
+}
+
+// gitConfigCountKey is the variable that tells git how many GIT_CONFIG_KEY_n/VALUE_n pairs to read.
+const gitConfigCountKey = "GIT_CONFIG_COUNT"
+
+// exportOrder returns the keys of env in export order: every variable first and
+// GIT_CONFIG_COUNT last. Git treats a missing KEY_n/VALUE_n below the count as an error, so a
+// subprocess that starts mid-export must never see a count larger than the number of complete
+// pairs already set.
+func exportOrder(env map[string]string) []string {
+	keys := make([]string, 0, len(env))
+	for key := range env {
+		if key != gitConfigCountKey {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	if _, found := env[gitConfigCountKey]; found {
+		keys = append(keys, gitConfigCountKey)
+	}
+	return keys
+}
+
+// exportEnv exports env via os.Setenv in exportOrder and reports whether at least one variable
+// was exported.
+func exportEnv(name string, env map[string]string) bool {
+	exported := false
+	for _, key := range exportOrder(env) {
+		if err := os.Setenv(key, env[key]); err != nil {
+			log.Warn("Failed to export credential broker variable", "broker", name, "key", key, "error", err)
+			continue
+		}
+		exported = true
+	}
+	return exported
 }
 
 // markBrokered records that a broker provisioned credentials this process.

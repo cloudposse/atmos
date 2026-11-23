@@ -22,14 +22,18 @@ const KeyringConfigDigestPrefix = "atmos-config-digest"
 var _ ConfigDigestStore = (*keyringCredentialStore)(nil)
 
 // ExternalConfigDigest records which effective configuration produced credentials that an
-// identity persisted outside the credential store. Expiration binds the record to that exact
-// credential set: credentials rewritten by anything else (an older Atmos, another tool) carry
-// a different expiration and no longer match. Neither field is secret.
+// identity persisted outside the credential store. Expiration and CredentialID bind the record to
+// that exact credential set: credentials rewritten by anything else (an older Atmos, another
+// tool, another principal) carry a different expiration or access key ID and no longer match.
+// No field is secret.
 type ExternalConfigDigest struct {
 	// Digest is the SHA-256 of the chain step's non-secret effective configuration.
 	Digest string `json:"digest"`
 	// Expiration is the credentials' expiration in RFC 3339 UTC, or empty when they have none.
 	Expiration string `json:"expiration,omitempty"`
+	// CredentialID is the non-secret identifier of the credential set (the AWS access key ID of
+	// session credentials), or empty for credentials without one.
+	CredentialID string `json:"credential_id,omitempty"`
 }
 
 // ConfigDigestStore is implemented by credential stores that can persist a digest of the
