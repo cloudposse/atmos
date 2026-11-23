@@ -87,3 +87,15 @@ func TestAKSKubeUserNames_LegacyRealms(t *testing.T) {
 	}, names)
 	assert.Equal(t, names, kube.OwnedUserNames(written))
 }
+
+// TestAKSKubeUserName_SubscriptionCaseInsensitive guards that the writer's
+// subscription (configured or from credentials) and the one cleanup parses from
+// the ARM resource ID produce the same kubeconfig user even when they differ in case.
+func TestAKSKubeUserName_SubscriptionCaseInsensitive(t *testing.T) {
+	const upper, lower = "ABCDEF12-0000-0000-0000-000000000001", "abcdef12-0000-0000-0000-000000000001"
+
+	written := BuildKubeClusterInfo(&AKSClusterInfo{Name: "c", ResourceGroup: "rg", SubscriptionID: upper}, "dev")
+
+	assert.Equal(t, AKSKubeUserName("c", "rg", lower, "dev", ""), kube.UserName(written))
+	assert.Equal(t, AKSKubeUserName("c", "rg", upper, "dev", ""), AKSKubeUserName("c", "rg", lower, "dev", ""))
+}

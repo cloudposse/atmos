@@ -32,7 +32,9 @@ func resetProcessIntegrationCache() {
 // integrationTargetKey returns a canonical cache key for an integration.
 // For ECR integrations: "aws/ecr:<account_id>:<region>" — two configs pointing at the same
 // registry (e.g. a global + component-level duplicate) collapse to a single login.
-// For EKS integrations: "aws/eks:<cluster_name>:<region>" — same dedup logic for kubeconfig.
+// For EKS and GKE integrations: the cluster plus everything that shapes the kubeconfig entries
+// written (identity, alias, kubeconfig settings), so two identities for one cluster each write
+// their own kubeconfig user and only exact duplicates collapse.
 // All other integration types fall back to the config name to preserve existing behaviour.
 func integrationTargetKey(name string, cfg schema.Integration) string {
 	switch cfg.Kind {
@@ -45,7 +47,7 @@ func integrationTargetKey(name string, cfg schema.Integration) string {
 		return integrations.KindAWSECRPublic
 	case integrations.KindAWSEKS:
 		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
-			return "aws/eks:" + cfg.Spec.Cluster.Name + ":" + cfg.Spec.Cluster.Region
+			return eksIntegrationTargetKey(cfg)
 		}
 	case integrations.KindGCPGKE:
 		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
@@ -53,6 +55,27 @@ func integrationTargetKey(name string, cfg schema.Integration) string {
 		}
 	}
 	return name
+}
+
+// eksIntegrationTargetKey builds a cache key that includes the identity and
+// kubeconfig output behavior, because the EKS kubeconfig user name depends on
+// the identity.
+func eksIntegrationTargetKey(cfg schema.Integration) string {
+	cluster := cfg.Spec.Cluster
+	values := url.Values{
+		"alias":  {cluster.Alias},
+		"name":   {cluster.Name},
+		"region": {cluster.Region},
+	}
+	if cfg.Via != nil {
+		values.Set("identity", cfg.Via.Identity)
+	}
+	if cluster.Kubeconfig != nil {
+		values.Set("mode", cluster.Kubeconfig.Mode)
+		values.Set("path", cluster.Kubeconfig.Path)
+		values.Set("update", cluster.Kubeconfig.Update)
+	}
+	return integrations.KindAWSEKS + ":" + values.Encode()
 }
 
 // gkeIntegrationTargetKey builds a cache key that includes GKE output behavior.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"strings"
 	"time"
 
 	armcontainerservice "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v6"
@@ -262,7 +263,7 @@ func BuildKubeClusterInfo(info *AKSClusterInfo, identityName string) *kube.Clust
 		ID:                       info.ID,
 		Region:                   info.ResourceGroup,
 		UserPrefix:               aksUserPrefix,
-		AccountID:                info.SubscriptionID,
+		AccountID:                strings.ToLower(info.SubscriptionID), // Matches AKSKubeUserName.
 		Identity:                 identityName,
 		LegacyUserNames:          []string{LegacyAKSKubeUserName(info.Name, info.ResourceGroup, info.SubscriptionID)},
 		ExecArgs:                 execArgs,
@@ -279,11 +280,14 @@ func BuildKubeClusterInfo(info *AKSClusterInfo, identityName string) *kube.Clust
 func AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, realm string) string {
 	defer perf.Track(nil, "azure.AKSKubeUserName")()
 
+	// Subscription IDs are case-insensitive GUIDs, and the writer's value (the
+	// configured or credential subscription) can differ in case from the one
+	// in the ARM resource ID that cleanup parses, so both are lowercased here.
 	return kube.UserName(&kube.ClusterInfo{
 		Name:       clusterName,
 		Region:     resourceGroup,
 		UserPrefix: aksUserPrefix,
-		AccountID:  subscriptionID,
+		AccountID:  strings.ToLower(subscriptionID),
 		Identity:   identityName,
 		Realm:      realm,
 	})

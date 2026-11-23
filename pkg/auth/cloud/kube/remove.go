@@ -35,7 +35,12 @@ func (m *KubeconfigManager) RemoveClusterConfig(clusterARN, contextName, userNam
 // with its cluster and user. Pass ContextNames as contextNames so a context
 // written under the older, unprefixed default name is cleaned up too.
 // Idempotent: returns nil if entries do not exist. Empty names are ignored.
-func (m *KubeconfigManager) RemoveOwnedClusterConfig(clusterID string, contextNames, userNames []string) error {
+//
+// A context is removed only when it also points at clusterID, so a same-named
+// context of another cluster that shares a user name is never removed. With
+// WithIdentity, a context or user whose exec plugin authenticates as another
+// identity is left alone too.
+func (m *KubeconfigManager) RemoveOwnedClusterConfig(clusterID string, contextNames, userNames []string, opts ...RemoveOption) error {
 	defer perf.Track(nil, "kube.KubeconfigManager.RemoveOwnedClusterConfig")()
 
 	// If the file doesn't exist, nothing to clean up.
@@ -48,22 +53,47 @@ func (m *KubeconfigManager) RemoveOwnedClusterConfig(clusterID string, contextNa
 		return fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, err)
 	}
 
-	removeOwnedEntries(existing, clusterID, contextNames, userNames)
+	var cfg removeOptions
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	removeOwnedEntries(existing, clusterID, contextNames, userNames, cfg.identity)
 
 	// If the config is now empty, remove the file.
 	if len(existing.Clusters) == 0 && len(existing.Contexts) == 0 && len(existing.AuthInfos) == 0 {
-		return os.Remove(m.path)
+		if err := os.Remove(m.path); err != nil {
+			return fmt.Errorf("%w: %w", errUtils.ErrKubeconfigWrite, err)
+		}
+		return nil
 	}
 
-	return clientcmd.WriteToFile(*existing, m.path)
+	if err := clientcmd.WriteToFile(*existing, m.path); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrKubeconfigWrite, err)
+	}
+	return nil
+}
+
+// RemoveOption configures RemoveOwnedClusterConfig.
+type RemoveOption func(*removeOptions)
+
+type removeOptions struct {
+	identity string
+}
+
+// WithIdentity restricts removal to entries written for identity or for no
+// identity: a context or user whose exec plugin authenticates as a different
+// identity (its ATMOS_IDENTITY env value) is left alone. Entries that name no
+// identity, such as those older versions wrote, still count as owned.
+func WithIdentity(identity string) RemoveOption {
+	return func(o *removeOptions) { o.identity = identity }
 }
 
 // removeOwnedEntries removes the owned contexts from config, then the cluster
 // and users that no remaining context references.
-func removeOwnedEntries(config *clientcmdapi.Config, clusterID string, contextNames, userNames []string) {
+func removeOwnedEntries(config *clientcmdapi.Config, clusterID string, contextNames, userNames []string, identity string) {
 	// Remove the owned contexts first, so references are counted without them.
 	for _, contextName := range contextNames {
-		if !contextOwnedBy(config, contextName, userNames) {
+		if !contextOwnedBy(config, contextName, userNames) || !contextTargets(config, contextName, clusterID) || !userIdentityMatches(config, config.Contexts[contextName].AuthInfo, identity) {
 			continue
 		}
 		delete(config.Contexts, contextName)
@@ -76,7 +106,7 @@ func removeOwnedEntries(config *clientcmdapi.Config, clusterID string, contextNa
 		delete(config.Clusters, clusterID)
 	}
 	for _, name := range userNames {
-		if name != "" && !userReferenced(config, name) {
+		if name != "" && !userReferenced(config, name) && userIdentityMatches(config, name, identity) {
 			delete(config.AuthInfos, name)
 		}
 	}
@@ -124,4 +154,29 @@ func userReferenced(config *clientcmdapi.Config, userName string) bool {
 		}
 	}
 	return false
+}
+
+// contextTargets reports whether the named context points at clusterID.
+func contextTargets(config *clientcmdapi.Config, contextName, clusterID string) bool {
+	kubeContext := config.Contexts[contextName]
+	return kubeContext != nil && kubeContext.Cluster == clusterID
+}
+
+// userIdentityMatches reports whether the user may be removed for identity:
+// identity is empty (no restriction), or the user's exec plugin names no
+// identity or the same one.
+func userIdentityMatches(config *clientcmdapi.Config, userName, identity string) bool {
+	if identity == "" {
+		return true
+	}
+	user := config.AuthInfos[userName]
+	if user == nil || user.Exec == nil {
+		return true
+	}
+	for _, env := range user.Exec.Env {
+		if env.Name == identityExecEnv {
+			return env.Value == "" || env.Value == identity
+		}
+	}
+	return true
 }

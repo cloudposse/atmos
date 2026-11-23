@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -62,16 +64,23 @@ func checkChdirTarget(absPath string, fromEnv bool) (skip bool, err error) {
 
 // isKubeExecTokenInvocation reports whether args (os.Args without the program
 // name) start with one of kubeExecTokenCommands, ignoring flags before and
-// between the command words. Parsing stops at "--". A flag whose value is a
-// separate argument is not recognized, so such an invocation is treated as
-// another command, which keeps the strict behavior.
+// between the command words. A global flag registered on the root command that
+// takes a value (no NoOptDefVal) in a separate argument, such as
+// "--logs-level Debug", skips that value too. Parsing stops at "--". A flag
+// that is not registered is skipped alone, so an invocation that relies on
+// such a flag's separate value is treated as another command, which keeps the
+// strict behavior.
 func isKubeExecTokenInvocation(args []string) bool {
 	words := make([]string, 0, len(kubeExecTokenCommands[0]))
-	for _, arg := range args {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
 		if arg == "--" {
 			break
 		}
 		if len(arg) > 0 && arg[0] == '-' {
+			if flagTakesSeparateValue(arg) {
+				i++ // Skip the flag's value.
+			}
 			continue
 		}
 		words = append(words, arg)
@@ -82,4 +91,27 @@ func isKubeExecTokenInvocation(args []string) bool {
 	return slices.ContainsFunc(kubeExecTokenCommands, func(command []string) bool {
 		return slices.Equal(command, words)
 	})
+}
+
+// flagTakesSeparateValue reports whether arg is a global flag that requires
+// its value in the next argument: it has no inline value ("--name=value"), is
+// not a boolean, and has no NoOptDefVal. It reads the global flag registry
+// rather than RootCmd, which cannot be referenced here without an
+// initialization cycle (RootCmd -> processChdirFlag -> checkChdirTarget).
+func flagTakesSeparateValue(arg string) bool {
+	if strings.Contains(arg, "=") {
+		return false
+	}
+	name := strings.TrimLeft(arg, "-")
+	isShorthand := !strings.HasPrefix(arg, "--") && len(name) == 1
+	if !strings.HasPrefix(arg, "--") && !isShorthand {
+		return false
+	}
+	for _, flag := range flags.GlobalFlagsRegistry().All() {
+		if (isShorthand && flag.GetShorthand() == name) || (!isShorthand && flag.GetName() == name) {
+			_, isBool := flag.(*flags.BoolFlag)
+			return !isBool && flag.GetNoOptDefVal() == ""
+		}
+	}
+	return false
 }

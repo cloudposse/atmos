@@ -240,7 +240,19 @@ func TestIntegrationTargetKey(t *testing.T) {
 					Cluster: &schema.Cluster{Name: "prod-cluster", Region: "us-west-2"},
 				},
 			},
-			want: "aws/eks:prod-cluster:us-west-2",
+			want: "aws/eks:alias=&name=prod-cluster&region=us-west-2",
+		},
+		{
+			name:    "EKS key includes identity",
+			intName: "my-eks",
+			integration: schema.Integration{
+				Kind: "aws/eks",
+				Via:  &schema.IntegrationVia{Identity: "admin"},
+				Spec: &schema.IntegrationSpec{
+					Cluster: &schema.Cluster{Name: "prod-cluster", Region: "us-west-2"},
+				},
+			},
+			want: "aws/eks:alias=&identity=admin&name=prod-cluster&region=us-west-2",
 		},
 		{
 			name:    "EKS without spec falls back to name",

@@ -201,7 +201,7 @@ func (e *EKSIntegration) Cleanup(_ context.Context) error {
 	// user is kept while another context still references it.
 	userNames := e.kubeUserNames(clusterARN)
 
-	if err := mgr.RemoveOwnedClusterConfig(clusterARN, contextNames, userNames); err != nil {
+	if err := mgr.RemoveOwnedClusterConfig(clusterARN, contextNames, userNames, kube.WithIdentity(e.identity)); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 

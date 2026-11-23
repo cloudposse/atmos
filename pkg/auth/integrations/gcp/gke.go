@@ -180,7 +180,7 @@ func (g *GKEIntegration) Cleanup(_ context.Context) error {
 	// it points at one of these users, and a user is kept while another
 	// context still references it.
 	userNames := gcpCloud.GKEKubeUserNames(g.cluster.ProjectID, g.cluster.Location, g.cluster.Name, g.identity, kube.RealmScope{Realm: g.realm, LegacyRealms: g.legacyRealms})
-	if err := mgr.RemoveOwnedClusterConfig(clusterID, contextNames, userNames); err != nil {
+	if err := mgr.RemoveOwnedClusterConfig(clusterID, contextNames, userNames, kube.WithIdentity(g.identity)); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
 	gkeExpectedServers.Delete(g.expectedServerKey(mgr.GetPath()))

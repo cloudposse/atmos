@@ -159,6 +159,11 @@ func TestUserName(t *testing.T) {
 			info: &ClusterInfo{UserPrefix: "eks", Name: "prod", Region: "us-east-2", Identity: "prod-admin"},
 			want: "atmos-eks-prod-us-east-2-prod-admin",
 		},
+		{
+			name: "realm and identity scoped",
+			info: &ClusterInfo{Realm: "acme", UserPrefix: "eks", Name: "prod", Region: "us-east-2", AccountID: "111111111111", Identity: "prod-admin"},
+			want: "atmos-acme-eks-prod-us-east-2-111111111111-prod-admin",
+		},
 	}
 
 	for _, tt := range tests {

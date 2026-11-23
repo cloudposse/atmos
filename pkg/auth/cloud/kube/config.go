@@ -136,7 +136,7 @@ func (m *KubeconfigManager) WriteClusterConfig(info *ClusterInfo, alias, updateM
 		return m.writeIfChanged(newConfig)
 
 	case "error":
-		if err := m.checkErrorModeCollisions(newConfig); err != nil {
+		if err := m.checkErrorModeCollisions(newConfig, migration); err != nil {
 			return false, err
 		}
 		return m.mergeIfChanged(newConfig, migration)

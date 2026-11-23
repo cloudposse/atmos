@@ -156,3 +156,18 @@ func userReferencedOutside(config *clientcmdapi.Config, userName, contextName st
 	}
 	return false
 }
+
+// ownsLegacyContext reports whether current is this entry's own context that
+// still points at an older user: it targets the same cluster and namespace as
+// next, and its user is one of the entry's owned users other than the current
+// one. Writing next replaces it, so it is a migration, not a conflict. A nil
+// migration owns nothing.
+func (u *contextMigration) ownsLegacyContext(current, next *clientcmdapi.Context) bool {
+	if u == nil || current == nil || next == nil {
+		return false
+	}
+	return current.Cluster == next.Cluster &&
+		current.Namespace == next.Namespace &&
+		current.AuthInfo != u.currentUser &&
+		slices.Contains(u.ownedUsers, current.AuthInfo)
+}

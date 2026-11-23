@@ -242,7 +242,7 @@ func (a *AKSIntegration) Cleanup(_ context.Context) error {
 	// context still references it.
 	userNames := azureCloud.AKSKubeUserNames(a.cluster.Name, a.cluster.ResourceGroup, subscriptionID, a.identity, kube.RealmScope{Realm: a.realm, LegacyRealms: a.legacyRealms})
 
-	if err := mgr.RemoveOwnedClusterConfig(clusterID, contextNames, userNames); err != nil {
+	if err := mgr.RemoveOwnedClusterConfig(clusterID, contextNames, userNames, kube.WithIdentity(a.identity)); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
 	}
 

@@ -15,14 +15,20 @@ import (
 // same repository, so "error" update mode ignores it when comparing entries.
 const chdirExecEnv = "ATMOS_CHDIR"
 
+// identityExecEnv is the exec-plugin env var that carries the Atmos identity
+// the entry authenticates as.
+const identityExecEnv = "ATMOS_IDENTITY"
+
 // checkErrorModeCollisions checks the on-disk kubeconfig (if any) for
 // cluster, context and user entries that newConfig would overwrite with
 // different content, used by WriteClusterConfig in "error" update mode before
 // merging. An existing entry that already equals the new one is not a
 // collision, so re-running an integration is idempotent; for users, only the
-// ATMOS_CHDIR exec env value is ignored. Returns nil when the file doesn't
+// ATMOS_CHDIR exec env value is ignored. A context that points at one of the
+// migration's older users is this entry's own context and is not a collision:
+// the merge repoints it at the new user and removes the older one. Returns nil when the file doesn't
 // exist, can't be loaded, or has no conflicting entries.
-func (m *KubeconfigManager) checkErrorModeCollisions(newConfig *clientcmdapi.Config) error {
+func (m *KubeconfigManager) checkErrorModeCollisions(newConfig *clientcmdapi.Config, migration *contextMigration) error {
 	if _, err := os.Stat(m.path); err != nil {
 		return nil //nolint:nilerr // No file yet means no collisions; nothing to check.
 	}
@@ -32,7 +38,7 @@ func (m *KubeconfigManager) checkErrorModeCollisions(newConfig *clientcmdapi.Con
 		return nil //nolint:nilerr // Unreadable existing file: best-effort check, fall through to merge.
 	}
 
-	if kind, name, found := findCollision(existing, newConfig); found {
+	if kind, name, found := findCollision(existing, newConfig, migration); found {
 		return m.collisionError(kind, name)
 	}
 
@@ -41,14 +47,14 @@ func (m *KubeconfigManager) checkErrorModeCollisions(newConfig *clientcmdapi.Con
 
 // findCollision returns the kind and name of the first entry in newConfig that
 // exists in existing with different content.
-func findCollision(existing, newConfig *clientcmdapi.Config) (kind, name string, found bool) {
+func findCollision(existing, newConfig *clientcmdapi.Config, migration *contextMigration) (kind, name string, found bool) {
 	for id, cluster := range newConfig.Clusters {
 		if current, exists := existing.Clusters[id]; exists && !clustersEqual(current, cluster) {
 			return "cluster", id, true
 		}
 	}
 	for id, kubeContext := range newConfig.Contexts {
-		if current, exists := existing.Contexts[id]; exists && !contextsEqual(current, kubeContext) {
+		if current, exists := existing.Contexts[id]; exists && !contextsEqual(current, kubeContext) && !migration.ownsLegacyContext(current, kubeContext) {
 			return "context", id, true
 		}
 	}

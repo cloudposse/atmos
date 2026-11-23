@@ -14,10 +14,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"k8s.io/client-go/tools/clientcmd"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -33,24 +35,42 @@ func compactOutput(s string) string {
 	return strings.Join(strings.Fields(ansiSequence.ReplaceAllString(s, "")), "")
 }
 
-// dryRunAuthManager records whether Authenticate was asked to skip the
-// identity's auto-provisioned integrations (ECR login, kubeconfig writes).
-type dryRunAuthManager struct {
-	fakeEKSAuthManager
-	skippedIntegrations bool
+// dryRunCalls records how the generated auth manager was used: whether
+// Authenticate was asked to skip the identity's auto-provisioned integrations
+// (ECR login, kubeconfig writes), and whether an integration was executed.
+type dryRunCalls struct {
 	authenticated       bool
+	skippedIntegrations bool
 	executedIntegration bool
+	gotName             string
 }
 
-func (f *dryRunAuthManager) Authenticate(ctx context.Context, name string) (*types.WhoamiInfo, error) {
-	f.authenticated = true
-	f.skippedIntegrations = auth.IntegrationsSkipped(ctx)
-	return f.fakeEKSAuthManager.Authenticate(ctx, name)
+// newDryRunAuthManager returns a generated mock auth manager that authenticates
+// as whoami and records its use. Any call without an expectation fails the test.
+func newDryRunAuthManager(t *testing.T, whoami *types.WhoamiInfo) (*types.MockAuthManager, *dryRunCalls) {
+	t.Helper()
+	calls := &dryRunCalls{}
+	mgr := types.NewMockAuthManager(gomock.NewController(t))
+	mgr.EXPECT().Authenticate(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, name string) (*types.WhoamiInfo, error) {
+			calls.authenticated = true
+			calls.skippedIntegrations = auth.IntegrationsSkipped(ctx)
+			calls.gotName = name
+			return whoami, nil
+		}).AnyTimes()
+	mgr.EXPECT().ExecuteIntegration(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, name string, _ ...types.IntegrationOption) error {
+			calls.executedIntegration = true
+			calls.gotName = name
+			return nil
+		}).AnyTimes()
+	mgr.EXPECT().GetRealm().Return(realm.RealmInfo{}).AnyTimes()
+	return mgr, calls
 }
 
-func (f *dryRunAuthManager) ExecuteIntegration(ctx context.Context, name string, opts ...types.IntegrationOption) error {
-	f.executedIntegration = true
-	return f.fakeEKSAuthManager.ExecuteIntegration(ctx, name, opts...)
+// dryRunWhoami returns static AWS credentials for the dry-run tests.
+func dryRunWhoami() *types.WhoamiInfo {
+	return &types.WhoamiInfo{Credentials: &types.AWSCredentials{AccessKeyID: "test-access-key", SecretAccessKey: "test-secret-key"}}
 }
 
 // serveDryRunEKS points the AWS SDK EKS client at an httptest server that
@@ -120,9 +140,7 @@ func TestUpdateKubeconfig_DryRunDirectWritesNothing(t *testing.T) {
 	restoreEKSSeams(t)
 	serveDryRunEKS(t)
 	initCliConfig = okEKSInitConfig
-	fake := &dryRunAuthManager{fakeEKSAuthManager: fakeEKSAuthManager{whoami: &types.WhoamiInfo{Credentials: &types.AWSCredentials{
-		AccessKeyID: "test-access-key", SecretAccessKey: "test-secret-key",
-	}}}}
+	fake, calls := newDryRunAuthManager(t, dryRunWhoami())
 	newAuthManager = func(*schema.AuthConfig, types.CredentialStore, types.Validator, *schema.ConfigAndStacksInfo, string) (types.AuthManager, error) {
 		return fake, nil
 	}
@@ -146,8 +164,8 @@ func TestUpdateKubeconfig_DryRunDirectWritesNothing(t *testing.T) {
 
 	assert.NoFileExists(t, path, "--dry-run must not write the kubeconfig")
 	assert.NoDirExists(t, filepath.Dir(path), "--dry-run must not create the kubeconfig directory")
-	assert.True(t, fake.authenticated)
-	assert.True(t, fake.skippedIntegrations, "--dry-run must not run auto-provisioned integrations such as ECR login")
+	assert.True(t, calls.authenticated)
+	assert.True(t, calls.skippedIntegrations, "--dry-run must not run auto-provisioned integrations such as ECR login")
 }
 
 // TestUpdateKubeconfig_DryRunIntegrationWritesNothing covers --integration with
@@ -169,9 +187,7 @@ func TestUpdateKubeconfig_DryRunIntegrationWritesNothing(t *testing.T) {
 			},
 		}}}, nil
 	}
-	fake := &dryRunAuthManager{fakeEKSAuthManager: fakeEKSAuthManager{whoami: &types.WhoamiInfo{Credentials: &types.AWSCredentials{
-		AccessKeyID: "test-access-key", SecretAccessKey: "test-secret-key",
-	}}}}
+	fake, calls := newDryRunAuthManager(t, dryRunWhoami())
 	newAuthManager = func(*schema.AuthConfig, types.CredentialStore, types.Validator, *schema.ConfigAndStacksInfo, string) (types.AuthManager, error) {
 		return fake, nil
 	}
@@ -185,9 +201,9 @@ func TestUpdateKubeconfig_DryRunIntegrationWritesNothing(t *testing.T) {
 	assert.Equal(t, "cli-alias", preview.CurrentContext, "the CLI alias overrides the configured one")
 	assert.Contains(t, compactOutput(stderr.String()), compactOutput(path), "the CLI kubeconfig path overrides the configured one")
 	assert.NoFileExists(t, path, "--dry-run must not write the kubeconfig")
-	assert.False(t, fake.executedIntegration, "--dry-run must not execute the integration")
-	assert.True(t, fake.skippedIntegrations, "--dry-run must not run auto-provisioned integrations such as ECR login")
-	assert.Equal(t, "foo", fake.gotName, "the integration's identity is authenticated")
+	assert.False(t, calls.executedIntegration, "--dry-run must not execute the integration")
+	assert.True(t, calls.skippedIntegrations, "--dry-run must not run auto-provisioned integrations such as ECR login")
+	assert.Equal(t, "foo", calls.gotName, "the integration's identity is authenticated")
 }
 
 // TestUpdateKubeconfig_WithoutDryRunWrites is the negative path: without
@@ -197,9 +213,7 @@ func TestUpdateKubeconfig_WithoutDryRunWrites(t *testing.T) {
 	restoreEKSSeams(t)
 	serveDryRunEKS(t)
 	initCliConfig = okEKSInitConfig
-	fake := &dryRunAuthManager{fakeEKSAuthManager: fakeEKSAuthManager{whoami: &types.WhoamiInfo{Credentials: &types.AWSCredentials{
-		AccessKeyID: "test-access-key", SecretAccessKey: "test-secret-key",
-	}}}}
+	fake, calls := newDryRunAuthManager(t, dryRunWhoami())
 	newAuthManager = func(*schema.AuthConfig, types.CredentialStore, types.Validator, *schema.ConfigAndStacksInfo, string) (types.AuthManager, error) {
 		return fake, nil
 	}
@@ -209,7 +223,7 @@ func TestUpdateKubeconfig_WithoutDryRunWrites(t *testing.T) {
 	require.NoError(t, updateKubeconfigCmd.RunE(updateKubeconfigCmd, nil))
 
 	assert.FileExists(t, path)
-	assert.False(t, fake.skippedIntegrations)
+	assert.False(t, calls.skippedIntegrations)
 }
 
 // TestUpdateKubeconfig_DryRunIntegrationErrors covers integrations that cannot
@@ -239,7 +253,7 @@ func TestUpdateKubeconfig_DryRunIntegrationErrors(t *testing.T) {
 				}
 				return schema.AtmosConfiguration{Auth: schema.AuthConfig{Integrations: configured}}, nil
 			}
-			fake := &dryRunAuthManager{}
+			fake, calls := newDryRunAuthManager(t, nil)
 			newAuthManager = func(*schema.AuthConfig, types.CredentialStore, types.Validator, *schema.ConfigAndStacksInfo, string) (types.AuthManager, error) {
 				return fake, nil
 			}
@@ -248,7 +262,7 @@ func TestUpdateKubeconfig_DryRunIntegrationErrors(t *testing.T) {
 
 			require.Error(t, err)
 			assert.ErrorIs(t, err, tt.wantErr)
-			assert.False(t, fake.authenticated)
+			assert.False(t, calls.authenticated)
 		})
 	}
 

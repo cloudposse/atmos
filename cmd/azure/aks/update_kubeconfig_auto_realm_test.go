@@ -77,13 +77,17 @@ func TestExecuteAKSUpdateKubeconfigDirect_AutoRealmKeepsNames(t *testing.T) {
 			assert.Equal(t, tt.wantUser, config.Contexts[tt.wantContext].AuthInfo)
 			user := config.AuthInfos[tt.wantUser]
 			require.NotNil(t, user)
-			execRealm := ""
+			var realmValues []string
 			for _, env := range user.Exec.Env {
 				if env.Name == "ATMOS_AUTH_REALM" {
-					execRealm = env.Value
+					realmValues = append(realmValues, env.Value)
 				}
 			}
-			assert.Equal(t, tt.wantExecRealm, execRealm)
+			if tt.wantExecRealm == "" {
+				assert.Empty(t, realmValues, "a derived realm must not set ATMOS_AUTH_REALM, even to an empty value")
+			} else {
+				assert.Equal(t, []string{tt.wantExecRealm}, realmValues)
+			}
 		})
 	}
 }

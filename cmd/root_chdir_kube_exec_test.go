@@ -33,6 +33,8 @@ func chdirFallbackCases() []chdirFallbackCase {
 		{name: "azure aks token falls back", args: []string{"atmos", "azure", "aks", "token", "--cluster-name", "dev"}, envTarget: missingEnv},
 		{name: "gcp gke token falls back", args: []string{"atmos", "gcp", "gke", "token", "--identity=dev"}, envTarget: missingEnv},
 		{name: "global flag before the token command falls back", args: []string{"atmos", "--logs-level=Debug", "aws", "eks", "token"}, envTarget: missingEnv},
+		{name: "global flag with a separate value before the token command falls back", args: []string{"atmos", "--logs-level", "Debug", "aws", "eks", "token"}, envTarget: missingEnv},
+		{name: "separate value of a global flag is not a command word", args: []string{"atmos", "--logs-level", "aws", "terraform", "plan"}, envTarget: missingEnv, wantErr: errUtils.ErrWorkdirNotExist},
 		{name: "other command still fails", args: []string{"atmos", "terraform", "plan", "vpc"}, envTarget: missingEnv, wantErr: errUtils.ErrWorkdirNotExist},
 		{name: "token prefix of another command still fails", args: []string{"atmos", "aws", "eks", "update-kubeconfig"}, envTarget: missingEnv, wantErr: errUtils.ErrWorkdirNotExist},
 		{name: "explicit --chdir still fails", args: []string{"atmos", "aws", "eks", "token"}, flag: func(missing string) string { return missing }, wantErr: errUtils.ErrWorkdirNotExist},
