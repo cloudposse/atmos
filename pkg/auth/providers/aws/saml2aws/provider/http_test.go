@@ -346,7 +346,7 @@ func TestResponseValidatorRedactsQuery(t *testing.T) {
 // strings can carry session tokens. Neither may reach the logs.
 func TestClientDoDoesNotLogSecrets(t *testing.T) {
 	const (
-		secretBody  = "Passwd=hunter2"
+		secretBody  = "Passwd=hunter2" // gitleaks:allow -- Synthetic test request body.
 		secretQuery = "sessionToken=secret-session-token"
 		secretReply = "SAMLResponse=secret-assertion"
 	)

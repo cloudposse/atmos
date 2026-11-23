@@ -178,9 +178,9 @@ func TestFidoClientChallengeU2F_PresenceTimeoutBetweenPolls(t *testing.T) {
 // The test runs in a synctest bubble: time is virtual, a regression that waits on the blocked read fails as
 // a deadlock instead of hanging, and synctest.Wait lets every runnable goroutine settle before the checks.
 func TestFidoClientChallengeU2F_HungDeviceTimesOut(t *testing.T) {
-	origTimeout, origInterval := u2fAuthTimeout, u2fPollInterval
-	u2fAuthTimeout, u2fPollInterval = 100*time.Millisecond, 5*time.Millisecond // gitleaks:allow -- Test timing variables, not secrets.
-	t.Cleanup(func() { u2fAuthTimeout, u2fPollInterval = origTimeout, origInterval })
+	origTimeout, origInterval := u2fAuthTimeout, u2fPollInterval                      // gitleaks:allow -- Test timing variables, not secrets.
+	u2fAuthTimeout, u2fPollInterval = 100*time.Millisecond, 5*time.Millisecond        // gitleaks:allow -- Test timing variables, not secrets.
+	t.Cleanup(func() { u2fAuthTimeout, u2fPollInterval = origTimeout, origInterval }) // gitleaks:allow -- Restore test timing variables.
 
 	synctest.Test(t, func(t *testing.T) {
 		release := make(chan struct{})
