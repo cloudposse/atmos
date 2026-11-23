@@ -102,6 +102,9 @@ var featureEnvironment = []string{"ATMOS_TERRAGRUNT_FEATURE", "TG_FEATURE"}
 func Owns(info *schema.ConfigAndStacksInfo) bool {
 	defer perf.Track(nil, "terragruntexec.Owns")()
 
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
+		return false
+	}
 	configuration, _ := info.ComponentSettingsSection["configuration"].(map[string]any)
 	engine, _ := configuration["engine"].(string)
 	return engine == Engine

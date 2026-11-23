@@ -122,7 +122,7 @@ func TestAffectedConfigurationWatchRootSpelling(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	config := &schema.AtmosConfiguration{BasePathAbsolute: filepath.Join(repo, "project")}
-	settings := map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}
+	settings := map[string]any{"configuration": map[string]any{"provider": "terragrunt", schema.ConfigurationOwnedKey: true}}
 	watches := func() []schema.ComponentDependency {
 		deps := []schema.ComponentDependency{{Kind: "folder", Path: "modules/unit"}}
 		require.True(t, configuration.WatchPaths(config, settings, deps))
@@ -301,7 +301,7 @@ func TestConfigurationWatchIndexIsBuiltOncePerExclusionSet(t *testing.T) {
 	root := t.TempDir()
 	config := &schema.AtmosConfiguration{BasePathAbsolute: root, BasePath: root}
 	index := newChangedFilesIndex(config, []string{"live/a/.terragrunt-cache/x.tf", "live/a/main.hcl"}, root)
-	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/.terragrunt-cache/**"}}}
+	settings := map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "watch_excludes": []any{"**/.terragrunt-cache/**"}}}
 	first, err := configurationWatchIndex(config, settings, index)
 	require.NoError(t, err)
 	second, err := configurationWatchIndex(config, settings, index)
@@ -310,7 +310,7 @@ func TestConfigurationWatchIndexIsBuiltOncePerExclusionSet(t *testing.T) {
 	require.Equal(t, []string{filepath.Join(root, "live", "a", "main.hcl")}, first.getAllFiles())
 	require.Len(t, index.getAllFiles(), 2, "the shared change set is not modified")
 
-	other := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/*.hcl"}}}
+	other := map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "watch_excludes": []any{"**/*.hcl"}}}
 	different, err := configurationWatchIndex(config, other, index)
 	require.NoError(t, err)
 	require.NotSame(t, first, different)

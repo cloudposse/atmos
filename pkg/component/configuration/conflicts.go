@@ -6,6 +6,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ImportFragment wraps imported units as a stack manifest fragment, so the ordinary
@@ -97,8 +98,7 @@ func OwnsComponent(component map[string]any) bool {
 	defer perf.Track(nil, "configuration.OwnsComponent")()
 
 	settings, _ := component["settings"].(map[string]any)
-	configuration, _ := settings["configuration"].(map[string]any)
-	return configuration["provider"] != nil
+	return schema.ConfigurationOwned(settings)
 }
 
 // ImportConflict reports two units that would become one component of the importing stack.
@@ -124,8 +124,8 @@ type BackendLayer struct {
 func CheckBackendOverrides(component, stack string, settings map[string]any, layers ...BackendLayer) error {
 	defer perf.Track(nil, "configuration.CheckBackendOverrides")()
 
-	// Only a provider owns the backend; a bare `configuration` key, such as an empty map, does not.
-	if !OwnsComponent(map[string]any{"settings": settings}) {
+	// Only a provider owns the backend; the user's own `settings.configuration` data does not.
+	if !schema.ConfigurationOwned(settings) {
 		return nil
 	}
 	for _, layer := range layers {

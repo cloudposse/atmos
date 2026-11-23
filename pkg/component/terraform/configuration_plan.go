@@ -68,8 +68,7 @@ type configurationPlan struct {
 // ownsConfigurationPlan reports whether a provider manages this component's saved plans.
 // Their plan files are reviewed artifacts bound to a record, not ephemeral scratch files.
 func ownsConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
-	_, owned := info.ComponentSettingsSection["configuration"]
-	return owned
+	return schema.ConfigurationOwned(info.ComponentSettingsSection)
 }
 
 // usesConfigurationPlan reports whether the invocation applies a saved plan. A downloaded

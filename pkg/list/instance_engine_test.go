@@ -28,7 +28,8 @@ func TestInstanceEngineSelection(t *testing.T) {
 		{"mixed-case OpenTofu binary", "terraform", map[string]any{"command": "OpenTofu.EXE"}, "opentofu"},
 		{"absolute Windows binary", "terraform", map[string]any{"command": filepath.Join(t.TempDir(), "tofu.exe")}, "opentofu"},
 		{"native HCL remains tofu", "terraform", map[string]any{"settings": map[string]any{"configuration": map[string]any{"provider": "terragrunt", "engine": "opentofu"}}}, "opentofu"},
-		{"external engine metadata", "terraform", map[string]any{"settings": map[string]any{"configuration": map[string]any{"engine": "terragrunt"}}}, "terragrunt"},
+		{"external engine metadata", "terraform", map[string]any{"settings": map[string]any{"configuration": map[string]any{"engine": "terragrunt", schema.ConfigurationOwnedKey: true}}}, "terragrunt"},
+		{"user settings engine is ignored", "terraform", map[string]any{"settings": map[string]any{"configuration": map[string]any{"engine": "terragrunt"}}}, "opentofu"},
 		{"other component family", "helmfile", nil, "helmfile"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -43,7 +44,7 @@ func TestInstanceDefaultColumnsRespectEditionsAndOverrides(t *testing.T) {
 	for _, tc := range []struct {
 		pin   string
 		count int
-	}{{"", 4}, {"2026-10-28", 2}, {"2026-10-29", 4}} {
+	}{{"", 4}, {"2026-11-10", 2}, {"2026-11-20", 2}, {"2026-11-21", 4}} {
 		config := &schema.AtmosConfiguration{Edition: tc.pin}
 		columns, err := getInstanceColumns(config, nil)
 		require.NoError(t, err)

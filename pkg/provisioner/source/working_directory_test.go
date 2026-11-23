@@ -14,8 +14,10 @@ import (
 )
 
 func TestSourceWorkingDirectoryPrecedenceEditions(t *testing.T) {
+	// Pins before the 2026-11-21 transition, including the v1.234.1 release date, keep the generated path.
+	keepsLegacyPath := map[string]bool{"2026-11-10": true, "2026-11-20": true}
 	for _, field := range []string{"metadata", "settings"} {
-		for _, pin := range []string{"2026-10-27", "2026-10-28", "2026-11", "", "invalid"} {
+		for _, pin := range []string{"2026-11-10", "2026-11-20", "2026-11-21", "2026-12", "", "invalid"} {
 			t.Run(field+"/"+pin, func(t *testing.T) {
 				base := t.TempDir()
 				config := &schema.AtmosConfiguration{BasePath: base, Edition: pin}
@@ -34,7 +36,7 @@ func TestSourceWorkingDirectoryPrecedenceEditions(t *testing.T) {
 				}
 				require.NoError(t, err)
 				require.True(t, target.IsWorkdir)
-				if pin == "2026-10-27" {
+				if keepsLegacyPath[pin] {
 					assert.Equal(t, legacy, target.Dir)
 				} else {
 					assert.Equal(t, filepath.Join(base, "custom", "instance"), target.Dir)
@@ -43,7 +45,7 @@ func TestSourceWorkingDirectoryPrecedenceEditions(t *testing.T) {
 				state := filepath.Join(legacy, "custom-state")
 				require.NoError(t, os.WriteFile(state, []byte("state must survive"), 0o600))
 				_, err = ResolveTarget(config, "terraform", "module", section)
-				if pin == "2026-10-27" {
+				if keepsLegacyPath[pin] {
 					require.NoError(t, err)
 				} else {
 					require.ErrorIs(t, err, errUtils.ErrWorkdirProvision)

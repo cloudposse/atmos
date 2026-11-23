@@ -44,7 +44,7 @@ func TestResolveConfigurationStateUsesTargetEnvironment(t *testing.T) {
 	manager := types.NewMockAuthManager(ctrl)
 	manager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{SanitizedEnv: []string{}})
 	sections := validSections()
-	sections["settings"] = map[string]any{"configuration": true}
+	sections["settings"] = map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}
 	sections["env"] = map[string]any{"EXPLICIT": "component"}
 	config := validAtmosConfig(t)
 	config.ComponentConfigurations = stateRuntime(t, func(_ context.Context, info *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
@@ -70,7 +70,7 @@ func TestResolveConfigurationStateKeepsEvaluationVariables(t *testing.T) {
 	manager := types.NewMockAuthManager(gomock.NewController(t))
 	manager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{SanitizedEnv: []string{"TF_VAR_region=base", "TF_WORKSPACE=production", "TF_CLI_ARGS_plan=-lock=false"}})
 	sections := validSections()
-	sections["settings"] = map[string]any{"configuration": true}
+	sections["settings"] = map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}
 	sections["env"] = map[string]any{"TF_VAR_region": "component"}
 	config := validAtmosConfig(t)
 	config.ComponentConfigurations = stateRuntime(t, func(_ context.Context, info *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
@@ -123,7 +123,7 @@ func TestPluginOutputUsesBackendOnlyScratchDirectory(t *testing.T) {
 				return &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{"path": filepath.Join(stateRoot, "default.tfstate")}, Workspace: "prod", WorkingDirectory: stateRoot}, nil
 			})
 			sections := validSections()
-			sections["settings"] = map[string]any{"configuration": true}
+			sections["settings"] = map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}
 			sections["source"] = map[string]any{"uri": "https://must-not-fetch.invalid/module"}
 			sections["env"] = map[string]any{"TF_DATA_DIR": "original-data"}
 			binary, err := os.Executable()
@@ -163,7 +163,7 @@ func TestPluginOutputUsesBackendOnlyScratchDirectory(t *testing.T) {
 func TestConfigurationStateFailureAndScratchCleanup(t *testing.T) {
 	config := validAtmosConfig(t)
 	sections := validSections()
-	sections["settings"] = map[string]any{"configuration": true}
+	sections["settings"] = map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}
 	config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
 		return nil, context.Canceled
 	})
@@ -266,7 +266,7 @@ func TestPluginOutputSkipInitReadsTheInitializedUnit(t *testing.T) {
 				return &schema.ComponentConfigurationState{BackendType: "local", Workspace: "prod", WorkingDirectory: unit}, nil
 			})
 			sections := validSections()
-			sections["settings"] = map[string]any{"configuration": true}
+			sections["settings"] = map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}
 			sections["providers"] = map[string]any{"aws": map[string]any{"region": "us-east-2"}}
 			binary, err := os.Executable()
 			require.NoError(t, err)
@@ -311,7 +311,7 @@ func TestPluginOutputSkipInitRejectsAnUninitializedUnit(t *testing.T) {
 						return state, nil
 					})
 					sections := validSections()
-					sections["settings"] = map[string]any{"configuration": true}
+					sections["settings"] = map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}
 					executor := NewExecutor(nil, WithRunnerFactory(func(string, string) (TerraformRunner, error) {
 						t.Fatal("no Terraform process may start")
 						return nil, nil
@@ -375,7 +375,7 @@ func TestPluginOutputDoesNotResolveTheExecutionWorkdir(t *testing.T) {
 		return &schema.ComponentConfigurationState{BackendType: "local", Workspace: "prod", WorkingDirectory: unit}, nil
 	})
 	sections := validSections()
-	sections["settings"] = map[string]any{"configuration": true}
+	sections["settings"] = map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}
 	// No base component: an ordinary component could not resolve its execution path at all.
 	delete(sections, "component")
 	_, err := ExtractComponentConfig(config, sections, "network", "live")
@@ -441,7 +441,7 @@ func TestConfigurationStateSectionsKeepsExplicitRemoteStateOverrides(t *testing.
 func TestResolveConfigurationStateRejectsProviderWithoutStateOrError(t *testing.T) {
 	config := validAtmosConfig(t)
 	sections := validSections()
-	sections["settings"] = map[string]any{"configuration": true}
+	sections["settings"] = map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}
 	config.ComponentConfigurations = stateRuntime(t, func(context.Context, *schema.ConfigAndStacksInfo) (*schema.ComponentConfigurationState, error) {
 		return nil, nil
 	})
@@ -476,7 +476,7 @@ func TestPluginOutputFailsBeforeRunnerWhenScratchDirectoryCannotBeCreated(t *tes
 		return &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{"path": filepath.Join(stateRoot, "default.tfstate")}, Workspace: "default", WorkingDirectory: stateRoot}, nil
 	})
 	sections := validSections()
-	sections["settings"] = map[string]any{"configuration": true}
+	sections["settings"] = map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 	t.Setenv("TMPDIR", missing)
 	t.Setenv("TMP", missing)

@@ -1,6 +1,7 @@
 package source
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -48,25 +49,128 @@ func TestRuntimePathsProtectResolvedModuleRoot(t *testing.T) {
 	})
 }
 
-// TestSourceRefreshRejectsGeneratedBackendCollision verifies a source that ships backend.tf.json is
-// rejected when Atmos generates that file, and installed normally when backend generation is off.
-func TestSourceRefreshRejectsGeneratedBackendCollision(t *testing.T) {
+// TestSourceRefreshYieldsShippedBackendToGeneration verifies that a source shipping backend.tf.json
+// provisions when Atmos generates that file, as it did before source ownership existed: the shipped
+// copy is not installed or recorded as source-owned, so the generated backend wins on every run and a
+// later refresh neither replaces nor removes it. With backend generation off, the shipped file is
+// ordinary source content.
+func TestSourceRefreshYieldsShippedBackendToGeneration(t *testing.T) {
 	src := t.TempDir()
 	refreshWrite(t, src, "main.tf", "# source")
-	refreshWrite(t, src, "backend.tf.json", `{"terraform":{"backend":{"local":{}}}}`)
+	refreshWrite(t, src, generatedBackendFile, `{"terraform":{"backend":{"s3":{}}}}`)
 	spec := &schema.VendorComponentSource{Uri: src}
 
 	generating := &schema.AtmosConfiguration{}
 	generating.Components.Terraform.AutoGenerateBackendFile = true
+	var warned []string
+	stubShippedBackendWarning(t, &warned)
 	target := filepath.Join(t.TempDir(), "target")
-	err := VendorSource(t.Context(), generating, spec, target, WithRuntimePreservation(nil))
-	require.ErrorIs(t, err, errUtils.ErrSourceCopyFailed)
-	assert.Contains(t, err.Error(), "backend.tf.json")
-	assert.NoFileExists(t, filepath.Join(target, "main.tf"), "a rejected refresh must not publish any source file")
+	require.NoError(t, VendorSource(t.Context(), generating, spec, target, WithRuntimePreservation(nil)))
+	assert.FileExists(t, filepath.Join(target, "main.tf"))
+	assert.NoFileExists(t, filepath.Join(target, generatedBackendFile), "the shipped backend must not be installed")
+	inventory, err := readSourceInventory(target)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"main.tf"}, inventory.Files, "the shipped backend must not become source-owned")
+	assert.Equal(t, []string{generatedBackendFile}, warned)
 
+	// Atmos generates its backend; a forced refresh of an existing workdir keeps it untouched.
+	generated := `{"terraform":{"backend":{"local":{}}}}`
+	refreshWrite(t, target, generatedBackendFile, generated)
+	refreshWrite(t, src, "main.tf", "# updated")
+	require.NoError(t, VendorSource(t.Context(), generating, spec, target, WithRuntimePreservation(nil)))
+	content, err := os.ReadFile(filepath.Join(target, generatedBackendFile))
+	require.NoError(t, err)
+	assert.Equal(t, generated, string(content))
+	content, err = os.ReadFile(filepath.Join(target, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# updated", string(content))
+
+	// Without backend generation the module's own backend file is source content.
 	target = filepath.Join(t.TempDir(), "target")
 	require.NoError(t, VendorSource(t.Context(), &schema.AtmosConfiguration{}, spec, target, WithRuntimePreservation(nil)))
-	assert.FileExists(t, filepath.Join(target, "backend.tf.json"))
+	assert.FileExists(t, filepath.Join(target, generatedBackendFile))
+}
+
+// TestSourceRefreshTakesOverPreviouslyOwnedBackend verifies that enabling backend generation for a
+// workdir whose receipt recorded the module's backend.tf.json as source-owned hands the path to
+// generation: the obsolete source copy is removed so Atmos writes its own backend there.
+func TestSourceRefreshTakesOverPreviouslyOwnedBackend(t *testing.T) {
+	src := t.TempDir()
+	refreshWrite(t, src, "main.tf", "# source")
+	refreshWrite(t, src, generatedBackendFile, `{"terraform":{"backend":{"s3":{}}}}`)
+	spec := &schema.VendorComponentSource{Uri: src}
+	target := filepath.Join(t.TempDir(), "target")
+	require.NoError(t, VendorSource(t.Context(), &schema.AtmosConfiguration{}, spec, target, WithRuntimePreservation(nil)))
+	require.FileExists(t, filepath.Join(target, generatedBackendFile))
+
+	generating := &schema.AtmosConfiguration{}
+	generating.Components.Terraform.AutoGenerateBackendFile = true
+	stubShippedBackendWarning(t, new([]string))
+	require.NoError(t, VendorSource(t.Context(), generating, spec, target, WithRuntimePreservation(nil)))
+	assert.NoFileExists(t, filepath.Join(target, generatedBackendFile))
+	assert.FileExists(t, filepath.Join(target, "main.tf"))
+}
+
+// TestSourceRefreshStillRejectsOtherCollisions is the negative path of the backend exemption: a
+// shipped file that collides with caller-owned content is still refused, and a directory named
+// like the backend file is not silently discarded.
+func TestSourceRefreshStillRejectsOtherCollisions(t *testing.T) {
+	generating := &schema.AtmosConfiguration{}
+	generating.Components.Terraform.AutoGenerateBackendFile = true
+	stubShippedBackendWarning(t, new([]string))
+
+	t.Run("runtime state", func(t *testing.T) {
+		src := t.TempDir()
+		refreshWrite(t, src, "main.tf", "# source")
+		refreshWrite(t, src, "terraform.tfstate", `{"version":4}`)
+		target := filepath.Join(t.TempDir(), "target")
+		err := VendorSource(t.Context(), generating, &schema.VendorComponentSource{Uri: src}, target, WithRuntimePreservation(nil))
+		require.ErrorIs(t, err, errUtils.ErrSourceCopyFailed)
+		assert.NoFileExists(t, filepath.Join(target, "main.tf"))
+	})
+
+	t.Run("backend path is a directory", func(t *testing.T) {
+		src := t.TempDir()
+		refreshWrite(t, src, "main.tf", "# source")
+		refreshWrite(t, src, filepath.Join(generatedBackendFile, "nested.tf"), "# nested")
+		target := filepath.Join(t.TempDir(), "target")
+		err := VendorSource(t.Context(), generating, &schema.VendorComponentSource{Uri: src}, target, WithRuntimePreservation(nil))
+		require.ErrorIs(t, err, errUtils.ErrSourceCopyFailed)
+		assert.Contains(t, err.Error(), generatedBackendFile)
+		assert.NoFileExists(t, filepath.Join(target, "main.tf"))
+	})
+}
+
+// TestYieldGeneratedBackendModuleRoots verifies every module root is inspected once, and that a
+// module root which is a file in the staged source ships nothing there.
+func TestYieldGeneratedBackendModuleRoots(t *testing.T) {
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	var warned []string
+	stubShippedBackendWarning(t, &warned)
+	stage, target := t.TempDir(), filepath.Join(t.TempDir(), "target")
+	refreshWrite(t, stage, generatedBackendFile, "{}")
+	refreshWrite(t, stage, "app", "# a file where a module root could be")
+	// The component name and metadata.component both resolve to "app"; target itself appears once.
+	section := map[string]any{"component": "app", "metadata": map[string]any{"component": "app"}, workdir.WorkdirPathKey: target}
+	require.NoError(t, yieldGeneratedBackend(t.Context(), config, stage, target, section))
+	assert.Equal(t, []string{generatedBackendFile}, warned)
+	assert.NoFileExists(t, filepath.Join(stage, generatedBackendFile))
+	assert.FileExists(t, filepath.Join(stage, "app"))
+}
+
+// TestShippedBackendWarning exercises the default reporter in both output modes.
+func TestShippedBackendWarning(t *testing.T) {
+	warnShippedBackendReplaced(t.Context(), generatedBackendFile)
+	warnShippedBackendReplaced(workdir.WithOutputSuppressed(t.Context()), generatedBackendFile)
+}
+
+// stubShippedBackendWarning records the shipped-backend warnings of one test.
+func stubShippedBackendWarning(t *testing.T, warned *[]string) {
+	t.Helper()
+	original := warnShippedBackendReplaced
+	warnShippedBackendReplaced = func(_ context.Context, path string) { *warned = append(*warned, path) }
+	t.Cleanup(func() { warnShippedBackendReplaced = original })
 }
 
 // TestSourceRefreshRejectsFileDirectoryTypeChange verifies a source update that turns a file into a

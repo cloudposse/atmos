@@ -167,7 +167,7 @@ func TestWatchPaths(t *testing.T) {
 	for _, provider := range []bool{true, false} {
 		settings := map[string]any{}
 		if provider {
-			settings["configuration"] = map[string]any{"provider": "terragrunt"}
+			settings["configuration"] = map[string]any{"provider": "terragrunt", schema.ConfigurationOwnedKey: true}
 		}
 		absolute := filepath.Join(root, "module")
 		deps := []schema.ComponentDependency{{Path: "root.hcl"}, {Path: absolute}}

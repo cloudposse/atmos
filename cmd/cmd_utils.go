@@ -2101,12 +2101,9 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 		return
 	}
 
-	// Trim "v" prefix to compare versions
-	latestVersion := strings.TrimPrefix(latestReleaseTag, "v")
-	currentVersion := strings.TrimPrefix(version.Version, "v")
-
-	// If the versions differ, print the update message
-	if latestVersion != currentVersion {
+	// Print the update message only when the latest release is semantically newer, so a newer
+	// build or prerelease is never told to "update" to an older release.
+	if latestVersion, newer := upgrade.NewerRelease(version.Version, latestReleaseTag); newer {
 		root := atmosConfig.Toolchain.InstallPath
 		if root != "" && !filepath.IsAbs(root) {
 			root = filepath.Join(atmosConfig.BasePathAbsolute, root)

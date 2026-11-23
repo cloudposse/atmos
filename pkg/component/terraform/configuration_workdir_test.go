@@ -39,7 +39,7 @@ func TestConfigurationWorkdirOwnsArtifactsNotState(t *testing.T) {
 					continue
 				}
 				for _, revision := range []string{"first", "second"} {
-					info := &schema.ConfigAndStacksInfo{Stack: stack, ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": stack, "source": map[string]any{"uri": "./module"}}}
+					info := &schema.ConfigAndStacksInfo{Stack: stack, ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": stack, "source": map[string]any{"uri": "./module"}}}
 					if mode != "component directory" {
 						info.ComponentSection["provision"] = map[string]any{"workdir": map[string]any{"enabled": true}}
 					}
@@ -107,7 +107,7 @@ func TestConfigurationExplicitWorkdirRejectsAnotherOwner(t *testing.T) {
 	binary, err := os.Executable()
 	require.NoError(t, err)
 	for _, stack := range []string{"dev", "prod"} {
-		info := &schema.ConfigAndStacksInfo{Stack: stack, ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": stack, "source": map[string]any{"uri": source}, "provision": map[string]any{"workdir": map[string]any{"enabled": true}}, "metadata": map[string]any{"working_directory": target}}}
+		info := &schema.ConfigAndStacksInfo{Stack: stack, ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": stack, "source": map[string]any{"uri": source}, "provision": map[string]any{"workdir": map[string]any{"enabled": true}}, "metadata": map[string]any{"working_directory": target}}}
 		provider.EXPECT().Prepare(gomock.Any(), info).Return(&schema.PreparedComponentConfiguration{Engine: "terraform", Source: source, Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{}, Workspace: "default", Files: []schema.ComponentConfigurationFile{{Path: "generated.tf", Content: []byte(stack), IfExists: "overwrite"}}}, nil)
 		_, err := testExecutor(t).prepareComponentExecution(t.Context(), provisioner.OutputWriters{}, config, info, false)
 		if stack == "dev" {

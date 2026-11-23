@@ -1393,6 +1393,11 @@ func processYAMLConfigFileWithContextInternal(
 		}
 	}
 
+	// A null mapping key (`null:` or `~:`) would panic JSON Schema validation and merging below.
+	if err := checkStackManifestNullKeys(stackConfigMap, relativeFilePath); err != nil {
+		return nil, nil, err
+	}
+
 	// Store resolved file-level sections in stackConfigMap so they're available during describe_stacks.
 	// The context contains resolved values from extractAndAddLocalsToContext, but the YAML content
 	// (and thus stackConfigMap) may still have unresolved template expressions.

@@ -122,7 +122,7 @@ func overrideInfo(t *testing.T) *schema.ConfigAndStacksInfo {
 	return &schema.ConfigAndStacksInfo{
 		Command: binary, SubCommand: "plan", Stack: "dev", ComponentFromArg: "vpc",
 		ComponentSection:         map[string]any{},
-		ComponentSettingsSection: map[string]any{"configuration": true},
+		ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}},
 		ComponentVarsSection:     map[string]any{"name": "from-stack", "tags": map[string]any{"team": "stack"}},
 		ComponentEnvSection:      map[string]any{"TF_LOG": "ERROR"},
 	}

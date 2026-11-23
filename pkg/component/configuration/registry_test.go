@@ -106,7 +106,7 @@ func TestConfigurationImportRouting(t *testing.T) {
 }
 
 func TestWatchExcludes(t *testing.T) {
-	patterns, err := WatchExcludes(map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/.cache/**"}}})
+	patterns, err := WatchExcludes(map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "watch_excludes": []any{"**/.cache/**"}}})
 	require.NoError(t, err)
 	root := t.TempDir()
 	files := []string{filepath.Join(root, "a", ".cache", "x"), filepath.Join(root, "a", "main.tf")}
@@ -114,8 +114,12 @@ func TestWatchExcludes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, files[1:], filtered)
 	for _, value := range []any{"bad shape", []any{"["}, []any{42}} {
-		_, err := WatchExcludes(map[string]any{"configuration": map[string]any{"watch_excludes": value}})
+		_, err := WatchExcludes(map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "watch_excludes": value}})
 		require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+		// The same data in a user's own settings.configuration is not interpreted.
+		patterns, err := WatchExcludes(map[string]any{"configuration": map[string]any{"watch_excludes": value}})
+		require.NoError(t, err)
+		require.Empty(t, patterns)
 	}
 	_, err = UnexcludedWatchFiles("relative", files, patterns)
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
@@ -217,12 +221,21 @@ func TestCompileManifestSchemaWrapsFailures(t *testing.T) {
 	require.NotNil(t, compiled)
 }
 
-// Only a provider owns the backend; an empty `settings.configuration` map leaves ordinary components
-// alone. Each component-level layer, inherited or the component's own, is checked.
+func TestOwnsComponentReadsTheOwnershipMarker(t *testing.T) {
+	require.True(t, OwnsComponent(map[string]any{"settings": map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}))
+	require.False(t, OwnsComponent(map[string]any{"settings": map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}}))
+	require.False(t, OwnsComponent(map[string]any{"settings": map[string]any{"configuration": map[string]any{"notes": "internal"}}}))
+	require.False(t, OwnsComponent(nil))
+}
+
+// Only a provider owns the backend; the user's own `settings.configuration` data, even one that names
+// a provider, leaves ordinary components alone. Each component-level layer, inherited or the
+// component's own, is checked.
 func TestBackendOverridesRequireProviderOwnership(t *testing.T) {
 	s3 := BackendLayer{Type: "s3", Settings: map[string]any{"bucket": "other"}}
-	owned := map[string]any{"configuration": map[string]any{"provider": "terragrunt"}}
+	owned := map[string]any{"configuration": map[string]any{"provider": "terragrunt", schema.ConfigurationOwnedKey: true}}
 	require.NoError(t, CheckBackendOverrides("app", "dev", map[string]any{"configuration": map[string]any{}}, s3))
+	require.NoError(t, CheckBackendOverrides("app", "dev", map[string]any{"configuration": map[string]any{"provider": "aws"}}, s3))
 	require.NoError(t, CheckBackendOverrides("app", "dev", map[string]any{}, s3))
 	require.NoError(t, CheckBackendOverrides("app", "dev", owned, BackendLayer{Type: "local"}, BackendLayer{}))
 

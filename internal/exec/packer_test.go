@@ -220,6 +220,25 @@ func TestExecutePacker_Version(t *testing.T) {
 	}
 }
 
+// TestExecutePacker_VersionDryRun verifies that `version --dry-run` previews the invocation and never
+// starts Packer: the command is a binary that does not exist, so running it would fail.
+func TestExecutePacker_VersionDryRun(t *testing.T) {
+	workDir := "../../tests/fixtures/scenarios/packer"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
+
+	info := schema.ConfigAndStacksInfo{
+		ComponentType: "packer",
+		SubCommand:    "version",
+		Command:       "atmos-nonexistent-packer-binary",
+		DryRun:        true,
+	}
+	require.NoError(t, ExecutePacker(&info, &PackerFlags{}))
+
+	info.DryRun = false
+	require.Error(t, ExecutePacker(&info, &PackerFlags{}), "without --dry-run the missing binary must be executed")
+}
+
 func TestExecutePacker_Init(t *testing.T) {
 	tests.RequirePacker(t)
 

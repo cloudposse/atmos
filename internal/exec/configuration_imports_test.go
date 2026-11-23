@@ -210,7 +210,7 @@ func TestConfigurationWatchExclusionsDoNotChangeSharedIndex(t *testing.T) {
 	root := t.TempDir()
 	config := &schema.AtmosConfiguration{BasePathAbsolute: root}
 	index := newChangedFilesIndex(config, []string{filepath.Join("live", ".terragrunt-cache", "generated.tf"), filepath.Join("live", "new.yaml")}, root)
-	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/.terragrunt-cache/**"}}}
+	settings := map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "watch_excludes": []any{"**/.terragrunt-cache/**"}}}
 	filtered, err := configurationWatchIndex(config, settings, index)
 	require.NoError(t, err)
 	require.Equal(t, []string{filepath.Join(root, "live", "new.yaml")}, filtered.getAllFiles())
@@ -219,7 +219,7 @@ func TestConfigurationWatchExclusionsDoNotChangeSharedIndex(t *testing.T) {
 	again, err := configurationWatchIndex(config, settings, index)
 	require.NoError(t, err)
 	require.Same(t, filtered, again, "components sharing exclusions must reuse one filtered index")
-	other, err := configurationWatchIndex(config, map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/*.yaml"}}}, index)
+	other, err := configurationWatchIndex(config, map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "watch_excludes": []any{"**/*.yaml"}}}, index)
 	require.NoError(t, err)
 	require.NotSame(t, filtered, other)
 	again, err = configurationWatchIndex(config, settings, index)
@@ -233,10 +233,10 @@ func TestConfigurationWatchExclusionsDoNotChangeSharedIndex(t *testing.T) {
 	unchanged, err := configurationWatchIndex(config, nil, index)
 	require.NoError(t, err)
 	require.Same(t, index, unchanged)
-	empty, err := configurationWatchIndex(config, map[string]any{"configuration": map[string]any{"watch_excludes": []any{}}}, index)
+	empty, err := configurationWatchIndex(config, map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "watch_excludes": []any{}}}, index)
 	require.NoError(t, err)
 	require.Same(t, index, empty)
-	_, err = configurationWatchIndex(config, map[string]any{"configuration": map[string]any{"watch_excludes": "**/.terragrunt-cache/**"}}, index)
+	_, err = configurationWatchIndex(config, map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "watch_excludes": "**/.terragrunt-cache/**"}}, index)
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	for _, invalid := range []any{"[", 42} {
 		settings["configuration"].(map[string]any)["watch_excludes"] = []any{invalid}
@@ -250,7 +250,7 @@ func TestConfigurationWatchExclusionsFailClosedOnPathsOutsideTheProject(t *testi
 	config := &schema.AtmosConfiguration{BasePathAbsolute: "relative-root"}
 	absolute := filepath.Join(t.TempDir(), "live", "new.yaml")
 	index := newChangedFilesIndex(config, []string{absolute}, "")
-	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/*.tf"}}}
+	settings := map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "watch_excludes": []any{"**/*.tf"}}}
 	filtered, err := configurationWatchIndex(config, settings, index)
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	require.Nil(t, filtered)
@@ -272,7 +272,7 @@ func TestDependencyChangeCheckReportsInvalidWatchExclusions(t *testing.T) {
 	config := &schema.AtmosConfiguration{BasePathAbsolute: root}
 	index := newChangedFilesIndex(config, []string{filepath.Join("live", "changed.hcl")}, root)
 	component := map[string]any{}
-	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"["}}}
+	settings := map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "watch_excludes": []any{"["}}}
 	var affected []schema.Affected
 	err := checkDependencyChangesIndexed(&affected, config, "app", "dev", "terraform", &component, settings, index, false, nil, false)
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)

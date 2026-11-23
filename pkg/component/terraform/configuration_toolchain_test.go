@@ -312,7 +312,7 @@ func (h *toolchainHarness) info(t *testing.T, s *toolchainScenario, probe string
 			"providers":  map[string]any{"mock-provider": map[string]any{"kind": "mock/aws"}},
 			"identities": identities,
 		},
-		ComponentSettingsSection: map[string]any{"configuration": true},
+		ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}},
 		ComponentSection: map[string]any{"dependencies": map[string]any{"tools": map[string]any{
 			"tofu": s.tofuVersion, "fixture-tool": s.toolVersion,
 		}}},
@@ -597,7 +597,7 @@ func unitHarness(t *testing.T) (*toolchainHarness, *schema.ConfigAndStacksInfo, 
 	require.NoError(t, os.MkdirAll(unit, 0o755))
 	probe := filepath.Join(t.TempDir(), "probe.jsonl")
 	info := harness.info(t, &toolchainScenario{identity: "development", tofuVersion: "1.0.0", toolVersion: "1.0.0"}, probe)
-	info.ComponentSettingsSection = map[string]any{"configuration": map[string]any{"engine": "terragrunt", "provider": "terragrunt", "source": "live/dev/app/terragrunt.hcl"}}
+	info.ComponentSettingsSection = map[string]any{"configuration": map[string]any{"engine": "terragrunt", "provider": "terragrunt", "source": "live/dev/app/terragrunt.hcl", schema.ConfigurationOwnedKey: true}}
 	info.AdditionalArgsAndFlags = []string{"-no-color"}
 	tools, _ := info.ComponentSection["dependencies"].(map[string]any)["tools"].(map[string]any)
 	tools["terragrunt"] = "1.2.1"

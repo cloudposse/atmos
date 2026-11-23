@@ -18,7 +18,9 @@ the manifest schema.
 Source and shell parsing uses the shared identity selector; library boundaries normalize false
 aliases, and shell preserves disabled authentication during nested evaluation. Source placement
 uses `ResolveTarget` for provisioning, execution reconstruction, output and local-state lookup.
-The 2026-10-28 behavior transition preserves generated paths for older edition pins. A nonempty
+The `components.source.working_directory_precedence` behavior transition preserves generated paths
+for older edition pins. It is dated 2026-11-21, the day it merged, because it did not ship in
+v1.234.1 (see `docs/fixes/2026-11-22-release-1-235-0-regressions.md`). A nonempty
 old workdir blocks an implicit move; Atmos never moves or discards Terraform state automatically.
 The manifest schema accepts the metadata override.
 The shared resolver validates explicit-target ownership before state or output lookup,

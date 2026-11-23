@@ -64,7 +64,7 @@ For source components with workdir provisioning enabled, `metadata.working_direc
 over `settings.working_directory`, then the generated workdir path. Relative overrides resolve from
 the Atmos base path, including commands invoked from a nested directory.
 
-This behavior starts with edition `2026-10-28`; earlier edition pins retain the generated path. If the
+This behavior starts with edition `2026-11-21`; earlier edition pins retain the generated path. If the
 previous workdir still contains files, Atmos stops before switching paths. Explicitly migrate the whole
 workdir and its state, or retain the earlier edition pin. Advancing an edition never moves state automatically.
 

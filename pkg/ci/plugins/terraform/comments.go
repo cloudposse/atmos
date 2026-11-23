@@ -27,12 +27,13 @@ const logKeyComponent = "component"
 // logKeyName is the structured-log and error-context key for a commit status name.
 const logKeyName = "name"
 
-// logCommentError logs PR comment errors. Token-related failures and
+// logCommentError logs PR comment errors. Configuration gaps (missing token or
+// unusable API URL, see configurationGapReason) and
 // "provider does not support comments" cases are logged at Debug level (not
 // runtime failures); everything else is a warning.
 func logCommentError(msg string, err error) {
-	if errors.Is(err, errUtils.ErrGitHubTokenNotFound) {
-		log.Debug(msg, "reason", "GITHUB_TOKEN not set")
+	if reason, ok := configurationGapReason(err); ok {
+		log.Debug(msg, "reason", reason)
 		return
 	}
 	if errors.Is(err, errUtils.ErrCIOperationNotSupported) {
