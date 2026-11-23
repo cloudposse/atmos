@@ -99,7 +99,14 @@ func (e *ECRIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 
 	// Write credentials to Docker config.
 	if err := dockerConfig.WriteAuth(registryURL, result.Username, result.Password); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+		notice, managed := docker.HelperManagedNotice(err)
+		if !managed {
+			return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+		}
+		// config.json routes the registry to a helper such as ecr-login that
+		// gets ECR credentials itself, so there is nothing to write.
+		ui.Info("ECR login: " + notice)
+		return nil
 	}
 
 	// Log success with actual expiration time.

@@ -320,7 +320,9 @@ func TestConfigManager_SaveConfig_WriteFailure(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(tmpDir, 0o700) })
 
 	manager := &ConfigManager{configDir: tmpDir, configPath: configPath}
-	err := manager.saveConfig(&dockerConfig{Auths: map[string]authEntry{"registry": {Auth: "dGVzdA=="}}})
+	config := newRawConfig()
+	config.setAuth("registry", inlineAuthEntry("dGVzdA=="))
+	err := manager.saveConfig(config)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrDockerConfigWrite))
 }

@@ -392,3 +392,20 @@ var (
 	ErrLSPRPCError              = errors.New("RPC error")
 	ErrLSPNoContentLengthHeader = errors.New("no Content-Length header found")
 )
+
+// Docker credential helper errors.
+var ErrDockerCredentialHelper = errors.New("docker credential helper failed")
+
+// ErrDockerCredentialHelperStoreUnsupported is returned when the Docker
+// credential helper that config.json routes a registry to does not implement
+// store, such as docker-credential-ecr-login, which gets registry credentials
+// itself. Docker then uses that helper, not credentials Atmos writes.
+var ErrDockerCredentialHelperStoreUnsupported = errors.New("docker credential helper does not implement store")
+
+// Reasons docker/cli rejects a DOCKER_AUTH_CONFIG value. They are used to
+// explain, in a warning, why Docker ignores the variable.
+var (
+	ErrDockerAuthConfigMultipleObjects = errors.New("more than one JSON object")
+	ErrDockerAuthConfigMissingAuth     = errors.New("missing key `auth`")
+	ErrDockerAuthConfigBadAuth         = errors.New("auth is not base64(username:password)")
+)

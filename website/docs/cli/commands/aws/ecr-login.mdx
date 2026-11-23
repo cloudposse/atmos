@@ -207,6 +207,23 @@ export DOCKER_CONFIG=~/.config/atmos/docker
 atmos aws ecr login dev/ecr/primary
 ```
 
+### Credential Helpers
+
+Docker ignores the inline credentials in `config.json` for a registry that `credHelpers` (or `credsStore`) routes to a credential helper. Atmos then stores the credentials through that helper, as `docker login` does. If the helper fails, the login fails and `config.json` is left unchanged.
+
+A helper that gets registry credentials itself, such as `ecr-login` from [amazon-ecr-credential-helper](https://github.com/awslabs/amazon-ecr-credential-helper), cannot store them. For a registry routed to such a helper, Atmos prints a note that Docker uses the helper, writes nothing, and the login succeeds:
+
+```json
+{
+  "credHelpers": {
+    "123456789012.dkr.ecr.us-east-1.amazonaws.com": "ecr-login",
+    "public.ecr.aws": "ecr-login"
+  }
+}
+```
+
+The `ecr-login` helper fetches tokens with the AWS credentials in Docker's own environment, not with the Atmos identity. To have Docker use an Atmos identity, run it under `atmos auth exec` or `atmos auth shell`, or remove the registry from `credHelpers` so Atmos can write the credentials. If `credsStore` is also `ecr-login`, removing the entry still selects `ecr-login`, so also set an explicit empty entry for the registry (for example `"public.ecr.aws": ""`), which overrides the global store and makes Docker read inline credentials.
+
 ## Auto-Provisioning
 
 When `auto_provision` is `true` (the default), ECR integrations are automatically triggered when you authenticate with their linked identity:
