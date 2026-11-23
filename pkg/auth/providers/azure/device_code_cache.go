@@ -239,22 +239,20 @@ func (p *deviceCodeProvider) updateAzureCLICache(update *tokenCacheUpdate) error
 
 	msalCachePath := filepath.Join(home, ".azure", "msal_token_cache.json")
 
-	// Load and populate cache.
-	cache, accessTokenSection, accountSection := p.loadAndInitializeCLICache(msalCachePath)
-	cacheKey := p.populateCLICacheWithTokens(accessTokenSection, accountSection, userOID, username, update)
+	// Load, populate, and write the shared az cache under one msal-extensions
+	// compatible lock. The file is co-owned with the user's own `az login`, so an
+	// unparseable cache is left untouched instead of being reset to {}.
+	var cacheKey string
+	if err := azureCloud.UpdateAzureCLIMSALCache(msalCachePath, func(cache map[string]interface{}) error {
+		accessTokenSection, accountSection := initializeCLICacheSections(cache)
+		cacheKey = p.populateCLICacheWithTokens(accessTokenSection, accountSection, userOID, username, update)
 
-	// Copy refresh tokens from the Atmos realm cache so az can self-mint any
-	// audience and survive access-token expiry.
-	azureCloud.CopyAtmosRefreshTokensInto(cache, home, p.realm, update.HomeAccountID)
-
-	// Write updated cache.
-	updatedData, err := json.MarshalIndent(cache, "", "  ")
-	if err != nil {
-		log.Debug("Failed to marshal Azure CLI MSAL cache", "error", err)
+		// Copy refresh tokens from the Atmos realm cache so az can self-mint any
+		// audience and survive access-token expiry.
+		azureCloud.CopyAtmosRefreshTokensInto(cache, home, p.realm, update.HomeAccountID)
 		return nil
-	}
-
-	if !writeCacheFileWithLocking(msalCachePath, updatedData, "MSAL cache") {
+	}); err != nil {
+		logAzureCLICacheUpdateFailure(err)
 		return nil
 	}
 
@@ -377,23 +375,20 @@ func addOptionalCLITokens(accessTokenSection map[string]interface{}, update *tok
 	}
 }
 
-// loadAndInitializeCLICache loads MSAL cache and ensures required sections exist.
-func (p *deviceCodeProvider) loadAndInitializeCLICache(msalCachePath string) (cache, accessTokenSection, accountSection map[string]interface{}) {
-	// Load existing cache or create new one.
-	data, err := os.ReadFile(msalCachePath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			log.Debug("Failed to read Azure CLI MSAL cache", "error", err)
-		}
-		// Create new cache structure.
-		cache = make(map[string]interface{})
-	} else {
-		if err := json.Unmarshal(data, &cache); err != nil {
-			log.Debug("Failed to parse Azure CLI MSAL cache", "error", err)
-			cache = make(map[string]interface{})
-		}
+// logAzureCLICacheUpdateFailure reports a skipped Azure CLI cache update. A damaged
+// cache is surfaced as a warning because az will not see this login until the user
+// repairs or removes the file; other failures stay at debug level (non-fatal).
+func logAzureCLICacheUpdateFailure(err error) {
+	if errors.Is(err, errUtils.ErrAzureCLIMSALCacheUnparseable) {
+		log.Warn("Skipped updating the Azure CLI token cache; az commands will not see this login until the file is repaired or removed", "error", err)
+		return
 	}
+	log.Debug("Failed to update Azure CLI MSAL cache", "error", err)
+}
 
+// initializeCLICacheSections ensures the AccessToken and Account sections exist in a
+// loaded Azure CLI MSAL cache and returns them for in-place updates.
+func initializeCLICacheSections(cache map[string]interface{}) (accessTokenSection, accountSection map[string]interface{}) {
 	// Ensure AccessToken section exists.
 	accessTokenSection, ok := cache[azureCloud.FieldAccessToken].(map[string]interface{})
 	if !ok {
@@ -408,7 +403,7 @@ func (p *deviceCodeProvider) loadAndInitializeCLICache(msalCachePath string) (ca
 		cache["Account"] = accountSection
 	}
 
-	return cache, accessTokenSection, accountSection
+	return accessTokenSection, accountSection
 }
 
 // msalTokenParams holds parameters for creating an MSAL token cache entry.
@@ -555,26 +550,6 @@ func (p *deviceCodeProvider) updateAzureProfile(home, username string) error {
 
 	log.Debug("Updated Azure profile", "path", profilePath, "subscription", p.subscriptionID)
 	return nil
-}
-
-// writeCacheFileWithLocking writes cache data to file with directory creation and file locking.
-// Returns true on success, false on error (errors are logged but not returned).
-func writeCacheFileWithLocking(cachePath string, data []byte, cacheType string) bool {
-	// Ensure directory exists.
-	cacheDir := filepath.Dir(cachePath)
-	if err := os.MkdirAll(cacheDir, azureCloud.DirPermissions); err != nil {
-		log.Debug(fmt.Sprintf("Failed to create directory for %s", cacheType), "error", err)
-		return false
-	}
-
-	if err := withAzureFileLock(cachePath, func() error {
-		return os.WriteFile(cachePath, data, azureCloud.FilePermissions)
-	}); err != nil {
-		log.Debug(fmt.Sprintf("Failed to write %s", cacheType), "error", err)
-		return false
-	}
-
-	return true
 }
 
 func withAzureFileLock(path string, fn func() error) error {

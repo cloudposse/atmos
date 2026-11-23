@@ -183,6 +183,23 @@ func (i *identity) sessionSettings() map[string]any {
 	return map[string]any{"kind": i.Kind(), "spec": i.config.Spec, "principal": i.config.Principal, "via": i.config.Via, "provider": i.config.Provider}
 }
 
+// managerAware materializers resolve provider settings, such as AWS spec.files.base_path,
+// through the auth manager.
+type managerAware interface {
+	SetManager(types.AuthManager)
+}
+
+// SetManagerAndProvider is how the auth manager binds AWS identities in a fresh process that
+// reuses cached credentials, so file paths resolve the same way as after authentication.
+func (i *identity) SetManagerAndProvider(manager types.AuthManager, rootProviderName string) {
+	defer perf.Track(nil, "auth.identity.SetManagerAndProvider")()
+
+	i.SetRootProvider(rootProviderName)
+	if aware, ok := i.materializer.(managerAware); ok {
+		aware.SetManager(manager)
+	}
+}
+
 // SetRootProvider binds cloud-file paths before reuse or logout in a fresh process.
 func (i *identity) SetRootProvider(name string) {
 	defer perf.Track(nil, "auth.identity.SetRootProvider")()

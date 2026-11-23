@@ -187,12 +187,18 @@ func publicLogin(ctx context.Context, creds types.ICredentials) error {
 	}
 
 	if err := dockerConfig.WriteAuth(awsCloud.ECRPublicRegistryURL, result.Username, result.Password); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+		notice, managed := docker.HelperManagedNotice(err)
+		if !managed {
+			return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+		}
+		// config.json routes public.ecr.aws to a helper such as ecr-login that
+		// gets credentials itself, so there is nothing to write.
+		ui.Info("ECR Public login: " + notice)
+	} else {
+		// Log success with actual expiration time from the ECR Public token.
+		expiresIn := time.Until(result.ExpiresAt).Round(time.Minute)
+		ui.Success(fmt.Sprintf("ECR Public login: %s (expires in %s)", awsCloud.ECRPublicRegistryURL, expiresIn))
 	}
-
-	// Log success with actual expiration time from the ECR Public token.
-	expiresIn := time.Until(result.ExpiresAt).Round(time.Minute)
-	ui.Success(fmt.Sprintf("ECR Public login: %s (expires in %s)", awsCloud.ECRPublicRegistryURL, expiresIn))
 
 	// Set DOCKER_CONFIG so downstream Docker commands use the same config location.
 	_ = os.Setenv("DOCKER_CONFIG", dockerConfig.GetConfigDir())
@@ -261,7 +267,14 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 		}
 
 		if err := dockerConfig.WriteAuth(registry, result.Username, result.Password); err != nil {
-			return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+			notice, managed := docker.HelperManagedNotice(err)
+			if !managed {
+				return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+			}
+			// config.json routes the registry to a helper such as ecr-login
+			// that gets ECR credentials itself, so there is nothing to write.
+			ui.Info("ECR login: " + notice)
+			continue
 		}
 
 		// Log success with actual expiration time from ECR token.

@@ -44,7 +44,7 @@ func TestGetEnvironmentVariables(t *testing.T) {
 	env, err := GetEnvironmentVariables(testRealm, providerName, "env-identity")
 	require.NoError(t, err)
 	require.NotNil(t, env)
-	assert.Equal(t, "config_atmos", env["CLOUDSDK_ACTIVE_CONFIG_NAME"])
+	assert.Equal(t, ActiveConfigName, env["CLOUDSDK_ACTIVE_CONFIG_NAME"])
 	assert.NotEmpty(t, env["GOOGLE_APPLICATION_CREDENTIALS"])
 	assert.NotEmpty(t, env["CLOUDSDK_CONFIG"])
 	assert.Contains(t, env["GOOGLE_APPLICATION_CREDENTIALS"], "application_default_credentials.json")
@@ -104,7 +104,7 @@ func TestSetEnvironmentVariables(t *testing.T) {
 	assert.Contains(t, credsPath, "setenv-identity")
 	assert.Contains(t, credsPath, "application_default_credentials.json")
 	assert.NotEmpty(t, os.Getenv("CLOUDSDK_CONFIG"))
-	assert.Equal(t, "config_atmos", os.Getenv("CLOUDSDK_ACTIVE_CONFIG_NAME"))
+	assert.Equal(t, ActiveConfigName, os.Getenv("CLOUDSDK_ACTIVE_CONFIG_NAME"))
 
 	// Clean up for other tests.
 	for _, key := range GCPEnvironmentVariables {
@@ -197,6 +197,7 @@ func TestGetEnvironmentVariablesForIdentity_WithAccessToken(t *testing.T) {
 	env, err := GetEnvironmentVariablesForIdentity(testRealm, providerName, "token-id", gcpAuth)
 	require.NoError(t, err)
 	assert.Equal(t, "ya29.access-token", env["GOOGLE_OAUTH_ACCESS_TOKEN"])
+	assert.Equal(t, "ya29.access-token", env["CLOUDSDK_AUTH_ACCESS_TOKEN"])
 	_, hasADC := env["GOOGLE_APPLICATION_CREDENTIALS"]
 	assert.False(t, hasADC, "GOOGLE_APPLICATION_CREDENTIALS should not be set when access token is available")
 }

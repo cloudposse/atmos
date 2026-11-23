@@ -10,7 +10,7 @@ import (
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 )
 
-func okACRCreds(context.Context) (*authTypes.AzureCredentials, error) {
+func okACRCreds(context.Context, *azureCloud.CloudEnvironment) (*authTypes.AzureCredentials, error) {
 	return &authTypes.AzureCredentials{TenantID: "tenant-123"}, nil
 }
 

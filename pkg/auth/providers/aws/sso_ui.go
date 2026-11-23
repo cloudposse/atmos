@@ -96,19 +96,29 @@ func renderVerificationDialog(code, url string) (string, bool) {
 	content.WriteString("Verification Code: ")
 	content.WriteString(codeStyle.Render(code))
 
-	containsURL := link.FitsInline(url)
+	containsURL := fitsInDialog(url, &boxStyle)
 	switch {
 	case containsURL:
 		content.WriteString(dialogSectionBreak)
 		content.WriteString(urlStyle.Render(url))
 		content.WriteString(dialogSectionBreak)
-		content.WriteString(instructionStyle.Render("Opening browser... If it doesn't open, visit the URL above and enter the code."))
+		// Two lines keep the instruction, plus the box border and padding, inside
+		// an 80-column terminal.
+		content.WriteString(instructionStyle.Render("Opening browser...\nIf it doesn't open, visit the URL above and enter the code."))
 	case url != "":
 		content.WriteString(dialogSectionBreak)
 		content.WriteString(instructionStyle.Render("Opening browser for authentication..."))
 	}
 
 	return boxStyle.Render(content.String()), containsURL
+}
+
+// fitsInDialog reports whether url fits inside a dialog drawn with box without
+// the dialog growing wider than link.MaxInlineWidth. The border and horizontal
+// padding of the box take columns too, so they are subtracted from the budget;
+// otherwise a URL at the inline limit makes the dialog wrap in an 80-column terminal.
+func fitsInDialog(url string, box *lipgloss.Style) bool {
+	return url != "" && lipgloss.Width(url) <= link.MaxInlineWidth-box.GetHorizontalFrameSize()
 }
 
 // displayVerificationPlainText shows verification code in plain text (for non-TTY/CI).

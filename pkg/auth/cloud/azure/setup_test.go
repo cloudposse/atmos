@@ -1702,8 +1702,7 @@ func TestLoadMSALCache_ParseFailure(t *testing.T) {
 	require.NoError(t, os.WriteFile(msalCachePath, []byte("{not valid json"), 0o600))
 
 	_, err := loadMSALCache(msalCachePath)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to parse MSAL cache")
+	require.ErrorIs(t, err, errUtils.ErrAzureCLIMSALCacheUnparseable)
 }
 
 // TestUpdateMSALCache_LoadFailurePropagates verifies that updateMSALCache
@@ -1721,41 +1720,7 @@ func TestUpdateMSALCache_LoadFailurePropagates(t *testing.T) {
 		UserOID:  "user-oid-123",
 		TenantID: "tenant-123",
 	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to parse MSAL cache")
-}
-
-// TestWriteMSALCacheToFile_MkdirAllFailure verifies that a MkdirAll failure
-// (the ".azure" path segment already exists as a regular file, not a
-// directory) is surfaced instead of panicking or being swallowed.
-func TestWriteMSALCacheToFile_MkdirAllFailure(t *testing.T) {
-	tmpDir := t.TempDir()
-	azureDir := filepath.Join(tmpDir, ".azure")
-	require.NoError(t, os.WriteFile(azureDir, []byte("not a directory"), 0o600))
-
-	err := writeMSALCacheToFile(filepath.Join(azureDir, "msal_token_cache.json"), []byte("{}"))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to create .azure directory")
-}
-
-// TestWriteMSALCacheToFile_WriteFailure verifies the os.WriteFile failure
-// branch inside the lock closure (distinct from a lock-acquisition failure):
-// the sibling ".lock" file is pre-created so locking succeeds, then the
-// directory is made read-only so the actual cache write fails.
-func TestWriteMSALCacheToFile_WriteFailure(t *testing.T) {
-	skipIfCannotDenyDirWrite(t)
-
-	tmpDir := t.TempDir()
-	azureDir := filepath.Join(tmpDir, ".azure")
-	require.NoError(t, os.MkdirAll(azureDir, 0o700))
-	msalCachePath := filepath.Join(azureDir, "msal_token_cache.json")
-	require.NoError(t, os.WriteFile(msalCachePath+".lock", nil, 0o600))
-	require.NoError(t, os.Chmod(azureDir, 0o500))
-	t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })
-
-	err := writeMSALCacheToFile(msalCachePath, []byte("{}"))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to write MSAL cache")
+	require.ErrorIs(t, err, errUtils.ErrAzureCLIMSALCacheUnparseable)
 }
 
 // TestUpdateMSALCacheFromCreds_WriteFailureIsNonFatal verifies the failure
@@ -1770,6 +1735,7 @@ func TestUpdateMSALCacheFromCreds_WriteFailureIsNonFatal(t *testing.T) {
 	azureDir := filepath.Join(tmpDir, ".azure")
 	require.NoError(t, os.MkdirAll(azureDir, 0o700))
 	msalCachePath := filepath.Join(azureDir, "msal_token_cache.json")
+	require.NoError(t, os.WriteFile(AzureCLIMSALCacheLockPath(msalCachePath), nil, 0o600))
 	require.NoError(t, os.WriteFile(msalCachePath+".lock", nil, 0o600))
 	require.NoError(t, os.Chmod(azureDir, 0o500))
 	t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })
@@ -1918,6 +1884,7 @@ func TestUpdateAzureCLIFiles_ProfileWriteFailureIsNonFatal(t *testing.T) {
 	// The MSAL cache lock also needs to be pre-created so that step succeeds
 	// and only the azureProfile.json write fails.
 	msalCachePath := filepath.Join(azureDir, "msal_token_cache.json")
+	require.NoError(t, os.WriteFile(AzureCLIMSALCacheLockPath(msalCachePath), nil, 0o600))
 	require.NoError(t, os.WriteFile(msalCachePath+".lock", nil, 0o600))
 	require.NoError(t, os.Chmod(azureDir, 0o500))
 	t.Cleanup(func() { _ = os.Chmod(azureDir, 0o700) })

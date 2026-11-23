@@ -2,6 +2,7 @@ package registryauth
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/authn"
@@ -14,7 +15,7 @@ import (
 func matchingIntegration(config *schema.AuthConfig, host string) (string, error) {
 	selected := ""
 	for key, integration := range config.Integrations {
-		if integrationHost(integration) != host {
+		if !slices.Contains(integrationHosts(integration), host) {
 			continue
 		}
 		if selected != "" {

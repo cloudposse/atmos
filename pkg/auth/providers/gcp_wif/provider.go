@@ -424,6 +424,10 @@ func (p *Provider) exchangeToken(ctx context.Context, oidcToken string) (*oauth2
 	if err := json.NewDecoder(resp.Body).Decode(&stsResp); err != nil {
 		return nil, fmt.Errorf("%w: decode STS response: %w", errUtils.ErrAuthenticationFailed, err)
 	}
+	// A 200 without a token must not become an "authenticated" empty credential.
+	if strings.TrimSpace(stsResp.AccessToken) == "" {
+		return nil, fmt.Errorf("%w: STS response did not include an access_token", errUtils.ErrAuthenticationFailed)
+	}
 
 	return &oauth2.Token{
 		AccessToken: stsResp.AccessToken,

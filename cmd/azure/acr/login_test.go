@@ -228,7 +228,7 @@ func TestResolveSelectedIdentity_AbortWrapsSentinel(t *testing.T) {
 // leave a seam at its real implementation.
 func stubAzureSeams(
 	t *testing.T,
-	loadCreds func(ctx context.Context) (*authTypes.AzureCredentials, error),
+	loadCreds func(ctx context.Context, cloudEnv *azureCloud.CloudEnvironment) (*authTypes.AzureCredentials, error),
 	token func(ctx context.Context, creds authTypes.ICredentials, loginServer string) (*azureCloud.ACRAuthResult, error),
 ) {
 	t.Helper()
@@ -273,7 +273,7 @@ func TestExecuteExplicitRegistries(t *testing.T) {
 	const reg1 = "myregistry.azurecr.io"
 	const reg2 = "otherregistry.azurecr.io"
 
-	okCreds := func(_ context.Context) (*authTypes.AzureCredentials, error) {
+	okCreds := func(_ context.Context, _ *azureCloud.CloudEnvironment) (*authTypes.AzureCredentials, error) {
 		return &authTypes.AzureCredentials{TenantID: "tenant-123"}, nil
 	}
 
@@ -306,7 +306,7 @@ func TestExecuteExplicitRegistries(t *testing.T) {
 	t.Run("credentials load error", func(t *testing.T) {
 		stubAzureSeams(
 			t,
-			func(_ context.Context) (*authTypes.AzureCredentials, error) {
+			func(_ context.Context, _ *azureCloud.CloudEnvironment) (*authTypes.AzureCredentials, error) {
 				return nil, fmt.Errorf("no credentials")
 			},
 			nil,
@@ -383,7 +383,7 @@ func TestExecuteLoginCommand_Dispatch(t *testing.T) {
 		t.Setenv("DOCKER_CONFIG", dockerDir)
 		stubAzureSeams(
 			t,
-			func(_ context.Context) (*authTypes.AzureCredentials, error) {
+			func(_ context.Context, _ *azureCloud.CloudEnvironment) (*authTypes.AzureCredentials, error) {
 				return &authTypes.AzureCredentials{TenantID: "tenant-123"}, nil
 			},
 			func(_ context.Context, _ authTypes.ICredentials, _ string) (*azureCloud.ACRAuthResult, error) {
@@ -408,7 +408,7 @@ func TestExecuteLoginCommand_Dispatch(t *testing.T) {
 		t.Run("explicit registry rejects "+tt.name, func(t *testing.T) {
 			origLoadCreds := loadDefaultAzureCredentials
 			t.Cleanup(func() { loadDefaultAzureCredentials = origLoadCreds })
-			loadDefaultAzureCredentials = func(context.Context) (*authTypes.AzureCredentials, error) {
+			loadDefaultAzureCredentials = func(context.Context, *azureCloud.CloudEnvironment) (*authTypes.AzureCredentials, error) {
 				t.Fatal("explicit registry authentication must not start for conflicting input")
 				return nil, nil
 			}
