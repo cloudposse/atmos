@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -134,10 +135,31 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 	return nil
 }
 
+// localSourceFailure reports a failure that no source URI or credential change can fix: copying,
+// ownership and publication conflicts, an unsafe or busy target, an invalid specification, a
+// local file system error, or cancellation. A fetch or registry failure is not local.
+func localSourceFailure(err error) bool {
+	if errors.Is(err, errUtils.ErrSourceAccessDenied) || errors.Is(err, errUtils.ErrSourceNotFound) || errors.Is(err, errUtils.ErrSourceDownload) {
+		return false
+	}
+	for _, local := range []error{
+		errUtils.ErrSourceCopyFailed, errUtils.ErrUnsafeVendorTarget, errUtils.ErrSourceInvalidSpec,
+		errUtils.ErrCacheLocked, errUtils.ErrCreateTempDir, errUtils.ErrNilParam, context.Canceled,
+	} {
+		if errors.Is(err, local) {
+			return true
+		}
+	}
+	var pathErr *fs.PathError
+	return errors.As(err, &pathErr)
+}
+
 // provisionFailure wraps a source provisioning failure with outer context. When the cause already
 // carries ErrSourceProvision (the downloader and vendoring layers build it themselves) the sentinel
 // is not repeated: re-wrapping printed "source provisioning failed:" twice and duplicated the hint.
 // The outer explanation, hint and context are added only for causes that do not carry it yet.
+// The hint is about reaching the source, so it is left off failures that happen locally after the
+// fetch, such as an ownership conflict in the component directory.
 func provisionFailure(cause error, explanation string, context map[string]string, hint string) error {
 	var builder *errUtils.ErrorBuilder
 	if errors.Is(cause, errUtils.ErrSourceProvision) {
@@ -146,7 +168,7 @@ func provisionFailure(cause error, explanation string, context map[string]string
 		builder = errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(cause).
 			WithExplanation(explanation)
-		if hint != "" {
+		if hint != "" && !localSourceFailure(cause) {
 			builder = builder.WithHint(hint)
 		}
 	}

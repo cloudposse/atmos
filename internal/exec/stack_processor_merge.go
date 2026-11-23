@@ -482,6 +482,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	if err != nil {
 		return nil, nil, err
 	}
+	// Record whether an enabled configuration provider supplies this component. Every ownership
+	// check reads this marker, never the user's free-form `settings.configuration` data.
+	atmosConfig.MarkConfigurationOwnership(opts.ComponentType, finalSettings)
 
 	// Merge metadata (global + base component + component metadata).
 	// Priority (lowest to highest): global (stack-wide) → metadata.inherits base chain → component instance.

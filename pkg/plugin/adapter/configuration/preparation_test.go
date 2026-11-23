@@ -34,7 +34,7 @@ func preparationSession(t *testing.T) (*Session, *MockProvider, *schema.ConfigAn
 		return map[string]Provider{"terragrunt": provider}, nil
 	})
 	require.NoError(t, err)
-	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "apply", ComponentSettingsSection: map[string]any{"configuration": true}}
+	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "apply", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 	return session, provider, info
 }
 
@@ -113,7 +113,7 @@ func TestPrepareRejectsDependenciesChangedSinceDiscovery(t *testing.T) {
 		return map[string]Provider{"terragrunt": provider}, nil
 	})
 	require.NoError(t, err)
-	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "apply", ComponentSettingsSection: map[string]any{"configuration": true}}
+	info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "apply", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 
 	prepared, err := session.Prepare(t.Context(), info)
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
@@ -494,7 +494,7 @@ func TestExplicitOptionsAndModeReachDiscoveryAndPreparation(t *testing.T) {
 				return map[string]Provider{"terragrunt": provider}, nil
 			})
 			require.NoError(t, err)
-			info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}}
+			info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 			if wantMode == "executable" {
 				// The host never prepares an executable-mode unit; only discovery needs the plugin.
 				_, err = session.Discover(t.Context())
@@ -531,7 +531,7 @@ func TestPlanIdentityIncludesTheEffectiveOptions(t *testing.T) {
 			return map[string]Provider{"terragrunt": provider}, nil
 		})
 		require.NoError(t, err)
-		info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}}
+		info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 		sum, err := session.PlanIdentity(t.Context(), info, nil)
 		require.NoError(t, err)
 		return sum
@@ -551,7 +551,7 @@ func (p *stateProviderFixture) ResolveState(ctx context.Context, req *pluginv1.C
 
 func TestPrepareRefusesAnExecutableModeUnit(t *testing.T) {
 	session, _, info := preparationSession(t)
-	info.ComponentSettingsSection = map[string]any{"configuration": map[string]any{"engine": "terragrunt"}}
+	info.ComponentSettingsSection = map[string]any{"configuration": map[string]any{"engine": "terragrunt", schema.ConfigurationOwnedKey: true}}
 	_, err := session.Prepare(t.Context(), info)
 	require.ErrorIs(t, err, errUtils.ErrExecutableModeUnsupported)
 }
@@ -687,7 +687,7 @@ func TestDiscoveryAndStateRenderEngineLogs(t *testing.T) {
 
 	_, err = session.Discover(t.Context())
 	require.NoError(t, err)
-	_, err = session.ResolveState(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "network", SubCommand: "output", ComponentSettingsSection: map[string]any{"configuration": true}})
+	_, err = session.ResolveState(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "network", SubCommand: "output", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}})
 	require.NoError(t, err)
 
 	require.Equal(t, "debug", sent.Invocation.LogLevel)
@@ -764,7 +764,7 @@ func TestCommandOverrideKeepsDiscoveryEngineAndValidatesPreparation(t *testing.T
 				return map[string]Provider{"terragrunt": provider}, nil
 			})
 			require.NoError(t, err)
-			info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "plan", Command: "tofu", ComponentCommand: "tofu", ComponentSettingsSection: map[string]any{"configuration": true}}
+			info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "plan", Command: "tofu", ComponentCommand: "tofu", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 			prepared, err := session.Prepare(t.Context(), info)
 			if returnedEngine == "terraform" {
 				require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
@@ -801,7 +801,7 @@ func TestPreparationDoesNotRediscoverEveryIndependentUnit(t *testing.T) {
 	})
 	require.NoError(t, err)
 	for _, candidate := range units {
-		prepared, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: candidate.Address.Component, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}})
+		prepared, err := session.Prepare(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: candidate.Address.Component, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}})
 		require.NoError(t, err)
 		require.NotNil(t, prepared)
 	}

@@ -200,6 +200,7 @@ var (
 	ErrCITemplateNotFound         = errors.New("CI report template not found")
 	ErrGiteaTokenNotFound         = errors.New("gitea token not found")
 	ErrGiteaAPIFailed             = errors.New("gitea API request failed")
+	ErrGiteaAPIUnavailable        = errors.New("gitea API is unavailable")
 	ErrGitHubTokenNotFound        = errors.New("GitHub token not found")
 
 	// Planfile storage errors.

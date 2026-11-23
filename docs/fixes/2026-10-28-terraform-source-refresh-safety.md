@@ -51,9 +51,11 @@ lock markers and destination symlink traversal also prevent publication. Separat
 separate target locks; this does not introduce a universal scheduler for independent Terraform
 processes sharing one mutable directory.
 
-When `auto_generate_backend_file` is enabled, a source that ships `backend.tf.json` in a module root
-is rejected before publication: the source copy and the generated backend would otherwise overwrite
-each other. A source update that changes a path between a file and a directory is also rejected
+When `auto_generate_backend_file` is enabled, a `backend.tf.json` that a source ships in a module root
+is not treated as source-owned: refresh drops it from the staged copy and warns, and the backend
+Atmos generates replaces it, as in v1.234.1. Rejecting such sources was a regression and was reverted
+(see `docs/fixes/2026-11-22-release-1-235-0-regressions.md`). A directory named `backend.tf.json`
+is still rejected. A source update that changes a path between a file and a directory is also rejected
 before publication, because refresh replaces files in place and cannot change a path's type
 transactionally. The error names the conflicting path. To recover, move only that path out of the
 component directory, keeping anything it holds that is still needed, and refresh again. Back up and

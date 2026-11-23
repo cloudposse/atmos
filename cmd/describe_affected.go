@@ -14,6 +14,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -51,9 +52,12 @@ func init() {
 	describeAffectedCmd.PersistentFlags().String("ref", "", "Git reference with which to compare the current branch")
 	describeAffectedCmd.PersistentFlags().String("sha", "", "Git commit SHA with which to compare the current branch")
 
-	// Deprecate --ref and --sha in favor of --base.
-	_ = describeAffectedCmd.PersistentFlags().MarkDeprecated("ref", "use --base instead")
-	_ = describeAffectedCmd.PersistentFlags().MarkDeprecated("sha", "use --base instead")
+	// Deprecate --ref and --sha in favor of --base. They are hidden from help like deprecated
+	// flags, and warnDeprecatedDescribeAffectedFlags reports their use on stderr instead of
+	// Cobra's MarkDeprecated, which would print the notice to stdout.
+	for _, name := range describeAffectedDeprecatedFlags {
+		_ = describeAffectedCmd.PersistentFlags().MarkHidden(name)
+	}
 	describeAffectedCmd.PersistentFlags().String("file", "", "Write the result to the file")
 	describeAffectedCmd.PersistentFlags().String("output-file", "", "Write output to file in key=value format (for $GITHUB_OUTPUT)")
 	describeAffectedCmd.PersistentFlags().String("format", "json", "The output format: json, yaml, or matrix (for GitHub Actions matrix strategy)")
@@ -110,6 +114,8 @@ func getRunnableDescribeAffectedCmd(
 	return func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
 		checkAtmosConfig()
+
+		warnDeprecatedDescribeAffectedFlags(cmd)
 
 		// Resolve ATMOS_DESCRIBE_ERROR_MODE (via Viper) onto the --error-mode Cobra flag
 		// before parseDescribeAffectedCliArgs reads it, so the legacy cmd.Flags()-based
@@ -177,5 +183,19 @@ func getRunnableDescribeAffectedCmd(
 
 		err = newDescribeAffectedExec(props.CLIConfig).Execute(&props)
 		return err
+	}
+}
+
+// describeAffectedDeprecatedFlags are the flags superseded by --base.
+var describeAffectedDeprecatedFlags = []string{"ref", "sha"}
+
+// warnDeprecatedDescribeAffectedFlags reports each deprecated flag the user passed on the UI
+// channel (stderr). Cobra's MarkDeprecated prints through the command's output writer, which
+// Atmos routes to stdout, so the notice corrupted pipeable --format json/yaml output.
+func warnDeprecatedDescribeAffectedFlags(cmd *cobra.Command) {
+	for _, name := range describeAffectedDeprecatedFlags {
+		if cmd.Flags().Changed(name) {
+			ui.Warningf("Flag --%s has been deprecated, use --base instead", name)
+		}
 	}
 }

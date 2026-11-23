@@ -55,12 +55,17 @@ func TestLocalSubdirProtectsGeneratedBackend(t *testing.T) {
 	require.NoError(t, os.MkdirAll(module, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(module, generatedBackendFile), []byte("{}"), 0o644))
 	config := &schema.AtmosConfiguration{}
-	config.Components.Terraform.AutoGenerateBackendFile = true
 	section := map[string]any{"metadata": map[string]any{"source_subdir": "modules/app"}}
-	require.ErrorIs(t, rejectGeneratedBackendCollision(config, stage, target, section), errUtils.ErrSourceCopyFailed)
-	info := &schema.ConfigAndStacksInfo{ComponentSection: section}
-	info.SetBackendFileGeneration(false)
-	require.NoError(t, rejectGeneratedBackendCollision(config, stage, target, section))
+	// Without backend generation the shipped file stays in the stage as source content.
+	require.NoError(t, yieldGeneratedBackend(t.Context(), config, stage, target, section))
+	require.FileExists(t, filepath.Join(module, generatedBackendFile))
+	// With generation enabled, the nested module root's shipped backend yields to the generated one.
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	var warned []string
+	stubShippedBackendWarning(t, &warned)
+	require.NoError(t, yieldGeneratedBackend(t.Context(), config, stage, target, section))
+	require.NoFileExists(t, filepath.Join(module, generatedBackendFile))
+	require.Equal(t, []string{"modules/app/" + generatedBackendFile}, warned)
 }
 
 func TestLocalSubdirRefreshPreservesModuleState(t *testing.T) {

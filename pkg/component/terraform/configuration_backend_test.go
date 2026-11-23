@@ -20,7 +20,7 @@ func TestPreparedBackendTakeover(t *testing.T) {
 			directory := t.TempDir()
 			config := &schema.AtmosConfiguration{}
 			config.Components.Terraform.AutoGenerateBackendFile = true
-			info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{}}}
+			info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 			require.NoError(t, backend.GenerateFile(config, info, directory))
 			userFile := filepath.Join(directory, "user.tf")
 			require.NoError(t, os.WriteFile(userFile, []byte("# user-owned"), 0o600))
@@ -152,7 +152,7 @@ func TestRetainedBackendFailurePreservesHostBackend(t *testing.T) {
 	directory := t.TempDir()
 	config := &schema.AtmosConfiguration{}
 	config.Components.Terraform.AutoGenerateBackendFile = true
-	info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{}}}
+	info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 	require.NoError(t, backend.GenerateFile(config, info, directory))
 	hostPath := filepath.Join(directory, "backend.tf.json")
 	before, err := os.ReadFile(hostPath)
@@ -300,7 +300,7 @@ func TestRetainedBackendFileExcludedOnlyWhenHandoffRemovesIt(t *testing.T) {
 	directory := t.TempDir()
 	config := &schema.AtmosConfiguration{}
 	config.Components.Terraform.AutoGenerateBackendFile = true
-	info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{}}}
+	info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 	require.NoError(t, backend.GenerateFile(config, info, directory))
 	skipped := []schema.ComponentConfigurationFile{{Path: "backend.tf.json", Content: []byte(`{"terraform":{"backend":{"s3":{}}}}`), IfExists: "skip"}}
 
@@ -316,7 +316,7 @@ func generateHostBackend(t *testing.T, directory string) map[string][]byte {
 	t.Helper()
 	config := &schema.AtmosConfiguration{}
 	config.Components.Terraform.AutoGenerateBackendFile = true
-	info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{}}}
+	info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 	require.NoError(t, backend.GenerateFile(config, info, directory))
 	paths := backend.HostBackendPaths()
 	require.Len(t, paths, 2)

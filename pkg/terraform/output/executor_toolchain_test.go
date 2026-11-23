@@ -202,7 +202,7 @@ func TestPluginOwnedOutputReadUsesIdentityEnvironmentAndToolchain(t *testing.T) 
 		return &schema.ComponentConfigurationState{BackendType: "local", Backend: map[string]any{"path": filepath.Join(stateRoot, "default.tfstate")}, Workspace: "prod", WorkingDirectory: stateRoot}, nil
 	})
 	sections := validSections()
-	sections["settings"] = map[string]any{"configuration": true}
+	sections["settings"] = map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}
 	sections[cfg.CommandSectionName] = "tofu"
 	sections["dependencies"] = map[string]any{"tools": map[string]any{"tofu": "1.0.0", "fixture-tool": "1.0.0"}}
 

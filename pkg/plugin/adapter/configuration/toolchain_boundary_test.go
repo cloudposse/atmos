@@ -43,7 +43,7 @@ func preparedRequest(t *testing.T, info *schema.ConfigAndStacksInfo) *pluginv1.C
 	})
 	require.NoError(t, err)
 	info.Stack, info.ComponentFromArg, info.SubCommand = "live", "app", "plan"
-	info.ComponentSettingsSection = map[string]any{"configuration": true}
+	info.ComponentSettingsSection = map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}
 	_, err = session.Prepare(t.Context(), info)
 	require.NoError(t, err)
 	require.NotNil(t, captured)

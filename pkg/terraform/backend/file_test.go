@@ -79,7 +79,7 @@ func TestHostBackendOwnership(t *testing.T) {
 			dir := t.TempDir()
 			config := &schema.AtmosConfiguration{}
 			config.Components.Terraform.AutoGenerateBackendFile = true
-			info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{}}}
+			info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 			require.NoError(t, GenerateFile(config, info, dir))
 			path := filepath.Join(dir, hostBackendName)
 			switch mode {
@@ -111,6 +111,21 @@ func TestHostBackendOwnership(t *testing.T) {
 	}
 }
 
+// The user's own settings.configuration data writes the backend as v1.234.1 did: no ownership
+// receipt or other file is added next to the component.
+func TestGenerateFileIgnoresUserSettingsConfiguration(t *testing.T) {
+	dir := t.TempDir()
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	info := &schema.ConfigAndStacksInfo{SubCommand: "plan", ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{"notes": "internal tooling", "provider": "aws"}}}
+	require.NoError(t, GenerateFile(config, info, dir))
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, hostBackendName, entries[0].Name())
+	assert.NoFileExists(t, filepath.Join(dir, hostBackendReceipt))
+}
+
 // A provider-owned backend whose ownership receipt cannot be written fails with the backend
 // generation error and keeps the filesystem cause.
 func TestGenerateFileWrapsReceiptFailures(t *testing.T) {
@@ -121,7 +136,7 @@ func TestGenerateFileWrapsReceiptFailures(t *testing.T) {
 	config.Components.Terraform.AutoGenerateBackendFile = true
 	info := &schema.ConfigAndStacksInfo{
 		SubCommand: "plan", ComponentBackendType: "local", ComponentBackendSection: map[string]any{"path": "state.tfstate"},
-		ComponentSettingsSection: map[string]any{"configuration": map[string]any{"provider": "terragrunt"}},
+		ComponentSettingsSection: map[string]any{"configuration": map[string]any{"provider": "terragrunt", schema.ConfigurationOwnedKey: true}},
 	}
 	err := GenerateFile(config, info, dir)
 	require.ErrorIs(t, err, errUtils.ErrBackendFileGeneration)
@@ -153,7 +168,7 @@ func TestGenerateFileWaitsForWorkdirLock(t *testing.T) {
 	dir := t.TempDir()
 	config := &schema.AtmosConfiguration{}
 	config.Components.Terraform.AutoGenerateBackendFile = true
-	info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{}}}
+	info := &schema.ConfigAndStacksInfo{ComponentBackendType: "local", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 	path := filepath.Join(dir, hostBackendName)
 	done := make(chan error, 1)
 	require.NoError(t, configuration.WithWorkdirLock(dir, func() error {

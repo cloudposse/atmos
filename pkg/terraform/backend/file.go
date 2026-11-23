@@ -31,7 +31,7 @@ func GenerateFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAnd
 	if err != nil {
 		return err
 	}
-	if _, owned := info.ComponentSettingsSection["configuration"]; !owned {
+	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		return u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode)
 	}
 	// The write and its receipt share the workdir lock with RemoveHostBackend, so a handoff never

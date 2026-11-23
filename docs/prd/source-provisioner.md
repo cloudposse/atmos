@@ -93,13 +93,13 @@ After the workdir PR (#1852) merges:
 2. Local component directory (if exists)
 3. `source` (JIT vendor if component missing)
 
-### Working-directory migration (2026-10-28)
+### Working-directory migration (2026-11-21)
 
 The `components.source.working_directory_precedence` behavior transition makes an explicit
 `metadata.working_directory` (or `settings.working_directory`) override the generated path when
 source workdir provisioning is enabled. Metadata takes precedence over settings; relative override
 paths resolve against the Atmos base path. Explicit source commands, execution, shell, and state/output
-lookups use the same resolver. Projects pinned before 2026-10-28 retain the generated workdir path.
+lookups use the same resolver. Projects pinned before 2026-11-21 retain the generated workdir path.
 
 Adopting the new behavior does not automatically migrate state: if the old workdir contains any files,
 Atmos stops before provisioning into the new path. Migrate the complete workdir, including hidden files,

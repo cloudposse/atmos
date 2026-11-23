@@ -167,7 +167,7 @@ func (p *reviewedPlanProject) info(t *testing.T, subCommand string) *schema.Conf
 	}
 	return &schema.ConfigAndStacksInfo{
 		Stack: "dev", ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: subCommand,
-		ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvSection: map[string]any{},
+		ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, ComponentEnvSection: map[string]any{},
 		ComponentSection: map[string]any{
 			"component": "app", "atmos_component": "app", "atmos_stack": "dev", "source": map[string]any{"uri": p.module},
 			"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
@@ -401,7 +401,7 @@ func TestPrepareInitExecutionKeepsReviewedPlanWorkspace(t *testing.T) {
 			require.NoError(t, os.WriteFile(environment, []byte("workspace"), 0o644))
 			info := schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}, UseTerraformPlan: test.savedPlan}
 			if test.owned {
-				info.ComponentSettingsSection = map[string]any{"configuration": true}
+				info.ComponentSettingsSection = map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}
 			}
 			result, err := prepareInitExecution(t.Context(), provisioner.OutputWriters{}, &schema.AtmosConfiguration{}, &info, directory)
 			require.NoError(t, err)
@@ -834,7 +834,7 @@ func TestReviewedRebuildRestoreRetriesAfterPartialMove(t *testing.T) {
 }
 
 func TestNewReviewedRebuildRequiresAnOldEnoughRecord(t *testing.T) {
-	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", ComponentSettingsSection: map[string]any{"configuration": true}}
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 	_, err := newReviewedRebuild(info, &configurationPlan{WorkingDirectory: t.TempDir()}, "plan", "")
 	require.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed, "a record without a rebuild digest cannot prove a rebuilt workdir")
 }

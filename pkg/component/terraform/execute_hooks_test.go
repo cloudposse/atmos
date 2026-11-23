@@ -477,7 +477,7 @@ func TestPrepareConfigurationHandsExecutionToThePipeline(t *testing.T) {
 	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
 	info := &schema.ConfigAndStacksInfo{
 		SubCommand: "plan", Command: executable, ComponentSection: map[string]any{},
-		ComponentSettingsSection: map[string]any{"configuration": true},
+		ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}},
 	}
 	prepared, err := prepareConfiguration(t.Context(), config, info)
 	require.NoError(t, err)
@@ -803,7 +803,7 @@ func TestPrepareComponentExecutionEndsAnIgnoredRunWithoutExecuting(t *testing.T)
 	config.ComponentConfigurations = provider
 	binary, err := os.Executable()
 	require.NoError(t, err)
-	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": "dev", "source": map[string]any{"uri": "tfr://registry.example/acme/vpc/aws"}}}
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": "dev", "source": map[string]any{"uri": "tfr://registry.example/acme/vpc/aws"}}}
 	hooks := &schema.ComponentExecution{AfterHooks: []schema.ComponentHook{{Name: "read", Commands: []string{"terragrunt-read-config"}, Execute: []string{"must-not-run"}}}}
 	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&schema.PreparedComponentConfiguration{
 		Engine: "terraform", Source: "tfr://registry.example/acme/vpc/aws", Inputs: map[string]any{}, BackendType: "local", Backend: map[string]any{}, Workspace: "default", Execution: hooks,

@@ -302,6 +302,12 @@ func ExecutePacker(
 
 	log.Debug("Using ENV", "variables", envVars)
 
+	// With --dry-run, print the masked command that would run instead of running Packer.
+	if info.DryRun {
+		printHelmfilePreview(tenv.Resolve(info.Command), allArgsAndFlags)
+		return nil
+	}
+
 	// Resolve info.Command to the toolchain-installed binary (if any), mirroring
 	// the "version" subcommand branch above and the terraform/helmfile executors.
 	// Without this, a component-level `dependencies.tools.packer` constraint

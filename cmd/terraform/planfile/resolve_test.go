@@ -161,7 +161,7 @@ func TestCanonicalPlanfilePathFollowsTheComponentWorkdir(t *testing.T) {
 	t.Run("workdir component keeps its plan in the workdir, which need not exist yet", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
 			Stack: "live/dev", ComponentFromArg: "app", FinalComponent: "app",
-			ComponentSettingsSection: map[string]any{"configuration": true},
+			ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}},
 			ComponentSection:         map[string]any{"provision": map[string]any{"workdir": map[string]any{"enabled": true}}},
 		}
 		path, err := canonicalPlanfilePath(config, info)

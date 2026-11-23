@@ -22,7 +22,7 @@ func BenchmarkConfigurationWatchCacheHitDuringBuild(b *testing.B) {
 		files[i] = filepath.Join(root, "modules", fmt.Sprintf("unit-%d/main.tf", i))
 	}
 	settings := func(pattern string) map[string]any {
-		return map[string]any{"configuration": map[string]any{"watch_excludes": []any{pattern}}}
+		return map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "watch_excludes": []any{pattern}}}
 	}
 	var worstTotal time.Duration
 	for i := 0; i < b.N; i++ {
@@ -78,7 +78,7 @@ func TestConfigurationWatchIndexConcurrentViews(t *testing.T) {
 		go func(key int) {
 			<-start
 			patterns := []string{"**/*.tf", "**/*.md"}
-			settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{patterns[key]}}}
+			settings := map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "watch_excludes": []any{patterns[key]}}}
 			view, err := configurationWatchIndex(config, settings, index)
 			results <- result{key, view, err}
 		}(i % 2)
@@ -107,7 +107,7 @@ func TestConfigurationWatchIndexBuildsAreIsolated(t *testing.T) {
 	config := &schema.AtmosConfiguration{BasePathAbsolute: root, BasePath: root}
 	index := newChangedFilesIndex(config, []string{"main.tf", "README.md"}, root)
 	settings := func(pattern string) map[string]any {
-		return map[string]any{"configuration": map[string]any{"watch_excludes": []any{pattern}}}
+		return map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, "watch_excludes": []any{pattern}}}
 	}
 	cached, err := configurationWatchIndex(config, settings("**/*.md"), index)
 	require.NoError(t, err)

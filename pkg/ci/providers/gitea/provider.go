@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
@@ -22,7 +23,10 @@ const ProviderName = "gitea-actions"
 const pullRequestTargetEvent = "pull_request_target"
 
 // Provider implements Gitea Actions metadata and reporting.
-type Provider struct{}
+type Provider struct {
+	// unavailableOnce limits the "API features disabled" log line to one per provider.
+	unavailableOnce sync.Once
+}
 
 var _ provider.Provider = (*Provider)(nil)
 

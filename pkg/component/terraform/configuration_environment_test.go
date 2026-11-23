@@ -26,7 +26,7 @@ func configurationExecution(t *testing.T) (*Executor, *schema.AtmosConfiguration
 	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	binary, err := os.Executable()
 	require.NoError(t, err)
-	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", ComponentSection: map[string]any{}, ComponentEnvSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
+	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", ComponentSection: map[string]any{}, ComponentEnvSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
 	return NewExecutor(Services{}), config, info
 }
 
@@ -196,7 +196,7 @@ func TestGetTerraformStateRejectsConfigurationOwnedBackend(t *testing.T) {
 	executor := testExecutor(t)
 	executor.services.ExecuteDescribeComponent = func(*componentpkg.ExecuteDescribeComponentParams) (map[string]any, error) {
 		return map[string]any{
-			"settings":     map[string]any{"configuration": map[string]any{"provider": "terragrunt"}},
+			"settings":     map[string]any{"configuration": map[string]any{"provider": "terragrunt", schema.ConfigurationOwnedKey: true}},
 			"backend_type": "local",
 			"backend":      map[string]any{"local": map[string]any{}},
 		}, nil
@@ -226,7 +226,7 @@ func TestPreExecutionEnvPreservesConfigurationRouting(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, config, info := configurationExecution(t)
-			info.ComponentSettingsSection["configuration"] = tc.configuration
+			info.ComponentSettingsSection["configuration"] = map[string]any{schema.ConfigurationOwnedKey: tc.configuration}
 			info.DryRun = tc.dryRun
 			info.TerraformWorkspace = "stage"
 			info.SanitizedEnv = []string{"TF_WORKSPACE=" + tc.workspace}
@@ -271,7 +271,7 @@ func TestPrepareComponentExecutionHonorsExclusionAndReadConfigHooks(t *testing.T
 	binary, err := os.Executable()
 	require.NoError(t, err)
 	newInfo := func() *schema.ConfigAndStacksInfo {
-		return &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": "dev", "source": map[string]any{"uri": "./module"}}}
+		return &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": "dev", "source": map[string]any{"uri": "./module"}}}
 	}
 
 	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&schema.PreparedComponentConfiguration{
@@ -305,7 +305,7 @@ func TestPrepareComponentExecutionResolvesADeferredSourceAfterReadConfigHooks(t 
 	binary, err := os.Executable()
 	require.NoError(t, err)
 	const registry = "tfr://registry.example/acme/vpc/aws?version=1.0.0"
-	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": "dev", "source": map[string]any{"uri": registry}}}
+	info := &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", Component: "app", FinalComponent: "app", Command: binary, SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, ComponentEnvSection: map[string]any{}, ComponentSection: map[string]any{"component": "app", "atmos_component": "app", "atmos_stack": "dev", "source": map[string]any{"uri": registry}}}
 
 	var events []string
 	hooks := &schema.ComponentExecution{

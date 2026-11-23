@@ -144,6 +144,45 @@ Two test layers make an unjournaled default change un-mergeable:
     consistent (`entry[n+1].Old == entry[n].New`); each key's newest `New` equals the live default;
     journaled keys absent from the embedded atmos.yaml; `defaultCliConfig` agreement; the `edition`
     key never journaled.
+3. **Release boundary** (`pkg/edition/journal_release_test.go` +
+    `pkg/edition/testdata/latest-release.yaml`): see below.
+
+### Release boundary
+
+A pin must preserve the behavior of the release the user was running when they chose it. If an
+entry that a published release did not ship is dated on or before that release's publication date,
+a project pinned to that date (or earlier) while running the release silently receives the new
+default or behavior after upgrading, because the pin date is inclusive. This happened in the
+1.235.0 cycle: `plugins.default_alias`, `list.instances.engine_columns`, and
+`components.source.working_directory_precedence` were dated 2026-10-28/29, when their PRs were
+opened, but merged on 2026-11-21, after v1.234.1 was published on 2026-11-10. They are now dated
+2026-11-21.
+
+The dating rule is therefore:
+
+- An entry's date is the day its change merges into `main`. Re-check it before merging a PR that was
+  open for a while; the date the PR was opened is not the merge date.
+- An entry not shipped by the latest published release must be dated **after** that release's
+  publication date (UTC).
+- An entry that shipped in a published release is frozen: its date and key must not change, because
+  existing pins already resolve against it.
+
+Tests cannot query GitHub, so `pkg/edition/testdata/latest-release.yaml` records the latest
+published release version, its publication date, and the journal entries (date and key) it shipped.
+`TestJournalReleaseBoundary` fails when an unlisted entry is dated on or before that date, or when a
+listed entry is removed or re-dated; `TestLatestReleasePinKeepsReleaseBehavior` checks that pinning
+to the release date rolls back every unlisted entry.
+
+**Release process:** after publishing a release, update the file from the commit the release was
+built from, then commit it to `main`:
+
+```bash
+ATMOS_REGENERATE_EDITION_RELEASE=v1.235.0@2026-11-25 go test ./pkg/edition -run TestJournalReleaseBoundary
+```
+
+The value is `<tag>@<publication date>`. Regenerating records every entry in that commit's journal
+as shipped, so do not run it from a later commit. Until the file is updated, the guard still holds
+against the previous release, which is weaker but never wrong.
 
 ### Contributor workflow
 
@@ -154,7 +193,8 @@ Changing a shipped default means updating every live layer that sets it, in one 
     invariant tests require both to agree with the journal's current value. Confirm the key isn't
     set in the embedded `atmos.yaml` (layer (b) must stay free of journaled keys).
 2. Append a dated entry to `pkg/edition/journal.yaml` (date = expected merge date, `Ref` = PR URL,
-    `Old`/`New` in the type the field uses today).
+    `Old`/`New` in the type the field uses today). The date must be after the latest published
+    release; update it to the actual merge date before merging (see "Release boundary").
 3. Regenerate the snapshot.
 
 Adding a brand-new default only needs edit 1 (in whichever layer introduces it) and edit 3 — new
@@ -164,7 +204,8 @@ keys are never journal-gated.
 
 For a change to a code path rather than a configuration default:
 
-1. Add a `KindBehavior` entry with a unique transition key, its expected merge date, descriptive
+1. Add a `KindBehavior` entry with a unique transition key, its expected merge date (after the
+    latest published release; see "Release boundary"), descriptive
     `Old` and `New` values, and a reference. Each key represents exactly one transition; later
     changes need a new key. A key cannot mix value and behavior entries.
 2. Call `edition.BehaviorChanged(atmosConfig.Edition, key)` and propagate errors before running
@@ -372,3 +413,4 @@ current schema.
 | 2026-10-09 | 1.7 | Journaled `toolchain.install` (`declared` to `auto`): a brand-new key that governs how `.tool-versions` is used by component runs, which previously had a fixed answer. |
 | 2026-10-13 | 1.8 | Implemented named behavior transitions and inspection alongside value changes; historical candidates remain ungated. |
 | 2026-10-09 | 1.9 | Recorded unattended `claude-code` tool approval under `mcp.servers` becoming a permission prompt as a behavior-gating candidate. |
+| 2026-11-22 | 1.10 | Added the release boundary: journal entries not shipped by the latest published release must be dated after it, enforced against `pkg/edition/testdata/latest-release.yaml`. Re-dated `plugins.default_alias`, `list.instances.engine_columns`, and `components.source.working_directory_precedence` to their 2026-11-21 merge date. |

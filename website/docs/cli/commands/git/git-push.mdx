@@ -69,7 +69,7 @@ A rejected non-fast-forward push is the most common failure mode in GitOps publi
 
 1. On rejection, including a concurrent remote ref update (`cannot lock ref ... is at ... but expected ...`), run `pull --rebase`, then re-push.
 2. Wait with exponential backoff and random jitter, then retry according to `push.retry` (four total attempts by default; configurable per repository).
-3. After exhaustion, fail with a clear error. Size the retry budget for bursts from independent publishers.
+3. After exhaustion, fail with a clear error that names the remote, the branch, and the attempt count, for example `git push rejected: non-fast-forward: origin/main after 4 attempt(s), 3 retries`. The elapsed time is logged at debug level (`--logs-level=Debug`). Size the retry budget for bursts from independent publishers.
 
 Configure backoff and jitter using the shared [retry policy](/steps/retry) under `git.repositories.<name>.push`:
 
