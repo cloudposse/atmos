@@ -16,12 +16,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// forceInteractive pins the cmd/auth interactivity check for the test.
-func forceInteractive(t *testing.T, interactive bool) {
+// forceNonInteractive pins the cmd/auth interactivity check to non-interactive for the test.
+func forceNonInteractive(t *testing.T) {
 	t.Helper()
 	orig := isInteractiveFn
 	t.Cleanup(func() { isInteractiveFn = orig })
-	isInteractiveFn = func() bool { return interactive }
+	isInteractiveFn = func() bool { return false }
 }
 
 // stdinAtEOF replaces os.Stdin with a pipe that is already closed for writing,
@@ -45,7 +45,7 @@ func stdinAtEOF(t *testing.T) {
 // and never logs anything out. Before the fix the selection form ran anyway and
 // logged out whichever option came first.
 func TestPerformInteractiveLogout_WithoutTTYFailsInsteadOfPicking(t *testing.T) {
-	forceInteractive(t, false)
+	forceNonInteractive(t)
 	stdinAtEOF(t)
 
 	ctrl := gomock.NewController(t)
@@ -69,7 +69,7 @@ func TestPerformInteractiveLogout_WithoutTTYFailsInsteadOfPicking(t *testing.T) 
 // path: with nothing configured there is nothing to choose, so the command
 // still succeeds without a terminal.
 func TestPerformInteractiveLogout_NoIdentitiesSkipsTTYCheck(t *testing.T) {
-	forceInteractive(t, false)
+	forceNonInteractive(t)
 
 	ctrl := gomock.NewController(t)
 	m := authTypes.NewMockAuthManager(ctrl)
@@ -134,7 +134,7 @@ func TestBuildLogoutOptions_SortedOrder(t *testing.T) {
 }
 
 // restorePersistentIdentityFlag restores the inherited --identity flag after the
-// test. resetAuthCmdFlags snapshots only the command's own flags, and Cobra merges
+// test. The resetAuthCmdFlags helper snapshots only the command's own flags, and Cobra merges
 // the parent's persistent --identity flag into them during ParseFlags.
 func restorePersistentIdentityFlag(t *testing.T) {
 	t.Helper()
@@ -192,7 +192,7 @@ logs:
 func TestExecuteAuthLogoutCommand_BareIdentityWithoutTTYFails(t *testing.T) {
 	writeTwoIdentityFixture(t)
 	t.Setenv("CI", "true")
-	forceInteractive(t, false)
+	forceNonInteractive(t)
 	stdinAtEOF(t)
 
 	cmd := authLogoutCmd
@@ -212,7 +212,7 @@ func TestExecuteAuthLogoutCommand_BareIdentityWithoutTTYFails(t *testing.T) {
 func TestExecuteAuthLogoutCommand_PlainLogoutWithoutTTYFails(t *testing.T) {
 	writeTwoIdentityFixture(t)
 	t.Setenv("CI", "true")
-	forceInteractive(t, false)
+	forceNonInteractive(t)
 	stdinAtEOF(t)
 
 	cmd := authLogoutCmd

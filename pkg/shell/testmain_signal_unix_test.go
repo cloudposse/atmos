@@ -12,18 +12,18 @@ import (
 )
 
 const (
-	// killSelfEnv makes the test binary terminate itself with the signal number it holds.
+	// The killSelfEnv variable makes the test binary terminate itself with the signal number it holds.
 	killSelfEnv = "_ATMOS_SHELL_TEST_KILL_SELF"
 
-	// awaitSignalEnv makes the test binary wait for a signal. It holds the path of a
+	// The awaitSignalEnv variable makes the test binary wait for a signal. It holds the path of a
 	// report file: the child writes "ready" once its handlers are installed and then
 	// the name of the first signal it acts on, and exits with 128+N for that signal.
 	awaitSignalEnv = "_ATMOS_SHELL_TEST_AWAIT_SIGNAL"
 
-	// ignoreSignalsEnv lists signal numbers (comma-separated) the awaiting child ignores.
+	// The ignoreSignalsEnv variable lists signal numbers (comma-separated) the awaiting child ignores.
 	ignoreSignalsEnv = "_ATMOS_SHELL_TEST_IGNORE_SIGNALS"
 
-	// awaitSignalReady is the report content once the awaiting child is ready.
+	// The awaitSignalReady constant is the report content once the awaiting child is ready.
 	awaitSignalReady = "ready"
 )
 

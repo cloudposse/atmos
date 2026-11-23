@@ -66,7 +66,8 @@ func structuredListOutput(providers map[string]schema.Provider, identities map[s
 // redactedValue. The input map and its values are never modified.
 func redactProvidersForList(providers map[string]schema.Provider) map[string]schema.Provider {
 	redacted := make(map[string]schema.Provider, len(providers))
-	for name, provider := range providers {
+	for name := range providers {
+		provider := providers[name]
 		if provider.Password != "" {
 			provider.Password = redactedValue
 		}
@@ -85,7 +86,8 @@ func redactProvidersForList(providers map[string]schema.Provider) map[string]sch
 // The input maps are never modified.
 func redactIdentitiesForList(identities map[string]schema.Identity) map[string]schema.Identity {
 	redacted := make(map[string]schema.Identity, len(identities))
-	for name, identity := range identities {
+	for name := range identities {
+		identity := identities[name]
 		identity.Credentials = redactSecretMap(identity.Credentials)
 		identity.Spec = redactSecretMap(identity.Spec)
 		identity.Env = redactSecretEnv(identity.Env)
@@ -114,28 +116,43 @@ func redactSecretMap(m map[string]interface{}) map[string]interface{} {
 func redactSecretValue(secretKey bool, value interface{}) interface{} {
 	switch typed := value.(type) {
 	case string:
-		if typed != "" && (secretKey || awsAccessKeyIDPattern.MatchString(typed)) {
-			return redactedValue
-		}
-		return typed
+		return redactSecretString(secretKey, typed)
 	case map[string]interface{}:
-		nested := redactSecretMap(typed)
-		if secretKey {
-			// Every string under a secret key is secret, e.g. `token: {value: ...}`.
-			for key, nestedValue := range nested {
-				nested[key] = redactSecretValue(true, nestedValue)
-			}
-		}
-		return nested
+		return redactSecretNestedMap(secretKey, typed)
 	case []interface{}:
-		list := make([]interface{}, len(typed))
-		for i, item := range typed {
-			list[i] = redactSecretValue(secretKey, item)
-		}
-		return list
+		return redactSecretList(secretKey, typed)
 	default:
 		return value
 	}
+}
+
+// redactSecretString redacts a non-empty string under a secret key or shaped like an AWS access key ID.
+func redactSecretString(secretKey bool, value string) string {
+	if value != "" && (secretKey || awsAccessKeyIDPattern.MatchString(value)) {
+		return redactedValue
+	}
+	return value
+}
+
+// redactSecretNestedMap copies and redacts a nested map. Every string under a secret
+// key is secret, e.g. `token: {value: ...}`.
+func redactSecretNestedMap(secretKey bool, m map[string]interface{}) map[string]interface{} {
+	nested := redactSecretMap(m)
+	if secretKey {
+		for key, nestedValue := range nested {
+			nested[key] = redactSecretValue(true, nestedValue)
+		}
+	}
+	return nested
+}
+
+// redactSecretList copies and redacts a list of values.
+func redactSecretList(secretKey bool, items []interface{}) []interface{} {
+	list := make([]interface{}, len(items))
+	for i, item := range items {
+		list[i] = redactSecretValue(secretKey, item)
+	}
+	return list
 }
 
 // redactSecretEnv returns a copy of env with the values of secret-named
@@ -145,9 +162,9 @@ func redactSecretEnv(env []schema.EnvironmentVariable) []schema.EnvironmentVaria
 		return nil
 	}
 	out := make([]schema.EnvironmentVariable, len(env))
-	for i, variable := range env {
-		out[i] = variable
-		out[i].Value = redactSecretValue(isSecretListKey(variable.Key), variable.Value).(string)
+	for i := range env {
+		out[i] = env[i]
+		out[i].Value = redactSecretValue(isSecretListKey(env[i].Key), env[i].Value).(string)
 	}
 	return out
 }

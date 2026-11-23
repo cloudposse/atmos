@@ -10,10 +10,10 @@ import (
 )
 
 var (
-	// commandTerminationSignals are forwarded to an `exec` child when Atmos is terminated.
+	// The commandTerminationSignals list is forwarded to an `exec` child when Atmos is terminated.
 	commandTerminationSignals = []os.Signal{syscall.SIGTERM}
 
-	// shellTerminationSignals are forwarded to an interactive shell when Atmos is
+	// The shellTerminationSignals list is forwarded to an interactive shell when Atmos is
 	// terminated. An interactive shell ignores SIGTERM, so SIGHUP (what the shell gets
 	// when its terminal goes away) follows if it is still running.
 	shellTerminationSignals = []os.Signal{syscall.SIGTERM, syscall.SIGHUP}

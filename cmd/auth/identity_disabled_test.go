@@ -36,9 +36,7 @@ type identityResolver func(cmd *cobra.Command, authManager auth.AuthManager) (st
 
 func disabledIdentityResolvers() map[string]identityResolver {
 	return map[string]identityResolver{
-		"whoami": func(cmd *cobra.Command, m auth.AuthManager) (string, error) {
-			return identityFromFlagOrDefault(cmd, m)
-		},
+		"whoami": identityFromFlagOrDefault,
 		"env": func(cmd *cobra.Command, m auth.AuthManager) (string, error) {
 			return resolveIdentityNameForEnv(cmd, viper.GetViper(), m)
 		},

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
@@ -180,16 +179,12 @@ func configureWhoamiValidation(authManager authTypes.AuthManager, whoami *authTy
 		provider = &configured
 	}
 
-	option := awsAuth.GetBaseEndpointConfigOption(identity, provider)
-	if option == nil {
+	endpoint := awsAuth.GetBaseEndpointURL(identity, provider)
+	if endpoint == "" {
 		return
 	}
-	var loadOptions awsConfig.LoadOptions
-	if err := option(&loadOptions); err != nil || loadOptions.BaseEndpoint == "" {
-		return
-	}
-	log.Debug("Validating credentials against the configured endpoint", logKeyIdentity, whoami.Identity, "endpoint", loadOptions.BaseEndpoint)
-	setter.SetValidationEndpoint(loadOptions.BaseEndpoint)
+	log.Debug("Validating credentials against the configured endpoint", logKeyIdentity, whoami.Identity, "endpoint", endpoint)
+	setter.SetValidationEndpoint(endpoint)
 }
 
 // validationEndpointSetter is implemented by credentials whose validation call can

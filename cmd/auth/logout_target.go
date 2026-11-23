@@ -70,6 +70,12 @@ func resolveLogoutTarget(sel *logoutSelection) (logoutTarget, error) {
 	if len(sel.args) > 0 {
 		return logoutTarget{kind: logoutTargetIdentity, identity: sel.args[0]}, nil
 	}
+	return resolveLogoutIdentityTarget(sel)
+}
+
+// resolveLogoutIdentityTarget resolves the target from --identity or ATMOS_IDENTITY
+// when no positional identity, --all, --tags, or --provider selected one.
+func resolveLogoutIdentityTarget(sel *logoutSelection) (logoutTarget, error) {
 	// `--identity` without a value asks for interactive selection; the
 	// IdentityFlagSelectValue sentinel is never an identity name.
 	identity := sel.identityFlag

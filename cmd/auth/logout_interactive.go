@@ -87,7 +87,7 @@ func canonicalIdentityKey(identities map[string]schema.Identity, name string) st
 
 // executeLogoutOption executes the selected logout action.
 // This is a pure routing function that can be easily tested.
-func executeLogoutOption(ctx context.Context, authManager auth.AuthManager, option logoutOption, dryRun bool, deleteKeychain bool, force bool) error { //nolint:revive
+func executeLogoutOption(ctx context.Context, authManager auth.AuthManager, option logoutOption, dryRun bool, deleteKeychain bool, force bool) error {
 	defer perf.Track(nil, "auth.executeLogoutOption")()
 
 	switch option.typ {
@@ -168,7 +168,7 @@ func joinSorted[V any](m map[string]V) string {
 // an identity, so the identity selector is shown (not the full logout menu) and
 // the chosen identity is logged out. Without a terminal the selector returns the
 // same TTY-required error that other bare `--identity` commands return.
-func performSelectIdentityLogout(ctx context.Context, authManager auth.AuthManager, dryRun bool, deleteKeychain bool, force bool) error { //nolint:revive
+func performSelectIdentityLogout(ctx context.Context, authManager auth.AuthManager, dryRun bool, deleteKeychain bool, force bool) error {
 	defer perf.Track(nil, "auth.performSelectIdentityLogout")()
 
 	identityName, err := authManager.GetDefaultIdentity(true)

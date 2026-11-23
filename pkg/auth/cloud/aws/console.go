@@ -266,7 +266,7 @@ const federationRedactedQuery = "Action=getSigninToken&Session=[redacted]"
 const federationRedacted = "[redacted]"
 
 // redactFederationError rebuilds a federation request error without the credentials.
-// rawQuery is the encoded getSigninToken query (it holds the Session document) and
+// The rawQuery argument is the encoded getSigninToken query (it holds the Session document) and
 // sessionData is the Session JSON. The query is replaced first, then every remaining
 // raw, query-escaped, or path-escaped credential value (a response body may echo the
 // session). Cancellation and deadline causes stay in the error chain.

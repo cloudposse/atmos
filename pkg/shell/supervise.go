@@ -11,16 +11,16 @@ import (
 )
 
 var (
-	// terminationGrace bounds how long Atmos waits, after forwarding a termination
+	// The terminationGrace value bounds how long Atmos waits, after forwarding a termination
 	// signal, for the child to exit before Atmos itself exits.
 	terminationGrace = 30 * time.Second
 
-	// escalationDelay is how long Atmos waits after each forwarded termination signal
+	// The escalationDelay value is how long Atmos waits after each forwarded termination signal
 	// before sending the next one in the escalation list (for example SIGHUP after
 	// SIGTERM, which an interactive shell ignores).
 	escalationDelay = 2 * time.Second
 
-	// terminalDeliversInterruptFn reports whether the terminal already delivers Ctrl-C
+	// The terminalDeliversInterruptFn function reports whether the terminal already delivers Ctrl-C
 	// to the child. Tests replace it to exercise both paths without a terminal.
 	terminalDeliversInterruptFn = terminalDeliversInterrupt
 )
@@ -77,7 +77,7 @@ func superviseChild(proc *os.Process, escalation []os.Signal) (stop func()) {
 }
 
 // terminateChild forwards the escalation signals to the child until it exits, then
-// waits for it up to terminationGrace. done is closed once the child has exited.
+// waits for it up to terminationGrace. The done channel is closed once the child has exited.
 func terminateChild(proc *os.Process, escalation []os.Signal, done <-chan struct{}) {
 	deadline := time.NewTimer(terminationGrace)
 	defer deadline.Stop()
