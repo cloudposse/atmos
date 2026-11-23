@@ -52,12 +52,8 @@ type logoutTarget struct {
 // and otherwise interactive selection. A bare `--identity` selects an identity
 // with the identity selector.
 func resolveLogoutTarget(sel *logoutSelection) (logoutTarget, error) {
-	// --tags is mutually exclusive with --provider/--all/--identity/positional identity —
-	// it's an alternative way to select a target, not a composable cross-cutting filter here.
-	// ATMOS_IDENTITY is not an explicit selector (`atmos auth shell` exports it), so it
-	// never conflicts with --tags; it is only used when nothing else selects a target.
-	if len(sel.tags) > 0 && (sel.provider != "" || sel.all || sel.identityFlag != "" || len(sel.args) > 0) {
-		return logoutTarget{}, errUtils.ErrMutuallyExclusiveFlags
+	if err := checkLogoutTagsConflict(sel); err != nil {
+		return logoutTarget{}, err
 	}
 
 	switch {
@@ -81,6 +77,22 @@ func resolveLogoutTarget(sel *logoutSelection) (logoutTarget, error) {
 }
 
 // resolveLogoutIdentityTarget resolves the target from --identity or ATMOS_IDENTITY
+
+// checkLogoutTagsConflict rejects --tags combined with another explicit target selector.
+// The --tags flag is mutually exclusive with --provider/--all/--identity/positional identity:
+// it's an alternative way to select a target, not a composable cross-cutting filter here.
+// ATMOS_IDENTITY is not an explicit selector (`atmos auth shell` exports it), so it
+// never conflicts with --tags; it is only used when nothing else selects a target.
+func checkLogoutTagsConflict(sel *logoutSelection) error {
+	if len(sel.tags) == 0 {
+		return nil
+	}
+	if sel.provider != "" || sel.all || sel.identityFlag != "" || len(sel.args) > 0 {
+		return errUtils.ErrMutuallyExclusiveFlags
+	}
+	return nil
+}
+
 // when no positional identity, --all, --tags, or --provider selected one.
 func resolveLogoutIdentityTarget(sel *logoutSelection) (logoutTarget, error) {
 	// `--identity` without a value asks for interactive selection; the
