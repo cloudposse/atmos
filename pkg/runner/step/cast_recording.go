@@ -6,13 +6,12 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/spf13/viper"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 // castRecordingActive is the process-wide recording guard. It is held from just
@@ -64,13 +63,13 @@ func startStepRecorder(step *schema.WorkflowStep, vars *Variables) (*asciicast.R
 	}
 	rec, err := asciicast.Start(&asciicast.Options{
 		Path:       path,
-		BasePath:   viper.GetString("cast.recording.base_path"),
+		BasePath:   viperguard.GetString("cast.recording.base_path"),
 		Name:       step.Name,
 		Title:      title,
 		Command:    castCommandArgs(step),
 		Width:      width,
 		Height:     height,
-		RecordIn:   viper.GetBool("cast.recording.input"),
+		RecordIn:   viperguard.GetBool("cast.recording.input"),
 		Explicit:   path != "",
 		Overwrite:  true, // Declarative steps own their output path; commit replaces it.
 		Env:        env,
@@ -230,11 +229,11 @@ func castRecorderEnv(step *schema.WorkflowStep, vars *Variables) (map[string]str
 func castRecorderDimensions(step *schema.WorkflowStep) (int, int) {
 	width := step.Width
 	if width <= 0 {
-		width = viper.GetInt("cast.recording.width")
+		width = viperguard.GetInt("cast.recording.width")
 	}
 	height := step.Height
 	if height <= 0 {
-		height = viper.GetInt("cast.recording.height")
+		height = viperguard.GetInt("cast.recording.height")
 	}
 	return width, height
 }

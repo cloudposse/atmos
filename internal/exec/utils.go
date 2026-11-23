@@ -15,11 +15,11 @@ import (
 	"sync"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	"github.com/cloudposse/atmos/pkg/component/typedetect"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
@@ -30,6 +30,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/template/delimiters"
 	tfbackend "github.com/cloudposse/atmos/pkg/terraform/backend"
+	"github.com/cloudposse/atmos/pkg/terraform/inspect"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
@@ -1356,9 +1357,14 @@ func processStacks(
 	case cfg.TerraformComponentType:
 		componentPath := constructTerraformComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 		componentInfo[cfg.ComponentPathSectionName] = componentPath
-		terraformConfiguration, diags := tfconfig.LoadModule(componentPath)
+		// OpenTofu 1.9+ provider iteration (`provider = aws.by_account[each.key]`) is a terraform-config-inspect
+		// static-parser limitation, so inspect.LoadModule returns those diagnostics separately from diags.
+		// The module is still complete apart from those provider references, so keep it: consumers such as
+		// terraformSensitiveVarKeys need its variable declarations.
+		terraformConfiguration, diags, providerIteration := inspect.LoadModule(componentPath)
 		if !diags.HasErrors() {
 			componentInfo[terraformConfigKey] = terraformConfiguration
+			terraformcomponent.RecordProviderIterationSkip(componentInfo, providerIteration)
 		} else {
 			diagErr := diags.Err()
 
@@ -1425,6 +1431,8 @@ func processStacks(
 					log.Debug("Skipping terraform-config-inspect validation for known module-source-interpolation diagnostic", "diagnostic", errMsg)
 					componentInfo[terraformConfigKey] = nil
 					componentInfo["validation_skipped_module_source_interpolation"] = true
+					terraformcomponent.RecordSensitiveVariableNames(componentInfo, terraformConfiguration)
+					terraformcomponent.RecordProviderIterationSkip(componentInfo, providerIteration)
 				} else {
 					componentInfo[terraformConfigKey] = nil
 				}

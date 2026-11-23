@@ -7,14 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/viper"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 var (
@@ -332,7 +331,7 @@ func inheritCastSessionBlockDefaults(parent, block *schema.WorkflowStep) {
 // anything else is an rc file path whose existence the session checks when it
 // starts.
 func castSessionShellInit(step *schema.WorkflowStep) string {
-	return firstNonEmpty(strings.TrimSpace(step.ShellInit), strings.TrimSpace(viper.GetString("cast.session.shell_init")))
+	return firstNonEmpty(strings.TrimSpace(step.ShellInit), strings.TrimSpace(viperguard.GetString("cast.session.shell_init")))
 }
 
 func applyCastStepEnv(castStep *schema.WorkflowStep, vars *Variables) error {
