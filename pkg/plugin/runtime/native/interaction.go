@@ -155,18 +155,28 @@ func (b *budget) await() func() {
 
 func (b *budget) resume() {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	b.waiting--
 	if b.waiting > 0 || b.finished {
+		b.mu.Unlock()
 		return
 	}
 	if b.waitTimer != nil {
 		b.waitTimer.Stop()
 		b.waited += time.Since(b.waitSince)
+		if b.waited >= b.waitLimit {
+			// The wait timer may be due but blocked on the lock, and restarting work would make it
+			// stale, so expire here; the callback runs outside the lock.
+			b.finished = true
+			b.exhaustedByWait = true
+			b.mu.Unlock()
+			b.expire(true)
+			return
+		}
 	}
 	b.generation++
 	b.since = time.Now()
 	b.timer = b.schedule()
+	b.mu.Unlock()
 }
 
 // stop releases the timers when the invocation ends.

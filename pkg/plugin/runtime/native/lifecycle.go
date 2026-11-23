@@ -166,10 +166,7 @@ func (h *Handle) finishInvocation(callCtx context.Context, work *budget, err err
 	if errors.Is(context.Cause(callCtx), errUtils.ErrPluginTimeout) {
 		h.Close()
 		warn(omittedLogsNotice)
-		if work != nil && work.userWaitExhausted() {
-			return interactionTimeoutError(time.Now(), h.interactionLimit, h.packageAlias)
-		}
-		return timeoutError(time.Now(), true)
+		return h.budgetTimeoutError(work)
 	}
 	if deadlineExceeded(callCtx, err) {
 		h.Close()
@@ -186,6 +183,15 @@ func (h *Handle) finishInvocation(callCtx context.Context, work *budget, err err
 		warn(omittedLogsNotice)
 	}
 	return err
+}
+
+// budgetTimeoutError reports why the interactive budget ended the call: the user wait ran out
+// (the sign-in error) or the plugin's own work did (the generic timeout error).
+func (h *Handle) budgetTimeoutError(work *budget) error {
+	if work != nil && work.userWaitExhausted() {
+		return interactionTimeoutError(time.Now(), h.interactionLimit, h.packageAlias)
+	}
+	return timeoutError(time.Now(), true)
 }
 
 // deadlineExceeded reports whether a failed call ran out of time. The plugin's gRPC server can

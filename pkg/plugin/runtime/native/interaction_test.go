@@ -123,6 +123,23 @@ func TestBudgetWaitLimitAccumulatesAcrossWaits(t *testing.T) {
 	})
 }
 
+func TestBudgetResumeAtWaitLimitExpiresInsteadOfRestartingWork(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var waitExpired atomic.Bool
+		work := newBudget(30*time.Minute, time.Minute, func(wait bool) { waitExpired.Store(wait) })
+		defer work.stop()
+		resume := work.await()
+		// Model a wait timer that is due but has not acquired the lock when the wait ends.
+		work.mu.Lock()
+		work.waitSince = time.Now().Add(-time.Minute)
+		work.mu.Unlock()
+		resume()
+		synctest.Wait()
+		require.True(t, waitExpired.Load(), "a spent wait allowance must expire, not restart the work timer")
+		require.True(t, work.userWaitExhausted())
+	})
+}
+
 func TestStoppedBudgetNeverExpires(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		work, expired := budgetProbe()
