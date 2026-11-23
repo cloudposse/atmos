@@ -20,7 +20,7 @@ import (
 const autoRealm = "462813558259d41c"
 
 // newSourcedEKSIntegration builds the prod EKS integration with a realm and its source.
-func newSourcedEKSIntegration(t *testing.T, path, alias, realmValue, realmSource string) integrations.Integration {
+func newSourcedEKSIntegration(t *testing.T, path, realmValue, realmSource string) integrations.Integration {
 	t.Helper()
 
 	integration, err := NewEKSIntegration(&integrations.IntegrationConfig{
@@ -31,7 +31,7 @@ func newSourcedEKSIntegration(t *testing.T, path, alias, realmValue, realmSource
 			Kind: integrations.KindAWSEKS,
 			Via:  &schema.IntegrationVia{Identity: "admin"},
 			Spec: &schema.IntegrationSpec{Cluster: &schema.Cluster{
-				Name: "prod", Region: "us-east-2", Alias: alias,
+				Name: "prod", Region: "us-east-2",
 				Kubeconfig: &schema.KubeconfigSettings{Path: path},
 			}},
 		},
@@ -52,7 +52,7 @@ func TestEKSIntegration_Execute_AutoRealmKeepsNames(t *testing.T) {
 			stubProdEKSCluster(t)
 			path := filepath.Join(t.TempDir(), "kubeconfig")
 
-			require.NoError(t, newSourcedEKSIntegration(t, path, "", autoRealm, tt.source).Execute(t.Context(), nil))
+			require.NoError(t, newSourcedEKSIntegration(t, path, autoRealm, tt.source).Execute(t.Context(), nil))
 
 			config, err := loadKubeconfig(path)
 			require.NoError(t, err)
@@ -71,9 +71,9 @@ func TestEKSIntegration_Execute_AutoRealmKeepsNames(t *testing.T) {
 func TestEKSIntegration_Execute_MigratesAutoRealmNames(t *testing.T) {
 	stubProdEKSCluster(t)
 	path := filepath.Join(t.TempDir(), "kubeconfig")
-	require.NoError(t, newSourcedEKSIntegration(t, path, "", autoRealm, realm.SourceConfig).Execute(t.Context(), nil))
+	require.NoError(t, newSourcedEKSIntegration(t, path, autoRealm, realm.SourceConfig).Execute(t.Context(), nil))
 
-	require.NoError(t, newSourcedEKSIntegration(t, path, "", autoRealm, realm.SourceAuto).Execute(t.Context(), nil))
+	require.NoError(t, newSourcedEKSIntegration(t, path, autoRealm, realm.SourceAuto).Execute(t.Context(), nil))
 
 	config, err := loadKubeconfig(path)
 	require.NoError(t, err)
@@ -88,10 +88,10 @@ func TestEKSIntegration_Execute_MigratesAutoRealmNames(t *testing.T) {
 func TestEKSIntegration_Cleanup_RemovesAutoRealmNames(t *testing.T) {
 	stubProdEKSCluster(t)
 	path := filepath.Join(t.TempDir(), "kubeconfig")
-	require.NoError(t, newSourcedEKSIntegration(t, path, "", autoRealm, realm.SourceConfig).Execute(t.Context(), nil))
-	require.NoError(t, newSourcedEKSIntegration(t, path, "", "0123456789abcdef", realm.SourceConfig).Execute(t.Context(), nil))
+	require.NoError(t, newSourcedEKSIntegration(t, path, autoRealm, realm.SourceConfig).Execute(t.Context(), nil))
+	require.NoError(t, newSourcedEKSIntegration(t, path, "0123456789abcdef", realm.SourceConfig).Execute(t.Context(), nil))
 
-	require.NoError(t, newSourcedEKSIntegration(t, path, "", autoRealm, realm.SourceAuto).Cleanup(t.Context()))
+	require.NoError(t, newSourcedEKSIntegration(t, path, autoRealm, realm.SourceAuto).Cleanup(t.Context()))
 
 	config, err := loadKubeconfig(path)
 	require.NoError(t, err)

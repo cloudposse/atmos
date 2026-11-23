@@ -66,11 +66,11 @@ func TestEKSKubeUserNames(t *testing.T) {
 		"atmos-acme-eks-prod-us-east-2-111111111111-admin",
 		"atmos-eks-prod-us-east-2-111111111111-admin",
 		"atmos-eks-prod-us-east-2",
-	}, EKSKubeUserNames(arn, "prod", "us-east-2", "admin", "acme"))
+	}, EKSKubeUserNames(arn, "prod", "us-east-2", "admin", kube.RealmScope{Realm: "acme"}))
 	assert.Equal(t, []string{
 		"atmos-eks-prod-us-east-2-111111111111-admin",
 		"atmos-eks-prod-us-east-2",
-	}, EKSKubeUserNames(arn, "prod", "us-east-2", "admin", ""))
+	}, EKSKubeUserNames(arn, "prod", "us-east-2", "admin", kube.RealmScope{Realm: ""}))
 }
 
 // TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup verifies that the users
@@ -85,7 +85,7 @@ func TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup(t *testing.T) {
 			written.Realm = realm
 
 			assert.Equal(t, []string{LegacyEKSKubeUserName("prod", "us-east-2")}, written.LegacyUserNames)
-			assert.Equal(t, EKSKubeUserNames(clusterARN, "prod", "us-east-2", "prod-admin", realm), kube.OwnedUserNames(written))
+			assert.Equal(t, EKSKubeUserNames(clusterARN, "prod", "us-east-2", "prod-admin", kube.RealmScope{Realm: realm}), kube.OwnedUserNames(written))
 		})
 	}
 }
@@ -101,10 +101,10 @@ func TestEKSKubeUserNames_LegacyRealms(t *testing.T) {
 		"atmos-eks-prod-us-east-2-111111111111-admin",
 		"atmos-" + derived + "-eks-prod-us-east-2-111111111111-admin",
 		"atmos-eks-prod-us-east-2",
-	}, EKSKubeUserNames(clusterARN, "prod", "us-east-2", "admin", "", derived))
+	}, EKSKubeUserNames(clusterARN, "prod", "us-east-2", "admin", kube.RealmScope{LegacyRealms: []string{derived}}))
 
 	written, err := BuildKubeClusterInfo(&EKSClusterInfo{Name: "prod", Region: "us-east-2", ARN: clusterARN}, "admin")
 	require.NoError(t, err)
 	written.Realm, written.LegacyRealms = kube.NameRealm(derived, false)
-	assert.Equal(t, EKSKubeUserNames(clusterARN, "prod", "us-east-2", "admin", written.Realm, written.LegacyRealms...), kube.OwnedUserNames(written))
+	assert.Equal(t, EKSKubeUserNames(clusterARN, "prod", "us-east-2", "admin", kube.RealmScope{Realm: written.Realm, LegacyRealms: written.LegacyRealms}), kube.OwnedUserNames(written))
 }

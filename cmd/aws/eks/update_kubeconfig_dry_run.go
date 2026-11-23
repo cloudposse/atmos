@@ -38,16 +38,11 @@ func executeEKSUpdateKubeconfigViaIntegrationDryRun(integrationName, kubeconfigP
 // integration's configured values, as they do when it is executed.
 func eksDryRunRequestForIntegration(configured map[string]schema.Integration, name, kubeconfigPath, alias string) (*eksDirectRequest, error) {
 	integration, ok := configured[name]
-	switch {
-	case !ok:
+	if !ok {
 		return nil, fmt.Errorf(errUtils.ErrWrapWithNameFormat, errUtils.ErrIntegrationNotFound, name)
-	case integration.Kind != integrations.KindAWSEKS:
-		return nil, fmt.Errorf("%w: integration '%s' is %q, not %s", errUtils.ErrIntegrationFailed, name, integration.Kind, integrations.KindAWSEKS)
-	case integration.Via == nil || integration.Via.Identity == "":
-		return nil, fmt.Errorf("%w: integration '%s' has no identity configured", errUtils.ErrIntegrationFailed, name)
-	case integration.Spec == nil || integration.Spec.Cluster == nil ||
-		integration.Spec.Cluster.Name == "" || integration.Spec.Cluster.Region == "":
-		return nil, fmt.Errorf("%w: integration '%s' needs spec.cluster.name and spec.cluster.region", errUtils.ErrIntegrationFailed, name)
+	}
+	if err := validateEKSIntegration(name, &integration); err != nil {
+		return nil, err
 	}
 
 	cluster := integration.Spec.Cluster
@@ -68,6 +63,21 @@ func eksDryRunRequestForIntegration(configured map[string]schema.Integration, na
 		req.alias = alias
 	}
 	return req, nil
+}
+
+// validateEKSIntegration checks that the named integration is an aws/eks
+// integration with the identity and cluster settings a dry run needs.
+func validateEKSIntegration(name string, integration *schema.Integration) error {
+	switch {
+	case integration.Kind != integrations.KindAWSEKS:
+		return fmt.Errorf("%w: integration '%s' is %q, not %s", errUtils.ErrIntegrationFailed, name, integration.Kind, integrations.KindAWSEKS)
+	case integration.Via == nil || integration.Via.Identity == "":
+		return fmt.Errorf("%w: integration '%s' has no identity configured", errUtils.ErrIntegrationFailed, name)
+	case integration.Spec == nil || integration.Spec.Cluster == nil ||
+		integration.Spec.Cluster.Name == "" || integration.Spec.Cluster.Region == "":
+		return fmt.Errorf("%w: integration '%s' needs spec.cluster.name and spec.cluster.region", errUtils.ErrIntegrationFailed, name)
+	}
+	return nil
 }
 
 // printEKSKubeconfigDryRun prints the cluster, context and user entries a

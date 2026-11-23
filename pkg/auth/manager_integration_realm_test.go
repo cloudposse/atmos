@@ -51,7 +51,7 @@ func serveFakeEKS(t *testing.T) {
 func newRealmTestManager(t *testing.T, kubeconfigPath, realmValue, realmSource string) *manager {
 	t.Helper()
 	t.Setenv("ATMOS_AUTH_REALM", "")
-	m, err := NewAuthManager(&schema.AuthConfig{
+	authConfig := &schema.AuthConfig{
 		Realm:       realmValue,
 		RealmSource: realmSource,
 		Providers:   map[string]schema.Provider{},
@@ -66,7 +66,8 @@ func newRealmTestManager(t *testing.T, kubeconfigPath, realmValue, realmSource s
 				}},
 			},
 		},
-	}, credentials.NewCredentialStore(), validation.NewValidator(), nil, "")
+	}
+	m, err := NewAuthManager(authConfig, credentials.NewCredentialStoreWithConfig(authConfig), validation.NewValidator(), nil, "")
 	require.NoError(t, err)
 	impl, ok := m.(*manager)
 	require.True(t, ok)

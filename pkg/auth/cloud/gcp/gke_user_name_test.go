@@ -46,11 +46,11 @@ func TestGKEKubeUserNames(t *testing.T) {
 		"atmos-acme-gke-example-cluster-example-project-us-central1-gcp-admin",
 		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin",
 		"atmos-gke-example-cluster-example-project-us-central1",
-	}, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", "acme"))
+	}, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", kube.RealmScope{Realm: "acme"}))
 	assert.Equal(t, []string{
 		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin",
 		"atmos-gke-example-cluster-example-project-us-central1",
-	}, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", ""))
+	}, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", kube.RealmScope{Realm: ""}))
 }
 
 // TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup verifies that the users
@@ -63,7 +63,7 @@ func TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup(t *testing.T) {
 			written.Realm = realm
 
 			assert.Equal(t, []string{LegacyGKEKubeUserName("example-project", "us-central1", "example-cluster")}, written.LegacyUserNames)
-			assert.Equal(t, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", realm), kube.OwnedUserNames(written))
+			assert.Equal(t, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", kube.RealmScope{Realm: realm}), kube.OwnedUserNames(written))
 		})
 	}
 }
@@ -76,7 +76,7 @@ func TestGKEKubeUserNames_LegacyRealms(t *testing.T) {
 
 	written := BuildKubeClusterInfo(&GKEClusterInfo{Name: "example-cluster", ProjectID: "example-project", Location: "us-central1"}, "gcp-admin")
 	written.Realm, written.LegacyRealms = kube.NameRealm(derived, false)
-	names := GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", written.Realm, written.LegacyRealms...)
+	names := GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", kube.RealmScope{Realm: written.Realm, LegacyRealms: written.LegacyRealms})
 
 	assert.Equal(t, []string{
 		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin",

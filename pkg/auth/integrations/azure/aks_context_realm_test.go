@@ -21,12 +21,12 @@ import (
 )
 
 const (
-	// devUserRepoA and devUserRepoB are the realm-scoped users of the dev integration.
+	// The devUserRepoA and devUserRepoB constants are the realm-scoped users of the dev integration.
 	devUserRepoA = "atmos-repo-a-aks-dev-cluster-dev-rg-sub-123-azure-dev"
 	devUserRepoB = "atmos-repo-b-aks-dev-cluster-dev-rg-sub-123-azure-dev"
-	// devUserPreRealm is the user written before realms were part of the name.
+	// The devUserPreRealm constant is the user written before realms were part of the name.
 	devUserPreRealm = "atmos-aks-dev-cluster-dev-rg-sub-123-azure-dev"
-	// foreignAKSUser is a user Atmos did not write, such as one from the Azure CLI.
+	// The foreignAKSUser constant is a user Atmos did not write, such as one from the Azure CLI.
 	foreignAKSUser = "clusterUser_dev-rg_dev-cluster"
 )
 
@@ -37,7 +37,7 @@ func devCreds() *types.AzureCredentials {
 
 // putAKSContext adds a context, its cluster and a token user to the kubeconfig
 // at path, the way another tool or an older Atmos version would have written them.
-func putAKSContext(t *testing.T, path, contextName, userName string) {
+func putAKSContext(t *testing.T, path, userName string) {
 	t.Helper()
 
 	config := clientcmdapi.NewConfig()
@@ -47,8 +47,8 @@ func putAKSContext(t *testing.T, path, contextName, userName string) {
 	}
 	config.Clusters[devClusterResourceID] = &clientcmdapi.Cluster{Server: "https://dev-cluster.hcp.eastus.azmk8s.io:443"}
 	config.AuthInfos[userName] = &clientcmdapi.AuthInfo{Token: "token"}
-	config.Contexts[contextName] = &clientcmdapi.Context{Cluster: devClusterResourceID, AuthInfo: userName}
-	config.CurrentContext = contextName
+	config.Contexts[devClusterResourceID] = &clientcmdapi.Context{Cluster: devClusterResourceID, AuthInfo: userName}
+	config.CurrentContext = devClusterResourceID
 	require.NoError(t, clientcmd.WriteToFile(*config, path))
 }
 
@@ -98,7 +98,7 @@ func TestAKSIntegration_Cleanup_KeepsOtherRealmDefaultContext(t *testing.T) {
 // context with the default name that points at another user is left alone.
 func TestAKSIntegration_Cleanup_KeepsDefaultContextOfOtherUser(t *testing.T) {
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-	putAKSContext(t, kubeconfigPath, devClusterResourceID, foreignAKSUser)
+	putAKSContext(t, kubeconfigPath, foreignAKSUser)
 
 	require.NoError(t, newScopedAKSIntegration(t, kubeconfigPath, "", "azure-dev", "").Cleanup(t.Context()))
 
@@ -118,7 +118,7 @@ func TestAKSIntegration_Execute_MigratesUnprefixedOwnContext(t *testing.T) {
 		t.Run(oldUser, func(t *testing.T) {
 			stubDevAKSCluster(t)
 			kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-			putAKSContext(t, kubeconfigPath, devClusterResourceID, oldUser)
+			putAKSContext(t, kubeconfigPath, oldUser)
 
 			require.NoError(t, newScopedAKSIntegration(t, kubeconfigPath, "", "azure-dev", realmRepoA).Execute(t.Context(), devCreds()))
 
@@ -139,7 +139,7 @@ func TestAKSIntegration_Execute_MigratesUnprefixedOwnContext(t *testing.T) {
 func TestAKSIntegration_Execute_KeepsUnprefixedForeignContext(t *testing.T) {
 	stubDevAKSCluster(t)
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-	putAKSContext(t, kubeconfigPath, devClusterResourceID, devUserRepoB)
+	putAKSContext(t, kubeconfigPath, devUserRepoB)
 
 	require.NoError(t, newScopedAKSIntegration(t, kubeconfigPath, "", "azure-dev", realmRepoA).Execute(t.Context(), devCreds()))
 
@@ -156,7 +156,7 @@ func TestAKSIntegration_Execute_KeepsUnprefixedForeignContext(t *testing.T) {
 // cleanup also removes the unprefixed context an older version wrote for it.
 func TestAKSIntegration_Cleanup_RemovesUnprefixedOwnContext(t *testing.T) {
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-	putAKSContext(t, kubeconfigPath, devClusterResourceID, devUserPreRealm)
+	putAKSContext(t, kubeconfigPath, devUserPreRealm)
 
 	require.NoError(t, newScopedAKSIntegration(t, kubeconfigPath, "", "azure-dev", realmRepoA).Cleanup(t.Context()))
 

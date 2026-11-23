@@ -36,7 +36,7 @@ const (
 	// eksPresignLifetimeSeconds is the presigned URL lifetime (60 seconds).
 	eksPresignLifetimeSeconds = 60
 
-	// eksUserPrefix distinguishes EKS exec-plugin usernames in a kubeconfig.
+	// The eksUserPrefix constant distinguishes EKS exec-plugin usernames in a kubeconfig.
 	eksUserPrefix = "eks"
 )
 
@@ -226,14 +226,14 @@ func EKSKubeUserName(clusterARN, clusterName, region, identityName, realm string
 // name without the realm (when realm is set), the names under each of
 // legacyRealms (see kube.ClusterInfo.LegacyRealms) and the legacy
 // atmos-eks-<name>-<region> name.
-func EKSKubeUserNames(clusterARN, clusterName, region, identityName, realm string, legacyRealms ...string) []string {
+func EKSKubeUserNames(clusterARN, clusterName, region, identityName string, scope kube.RealmScope) []string {
 	defer perf.Track(nil, "aws.EKSKubeUserNames")()
 
-	names := []string{EKSKubeUserName(clusterARN, clusterName, region, identityName, realm)}
-	if realm != "" {
+	names := []string{EKSKubeUserName(clusterARN, clusterName, region, identityName, scope.Realm)}
+	if scope.Realm != "" {
 		names = append(names, EKSKubeUserName(clusterARN, clusterName, region, identityName, ""))
 	}
-	for _, legacyRealm := range legacyRealms {
+	for _, legacyRealm := range scope.LegacyRealms {
 		names = append(names, EKSKubeUserName(clusterARN, clusterName, region, identityName, legacyRealm))
 	}
 	return append(names, LegacyEKSKubeUserName(clusterName, region))
@@ -256,6 +256,20 @@ func clusterAccountID(clusterARN string) string {
 		return ""
 	}
 	return parsed.AccountID
+}
+
+// IsEKSClusterARN reports whether id is the ARN of the EKS cluster with the
+// given name in the given region.
+func IsEKSClusterARN(id, clusterName, region string) bool {
+	defer perf.Track(nil, "aws.IsEKSClusterARN")()
+
+	parsed, err := arn.Parse(id)
+	if err != nil {
+		return false
+	}
+	return parsed.Service == "eks" &&
+		parsed.Region == region &&
+		parsed.Resource == "cluster/"+clusterName
 }
 
 // addPresignExpiry returns a middleware that adds X-Amz-Expires to the presigned URL query string.

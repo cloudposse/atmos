@@ -17,18 +17,18 @@ import (
 )
 
 const (
-	// exampleUserRepoA and exampleUserRepoB are the realm-scoped users of the example integration.
+	// The exampleUserRepoA and exampleUserRepoB constants are the realm-scoped users of the example integration.
 	exampleUserRepoA = "atmos-repo-a-gke-example-cluster-example-project-us-central1-gcp-admin"
 	exampleUserRepoB = "atmos-repo-b-gke-example-cluster-example-project-us-central1-gcp-admin"
-	// exampleUserPreRealm is the user written before realms were part of the name.
+	// The exampleUserPreRealm constant is the user written before realms were part of the name.
 	exampleUserPreRealm = legacyExampleUserName + "-gcp-admin"
-	// foreignGKEUser is a user Atmos did not write, such as one from gcloud.
+	// The foreignGKEUser constant is a user Atmos did not write, such as one from gcloud.
 	foreignGKEUser = "gke_example-project_us-central1_example-cluster"
 )
 
 // putGKEContext adds a context, its cluster and a token user to the kubeconfig
 // at path, the way another tool or an older Atmos version would have written them.
-func putGKEContext(t *testing.T, path, contextName, userName string) {
+func putGKEContext(t *testing.T, path, userName string) {
 	t.Helper()
 
 	config := clientcmdapi.NewConfig()
@@ -38,8 +38,8 @@ func putGKEContext(t *testing.T, path, contextName, userName string) {
 	}
 	config.Clusters[exampleClusterID] = &clientcmdapi.Cluster{Server: "https://gke.example.invalid"}
 	config.AuthInfos[userName] = &clientcmdapi.AuthInfo{Token: "token"}
-	config.Contexts[contextName] = &clientcmdapi.Context{Cluster: exampleClusterID, AuthInfo: userName}
-	config.CurrentContext = contextName
+	config.Contexts[exampleClusterID] = &clientcmdapi.Context{Cluster: exampleClusterID, AuthInfo: userName}
+	config.CurrentContext = exampleClusterID
 	require.NoError(t, clientcmd.WriteToFile(*config, path))
 }
 
@@ -89,7 +89,7 @@ func TestGKEIntegration_Cleanup_KeepsOtherRealmDefaultContext(t *testing.T) {
 // context with the default name that points at another user is left alone.
 func TestGKEIntegration_Cleanup_KeepsDefaultContextOfOtherUser(t *testing.T) {
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-	putGKEContext(t, kubeconfigPath, exampleClusterID, foreignGKEUser)
+	putGKEContext(t, kubeconfigPath, foreignGKEUser)
 
 	require.NoError(t, newScopedGKEIntegration(t, kubeconfigPath, "", "gcp-admin", "").Cleanup(t.Context()))
 
@@ -109,7 +109,7 @@ func TestGKEIntegration_Execute_MigratesUnprefixedOwnContext(t *testing.T) {
 		t.Run(oldUser, func(t *testing.T) {
 			stubExampleGKECluster(t)
 			kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-			putGKEContext(t, kubeconfigPath, exampleClusterID, oldUser)
+			putGKEContext(t, kubeconfigPath, oldUser)
 
 			require.NoError(t, newScopedGKEIntegration(t, kubeconfigPath, "", "gcp-admin", realmRepoA).Execute(t.Context(), exampleGCPCredentials()))
 
@@ -130,7 +130,7 @@ func TestGKEIntegration_Execute_MigratesUnprefixedOwnContext(t *testing.T) {
 func TestGKEIntegration_Execute_KeepsUnprefixedForeignContext(t *testing.T) {
 	stubExampleGKECluster(t)
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-	putGKEContext(t, kubeconfigPath, exampleClusterID, exampleUserRepoB)
+	putGKEContext(t, kubeconfigPath, exampleUserRepoB)
 
 	require.NoError(t, newScopedGKEIntegration(t, kubeconfigPath, "", "gcp-admin", realmRepoA).Execute(t.Context(), exampleGCPCredentials()))
 
@@ -147,7 +147,7 @@ func TestGKEIntegration_Execute_KeepsUnprefixedForeignContext(t *testing.T) {
 // cleanup also removes the unprefixed context an older version wrote for it.
 func TestGKEIntegration_Cleanup_RemovesUnprefixedOwnContext(t *testing.T) {
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-	putGKEContext(t, kubeconfigPath, exampleClusterID, exampleUserPreRealm)
+	putGKEContext(t, kubeconfigPath, exampleUserPreRealm)
 
 	require.NoError(t, newScopedGKEIntegration(t, kubeconfigPath, "", "gcp-admin", realmRepoA).Cleanup(t.Context()))
 

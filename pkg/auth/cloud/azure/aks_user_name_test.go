@@ -48,11 +48,11 @@ func TestAKSKubeUserNames(t *testing.T) {
 		"atmos-acme-aks-dev-cluster-dev-rg-sub-123-azure-admin",
 		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin",
 		"atmos-aks-dev-cluster-dev-rg-sub-123",
-	}, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", "acme"))
+	}, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", kube.RealmScope{Realm: "acme"}))
 	assert.Equal(t, []string{
 		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin",
 		"atmos-aks-dev-cluster-dev-rg-sub-123",
-	}, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", ""))
+	}, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", kube.RealmScope{Realm: ""}))
 }
 
 // TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup verifies that the users
@@ -65,7 +65,7 @@ func TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup(t *testing.T) {
 			written.Realm = realm
 
 			assert.Equal(t, []string{LegacyAKSKubeUserName("dev-cluster", "dev-rg", "sub-123")}, written.LegacyUserNames)
-			assert.Equal(t, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", realm), kube.OwnedUserNames(written))
+			assert.Equal(t, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", kube.RealmScope{Realm: realm}), kube.OwnedUserNames(written))
 		})
 	}
 }
@@ -78,7 +78,7 @@ func TestAKSKubeUserNames_LegacyRealms(t *testing.T) {
 
 	written := BuildKubeClusterInfo(&AKSClusterInfo{Name: "dev-cluster", ResourceGroup: "dev-rg", SubscriptionID: "sub-123"}, "azure-admin")
 	written.Realm, written.LegacyRealms = kube.NameRealm(derived, false)
-	names := AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", written.Realm, written.LegacyRealms...)
+	names := AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", kube.RealmScope{Realm: written.Realm, LegacyRealms: written.LegacyRealms})
 
 	assert.Equal(t, []string{
 		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin",

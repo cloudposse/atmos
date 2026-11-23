@@ -240,7 +240,7 @@ func (a *AKSIntegration) Cleanup(_ context.Context) error {
 	// wrote, without the realm or the identity. A context is removed only when
 	// it points at one of these users, and a user is kept while another
 	// context still references it.
-	userNames := azureCloud.AKSKubeUserNames(a.cluster.Name, a.cluster.ResourceGroup, subscriptionID, a.identity, a.realm, a.legacyRealms...)
+	userNames := azureCloud.AKSKubeUserNames(a.cluster.Name, a.cluster.ResourceGroup, subscriptionID, a.identity, kube.RealmScope{Realm: a.realm, LegacyRealms: a.legacyRealms})
 
 	if err := mgr.RemoveOwnedClusterConfig(clusterID, contextNames, userNames); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)

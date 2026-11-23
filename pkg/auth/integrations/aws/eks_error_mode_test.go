@@ -15,7 +15,7 @@ import (
 )
 
 // newErrorModeEKSIntegration builds the prod integration with update "error".
-func newErrorModeEKSIntegration(t *testing.T, path, alias string) integrations.Integration {
+func newErrorModeEKSIntegration(t *testing.T, path string) integrations.Integration {
 	t.Helper()
 
 	integration, err := NewEKSIntegration(&integrations.IntegrationConfig{
@@ -24,7 +24,7 @@ func newErrorModeEKSIntegration(t *testing.T, path, alias string) integrations.I
 			Kind: integrations.KindAWSEKS,
 			Via:  &schema.IntegrationVia{Identity: "admin"},
 			Spec: &schema.IntegrationSpec{Cluster: &schema.Cluster{
-				Name: "prod", Region: "us-east-2", Alias: alias,
+				Name: "prod", Region: "us-east-2", Alias: "prod",
 				Kubeconfig: &schema.KubeconfigSettings{Path: path, Update: "error"},
 			}},
 		},
@@ -40,11 +40,11 @@ func TestEKSIntegration_Execute_ErrorModeRerun(t *testing.T) {
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
 
 	t.Chdir(t.TempDir())
-	require.NoError(t, newErrorModeEKSIntegration(t, kubeconfigPath, "prod").Execute(t.Context(), nil))
-	require.NoError(t, newErrorModeEKSIntegration(t, kubeconfigPath, "prod").Execute(t.Context(), nil), "an identical re-run must not conflict")
+	require.NoError(t, newErrorModeEKSIntegration(t, kubeconfigPath).Execute(t.Context(), nil))
+	require.NoError(t, newErrorModeEKSIntegration(t, kubeconfigPath).Execute(t.Context(), nil), "an identical re-run must not conflict")
 
 	t.Chdir(t.TempDir())
-	require.NoError(t, newErrorModeEKSIntegration(t, kubeconfigPath, "prod").Execute(t.Context(), nil), "a different ATMOS_CHDIR must not conflict")
+	require.NoError(t, newErrorModeEKSIntegration(t, kubeconfigPath).Execute(t.Context(), nil), "a different ATMOS_CHDIR must not conflict")
 }
 
 // TestEKSIntegration_Execute_ErrorModeConflict verifies that error mode still
@@ -54,7 +54,7 @@ func TestEKSIntegration_Execute_ErrorModeConflict(t *testing.T) {
 	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
 	writeEKSEntry(t, kubeconfigPath, "arn:aws:eks:eu-west-1:111111111111:cluster/other", "other", "eu-west-1", "prod", "admin")
 
-	err := newErrorModeEKSIntegration(t, kubeconfigPath, "prod").Execute(t.Context(), nil)
+	err := newErrorModeEKSIntegration(t, kubeconfigPath).Execute(t.Context(), nil)
 	require.ErrorIs(t, err, errUtils.ErrEKSIntegrationFailed)
 	require.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
 }

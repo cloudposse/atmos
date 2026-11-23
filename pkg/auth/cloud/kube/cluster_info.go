@@ -1,6 +1,8 @@
 package kube
 
 import (
+	"strings"
+
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/cloudposse/atmos/pkg/auth/realm"
@@ -92,18 +94,18 @@ type ClusterInfo struct {
 func UserName(info *ClusterInfo) string {
 	defer perf.Track(nil, "kube.UserName")()
 
-	name := "atmos-"
+	parts := []string{"atmos"}
 	if info.Realm != "" {
-		name += info.Realm + "-"
+		parts = append(parts, info.Realm)
 	}
-	name += info.UserPrefix + "-" + info.Name + "-" + info.Region
+	parts = append(parts, info.UserPrefix, info.Name, info.Region)
 	if info.AccountID != "" {
-		name += "-" + info.AccountID
+		parts = append(parts, info.AccountID)
 	}
 	if info.Identity != "" {
-		name += "-" + info.Identity
+		parts = append(parts, info.Identity)
 	}
-	return name
+	return strings.Join(parts, "-")
 }
 
 // execEnv returns the exec-plugin environment for info: its ExecEnv plus

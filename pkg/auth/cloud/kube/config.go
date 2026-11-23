@@ -364,16 +364,9 @@ func (m *KubeconfigManager) writeIfChanged(newConfig *clientcmdapi.Config) (bool
 // migration (nil for none). Returns changed=false when the result would equal
 // the existing on-disk content.
 func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config, migration *contextMigration) (bool, error) {
-	// Load existing config if file exists.
-	existing := clientcmdapi.NewConfig()
-	fileExists := false
-	if _, err := os.Stat(m.path); err == nil {
-		loaded, loadErr := clientcmd.LoadFromFile(m.path)
-		if loadErr != nil {
-			return false, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, loadErr)
-		}
-		existing = loaded
-		fileExists = true
+	existing, fileExists, err := m.loadExisting()
+	if err != nil {
+		return false, err
 	}
 
 	// Short-circuit when the merge would be a no-op: every entry in newConfig
@@ -388,7 +381,30 @@ func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config, migra
 		return m.reconcileMode()
 	}
 
-	// Merge new entries into existing config.
+	mergeInto(existing, newConfig)
+
+	if err := m.writeConfig(existing); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// loadExisting loads the kubeconfig at m.path. It returns an empty config and
+// exists=false when the file does not exist.
+func (m *KubeconfigManager) loadExisting() (config *clientcmdapi.Config, exists bool, err error) {
+	if _, statErr := os.Stat(m.path); statErr != nil {
+		return clientcmdapi.NewConfig(), false, nil
+	}
+	loaded, loadErr := clientcmd.LoadFromFile(m.path)
+	if loadErr != nil {
+		return nil, false, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, loadErr)
+	}
+	return loaded, true, nil
+}
+
+// mergeInto merges the entries of newConfig into existing and adopts the
+// current-context of newConfig when it has one.
+func mergeInto(existing, newConfig *clientcmdapi.Config) {
 	for k, v := range newConfig.Clusters {
 		existing.Clusters[k] = v
 	}
@@ -398,16 +414,9 @@ func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config, migra
 	for k, v := range newConfig.AuthInfos {
 		existing.AuthInfos[k] = v
 	}
-
-	// Set current-context to the new config's current-context.
 	if newConfig.CurrentContext != "" {
 		existing.CurrentContext = newConfig.CurrentContext
 	}
-
-	if err := m.writeConfig(existing); err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 // reconcileMode enforces the configured file mode on the kubeconfig without

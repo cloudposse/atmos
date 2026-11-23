@@ -173,14 +173,14 @@ func GKEKubeUserName(projectID, location, clusterName, identityName, realm strin
 // name without the realm (when realm is set), the names under each of
 // legacyRealms (see kube.ClusterInfo.LegacyRealms) and the legacy name
 // without the identity.
-func GKEKubeUserNames(projectID, location, clusterName, identityName, realm string, legacyRealms ...string) []string {
+func GKEKubeUserNames(projectID, location, clusterName, identityName string, scope kube.RealmScope) []string {
 	defer perf.Track(nil, "gcp.GKEKubeUserNames")()
 
-	names := []string{GKEKubeUserName(projectID, location, clusterName, identityName, realm)}
-	if realm != "" {
+	names := []string{GKEKubeUserName(projectID, location, clusterName, identityName, scope.Realm)}
+	if scope.Realm != "" {
 		names = append(names, GKEKubeUserName(projectID, location, clusterName, identityName, ""))
 	}
-	for _, legacyRealm := range legacyRealms {
+	for _, legacyRealm := range scope.LegacyRealms {
 		names = append(names, GKEKubeUserName(projectID, location, clusterName, identityName, legacyRealm))
 	}
 	return append(names, LegacyGKEKubeUserName(projectID, location, clusterName))

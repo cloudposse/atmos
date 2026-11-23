@@ -22,7 +22,7 @@ import (
 // The cluster and each user are removed only when no remaining context still
 // references them, so cleaning up one integration never breaks another context
 // that shares the cluster entry (for example, two identities for one cluster)
-// or a user name written by an older version. extraUserNames lists additional
+// or a user name written by an older version. The extraUserNames argument lists additional
 // users to remove under the same rule, such as a user name in a format that
 // older versions wrote.
 func (m *KubeconfigManager) RemoveClusterConfig(clusterARN, contextName, userName string, extraUserNames ...string) error {
@@ -48,25 +48,7 @@ func (m *KubeconfigManager) RemoveOwnedClusterConfig(clusterID string, contextNa
 		return fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, err)
 	}
 
-	// Remove the owned contexts first, so references are counted without them.
-	for _, contextName := range contextNames {
-		if !contextOwnedBy(existing, contextName, userNames) {
-			continue
-		}
-		delete(existing.Contexts, contextName)
-		// If current-context points to the removed context, clear it.
-		if existing.CurrentContext == contextName {
-			existing.CurrentContext = ""
-		}
-	}
-	if !clusterReferenced(existing, clusterID) {
-		delete(existing.Clusters, clusterID)
-	}
-	for _, name := range userNames {
-		if name != "" && !userReferenced(existing, name) {
-			delete(existing.AuthInfos, name)
-		}
-	}
+	removeOwnedEntries(existing, clusterID, contextNames, userNames)
 
 	// If the config is now empty, remove the file.
 	if len(existing.Clusters) == 0 && len(existing.Contexts) == 0 && len(existing.AuthInfos) == 0 {
@@ -74,6 +56,30 @@ func (m *KubeconfigManager) RemoveOwnedClusterConfig(clusterID string, contextNa
 	}
 
 	return clientcmd.WriteToFile(*existing, m.path)
+}
+
+// removeOwnedEntries removes the owned contexts from config, then the cluster
+// and users that no remaining context references.
+func removeOwnedEntries(config *clientcmdapi.Config, clusterID string, contextNames, userNames []string) {
+	// Remove the owned contexts first, so references are counted without them.
+	for _, contextName := range contextNames {
+		if !contextOwnedBy(config, contextName, userNames) {
+			continue
+		}
+		delete(config.Contexts, contextName)
+		// If current-context points to the removed context, clear it.
+		if config.CurrentContext == contextName {
+			config.CurrentContext = ""
+		}
+	}
+	if !clusterReferenced(config, clusterID) {
+		delete(config.Clusters, clusterID)
+	}
+	for _, name := range userNames {
+		if name != "" && !userReferenced(config, name) {
+			delete(config.AuthInfos, name)
+		}
+	}
 }
 
 // LookupContext returns the named context from the kubeconfig, or nil when the

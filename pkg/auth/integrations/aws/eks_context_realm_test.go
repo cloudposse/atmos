@@ -22,13 +22,13 @@ import (
 )
 
 const (
-	// prodUserRepoA and prodUserRepoB are the realm-scoped users of the prod admin integration.
+	// The prodUserRepoA and prodUserRepoB constants are the realm-scoped users of the prod admin integration.
 	prodUserRepoA = "atmos-repo-a-eks-prod-us-east-2-111111111111-admin"
 	prodUserRepoB = "atmos-repo-b-eks-prod-us-east-2-111111111111-admin"
-	// prodUserPreRealm and prodUserLegacy are the users older versions wrote for it.
+	// The prodUserPreRealm and prodUserLegacy constants are the users older versions wrote for it.
 	prodUserPreRealm = "atmos-eks-prod-us-east-2-111111111111-admin"
 	prodUserLegacy   = "atmos-eks-prod-us-east-2"
-	// foreignUser is a user Atmos did not write, such as one from the AWS CLI.
+	// The foreignUser constant is a user Atmos did not write, such as one from the AWS CLI.
 	foreignUser = "arn:aws:eks:us-east-2:111111111111:cluster/prod-aws-cli"
 )
 
@@ -51,11 +51,11 @@ func putKubeContext(t *testing.T, path, contextName, clusterID, userName string)
 	require.NoError(t, clientcmd.WriteToFile(*config, path))
 }
 
-// newErrorModeRealmEKSIntegration builds an EKS integration with update: error.
-func newErrorModeRealmEKSIntegration(t *testing.T, path, realm string) *EKSIntegration {
+// newErrorModeRealmEKSIntegration builds a realmRepoA EKS integration with update: error.
+func newErrorModeRealmEKSIntegration(t *testing.T, path string) *EKSIntegration {
 	t.Helper()
 
-	integration, ok := newRealmEKSIntegration(t, path, "", realm).(*EKSIntegration)
+	integration, ok := newRealmEKSIntegration(t, path, "", realmRepoA).(*EKSIntegration)
 	require.True(t, ok)
 	integration.cluster.Kubeconfig = &schema.KubeconfigSettings{Path: path, Update: "error"}
 	return integration
@@ -229,11 +229,11 @@ func TestEKSIntegration_Execute_ErrorModeRealmContext(t *testing.T) {
 	t.Run("identical re-run is a no-op", func(t *testing.T) {
 		stubProdEKSCluster(t)
 		kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-		require.NoError(t, newErrorModeRealmEKSIntegration(t, kubeconfigPath, realmRepoA).Execute(t.Context(), nil))
+		require.NoError(t, newErrorModeRealmEKSIntegration(t, kubeconfigPath).Execute(t.Context(), nil))
 		before, err := os.ReadFile(kubeconfigPath)
 		require.NoError(t, err)
 
-		require.NoError(t, newErrorModeRealmEKSIntegration(t, kubeconfigPath, realmRepoA).Execute(t.Context(), nil))
+		require.NoError(t, newErrorModeRealmEKSIntegration(t, kubeconfigPath).Execute(t.Context(), nil))
 
 		after, err := os.ReadFile(kubeconfigPath)
 		require.NoError(t, err)
@@ -245,7 +245,7 @@ func TestEKSIntegration_Execute_ErrorModeRealmContext(t *testing.T) {
 		kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
 		writeEKSEntry(t, kubeconfigPath, prodClusterARN, "prod", "us-east-2", "", "admin")
 
-		require.NoError(t, newErrorModeRealmEKSIntegration(t, kubeconfigPath, realmRepoA).Execute(t.Context(), nil))
+		require.NoError(t, newErrorModeRealmEKSIntegration(t, kubeconfigPath).Execute(t.Context(), nil))
 
 		config, err := loadKubeconfig(kubeconfigPath)
 		require.NoError(t, err)
@@ -256,7 +256,7 @@ func TestEKSIntegration_Execute_ErrorModeRealmContext(t *testing.T) {
 	t.Run("conflicting realm context errors", func(t *testing.T) {
 		stubProdEKSCluster(t)
 		kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
-		require.NoError(t, newErrorModeRealmEKSIntegration(t, kubeconfigPath, realmRepoA).Execute(t.Context(), nil))
+		require.NoError(t, newErrorModeRealmEKSIntegration(t, kubeconfigPath).Execute(t.Context(), nil))
 		// Repoint the realm context at another user; cluster and user stay identical.
 		config, err := loadKubeconfig(kubeconfigPath)
 		require.NoError(t, err)
@@ -265,7 +265,7 @@ func TestEKSIntegration_Execute_ErrorModeRealmContext(t *testing.T) {
 		config.Contexts[contextName].AuthInfo = foreignUser
 		require.NoError(t, clientcmd.WriteToFile(*config, kubeconfigPath))
 
-		err = newErrorModeRealmEKSIntegration(t, kubeconfigPath, realmRepoA).Execute(t.Context(), nil)
+		err = newErrorModeRealmEKSIntegration(t, kubeconfigPath).Execute(t.Context(), nil)
 		require.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)
 		assert.Contains(t, err.Error(), "context "+contextName)
 	})

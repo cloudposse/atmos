@@ -294,14 +294,14 @@ func AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, r
 // name without the realm (when realm is set), the names under each of
 // legacyRealms (see kube.ClusterInfo.LegacyRealms) and the legacy name
 // without the identity.
-func AKSKubeUserNames(clusterName, resourceGroup, subscriptionID, identityName, realm string, legacyRealms ...string) []string {
+func AKSKubeUserNames(clusterName, resourceGroup, subscriptionID, identityName string, scope kube.RealmScope) []string {
 	defer perf.Track(nil, "azure.AKSKubeUserNames")()
 
-	names := []string{AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, realm)}
-	if realm != "" {
+	names := []string{AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, scope.Realm)}
+	if scope.Realm != "" {
 		names = append(names, AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, ""))
 	}
-	for _, legacyRealm := range legacyRealms {
+	for _, legacyRealm := range scope.LegacyRealms {
 		names = append(names, AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, legacyRealm))
 	}
 	return append(names, LegacyAKSKubeUserName(clusterName, resourceGroup, subscriptionID))

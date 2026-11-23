@@ -10,7 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// kubeExecTokenCommands are the commands that the kubeconfig exec entries
+// The kubeExecTokenCommands are the commands that the kubeconfig exec entries
 // written by the aws/eks, azure/aks and gcp/gke integrations run. kubectl
 // invokes them with ATMOS_CHDIR set to the checkout that wrote the entry.
 var kubeExecTokenCommands = [][]string{

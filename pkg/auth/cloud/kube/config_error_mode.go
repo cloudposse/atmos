@@ -32,23 +32,32 @@ func (m *KubeconfigManager) checkErrorModeCollisions(newConfig *clientcmdapi.Con
 		return nil //nolint:nilerr // Unreadable existing file: best-effort check, fall through to merge.
 	}
 
-	for id, cluster := range newConfig.Clusters {
-		if current, exists := existing.Clusters[id]; exists && !clustersEqual(current, cluster) {
-			return m.collisionError("cluster", id)
-		}
-	}
-	for name, kubeContext := range newConfig.Contexts {
-		if current, exists := existing.Contexts[name]; exists && !contextsEqual(current, kubeContext) {
-			return m.collisionError("context", name)
-		}
-	}
-	for name, user := range newConfig.AuthInfos {
-		if current, exists := existing.AuthInfos[name]; exists && !authInfosEqualIgnoringChdir(current, user) {
-			return m.collisionError("user", name)
-		}
+	if kind, name, found := findCollision(existing, newConfig); found {
+		return m.collisionError(kind, name)
 	}
 
 	return nil
+}
+
+// findCollision returns the kind and name of the first entry in newConfig that
+// exists in existing with different content.
+func findCollision(existing, newConfig *clientcmdapi.Config) (kind, name string, found bool) {
+	for id, cluster := range newConfig.Clusters {
+		if current, exists := existing.Clusters[id]; exists && !clustersEqual(current, cluster) {
+			return "cluster", id, true
+		}
+	}
+	for id, kubeContext := range newConfig.Contexts {
+		if current, exists := existing.Contexts[id]; exists && !contextsEqual(current, kubeContext) {
+			return "context", id, true
+		}
+	}
+	for id, user := range newConfig.AuthInfos {
+		if current, exists := existing.AuthInfos[id]; exists && !authInfosEqualIgnoringChdir(current, user) {
+			return "user", id, true
+		}
+	}
+	return "", "", false
 }
 
 // collisionError reports an existing kubeconfig entry that differs from the one being written.

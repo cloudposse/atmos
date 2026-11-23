@@ -63,7 +63,7 @@ func loadEKSAuthManager() (*schema.AtmosConfiguration, types.AuthManager, error)
 
 // executeEKSUpdateKubeconfigViaIntegration runs EKS kubeconfig update using a named integration.
 // This authenticates via the auth manager and uses the Go SDK instead of shelling out to AWS CLI.
-// kubeconfigPath and alias are optional CLI overrides (empty means "use the integration's
+// The kubeconfigPath and alias are optional CLI overrides (empty means "use the integration's
 // configured value") forwarded so --kubeconfig/--alias work on the integration path.
 func executeEKSUpdateKubeconfigViaIntegration(integrationName, kubeconfigPath, alias string) error {
 	defer perf.Track(nil, "eks.executeEKSUpdateKubeconfigViaIntegration")()
@@ -131,7 +131,7 @@ func updateEKSKubeconfigDirect(ctx context.Context, atmosConfig *schema.AtmosCon
 
 	kubeMgr, err := kube.NewKubeconfigManager(req.kubeconfigPath, "")
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEKSIntegrationFailed, err)
 	}
 
 	// The display name is the context name written: the alias, else [<realm>/]<ARN>.
@@ -141,7 +141,7 @@ func updateEKSKubeconfigDirect(ctx context.Context, atmosConfig *schema.AtmosCon
 	}
 
 	if _, err := kubeMgr.WriteClusterConfig(clusterInfo, req.alias, "merge"); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEKSIntegrationFailed, err)
 	}
 	ui.Success(fmt.Sprintf("EKS kubeconfig: %s → %s", displayName, kubeMgr.GetPath()))
 
@@ -153,12 +153,12 @@ func describeEKSKubeCluster(ctx context.Context, creds types.ICredentials, req *
 	// Create EKS client and describe cluster.
 	client, err := awsCloud.NewEKSClient(ctx, creds, req.region)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
+		return nil, nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEKSIntegrationFailed, err)
 	}
 
 	info, err := awsCloud.DescribeCluster(ctx, client, req.clusterName, req.region)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
+		return nil, nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEKSIntegrationFailed, err)
 	}
 
 	clusterInfo, err := awsCloud.BuildKubeClusterInfo(info, req.identityName)

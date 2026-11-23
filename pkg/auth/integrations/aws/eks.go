@@ -7,8 +7,6 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/aws/aws-sdk-go-v2/aws/arn"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
@@ -20,12 +18,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-const (
-	// eksServiceName is the service component of an EKS cluster ARN.
-	eksServiceName = "eks"
-	// eksClusterResourcePrefix precedes the cluster name in an EKS cluster ARN resource.
-	eksClusterResourcePrefix = "cluster/"
-)
+// logKeyCluster is the structured log key for the EKS cluster name.
+const logKeyCluster = "cluster"
 
 func init() {
 	integrations.Register(integrations.KindAWSEKS, NewEKSIntegration)
@@ -121,7 +115,7 @@ func (e *EKSIntegration) Kind() string {
 func (e *EKSIntegration) Execute(ctx context.Context, creds types.ICredentials) error {
 	defer perf.Track(nil, "aws.EKSIntegration.Execute")()
 
-	log.Debug("Configuring kubeconfig for EKS cluster", "cluster", e.cluster.Name, "region", e.cluster.Region)
+	log.Debug("Configuring kubeconfig for EKS cluster", logKeyCluster, e.cluster.Name, "region", e.cluster.Region)
 
 	// Create EKS client.
 	client, err := eksClientFactory(ctx, creds, e.cluster.Region)
@@ -166,9 +160,9 @@ func (e *EKSIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	// commands (workflows, templates, !terraform.output lookups, ...).
 	if changed {
 		ui.Success(fmt.Sprintf("EKS kubeconfig: %s → %s", displayName, mgr.GetPath()))
-		log.Debug("EKS kubeconfig written", "cluster", e.cluster.Name, "context", displayName, "path", mgr.GetPath())
+		log.Debug("EKS kubeconfig written", logKeyCluster, e.cluster.Name, "context", displayName, "path", mgr.GetPath())
 	} else {
-		log.Debug("EKS kubeconfig already up to date", "cluster", e.cluster.Name, "context", displayName, "path", mgr.GetPath())
+		log.Debug("EKS kubeconfig already up to date", logKeyCluster, e.cluster.Name, "context", displayName, "path", mgr.GetPath())
 	}
 
 	return nil
@@ -211,7 +205,7 @@ func (e *EKSIntegration) Cleanup(_ context.Context) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 
-	log.Debug("EKS cleanup: removed kubeconfig entries", "cluster", e.cluster.Name, "context", contextNames[0])
+	log.Debug("EKS cleanup: removed kubeconfig entries", logKeyCluster, e.cluster.Name, "context", contextNames[0])
 
 	return nil
 }
@@ -328,16 +322,10 @@ func (e *EKSIntegration) ownsClusterContext(mgr *kube.KubeconfigManager, cluster
 // kubeUserNames returns the exec user name this integration writes for
 // clusterARN, followed by the names older versions wrote for it.
 func (e *EKSIntegration) kubeUserNames(clusterARN string) []string {
-	return awsCloud.EKSKubeUserNames(clusterARN, e.cluster.Name, e.cluster.Region, e.identity, e.realm, e.legacyRealms...)
+	return awsCloud.EKSKubeUserNames(clusterARN, e.cluster.Name, e.cluster.Region, e.identity, kube.RealmScope{Realm: e.realm, LegacyRealms: e.legacyRealms})
 }
 
 // matchesClusterARN reports whether id is the ARN of this integration's EKS cluster.
 func (e *EKSIntegration) matchesClusterARN(id string) bool {
-	parsed, err := arn.Parse(id)
-	if err != nil {
-		return false
-	}
-	return parsed.Service == eksServiceName &&
-		parsed.Region == e.cluster.Region &&
-		parsed.Resource == eksClusterResourcePrefix+e.cluster.Name
+	return awsCloud.IsEKSClusterARN(id, e.cluster.Name, e.cluster.Region)
 }
