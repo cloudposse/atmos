@@ -102,6 +102,11 @@ func TestResolveLogoutTarget_IdentityFalse(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, logoutTarget{kind: logoutTargetTags}, got)
 
+	// --all-realms needs no identity, so an ambient ATMOS_IDENTITY=false does not block it.
+	got, err = resolveLogoutTarget(&logoutSelection{identityEnv: "false", allRealms: true})
+	require.NoError(t, err)
+	assert.Equal(t, logoutTarget{kind: logoutTargetAllRealms}, got)
+
 	got, err = resolveLogoutTarget(&logoutSelection{identityEnv: "false", all: true})
 	require.NoError(t, err)
 	assert.Equal(t, logoutTarget{kind: logoutTargetAll}, got)

@@ -17,11 +17,11 @@ import (
 )
 
 // setAmbientIdentityEnv simulates ATMOS_IDENTITY (exported inside `atmos auth
-// shell`) as Viper sees it, and restores the global Viper afterwards.
+// shell`) as Viper sees it, and resets the global Viper afterwards (an empty override would mask later lookups).
 func setAmbientIdentityEnv(t *testing.T, identity string) {
 	t.Helper()
 	viper.Set(IdentityFlagName, identity)
-	t.Cleanup(func() { viper.Set(IdentityFlagName, "") })
+	t.Cleanup(func() { viper.Reset() })
 }
 
 func newIdentityFlagCmd(t *testing.T, cliArgs ...string) *cobra.Command {
@@ -65,7 +65,7 @@ func TestAuthenticateIdentity_TagsWinOverAmbientIdentityEnv(t *testing.T) {
 
 	setAmbientIdentityEnv(t, "shell-identity")
 	viper.Set(authTagsViperKey, "admin")
-	t.Cleanup(func() { viper.Set(authTagsViperKey, "") })
+	t.Cleanup(func() { viper.Reset() })
 
 	mockAuthManager := authTypes.NewMockAuthManager(ctrl)
 	mockAuthManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
@@ -89,7 +89,7 @@ func TestAuthenticateIdentity_TagsWithoutMatchFailInsteadOfUsingAmbientIdentity(
 
 	setAmbientIdentityEnv(t, "shell-identity")
 	viper.Set(authTagsViperKey, "nonexistent")
-	t.Cleanup(func() { viper.Set(authTagsViperKey, "") })
+	t.Cleanup(func() { viper.Reset() })
 
 	mockAuthManager := authTypes.NewMockAuthManager(ctrl)
 	mockAuthManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{
@@ -107,7 +107,7 @@ func TestAuthenticateIdentity_ExplicitIdentityWinsOverTags(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
 	viper.Set(authTagsViperKey, "admin")
-	t.Cleanup(func() { viper.Set(authTagsViperKey, "") })
+	t.Cleanup(func() { viper.Reset() })
 
 	mockAuthManager := authTypes.NewMockAuthManager(ctrl)
 	mockAuthManager.EXPECT().Authenticate(gomock.Any(), "dev").Return(&authTypes.WhoamiInfo{Identity: "dev"}, nil)

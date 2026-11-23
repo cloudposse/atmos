@@ -16,6 +16,8 @@ type logoutSelection struct {
 	provider    string
 	tags        []string
 	all         bool
+	// AllRealms is --all-realms, which needs no identity.
+	allRealms bool
 }
 
 // logoutTargetKind is what `atmos auth logout` logs out of.
@@ -32,6 +34,8 @@ const (
 	logoutTargetProvider
 	// A single identity.
 	logoutTargetIdentity
+	// Every realm across all repositories.
+	logoutTargetAllRealms
 	// A single identity chosen with the identity selector (a bare `--identity`).
 	logoutTargetSelectIdentity
 )
@@ -57,6 +61,9 @@ func resolveLogoutTarget(sel *logoutSelection) (logoutTarget, error) {
 	}
 
 	switch {
+	case sel.allRealms:
+		// --all-realms does not depend on the ambient identity, so skip identity validation.
+		return logoutTarget{kind: logoutTargetAllRealms}, nil
 	case sel.all:
 		return logoutTarget{kind: logoutTargetAll}, nil
 	case len(sel.tags) > 0:

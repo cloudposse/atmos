@@ -144,6 +144,7 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 		provider:     providerFlag,
 		tags:         tagsFlag,
 		all:          allFlag,
+		allRealms:    allRealmsFlag,
 	})
 	if err != nil {
 		return err
@@ -151,13 +152,11 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 
-	// Handle --all-realms flag - logout from all realms across all repositories.
-	if allRealmsFlag {
-		return performLogoutAllRealms(ctx, &atmosConfig, dryRun, deleteKeychain, force)
-	}
-
 	// Determine what to logout.
 	switch target.kind {
+	case logoutTargetAllRealms:
+		// Logout from all realms across all repositories.
+		return performLogoutAllRealms(ctx, &atmosConfig, dryRun, deleteKeychain, force)
 	case logoutTargetAll:
 		// Logout all identities.
 		return performLogoutAll(ctx, authManager, dryRun, deleteKeychain, force)

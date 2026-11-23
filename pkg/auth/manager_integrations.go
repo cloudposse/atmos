@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -132,7 +133,7 @@ func (m *manager) findIntegrationsForIdentity(identityName string, autoProvision
 
 		// An integration applies to this identity if it references the identity directly
 		// (via.identity) or binds to the identity's root provider (via.provider).
-		matchesIdentity := integration.Via.Identity != "" && integration.Via.Identity == identityName
+		matchesIdentity := integration.Via.Identity != "" && strings.EqualFold(integration.Via.Identity, identityName)
 		matchesProvider := integration.Via.Provider != "" && rootProvider != "" && integration.Via.Provider == rootProvider
 		if !matchesIdentity && !matchesProvider {
 			continue

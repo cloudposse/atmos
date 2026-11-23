@@ -33,6 +33,15 @@ func TestFindIntegrationsForIdentity_ViaProvider(t *testing.T) {
 		assert.Equal(t, []string{"gh-identity", "gh-provider"}, got)
 	})
 
+	t.Run("matches via.identity case-insensitively", func(t *testing.T) {
+		mixed := &manager{config: &schema.AuthConfig{
+			Integrations: map[string]schema.Integration{
+				"gh-mixed": {Kind: integrations.KindGitHubSTS, Via: &schema.IntegrationVia{Identity: "Pro-ID"}},
+			},
+		}}
+		assert.Equal(t, []string{"gh-mixed"}, mixed.findIntegrationsForIdentity("pro-id", false))
+	})
+
 	t.Run("does not match a provider-bound integration for an unrelated identity", func(t *testing.T) {
 		got := m.findIntegrationsForIdentity("other-id", false)
 		assert.Equal(t, []string{"ecr-other"}, got)

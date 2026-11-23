@@ -88,6 +88,7 @@ var awsRejectionErrorCodes = map[string]struct{}{
 	"AccessDeniedException":       {},
 	"AuthFailure":                 {},
 	"InvalidToken":                {},
+	"IncompleteSignature":         {},
 	"RequestExpired":              {},
 }
 
@@ -109,6 +110,11 @@ func (c *AWSCredentials) SetValidationEndpoint(endpointURL string) {
 func (c *AWSCredentials) Validate(ctx context.Context) (*ValidationInfo, error) {
 	if c.IsExpired() {
 		return nil, fmt.Errorf("%w: AWS credentials expired at %s", errUtils.ErrExpiredCredentials, c.Expiration)
+	}
+
+	// Incomplete stored credentials fail locally; no STS request is made for them.
+	if c.AccessKeyID == "" || c.SecretAccessKey == "" {
+		return nil, fmt.Errorf("%w: stored AWS credentials are incomplete (missing access key ID or secret access key)", errUtils.ErrAuthenticationFailed)
 	}
 
 	// Note: This is a validation check using explicit credentials, not loading from files,

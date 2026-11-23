@@ -155,3 +155,34 @@ func TestAWSCredentials_ValidationEndpointIsNotSerialized(t *testing.T) {
 	assert.NotContains(t, strings.ToLower(out), "endpoint")
 	assert.Contains(t, out, `"region":"us-east-1"`, "regular fields are still serialized")
 }
+
+// TestAWSCredentials_ValidateIncompleteSignature verifies that an HTTP 400
+// IncompleteSignature answer is a credential rejection, not an unavailable validation.
+func TestAWSCredentials_ValidateIncompleteSignature(t *testing.T) {
+	body := `<ErrorResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/">
+  <Error><Type>Sender</Type><Code>IncompleteSignature</Code><Message>bad signature</Message></Error>
+  <RequestId>req-4</RequestId>
+</ErrorResponse>`
+	server, _ := fakeSTS(t, http.StatusBadRequest, body)
+	creds := validAWSCredentials()
+	creds.SetValidationEndpoint(server.URL)
+
+	_, err := creds.Validate(context.Background())
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	assert.NotErrorIs(t, err, errUtils.ErrCredentialValidationUnavailable)
+}
+
+// TestAWSCredentials_ValidateIncompleteCredentials verifies that a missing secret is
+// reported as a local failure without contacting STS.
+func TestAWSCredentials_ValidateIncompleteCredentials(t *testing.T) {
+	server, calls := fakeSTS(t, http.StatusOK, fakeSTSCallerIdentityXML)
+	creds := validAWSCredentials()
+	creds.SecretAccessKey = ""
+	creds.SetValidationEndpoint(server.URL)
+
+	_, err := creds.Validate(context.Background())
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	assert.NotErrorIs(t, err, errUtils.ErrCredentialValidationUnavailable)
+	assert.NotContains(t, err.Error(), "could not be reached")
+	assert.Equal(t, int32(0), calls.Load())
+}
