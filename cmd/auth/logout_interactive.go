@@ -85,18 +85,25 @@ func canonicalIdentityKey(identities map[string]schema.Identity, name string) st
 	return name
 }
 
+// logoutFlags groups the behavior flags shared by the logout actions.
+type logoutFlags struct {
+	dryRun         bool
+	deleteKeychain bool
+	force          bool
+}
+
 // executeLogoutOption executes the selected logout action.
 // This is a pure routing function that can be easily tested.
-func executeLogoutOption(ctx context.Context, authManager auth.AuthManager, option logoutOption, dryRun bool, deleteKeychain bool, force bool) error {
+func executeLogoutOption(ctx context.Context, authManager auth.AuthManager, option logoutOption, flags logoutFlags) error {
 	defer perf.Track(nil, "auth.executeLogoutOption")()
 
 	switch option.typ {
 	case "identity":
-		return performIdentityLogout(ctx, authManager, option.target, dryRun, deleteKeychain, force)
+		return performIdentityLogout(ctx, authManager, option.target, flags.dryRun, flags.deleteKeychain, flags.force)
 	case "provider":
-		return performProviderLogout(ctx, authManager, option.target, dryRun, deleteKeychain, force)
+		return performProviderLogout(ctx, authManager, option.target, flags.dryRun, flags.deleteKeychain, flags.force)
 	case "all":
-		return performLogoutAll(ctx, authManager, dryRun, deleteKeychain, force)
+		return performLogoutAll(ctx, authManager, flags.dryRun, flags.deleteKeychain, flags.force)
 	default:
 		return errUtils.ErrInvalidLogoutOption
 	}
@@ -145,7 +152,7 @@ func performInteractiveLogout(ctx context.Context, authManager auth.AuthManager,
 	}
 
 	// Perform the selected logout action.
-	return executeLogoutOption(ctx, authManager, selected, dryRun, deleteKeychain, force)
+	return executeLogoutOption(ctx, authManager, selected, logoutFlags{dryRun: dryRun, deleteKeychain: deleteKeychain, force: force})
 }
 
 // logoutSelectionUnavailableError explains that `atmos auth logout` needs a

@@ -7,9 +7,11 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -220,4 +222,10 @@ func TestConfigureWhoamiValidation(t *testing.T) {
 		configureWhoamiValidation(m, &authTypes.WhoamiInfo{Identity: "devuser", Credentials: creds})
 		configureWhoamiValidation(nil, &authTypes.WhoamiInfo{Identity: "devuser"})
 	})
+}
+
+// plainWhoamiText returns the buffer with ANSI styling removed and whitespace
+// collapsed, so assertions do not depend on color or terminal word wrapping.
+func plainWhoamiText(buf *bytes.Buffer) string {
+	return strings.Join(strings.Fields(ansi.Strip(buf.String())), " ")
 }
