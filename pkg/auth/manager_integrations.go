@@ -144,6 +144,10 @@ func (m *manager) findIntegrationsForIdentity(identityName string, autoProvision
 
 	// Resolve the identity's root provider once so integrations can bind via.provider.
 	rootProvider := m.resolveProviderForIdentity(identityName)
+	// Identity keys are built with strings.ToLower (see IdentityCaseMap), so match via.identity
+	// the same way. strings.EqualFold is deliberately not used: its Unicode case folding treats
+	// distinct identity keys such as "ops-σ" and "ops-ς" as equal.
+	identityKey := strings.ToLower(identityName)
 
 	var result []string
 	for name, integration := range m.config.Integrations {
@@ -153,7 +157,7 @@ func (m *manager) findIntegrationsForIdentity(identityName string, autoProvision
 
 		// An integration applies to this identity if it references the identity directly
 		// (via.identity) or binds to the identity's root provider (via.provider).
-		matchesIdentity := integration.Via.Identity != "" && strings.ToLower(integration.Via.Identity) == strings.ToLower(identityName)
+		matchesIdentity := integration.Via.Identity != "" && strings.ToLower(integration.Via.Identity) == identityKey
 		matchesProvider := integration.Via.Provider != "" && rootProvider != "" && integration.Via.Provider == rootProvider
 		if !matchesIdentity && !matchesProvider {
 			continue
@@ -355,6 +359,10 @@ func applyIntegrationOverrides(config schema.Integration, overrides types.Integr
 // Auto-triggered integrations are skipped during authentication to avoid duplicate execution.
 func (m *manager) ExecuteIdentityIntegrations(ctx context.Context, identityName string) error {
 	defer perf.Track(nil, "auth.Manager.ExecuteIdentityIntegrations")()
+
+	// Resolve the name case-insensitively like Authenticate does, so --identity Pro-ID finds the
+	// configured pro-id. An unknown name is returned unchanged and reported as not found.
+	identityName = m.canonicalIdentityName(identityName)
 
 	// Verify the identity exists.
 	_, exists := m.config.Identities[identityName]
