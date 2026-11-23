@@ -135,6 +135,33 @@ func TestKeyringStore_DeleteReportsLegacyDeleteFailure(t *testing.T) {
 	require.ErrorIs(t, err, ErrCredentialStore)
 }
 
+// TestKeyringStore_DeleteStopsOnOwnershipReadFailure verifies a read failure other than
+// not-found stops Delete before removing an entry whose owner was never read.
+func TestKeyringStore_DeleteStopsOnOwnershipReadFailure(t *testing.T) {
+	t.Run("current key", func(t *testing.T) {
+		kr := keyring.NewMockKeyring(gomock.NewController(t))
+		store := &keyringCredentialStore{kr: kr, storeType: types.CredentialStoreTypeMemory}
+		kr.EXPECT().Get(buildKeyringKey("admin", "acme")).Return("", assert.AnError)
+
+		err := store.Delete("admin", "acme")
+		require.ErrorIs(t, err, assert.AnError)
+		require.ErrorIs(t, err, ErrCredentialStore)
+	})
+
+	t.Run("legacy key", func(t *testing.T) {
+		kr := keyring.NewMockKeyring(gomock.NewController(t))
+		store := &keyringCredentialStore{kr: kr, storeType: types.CredentialStoreTypeMemory}
+		kr.EXPECT().Get(buildKeyringKey("admin", "acme")).Return("", keyring.ErrNotFound)
+		kr.EXPECT().Delete(buildKeyringKey("admin", "acme")).Return(nil)
+		kr.EXPECT().Delete(buildConfigDigestKey("admin", "acme")).Return(nil)
+		kr.EXPECT().Get(legacyRealmKeyringKey("admin", "acme")).Return("", assert.AnError)
+
+		err := store.Delete("admin", "acme")
+		require.ErrorIs(t, err, assert.AnError)
+		require.ErrorIs(t, err, ErrCredentialStore)
+	})
+}
+
 // TestEmptyRealmKeyIsUnambiguous pins which pre-realm keys realm-scoped callers may
 // delete as their own legacy entry.
 func TestEmptyRealmKeyIsUnambiguous(t *testing.T) {

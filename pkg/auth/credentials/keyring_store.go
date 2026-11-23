@@ -122,7 +122,11 @@ func (s *keyringCredentialStore) migrateLegacyRealmEntry(alias, realm, data stri
 func (s *keyringCredentialStore) Delete(alias string, realm string) error {
 	defer perf.Track(nil, "credentials.keyringCredentialStore.Delete")()
 
-	if s.keyBelongsTo(buildKeyringKey(alias, realm), alias) {
+	owned, err := s.keyBelongsTo(buildKeyringKey(alias, realm), alias)
+	if err != nil {
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to read credentials before delete: %w", err))
+	}
+	if owned {
 		if err := s.kr.Delete(buildKeyringKey(alias, realm)); err != nil {
 			return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials: %w", err))
 		}
@@ -132,7 +136,14 @@ func (s *keyringCredentialStore) Delete(alias string, realm string) error {
 	// credential cannot resurface. An ambiguous old key may belong to another realm and is kept.
 	// The legacy key is also checked for ownership: another alias (for example "acme_admin" in the
 	// empty realm) can have an entry at the same key, which is kept.
-	if s.legacyKeyIsUnambiguous(alias, realm) && s.keyBelongsTo(legacyRealmKeyringKey(alias, realm), alias) {
+	if !s.legacyKeyIsUnambiguous(alias, realm) {
+		return nil
+	}
+	legacyOwned, err := s.keyBelongsTo(legacyRealmKeyringKey(alias, realm), alias)
+	if err != nil {
+		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to read legacy credentials before delete: %w", err))
+	}
+	if legacyOwned {
 		if err := s.kr.Delete(legacyRealmKeyringKey(alias, realm)); err != nil {
 			return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete legacy credentials: %w", err))
 		}
@@ -141,18 +152,23 @@ func (s *keyringCredentialStore) Delete(alias string, realm string) error {
 }
 
 // keyBelongsTo reports whether the entry at key may be deleted as alias's own: it is absent,
-// unreadable (kept deletable), carries no alias (written by an older version), or carries this alias. An entry stored for another alias that shares the key
-// belongs to that alias and is kept.
-func (s *keyringCredentialStore) keyBelongsTo(key, alias string) bool {
+// carries no alias (written by an older version) or an unparseable payload, or carries this
+// alias. An entry stored for another alias that shares the key belongs to that alias and is
+// kept. A read failure other than not-found is returned, so an entry of unknown ownership is
+// never deleted and the caller can retry.
+func (s *keyringCredentialStore) keyBelongsTo(key, alias string) (bool, error) {
 	data, err := s.kr.Get(key)
 	if err != nil {
-		return true
+		if errors.Is(err, keyring.ErrNotFound) {
+			return true, nil
+		}
+		return false, err
 	}
 	var env credentialEnvelope
 	if err := json.Unmarshal([]byte(data), &env); err != nil {
-		return true
+		return true, nil
 	}
-	return env.Alias == "" || env.Alias == alias
+	return env.Alias == "" || env.Alias == alias, nil
 }
 
 // List returns all stored credential aliases within the specified realm. Backends that cannot

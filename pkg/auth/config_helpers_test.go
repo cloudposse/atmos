@@ -1060,6 +1060,14 @@ func TestMergeComponentAuthConfig_PreservesRealmSource(t *testing.T) {
 		assert.Equal(t, "config", result.RealmSource)
 	})
 
+	t.Run("component repeating the derived realm is still explicit", func(t *testing.T) {
+		auto := &schema.AuthConfig{Realm: "0123456789abcdef", RealmSource: "config-path"}
+		result, err := MergeComponentAuthConfig(&schema.AtmosConfiguration{}, auto, map[string]any{"realm": "0123456789abcdef"})
+		require.NoError(t, err)
+		assert.Equal(t, "0123456789abcdef", result.Realm)
+		assert.Equal(t, "config", result.RealmSource)
+	})
+
 	t.Run("component realm is explicit", func(t *testing.T) {
 		auto := &schema.AuthConfig{Realm: "0123456789abcdef", RealmSource: "config-path"}
 		result, err := MergeComponentAuthConfig(&schema.AtmosConfiguration{}, auto, map[string]any{"realm": "custom"})

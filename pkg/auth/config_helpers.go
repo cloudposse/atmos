@@ -189,7 +189,7 @@ func MergeComponentAuthConfig(
 	// trip. Restore it so credential stores can tell an explicit realm from the auto-derived one.
 	// A realm the component itself sets is explicit.
 	finalAuthConfig.RealmSource = workingGlobalAuth.RealmSource
-	if finalAuthConfig.Realm != workingGlobalAuth.Realm {
+	if v, ok := normalizedComponentAuth["realm"].(string); ok && v != "" {
 		finalAuthConfig.RealmSource = realm.SourceConfig
 	}
 
