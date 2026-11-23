@@ -45,16 +45,24 @@ func integrationTargetKey(name string, cfg schema.Integration, explicitRealm str
 	case integrations.KindAWSECRPublic:
 		// ECR Public is a single global registry — no account or region discriminator needed.
 		return integrations.KindAWSECRPublic
-	case integrations.KindAWSEKS:
-		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
-			return eksIntegrationTargetKey(cfg, explicitRealm)
-		}
-	case integrations.KindGCPGKE:
-		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
-			return gkeIntegrationTargetKey(cfg, explicitRealm)
+	case integrations.KindAWSEKS, integrations.KindGCPGKE:
+		if key, ok := clusterIntegrationTargetKey(cfg, explicitRealm); ok {
+			return key
 		}
 	}
 	return name
+}
+
+// clusterIntegrationTargetKey returns the dedupe key for an EKS or GKE integration that has a
+// cluster spec. The second result is false when the integration has no cluster spec.
+func clusterIntegrationTargetKey(cfg schema.Integration, explicitRealm string) (string, bool) {
+	if cfg.Spec == nil || cfg.Spec.Cluster == nil {
+		return "", false
+	}
+	if cfg.Kind == integrations.KindGCPGKE {
+		return gkeIntegrationTargetKey(cfg, explicitRealm), true
+	}
+	return eksIntegrationTargetKey(cfg, explicitRealm), true
 }
 
 // eksIntegrationTargetKey builds a cache key that includes the identity and

@@ -133,6 +133,14 @@ func (u *contextMigration) apply(config *clientcmdapi.Config) bool {
 	if u == nil {
 		return false
 	}
+	contextsChanged := u.removeOldContexts(config)
+	usersChanged := u.removeOldUsers(config)
+	return contextsChanged || usersChanged
+}
+
+// removeOldContexts deletes each old context name that points at one of this entry's own users
+// whose exec plugin names no other identity. Returns true when a context was removed.
+func (u *contextMigration) removeOldContexts(config *clientcmdapi.Config) bool {
 	changed := false
 	for _, name := range u.oldContextNames {
 		if !contextOwnedBy(config, name, u.ownedUsers) || !userIdentityMatches(config, config.Contexts[name].AuthInfo, u.identity) {
@@ -144,6 +152,14 @@ func (u *contextMigration) apply(config *clientcmdapi.Config) bool {
 		}
 		changed = true
 	}
+	return changed
+}
+
+// removeOldUsers deletes this entry's older users that no context other than the one being
+// written references and whose exec plugin names no other identity. Returns true when a user
+// was removed.
+func (u *contextMigration) removeOldUsers(config *clientcmdapi.Config) bool {
+	changed := false
 	for _, name := range u.ownedUsers {
 		if name == u.currentUser {
 			continue
