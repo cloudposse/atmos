@@ -63,6 +63,10 @@ func (m *manager) logoutIdentity(ctx context.Context, identityName string, delet
 	// Step 2: Clean up linked integrations (non-fatal).
 	m.cleanupIntegrations(ctx, identityName)
 
+	// Bind the auth chain and manager so AWS materializers resolve the root provider's
+	// spec.files.base_path in a fresh process; otherwise cleanup targets the default location.
+	_ = m.ensureIdentityHasManager(identityName)
+
 	// Step 3: Call identity-specific cleanup (each identity type handles its own file cleanup).
 	if err := identity.Logout(ctx); err != nil {
 		// ErrLogoutNotSupported is a successful no-op (exit 0).

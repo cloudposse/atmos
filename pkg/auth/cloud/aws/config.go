@@ -15,6 +15,12 @@ import (
 
 // BuildAWSConfigFromCreds creates an AWS config from Atmos credentials.
 // Used by ECR and EKS integrations to create AWS SDK clients.
+//
+// The config is loaded in isolation from the user's AWS environment (shared
+// config and credentials files, AWS_PROFILE and ambient credential variables),
+// like the rest of Atmos auth: the credentials are already resolved, and a
+// stale AWS_PROFILE or a setting in ~/.aws/config must not break or alter the
+// clients built from them.
 func BuildAWSConfigFromCreds(ctx context.Context, creds types.ICredentials, region string) (aws.Config, error) {
 	defer perf.Track(nil, "aws.BuildAWSConfigFromCreds")()
 
@@ -30,7 +36,7 @@ func BuildAWSConfigFromCreds(ctx context.Context, creds types.ICredentials, regi
 	}
 
 	// Build config with static credentials.
-	cfg, err := config.LoadDefaultConfig(ctx,
+	cfg, err := LoadIsolatedAWSConfig(ctx,
 		config.WithRegion(effectiveRegion),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
 			awsCreds.AccessKeyID,
