@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -123,6 +124,7 @@ func TestFilterRealmKeys_SeparatesRealms(t *testing.T) {
 func TestKeyringStore_DeleteReportsLegacyDeleteFailure(t *testing.T) {
 	kr := keyring.NewMockKeyring(gomock.NewController(t))
 	store := &keyringCredentialStore{kr: kr, storeType: types.CredentialStoreTypeMemory}
+	kr.EXPECT().Get(buildKeyringKey("admin", "acme")).Return("", keyring.ErrNotFound)
 	kr.EXPECT().Delete(buildKeyringKey("admin", "acme")).Return(nil)
 	kr.EXPECT().Delete(buildConfigDigestKey("admin", "acme")).Return(nil)
 	kr.EXPECT().Delete(legacyRealmKeyringKey("admin", "acme")).Return(assert.AnError)
@@ -158,5 +160,63 @@ func writeLegacyRealmEntry(t *testing.T, store *keyringCredentialStore, alias, r
 	raw, err := store.kr.Get(buildKeyringKey(alias, realm))
 	require.NoError(t, err)
 	require.NoError(t, store.kr.Delete(buildKeyringKey(alias, realm)))
-	require.NoError(t, store.kr.Set(legacyRealmKeyringKey(alias, realm), raw))
+	// Older versions wrote no alias into the envelope.
+	require.NoError(t, store.kr.Set(legacyRealmKeyringKey(alias, realm), stripEnvelopeAlias(t, raw)))
+}
+
+// Compile-time sentinel for the envelope field these tests rely on.
+var _ = credentialEnvelope{Alias: ""}
+
+// TestCredentialEnvelope_AliasBindsEntryToOwner covers a v1.234.1 alias such as "_admin": its
+// previous-layout key "atmos_acme__admin" is also the current key of alias "admin". An entry that
+// records the alias it was stored for is never returned for, migrated to, or deleted by another
+// alias, while entries without an alias (older versions) keep working.
+func TestCredentialEnvelope_AliasBindsEntryToOwner(t *testing.T) {
+	sharedKey := buildKeyringKey("admin", "acme")
+	require.Equal(t, "atmos_acme__admin", sharedKey)
+	require.Equal(t, sharedKey, legacyRealmKeyringKey("_admin", "acme"))
+
+	t.Run("round trip records the alias", func(t *testing.T) {
+		store := newMemoryKeyringStore()
+		require.NoError(t, store.Store("admin", &types.OIDCCredentials{Token: "own"}, "acme"))
+		raw, err := store.kr.Get(sharedKey)
+		require.NoError(t, err)
+		var env credentialEnvelope
+		require.NoError(t, json.Unmarshal([]byte(raw), &env))
+		assert.Equal(t, "admin", env.Alias)
+		got, err := store.Retrieve("admin", "acme")
+		require.NoError(t, err)
+		assert.Equal(t, "own", got.(*types.OIDCCredentials).Token)
+	})
+
+	t.Run("an entry stored for another alias is not found, kept, and not deleted", func(t *testing.T) {
+		store := newMemoryKeyringStore()
+		other := &credentialEnvelope{Type: "oidc", Data: json.RawMessage(`{"token":"underscore-admin"}`), Alias: "_admin"}
+		data, err := json.Marshal(other)
+		require.NoError(t, err)
+		require.NoError(t, store.kr.Set(sharedKey, string(data)))
+
+		_, err = store.Retrieve("admin", "acme")
+		require.ErrorIs(t, err, ErrCredentialsNotFound)
+
+		require.NoError(t, store.Delete("admin", "acme"))
+		kept, err := store.kr.Get(sharedKey)
+		require.NoError(t, err, "another alias's entry must survive a delete of this alias")
+		assert.Equal(t, string(data), kept, "and stay unchanged")
+	})
+
+	t.Run("an entry without an alias is still readable", func(t *testing.T) {
+		store := newMemoryKeyringStore()
+		require.NoError(t, store.Store("admin", &types.OIDCCredentials{Token: "older"}, "acme"))
+		raw, err := store.kr.Get(sharedKey)
+		require.NoError(t, err)
+		require.NoError(t, store.kr.Set(sharedKey, stripEnvelopeAlias(t, raw)))
+
+		got, err := store.Retrieve("admin", "acme")
+		require.NoError(t, err)
+		assert.Equal(t, "older", got.(*types.OIDCCredentials).Token)
+		require.NoError(t, store.Delete("admin", "acme"))
+		_, err = store.kr.Get(sharedKey)
+		require.ErrorIs(t, err, keyring.ErrNotFound)
+	})
 }

@@ -38,15 +38,18 @@ const (
 	// after the prefix always ends the realm, whatever the alias contains.
 	KeyringRealmAliasSeparator = "__"
 
-	// logKeyAlias is the structured-log key for a credential alias.
+	// The logKeyAlias constant is the structured-log key for a credential alias.
 	logKeyAlias = "alias"
+
+	// The logKeyRealm constant is the structured-log key for a credential realm.
+	logKeyRealm = "realm"
 )
 
 // buildKeyringKey creates a realm-scoped keyring key.
 // Format: "atmos_realm__alias" when realm is provided.
 // Falls back to "atmos_alias" for backward compatibility when realm is empty.
 func buildKeyringKey(alias, realm string) string {
-	log.Debug("Building keyring key", logKeyAlias, alias, "realm", realm)
+	log.Debug("Building keyring key", logKeyAlias, alias, logKeyRealm, realm)
 	if realm != "" {
 		return KeyringRealmPrefix + KeyringSeparator + realm + KeyringRealmAliasSeparator + alias
 	}
@@ -81,12 +84,18 @@ func EmptyRealmKeyIsUnambiguous(alias string) bool {
 //
 // ConfigDigest is the SHA-256 of the non-secret effective configuration of the chain step that
 // produced the credentials (see ConfigDigestStore). It is omitted when empty, so envelopes
-// without one are byte-identical to those of older versions, and older versions decode
-// envelopes with one unchanged because encoding/json ignores unknown fields.
+// without one omit that field, and older versions decode envelopes with one unchanged because
+// encoding/json ignores unknown fields.
+//
+// Alias is the alias the entry was stored for. It binds the entry to its owner, so a lookup of a
+// different alias that maps to the same keyring key (a v1.234.1 alias such as "_admin" shares
+// "atmos_acme__admin" with the current key of "admin") never returns it. Envelopes written
+// before the field existed have no alias and are accepted for any alias that reaches their key.
 type credentialEnvelope struct {
 	Type         string          `json:"type"`
 	Data         json.RawMessage `json:"data"`
 	ConfigDigest string          `json:"config_digest,omitempty"`
+	Alias        string          `json:"alias,omitempty"`
 }
 
 // NewCredentialStore creates a new credential store instance based on configuration.

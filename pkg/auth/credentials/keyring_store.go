@@ -38,7 +38,7 @@ func (s *keyringCredentialStore) storeEnvelope(alias string, creds types.ICreden
 	if err != nil {
 		return err
 	}
-	data, err := json.Marshal(&credentialEnvelope{Type: typ, Data: raw, ConfigDigest: digest})
+	data, err := json.Marshal(&credentialEnvelope{Type: typ, Data: raw, ConfigDigest: digest, Alias: alias})
 	if err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
 	}
@@ -78,6 +78,11 @@ func (s *keyringCredentialStore) retrieveEnvelope(alias, realm string) (types.IC
 	if err := json.Unmarshal([]byte(data), &env); err != nil {
 		return nil, "", errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal credential envelope: %w", err))
 	}
+	// An entry stored for another alias that shares this key is not this alias's entry.
+	if env.Alias != "" && env.Alias != alias {
+		log.Debug("Ignoring keyring entry stored for another alias", logKeyAlias, alias, logKeyRealm, realm, "entryAlias", env.Alias)
+		return nil, "", errors.Join(ErrCredentialStore, ErrCredentialsNotFound)
+	}
 	creds, err := unmarshalCredential(env)
 	if err != nil {
 		return nil, "", err
@@ -99,26 +104,28 @@ func (s *keyringCredentialStore) migrateLegacyRealmEntry(alias, realm, data stri
 	current, legacy := buildKeyringKey(alias, realm), legacyRealmKeyringKey(alias, realm)
 	exists, err := s.kr.Has(current)
 	if err != nil || exists {
-		log.Debug("Not migrating legacy keyring entry", logKeyAlias, alias, "realm", realm, "currentExists", exists, "error", err)
+		log.Debug("Not migrating legacy keyring entry", logKeyAlias, alias, logKeyRealm, realm, "currentExists", exists, "error", err)
 		return
 	}
 	if err := s.kr.Set(current, data); err != nil {
-		log.Debug("Failed to migrate legacy keyring entry; keeping the legacy key", logKeyAlias, alias, "realm", realm, "error", err)
+		log.Debug("Failed to migrate legacy keyring entry; keeping the legacy key", logKeyAlias, alias, logKeyRealm, realm, "error", err)
 		return
 	}
 	if err := s.kr.Delete(legacy); err != nil {
-		log.Debug("Failed to delete migrated legacy keyring entry", logKeyAlias, alias, "realm", realm, "error", err)
+		log.Debug("Failed to delete migrated legacy keyring entry", logKeyAlias, alias, logKeyRealm, realm, "error", err)
 		return
 	}
-	log.Debug("Migrated legacy keyring entry to the current key layout", logKeyAlias, alias, "realm", realm)
+	log.Debug("Migrated legacy keyring entry to the current key layout", logKeyAlias, alias, logKeyRealm, realm)
 }
 
 // Delete deletes credentials for the given alias within the specified realm. It is idempotent.
 func (s *keyringCredentialStore) Delete(alias string, realm string) error {
 	defer perf.Track(nil, "credentials.keyringCredentialStore.Delete")()
 
-	if err := s.kr.Delete(buildKeyringKey(alias, realm)); err != nil {
-		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials: %w", err))
+	if s.currentKeyBelongsTo(alias, realm) {
+		if err := s.kr.Delete(buildKeyringKey(alias, realm)); err != nil {
+			return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials: %w", err))
+		}
 	}
 	s.deleteExternalConfigDigest(alias, realm)
 	// Also remove the previous-layout entry Retrieve would fall back to, so a deleted
@@ -129,6 +136,22 @@ func (s *keyringCredentialStore) Delete(alias string, realm string) error {
 		}
 	}
 	return nil
+}
+
+// currentKeyBelongsTo reports whether the entry at the current key of alias in realm may be
+// deleted as alias's own: it is absent, unreadable (kept deletable), carries no alias (written by
+// an older version), or carries this alias. An entry stored for another alias that shares the key
+// belongs to that alias and is kept.
+func (s *keyringCredentialStore) currentKeyBelongsTo(alias, realm string) bool {
+	data, err := s.kr.Get(buildKeyringKey(alias, realm))
+	if err != nil {
+		return true
+	}
+	var env credentialEnvelope
+	if err := json.Unmarshal([]byte(data), &env); err != nil {
+		return true
+	}
+	return env.Alias == "" || env.Alias == alias
 }
 
 // List returns all stored credential aliases within the specified realm. Backends that cannot

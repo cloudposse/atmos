@@ -106,7 +106,7 @@ func TestSystemKeyringStore_ExactServiceAndAccount(t *testing.T) {
 	// And the stored bytes are the credential envelope wrapping the type's own JSON.
 	awsJSON, err := json.Marshal(creds)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"type":"aws","data":`+string(awsJSON)+`}`, raw)
+	assert.JSONEq(t, `{"type":"aws","data":`+string(awsJSON)+`,"alias":"contract-aws"}`, raw)
 
 	// The account is part of the address: the same service under a different account is absent.
 	_, err = zkeyring.Get(composedKey, "not-atmos-auth")
@@ -117,7 +117,7 @@ func TestSystemKeyringStore_ExactServiceAndAccount(t *testing.T) {
 }
 
 // TestCredentialEnvelope_JSONSchema pins the exact stored byte layout for the file backend:
-// `{"type":"<kind>","data":<type-json>}`. The wrapper shape is the keyring layer's contract;
+// `{"type":"<kind>","data":<type-json>,"alias":"<alias>"}`. The wrapper shape is the keyring layer's contract;
 // the inner `data` is the credential type's own JSON.
 func TestCredentialEnvelope_JSONSchema(t *testing.T) {
 	store := newTestFileStore(t)
@@ -137,9 +137,9 @@ func TestCredentialEnvelope_JSONSchema(t *testing.T) {
 
 	awsJSON, err := json.Marshal(creds)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"type":"aws","data":`+string(awsJSON)+`}`, raw)
+	assert.JSONEq(t, `{"type":"aws","data":`+string(awsJSON)+`,"alias":"envelope-aws"}`, raw)
 
-	// The envelope must have exactly the two contract fields.
+	// Older versions decode the two fields they know and ignore the alias.
 	var env struct {
 		Type string          `json:"type"`
 		Data json.RawMessage `json:"data"`
@@ -196,7 +196,7 @@ func TestFileKeyring_StoreRetrieve_GCP(t *testing.T) {
 	require.NoError(t, err)
 	gcpJSON, err := json.Marshal(creds)
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"type":"gcp","data":`+string(gcpJSON)+`}`, raw)
+	assert.JSONEq(t, `{"type":"gcp","data":`+string(gcpJSON)+`,"alias":"gcp-direct"}`, raw)
 
 	got, err := store.Retrieve(alias, realm)
 	require.NoError(t, err)

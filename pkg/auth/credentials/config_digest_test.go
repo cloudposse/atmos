@@ -38,8 +38,9 @@ func TestCredentialEnvelope_DigestRoundTrip(t *testing.T) {
 }
 
 // TestCredentialEnvelope_CompatibleWithOlderVersions pins the on-disk compatibility contract:
-// an envelope without a digest is byte-identical to the previous format, and an older version
-// (which decodes into a struct without the field) reads an envelope with a digest unchanged.
+// an envelope without a digest carries only the alias on top of the previous format, and an older
+// version (which decodes into a struct without those fields) reads an envelope with a digest and an
+// alias unchanged.
 func TestCredentialEnvelope_CompatibleWithOlderVersions(t *testing.T) {
 	type olderEnvelope struct {
 		Type string          `json:"type"`
@@ -50,12 +51,12 @@ func TestCredentialEnvelope_CompatibleWithOlderVersions(t *testing.T) {
 	require.NoError(t, store.Store("a", &types.OIDCCredentials{Token: "t"}, "acme"))
 	raw, err := store.kr.Get(buildKeyringKey("a", "acme"))
 	require.NoError(t, err)
-	assert.Equal(t, `{"type":"oidc","data":{"token":"t"}}`, raw)
+	assert.Equal(t, `{"type":"oidc","data":{"token":"t"},"alias":"a"}`, raw)
 
 	require.NoError(t, store.StoreWithConfigDigest("b", &types.OIDCCredentials{Token: "t"}, "acme", "abc123"))
 	raw, err = store.kr.Get(buildKeyringKey("b", "acme"))
 	require.NoError(t, err)
-	assert.Equal(t, `{"type":"oidc","data":{"token":"t"},"config_digest":"abc123"}`, raw)
+	assert.Equal(t, `{"type":"oidc","data":{"token":"t"},"config_digest":"abc123","alias":"b"}`, raw)
 
 	var older olderEnvelope
 	require.NoError(t, json.Unmarshal([]byte(raw), &older))
@@ -129,6 +130,7 @@ func TestExternalConfigDigest_Errors(t *testing.T) {
 	t.Run("record delete failure does not fail Delete", func(t *testing.T) {
 		kr := keyring.NewMockKeyring(gomock.NewController(t))
 		store := &keyringCredentialStore{kr: kr, storeType: types.CredentialStoreTypeSystemKeyring}
+		kr.EXPECT().Get(buildKeyringKey("mid", "acme")).Return("", keyring.ErrNotFound)
 		kr.EXPECT().Delete(buildKeyringKey("mid", "acme")).Return(nil)
 		kr.EXPECT().Delete(buildConfigDigestKey("mid", "acme")).Return(assert.AnError)
 		kr.EXPECT().Delete(legacyRealmKeyringKey("mid", "acme")).Return(nil)

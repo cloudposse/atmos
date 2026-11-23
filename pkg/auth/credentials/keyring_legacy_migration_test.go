@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -165,5 +166,17 @@ func legacyEnvelope(t *testing.T, token string) string {
 	require.NoError(t, store.Store("x", &types.OIDCCredentials{Token: token}, ""))
 	raw, err := store.kr.Get(buildKeyringKey("x", ""))
 	require.NoError(t, err)
-	return raw
+	return stripEnvelopeAlias(t, raw)
+}
+
+// stripEnvelopeAlias removes the alias an envelope carries, giving the alias-less shape written by
+// versions before the alias was recorded.
+func stripEnvelopeAlias(t *testing.T, raw string) string {
+	t.Helper()
+	var env credentialEnvelope
+	require.NoError(t, json.Unmarshal([]byte(raw), &env))
+	env.Alias = ""
+	stripped, err := json.Marshal(&env)
+	require.NoError(t, err)
+	return string(stripped)
 }

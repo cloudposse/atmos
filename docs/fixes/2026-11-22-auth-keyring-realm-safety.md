@@ -299,6 +299,13 @@ Choices made in these fixes that can be revisited:
   the automatic realm is recognized by its 16-hex-character format, and the explicit realm is excluded
   only when the store was built from the auth config. Restoring `RealmSource` through
   `MergeComponentAuthConfig` would narrow this.
+- **Envelopes record the alias.** Every new keyring credential envelope carries the alias it was stored
+  for (`alias`, omitted when empty). A read of another alias that maps to the same key (a v1.234.1
+  identity `_admin` in realm `acme` shares `atmos_acme__admin` with the current key of `admin`)
+  returns not found, is not migrated, and `Delete` keeps that entry. Envelopes written by older
+  versions have no alias and are accepted for any alias that reaches their key, so a v1.234.1
+  `_admin` entry itself still cannot be told apart from an `admin` entry. Older Atmos versions ignore
+  the extra field.
 - **Keychain logout deletes an ambiguous legacy key** even if it belonged to another realm, matching
   v1.234.1, with a warning naming the other owners.
 - **Legacy `aws/user` key prompt.** After a No, browser sign-in still runs when it is enabled (the

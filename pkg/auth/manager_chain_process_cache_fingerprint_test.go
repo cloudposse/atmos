@@ -21,10 +21,10 @@ var (
 
 // fingerprintTestManager builds a manager for the chain prov -> role with the given
 // effective identity and provider configuration.
-func fingerprintTestManager(identity types.Identity, role *schema.Identity, prov schema.Provider) *manager {
+func fingerprintTestManager(identity types.Identity, role *schema.Identity, prov *schema.Provider) *manager {
 	return &manager{
 		config: &schema.AuthConfig{
-			Providers:  map[string]schema.Provider{"prov": prov},
+			Providers:  map[string]schema.Provider{"prov": *prov},
 			Identities: map[string]schema.Identity{"role": *role},
 		},
 		providers:       map[string]types.Provider{"prov": &testProvider{name: "prov", creds: &testCreds{}}},
@@ -55,7 +55,7 @@ func TestProcessCredentialCache_DifferentIdentityConfigMisses(t *testing.T) {
 	devCreds := &testCreds{exp: &exp}
 	prodIdentity := &countingIdentity{provider: "prov", creds: prodCreds}
 	devIdentity := &countingIdentity{provider: "prov", creds: devCreds}
-	prov := schema.Provider{Kind: "aws/iam-identity-center", StartURL: "https://example.awsapps.com/start"}
+	prov := &schema.Provider{Kind: "aws/iam-identity-center", StartURL: "https://example.awsapps.com/start"}
 
 	prod := fingerprintTestManager(prodIdentity, assumeRoleIdentity("arn:aws:iam::111111111111:role/admin"), prov)
 	got, err := prod.authenticateChain(context.Background(), "role")
@@ -85,9 +85,9 @@ func TestProcessCredentialCache_DifferentProviderConfigMisses(t *testing.T) {
 	exp := time.Now().UTC().Add(time.Hour)
 	role := assumeRoleIdentity("arn:aws:iam::111111111111:role/admin")
 	first := fingerprintTestManager(&countingIdentity{provider: "prov", creds: &testCreds{exp: &exp}}, role,
-		schema.Provider{Kind: "aws/iam-identity-center", StartURL: "https://one.awsapps.com/start"})
+		&schema.Provider{Kind: "aws/iam-identity-center", StartURL: "https://one.awsapps.com/start"})
 	second := fingerprintTestManager(&countingIdentity{provider: "prov", creds: &testCreds{exp: &exp}}, role,
-		schema.Provider{Kind: "aws/iam-identity-center", StartURL: "https://two.awsapps.com/start"})
+		&schema.Provider{Kind: "aws/iam-identity-center", StartURL: "https://two.awsapps.com/start"})
 
 	assert.NotEqual(t, first.chainCacheKey(), second.chainCacheKey())
 	assert.Equal(t, first.chainCacheKey(), first.chainCacheKey(), "the key must be stable for one manager")
@@ -103,7 +103,7 @@ func TestProcessCredentialCache_UnserializableConfigSkipsCache(t *testing.T) {
 	identity := &countingIdentity{provider: "prov", creds: &testCreds{exp: &exp}}
 	role := assumeRoleIdentity("arn:aws:iam::111111111111:role/admin")
 	role.Spec = map[string]any{"unsupported": func() {}}
-	m := fingerprintTestManager(identity, role, schema.Provider{Kind: "aws/iam-identity-center"})
+	m := fingerprintTestManager(identity, role, &schema.Provider{Kind: "aws/iam-identity-center"})
 
 	assert.Empty(t, m.chainCacheKey())
 	for range 2 {

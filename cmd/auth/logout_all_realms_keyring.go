@@ -11,6 +11,9 @@ import (
 // logKeyAlias is the structured-log key for a credential alias.
 const logKeyAlias = "alias"
 
+// The logKeyRealm constant is the structured-log key for a credential realm.
+const logKeyRealm = "realm"
+
 // deleteRealmKeyringEntries removes, for `atmos auth logout --all-realms --keychain`, the keyring
 // entries of each configured identity in one realm. Besides the current-layout entry it removes
 // what the per-identity keychain logout removes: the ambiguous previous-layout key that older
@@ -25,21 +28,21 @@ func deleteRealmKeyringEntries(store types.CredentialStore, aliases []string, re
 
 	for _, alias := range sorted {
 		if err := store.Delete(alias, realm); err != nil {
-			log.Debug("Failed to delete keyring entry", logKeyAlias, alias, "realm", realm, "error", err)
+			log.Debug("Failed to delete keyring entry", logKeyAlias, alias, logKeyRealm, realm, "error", err)
 		}
 		if canDeleteLegacy && realm != "" {
 			entry, err := deleter.DeleteAmbiguousLegacyRealmEntry(alias, realm)
 			switch {
 			case err != nil:
-				log.Debug("Failed to delete older keyring entry", logKeyAlias, alias, "realm", realm, "error", err)
+				log.Debug("Failed to delete older keyring entry", logKeyAlias, alias, logKeyRealm, realm, "error", err)
 			case entry != nil:
 				log.Warn("Deleted an older keyring entry that may also have belonged to another realm",
-					logKeyAlias, alias, "realm", realm, "key", entry.Key)
+					logKeyAlias, alias, logKeyRealm, realm, "key", entry.Key)
 			}
 		}
 		if canDeleteDigest {
 			if err := digests.DeleteExternalConfigDigest(alias, realm); err != nil {
-				log.Debug("Failed to delete configuration digest record", logKeyAlias, alias, "realm", realm, "error", err)
+				log.Debug("Failed to delete configuration digest record", logKeyAlias, alias, logKeyRealm, realm, "error", err)
 			}
 		}
 	}
