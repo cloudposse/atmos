@@ -102,12 +102,6 @@ when it differs from the identity's:
   Azure credentials instead of Atmos Auth.
 - ACR credentials are written to Docker's config location, respecting `DOCKER_CONFIG` when set.
   Set `DOCKER_CONFIG` first when the workflow needs isolated credentials.
-- When `config.json` sets `credsStore` or a `credHelpers` entry for the registry, the token is
-  stored through that `docker-credential-<name>` helper, as `docker login` does. If the helper
-  cannot store it, the login fails instead of writing an inline entry Docker would ignore.
-  Other `config.json` fields are preserved.
-- When `DOCKER_AUTH_CONFIG` is set, Docker reads it before `config.json`, so Atmos warns that a
-  stored login may not be used while it is set.
 - `spec.auto_provision: true` triggers ACR login during `atmos auth login`; set it to `false` for
   registries that should only be logged in explicitly.
 - `atmos azure acr login` has no `--public` mode (no ECR-Public equivalent) — it always
