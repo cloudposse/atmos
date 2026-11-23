@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
-	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -383,17 +382,6 @@ func TestSSOProvider_PromptDeviceAuth_NilPointers(t *testing.T) {
 	assert.NotPanics(t, func() {
 		provider.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{})
 	})
-}
-
-func TestSSOProvider_PollForAccessToken_SlowDown(t *testing.T) {
-	// Test that SlowDownException and AuthorizationPendingException types exist.
-	// This requires mocking the OIDC client, which is complex.
-	// For now, we verify the error types are defined by instantiating them.
-	_ = &types.SlowDownException{}
-	_ = &types.AuthorizationPendingException{}
-
-	// Test passes if types can be instantiated.
-	assert.True(t, true)
 }
 
 // strPtr is a helper to create string pointers.
