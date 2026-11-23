@@ -988,7 +988,7 @@ func addCloudFormationSectionAffected(
 
 	for _, section := range sections {
 		value, localOk := (*componentSection)[section.name]
-		remoteValue, remoteOk := remoteCloudFormationSectionValue(remoteStacks, stackName, componentName, section.name)
+		remoteValue, remoteOk := remoteComponentSectionValue(remoteStacks, stackName, cfg.CloudFormationComponentType, componentName, section.name)
 
 		// Compare presence and values on both sides: a section present on
 		// only one side (added or removed) is a change, not just a differing
@@ -1013,10 +1013,8 @@ func addCloudFormationSectionAffected(
 	return nil
 }
 
-// remoteCloudFormationSectionValue reports whether the named aws/cloudformation
-// section exists on the remote-ref version of the component (regardless of
-// whether its value matches the local one), and returns that value if so.
-func remoteCloudFormationSectionValue(remoteStacks *map[string]any, stackName, componentName, sectionName string) (any, bool) {
+// remoteComponentSectionValue returns a section and its presence on the remote component.
+func remoteComponentSectionValue(remoteStacks *map[string]any, stackName, componentType, componentName, sectionName string) (any, bool) {
 	remoteStackSection, ok := (*remoteStacks)[stackName].(map[string]any)
 	if !ok {
 		return nil, false
@@ -1025,7 +1023,7 @@ func remoteCloudFormationSectionValue(remoteStacks *map[string]any, stackName, c
 	if !ok {
 		return nil, false
 	}
-	remoteComponentTypeSection, ok := remoteComponentsSection[cfg.CloudFormationComponentType].(map[string]any)
+	remoteComponentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any)
 	if !ok {
 		return nil, false
 	}
@@ -1073,9 +1071,15 @@ func addHelmSectionAffected(
 	for _, section := range sections {
 		value, ok := (*componentSection)[section.name]
 		if !ok {
-			continue
-		}
-		if isComponentSectionEqual(remoteStacks, stackName, cfg.HelmComponentType, componentName, value, section.name) {
+			switch section.name {
+			case sectionNameRepository, sectionNameVersion, sectionNameNamespace, sectionNameName, cfg.HelmCreateNamespaceSectionName, cfg.HelmReleaseSectionName:
+				if _, remoteOK := remoteComponentSectionValue(remoteStacks, stackName, cfg.HelmComponentType, componentName, section.name); !remoteOK {
+					continue
+				}
+			default:
+				continue
+			}
+		} else if isComponentSectionEqual(remoteStacks, stackName, cfg.HelmComponentType, componentName, value, section.name) {
 			continue
 		}
 		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.HelmComponentType,

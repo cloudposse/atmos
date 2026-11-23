@@ -591,6 +591,33 @@ func TestAddHelmSectionAffected_NoFalsePositives(t *testing.T) {
 	})
 }
 
+func TestAddHelmSectionAffected_RemovedSettings(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		section string
+		value   any
+		reason  string
+	}{
+		{sectionNameRepository, "repo", affectedReasonStackRepository},
+		{sectionNameVersion, "1.0", affectedReasonStackVersion},
+		{sectionNameNamespace, "ns", affectedReasonStackNamespace},
+		{sectionNameName, "release", affectedReasonStackName},
+		{cfg.HelmCreateNamespaceSectionName, false, affectedReasonStackCreateNS},
+		{cfg.HelmReleaseSectionName, map[string]any{"timeout": "5m"}, affectedReasonStackRelease},
+	} {
+		t.Run(tc.section, func(t *testing.T) {
+			t.Parallel()
+			component := map[string]any{}
+			remote := helmRemoteStacksWith(map[string]any{tc.section: tc.value})
+			var affected []schema.Affected
+			err := addHelmSectionAffected(&affected, helmAtmosConfig(), helmTestComponent, helmTestStack, &component, &remote, &remote, false, false)
+			require.NoError(t, err)
+			require.Len(t, affected, 1)
+			assert.Contains(t, affected[0].AffectedAll, tc.reason)
+		})
+	}
+}
+
 func TestHelmValuesYAMLFunctionCheckoutPaths(t *testing.T) {
 	t.Parallel()
 
