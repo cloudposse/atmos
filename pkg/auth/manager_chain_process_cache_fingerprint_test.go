@@ -21,11 +21,11 @@ var (
 
 // fingerprintTestManager builds a manager for the chain prov -> role with the given
 // effective identity and provider configuration.
-func fingerprintTestManager(identity types.Identity, role schema.Identity, prov schema.Provider) *manager {
+func fingerprintTestManager(identity types.Identity, role *schema.Identity, prov schema.Provider) *manager {
 	return &manager{
 		config: &schema.AuthConfig{
 			Providers:  map[string]schema.Provider{"prov": prov},
-			Identities: map[string]schema.Identity{"role": role},
+			Identities: map[string]schema.Identity{"role": *role},
 		},
 		providers:       map[string]types.Provider{"prov": &testProvider{name: "prov", creds: &testCreds{}}},
 		identities:      map[string]types.Identity{"role": identity},
@@ -35,8 +35,8 @@ func fingerprintTestManager(identity types.Identity, role schema.Identity, prov 
 	}
 }
 
-func assumeRoleIdentity(roleARN string) schema.Identity {
-	return schema.Identity{
+func assumeRoleIdentity(roleARN string) *schema.Identity {
+	return &schema.Identity{
 		Kind:      "aws/assume-role",
 		Via:       &schema.IdentityVia{Provider: "prov"},
 		Principal: map[string]any{"assume_role": roleARN},

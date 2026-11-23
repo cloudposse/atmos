@@ -99,18 +99,18 @@ func (s *keyringCredentialStore) migrateLegacyRealmEntry(alias, realm, data stri
 	current, legacy := buildKeyringKey(alias, realm), legacyRealmKeyringKey(alias, realm)
 	exists, err := s.kr.Has(current)
 	if err != nil || exists {
-		log.Debug("Not migrating legacy keyring entry", "alias", alias, "realm", realm, "currentExists", exists, "error", err)
+		log.Debug("Not migrating legacy keyring entry", logKeyAlias, alias, "realm", realm, "currentExists", exists, "error", err)
 		return
 	}
 	if err := s.kr.Set(current, data); err != nil {
-		log.Debug("Failed to migrate legacy keyring entry; keeping the legacy key", "alias", alias, "realm", realm, "error", err)
+		log.Debug("Failed to migrate legacy keyring entry; keeping the legacy key", logKeyAlias, alias, "realm", realm, "error", err)
 		return
 	}
 	if err := s.kr.Delete(legacy); err != nil {
-		log.Debug("Failed to delete migrated legacy keyring entry", "alias", alias, "realm", realm, "error", err)
+		log.Debug("Failed to delete migrated legacy keyring entry", logKeyAlias, alias, "realm", realm, "error", err)
 		return
 	}
-	log.Debug("Migrated legacy keyring entry to the current key layout", "alias", alias, "realm", realm)
+	log.Debug("Migrated legacy keyring entry to the current key layout", logKeyAlias, alias, "realm", realm)
 }
 
 // Delete deletes credentials for the given alias within the specified realm. It is idempotent.
@@ -208,19 +208,23 @@ func (s *keyringCredentialStore) filterRealmKeys(keys []string, realm string) []
 		}
 		return aliases
 	}
-	current := base + realm + KeyringRealmAliasSeparator
-	legacy := base + realm + KeyringSeparator
 	seen := make(map[string]bool, len(keys))
 	for _, key := range keys {
-		alias, ok := strings.CutPrefix(key, current)
-		if !ok {
-			alias, ok = strings.CutPrefix(key, legacy)
-			ok = ok && s.legacyKeyIsUnambiguous(alias, realm)
-		}
+		alias, ok := s.realmKeyAlias(key, base, realm)
 		if ok && alias != "" && !seen[alias] {
 			seen[alias] = true
 			aliases = append(aliases, alias)
 		}
 	}
 	return aliases
+}
+
+// realmKeyAlias extracts the alias from a keyring key of the given realm: from the current
+// layout, or from the previous layout when that key is unambiguous.
+func (s *keyringCredentialStore) realmKeyAlias(key, base, realm string) (string, bool) {
+	if alias, ok := strings.CutPrefix(key, base+realm+KeyringRealmAliasSeparator); ok {
+		return alias, true
+	}
+	alias, ok := strings.CutPrefix(key, base+realm+KeyringSeparator)
+	return alias, ok && s.legacyKeyIsUnambiguous(alias, realm)
 }

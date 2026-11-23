@@ -76,10 +76,10 @@ func (f *logoutKeyringFixture) assertKept(t *testing.T, key, value string) {
 	assert.Equal(t, value, got)
 }
 
-// TestManager_LogoutKeychain_DeletesAmbiguousLegacyKey reproduces regression A3 of the 1.235.0
-// regression test: `atmos auth logout --keychain` reported the keys deleted but kept the
+// TestManager_LogoutKeychain_DeletesAmbiguousLegacyKey reproduces regression A3 of the
+// 1.235.0 regression test: `atmos auth logout --keychain` reported the keys deleted but kept the
 // identity's ambiguous previous-layout key "atmos_<realm>_<identity>", so a later interactive
-// login offered to revive the deleted keys. v1.234.1 deleted that key as the identity's own.
+// login offered to revive the deleted keys. Version 1.234.1 deleted that key as the identity's own.
 // Current-layout keys of other realms and identities must be left alone.
 func TestManager_LogoutKeychain_DeletesAmbiguousLegacyKey(t *testing.T) {
 	f := newLogoutKeyringFixture(t, "prod_admin")

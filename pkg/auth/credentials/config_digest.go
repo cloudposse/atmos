@@ -129,6 +129,6 @@ func (s *keyringCredentialStore) DeleteExternalConfigDigest(alias, realm string)
 // stops matching once they are rewritten (see ExternalConfigDigest.Expiration).
 func (s *keyringCredentialStore) deleteExternalConfigDigest(alias, realm string) {
 	if err := s.DeleteExternalConfigDigest(alias, realm); err != nil {
-		log.Debug("Failed to delete configuration digest record", "alias", alias, "realm", realm, "error", err)
+		log.Debug("Failed to delete configuration digest record", logKeyAlias, alias, "realm", realm, "error", err)
 	}
 }

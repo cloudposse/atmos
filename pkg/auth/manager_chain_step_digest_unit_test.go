@@ -64,7 +64,7 @@ func TestPersistedStepConfig_CanonicalFields(t *testing.T) {
 // TestChainPrefixDigest_TracksOnlyPrincipalFields verifies the digest changes with the fields
 // that select a principal, including upstream steps, and ignores the others.
 func TestChainPrefixDigest_TracksOnlyPrincipalFields(t *testing.T) {
-	base := func() *schema.AuthConfig { return prodConfig.authConfig() }
+	base := prodConfig.authConfig
 	chain := []string{"prov", "mid", "target"}
 	digestOf := func(cfg *schema.AuthConfig, index int) string {
 		d, ok := digestManager(cfg).chainPrefixDigest(chain, index)

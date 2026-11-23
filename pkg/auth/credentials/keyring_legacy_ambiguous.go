@@ -108,10 +108,10 @@ func (s *keyringCredentialStore) AdoptAmbiguousLegacyRealmEntry(alias, realm str
 		}
 	}
 	if err := s.kr.Delete(legacy); err != nil {
-		log.Debug("Failed to delete adopted legacy keyring entry", "alias", alias, "realm", realm, "error", err)
+		log.Debug("Failed to delete adopted legacy keyring entry", logKeyAlias, alias, "realm", realm, "error", err)
 		return nil
 	}
-	log.Debug("Adopted ambiguous legacy keyring entry after confirmation", "alias", alias, "realm", realm)
+	log.Debug("Adopted ambiguous legacy keyring entry after confirmation", logKeyAlias, alias, "realm", realm)
 	return nil
 }
 

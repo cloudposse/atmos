@@ -107,14 +107,13 @@ func describeLegacyOwners(owners []atmosCredentials.LegacyRealmOwner, code bool)
 	return strings.Join(parts, " or ")
 }
 
-var (
-	// legacyKeyringAdoptionMu serializes the lookup, prompt, and adoption, so concurrent
-	// authentications of the same identity (for example bulk Terraform runs) prompt at most once.
-	legacyKeyringAdoptionMu sync.Mutex
-	// declinedLegacyKeyringAdoptions records the realm and identity pairs whose legacy entry the
-	// user declined in this process, so the question is not asked again during this invocation.
-	declinedLegacyKeyringAdoptions sync.Map
-)
+// legacyKeyringAdoptionMu serializes the lookup, prompt, and adoption, so concurrent
+// authentications of the same identity (for example bulk Terraform runs) prompt at most once.
+var legacyKeyringAdoptionMu sync.Mutex
+
+// declinedLegacyKeyringAdoptions records the realm and identity pairs whose legacy entry the
+// user declined in this process, so the question is not asked again during this invocation.
+var declinedLegacyKeyringAdoptions sync.Map
 
 // legacyKeyringDeclineKey identifies a realm and identity pair in declinedLegacyKeyringAdoptions.
 func legacyKeyringDeclineKey(realm, identity string) string {
@@ -160,24 +159,8 @@ func (i *userIdentity) adoptAmbiguousLegacyKeyringEntry(ctx context.Context, sto
 	}
 	req := &legacyKeyringAdoption{Identity: i.name, Realm: i.realm, Key: entry.Key, OtherOwners: entry.OtherOwners}
 
-	declineKey := legacyKeyringDeclineKey(i.realm, i.name)
-	if _, declined := declinedLegacyKeyringAdoptions.Load(declineKey); declined {
-		return nil, i.legacyKeyringNotAdoptedError(req, false)
-	}
-	prompter := i.legacyPrompterOrDefault()
-	if !types.AllowPrompts(ctx) || !prompter.Available() {
-		return nil, i.legacyKeyringNotAdoptedError(req, true)
-	}
-	adopt, err := prompter.ConfirmAdoption(req)
-	if errors.Is(err, errUtils.ErrAuthPromptUnavailable) {
-		return nil, i.legacyKeyringNotAdoptedError(req, true)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("%w: confirming the older keyring entry %q for identity %q: %w", errUtils.ErrAwsUserNotConfigured, req.Key, i.name, err)
-	}
-	if !adopt {
-		declinedLegacyKeyringAdoptions.Store(declineKey, struct{}{})
-		return nil, i.legacyKeyringNotAdoptedError(req, false)
+	if adopt, err := i.confirmLegacyKeyringAdoption(ctx, req); err != nil || !adopt {
+		return nil, err
 	}
 
 	if err := legacyStore.AdoptAmbiguousLegacyRealmEntry(i.name, i.realm); err != nil {
@@ -189,6 +172,33 @@ func (i *userIdentity) adoptAmbiguousLegacyKeyringEntry(ctx context.Context, sto
 	return i.credentialsFrom(store)
 }
 
+// confirmLegacyKeyringAdoption asks the user whether the ambiguous legacy entry belongs to this
+// identity. It returns (true, nil) on confirmation. Otherwise it returns false with the error to
+// surface: a not-adopted error when the user declined (now or earlier in this process) or no
+// prompt can be shown, or a wrapped error when the prompt itself failed.
+func (i *userIdentity) confirmLegacyKeyringAdoption(ctx context.Context, req *legacyKeyringAdoption) (bool, error) {
+	declineKey := legacyKeyringDeclineKey(i.realm, i.name)
+	if _, declined := declinedLegacyKeyringAdoptions.Load(declineKey); declined {
+		return false, i.legacyKeyringNotAdoptedError(req, false)
+	}
+	prompter := i.legacyPrompterOrDefault()
+	if !types.AllowPrompts(ctx) || !prompter.Available() {
+		return false, i.legacyKeyringNotAdoptedError(req, true)
+	}
+	adopt, err := prompter.ConfirmAdoption(req)
+	if errors.Is(err, errUtils.ErrAuthPromptUnavailable) {
+		return false, i.legacyKeyringNotAdoptedError(req, true)
+	}
+	if err != nil {
+		return false, fmt.Errorf("%w: confirming the older keyring entry %q for identity %q: %w", errUtils.ErrAwsUserNotConfigured, req.Key, i.name, err)
+	}
+	if !adopt {
+		declinedLegacyKeyringAdoptions.Store(declineKey, struct{}{})
+		return false, i.legacyKeyringNotAdoptedError(req, false)
+	}
+	return true, nil
+}
+
 // isLongLivedAWSCredentials reports whether creds are complete long-lived AWS keys (not a
 // session), the only kind of entry worth adopting for an aws/user identity.
 func isLongLivedAWSCredentials(creds types.ICredentials) bool {
@@ -197,8 +207,8 @@ func isLongLivedAWSCredentials(creds types.ICredentials) bool {
 }
 
 // legacyKeyringNotAdoptedError builds the not-configured error returned when an ambiguous legacy
-// entry exists but was not adopted. noPrompt is true when the entry could not be offered because
-// no interactive prompt can be shown, and adds a hint to re-run interactively.
+// entry exists but was not adopted. The noPrompt argument is true when the entry could not be
+// offered because no interactive prompt can be shown, and adds a hint to re-run interactively.
 func (i *userIdentity) legacyKeyringNotAdoptedError(req *legacyKeyringAdoption, noPrompt bool) error {
 	builder := errUtils.Build(errUtils.ErrAwsUserNotConfigured).
 		WithCause(errUtils.ErrAwsUserLegacyKeyringEntryNotAdopted).

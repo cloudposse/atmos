@@ -37,13 +37,16 @@ const (
 	// Realms cannot contain "__" or end with "_" (see realm.Validate), so the first "__"
 	// after the prefix always ends the realm, whatever the alias contains.
 	KeyringRealmAliasSeparator = "__"
+
+	// logKeyAlias is the structured-log key for a credential alias.
+	logKeyAlias = "alias"
 )
 
 // buildKeyringKey creates a realm-scoped keyring key.
 // Format: "atmos_realm__alias" when realm is provided.
 // Falls back to "atmos_alias" for backward compatibility when realm is empty.
 func buildKeyringKey(alias, realm string) string {
-	log.Debug("Building keyring key", "alias", alias, "realm", realm)
+	log.Debug("Building keyring key", logKeyAlias, alias, "realm", realm)
 	if realm != "" {
 		return KeyringRealmPrefix + KeyringSeparator + realm + KeyringRealmAliasSeparator + alias
 	}

@@ -64,7 +64,7 @@ func (m *manager) storeWithDigest(name string, creds types.ICredentials, digestO
 // instead. Best effort: without a record the files are simply not reused as an intermediate step.
 func (m *manager) recordExternalStepDigest(name string, creds types.ICredentials) {
 	store, ok := m.configDigestStore()
-	if !ok || creds == nil || m.chainRootIsAmbient() || !(isSessionToken(creds) || !m.identityPersistsCredentials(name)) {
+	if !ok || creds == nil || m.chainRootIsAmbient() || (!isSessionToken(creds) && m.identityPersistsCredentials(name)) {
 		return
 	}
 	digest, ok := m.namedStepDigest(name)

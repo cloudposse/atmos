@@ -195,12 +195,12 @@ manager.realm (stored in auth manager)
 │                   └──► ~/.config/atmos/customer-a/aws/aws-sso/credentials
 │
 └──► PostAuthenticateParams.Realm
-           │
-           ▼
-     Identity.PostAuthenticate(params)
-           │
-           └──► SetupFiles(provider, identity, creds, basePath, realm)
-                     └──► Writes to realm-scoped path
+            │
+            ▼
+      Identity.PostAuthenticate(params)
+            │
+            └──► SetupFiles(provider, identity, creds, basePath, realm)
+                      └──► Writes to realm-scoped path
 ```
 
 ---

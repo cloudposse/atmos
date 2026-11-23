@@ -95,8 +95,8 @@ func (c stepDigestConfig) authConfig() *schema.AuthConfig {
 }
 
 // newStepDigestProcess builds a fresh manager (a new process) sharing store and files with
-// earlier processes. midCreds is what the intermediate step authenticates to; when files is
-// set, the intermediate step persists its credentials there instead of in the keyring.
+// earlier processes. The midCreds argument is what the intermediate step authenticates to; when the files
+// argument is set, the intermediate step persists its credentials there instead of in the keyring.
 func newStepDigestProcess(t *testing.T, store types.CredentialStore, cfg stepDigestConfig, midCreds types.ICredentials, files *fakeFiles) *stepDigestProcess {
 	t.Helper()
 	resetProcessCredentialCache()
