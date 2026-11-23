@@ -105,8 +105,8 @@ func TestReportWhoami_UnreachableSTSKeepsExitZero(t *testing.T) {
 			err := reportWhoami(context.Background(), awsWhoami(time.Hour, unreachableLocalEndpoint(t)), format)
 			require.NoError(t, err, "valid unexpired credentials must not fail when STS is unreachable")
 
-			assert.Contains(t, stderr.String(), "Could not validate the credentials")
-			assert.NotContains(t, stderr.String(), "may be expired or invalid")
+			assert.Contains(t, plainWhoamiText(stderr), "Could not validate the credentials")
+			assert.NotContains(t, plainWhoamiText(stderr), "may be expired or invalid")
 			if format == "json" {
 				var doc map[string]any
 				require.NoError(t, json.Unmarshal(stdout.Bytes(), &doc), "stdout must stay valid JSON")
@@ -138,7 +138,7 @@ func TestReportWhoami_RejectedCredentialsFail(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrExpiredCredentials)
 	assert.Equal(t, 1, errUtils.GetExitCode(err))
-	assert.Contains(t, stderr.String(), "may be expired or invalid")
+	assert.Contains(t, plainWhoamiText(stderr), "may be expired or invalid")
 	var doc map[string]any
 	require.NoError(t, json.Unmarshal(stdout.Bytes(), &doc), "stdout must stay valid JSON")
 }
@@ -150,7 +150,7 @@ func TestReportWhoami_ValidatesAgainstConfiguredEndpoint(t *testing.T) {
 
 	err := reportWhoami(context.Background(), awsWhoami(time.Hour, whoamiFakeSTS(t, http.StatusOK, whoamiFakeSTSResponse)), "json")
 	require.NoError(t, err)
-	assert.NotContains(t, stderr.String(), "Could not validate")
+	assert.NotContains(t, plainWhoamiText(stderr), "Could not validate")
 	var doc map[string]any
 	require.NoError(t, json.Unmarshal(stdout.Bytes(), &doc))
 	assert.Equal(t, "arn:aws:iam::111111111111:user/devuser", doc["principal"])
