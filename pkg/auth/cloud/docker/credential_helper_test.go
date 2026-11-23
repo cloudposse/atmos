@@ -137,6 +137,8 @@ func TestConfigManager_CredentialHelper_DefaultsToExec(t *testing.T) {
 	_, ok := manager.credentialHelper().(*execCredentialHelper)
 	assert.True(t, ok)
 
+	// Isolate from the user's Docker directory: the constructor creates it.
+	setupTestDockerConfigDir(t)
 	created, err := NewConfigManager()
 	require.NoError(t, err)
 	_, ok = created.credentialHelper().(*execCredentialHelper)
@@ -175,6 +177,46 @@ func TestExecCredentialHelper(t *testing.T) {
 		installFakeCredentialHelper(t, "fail")
 
 		err := newExecCredentialHelper().Store(fakeHelperName, testECRRegistry, testECRUser, testECRPassword)
+		assert.ErrorIs(t, err, errUtils.ErrDockerCredentialHelper)
+	})
+
+	t.Run("get returns the stored credential", func(t *testing.T) {
+		callsDir := installFakeCredentialHelper(t, "ok")
+
+		user, secret, found, err := newExecCredentialHelper().Get(fakeHelperName, testECRRegistry)
+
+		require.NoError(t, err)
+		assert.True(t, found)
+		assert.Equal(t, fakeHelperPrevUser, user)
+		assert.Equal(t, fakeHelperPrevSecret, secret)
+		calls := readFakeHelperCalls(t, callsDir)
+		require.Len(t, calls, 1)
+		assert.Equal(t, fakeHelperCall{Action: helperActionGet, Input: testECRRegistry}, calls[0])
+	})
+
+	t.Run("get of unknown credential is not found", func(t *testing.T) {
+		installFakeCredentialHelper(t, "notfound")
+
+		_, _, found, err := newExecCredentialHelper().Get(fakeHelperName, testECRRegistry)
+
+		require.NoError(t, err)
+		assert.False(t, found)
+	})
+
+	t.Run("get from a helper that cannot store is not found", func(t *testing.T) {
+		installFakeCredentialHelper(t, "notimplemented")
+
+		_, _, found, err := newExecCredentialHelper().Get(fakeHelperName, testECRRegistry)
+
+		require.NoError(t, err)
+		assert.False(t, found)
+	})
+
+	t.Run("get failure", func(t *testing.T) {
+		installFakeCredentialHelper(t, "fail")
+
+		_, _, _, err := newExecCredentialHelper().Get(fakeHelperName, testECRRegistry)
+
 		assert.ErrorIs(t, err, errUtils.ErrDockerCredentialHelper)
 	})
 

@@ -13,16 +13,19 @@ import (
 )
 
 const (
-	// fakeHelperDirEnv turns the test binary into a fake docker-credential-* helper
-	// that records each invocation under the given directory.
+	// Setting this variable (fakeHelperDirEnv) turns the test binary into a fake
+	// docker-credential-* helper that records each invocation under the given directory.
 	fakeHelperDirEnv = "_ATMOS_TEST_FAKE_DOCKER_CRED_HELPER_DIR"
-	// fakeHelperModeEnv selects the fake helper's behavior: "ok" (default), "notfound", "fail",
+	// The mode variable (fakeHelperModeEnv) selects the fake helper's behavior: "ok" (default), "notfound", "fail",
 	// "notimplemented" (reply on stdout), "notimplemented-stderr" or "hang".
 	fakeHelperModeEnv = "_ATMOS_TEST_FAKE_DOCKER_CRED_HELPER_MODE"
-	// fakeHelperName is the credsStore/credHelpers value that routes to the fake helper.
+	// The credsStore/credHelpers value (fakeHelperName) that routes to the fake helper.
 	fakeHelperName = "atmostest"
-	// fakeHelperCallsFile records one JSON object per helper invocation.
+	// The file (fakeHelperCallsFile) that records one JSON object per helper invocation.
 	fakeHelperCallsFile = "calls.jsonl"
+	// The credential the fake helper returns for a get action.
+	fakeHelperPrevUser   = "prev-user"
+	fakeHelperPrevSecret = "prev-secret"
 )
 
 // fakeHelperCall is one recorded invocation of the fake credential helper.
@@ -78,6 +81,10 @@ func runFakeCredentialHelper(dir, mode string, args []string) int {
 	defer f.Close()
 	if err := json.NewEncoder(f).Encode(fakeHelperCall{Action: args[0], Input: string(input)}); err != nil {
 		return 5
+	}
+	if args[0] == helperActionGet {
+		// A stored credential, so a restore after a failed save can be verified.
+		_, _ = io.WriteString(os.Stdout, `{"ServerURL":"`+string(input)+`","Username":"`+fakeHelperPrevUser+`","Secret":"`+fakeHelperPrevSecret+`"}`)
 	}
 	return 0
 }

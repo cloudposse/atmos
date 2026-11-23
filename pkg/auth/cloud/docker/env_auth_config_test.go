@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,7 +37,27 @@ func TestConfigManager_WriteAuth_WarnsWhenDockerAuthConfigSet(t *testing.T) {
 		{
 			name:     "not parseable",
 			value:    `not json`,
-			contains: []string{dockerAuthConfigEnv, testECRRegistry, "takes precedence"},
+			contains: []string{dockerAuthConfigEnv, testECRRegistry, "cannot use it", "Fix or unset"},
+		},
+		{
+			name:     "entry without auth is rejected by Docker",
+			value:    `{"auths": {"` + testECRRegistry + `": {}}}`,
+			contains: []string{dockerAuthConfigEnv, "cannot use it", "missing key `auth`"},
+		},
+		{
+			name:     "unknown field is rejected by Docker",
+			value:    `{"auths": {"` + testECRRegistry + `": {"auth": "eDp5", "extra": 1}}}`,
+			contains: []string{dockerAuthConfigEnv, "cannot use it"},
+		},
+		{
+			name:     "auth that is not base64 is rejected by Docker",
+			value:    `{"auths": {"` + testECRRegistry + `": {"auth": "!!!"}}}`,
+			contains: []string{dockerAuthConfigEnv, "cannot use it"},
+		},
+		{
+			name:     "auth without a username is rejected by Docker",
+			value:    `{"auths": {"` + testECRRegistry + `": {"auth": "OnB3"}}}`,
+			contains: []string{dockerAuthConfigEnv, "cannot use it", "base64(username:password)"},
 		},
 	}
 	for _, tc := range tests {
@@ -50,6 +71,9 @@ func TestConfigManager_WriteAuth_WarnsWhenDockerAuthConfigSet(t *testing.T) {
 			require.Len(t, *warnings, 1)
 			for _, want := range tc.contains {
 				assert.Contains(t, (*warnings)[0], want)
+			}
+			if strings.Contains((*warnings)[0], "cannot use it") {
+				assert.NotContains(t, (*warnings)[0], "will not be used", "an invalid value must not claim to shadow the login")
 			}
 			got := decodeGeneric(t, readConfigFile(t, manager))
 			assert.Equal(t, map[string]any{testECRRegistry: map[string]any{"auth": expectedInlineAuth()}}, got["auths"])

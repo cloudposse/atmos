@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	// fakeECRHelperModeEnv turns the test binary into a fake docker-credential-*
-	// helper. "ecr-login" mimics amazon-ecr-credential-helper, whose store and
+	// Setting this variable (fakeECRHelperModeEnv) turns the test binary into a
+	// fake docker-credential-* helper. "ecr-login" mimics amazon-ecr-credential-helper, whose store and
 	// erase are not implemented; "fail" is a helper whose store genuinely fails.
 	fakeECRHelperModeEnv = "_ATMOS_TEST_FAKE_ECR_CRED_HELPER_MODE"
 	fakeECRHelperLogin   = "ecr-login"

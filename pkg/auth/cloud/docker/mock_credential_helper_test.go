@@ -53,6 +53,23 @@ func (mr *MockCredentialHelperMockRecorder) Erase(helper, serverURL any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Erase", reflect.TypeOf((*MockCredentialHelper)(nil).Erase), helper, serverURL)
 }
 
+// Get mocks base method.
+func (m *MockCredentialHelper) Get(helper, serverURL string) (string, string, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", helper, serverURL)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(bool)
+	ret3, _ := ret[3].(error)
+	return ret0, ret1, ret2, ret3
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockCredentialHelperMockRecorder) Get(helper, serverURL any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockCredentialHelper)(nil).Get), helper, serverURL)
+}
+
 // Store mocks base method.
 func (m *MockCredentialHelper) Store(helper, serverURL, username, secret string) error {
 	m.ctrl.T.Helper()

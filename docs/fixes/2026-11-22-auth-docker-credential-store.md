@@ -241,4 +241,6 @@ Not run:
   note. Previously Atmos dropped `credHelpers` and `credsStore` from the file and wrote an inline token.
 - **`ecr-login` uses Docker's own AWS credentials.** For a registry left to `ecr-login`, Docker gets
   tokens with the AWS credentials in its own environment, not the Atmos identity. The ECR page says to
-  run Docker under `atmos auth exec` or `atmos auth shell`, or to remove the registry from `credHelpers`.
+  run Docker under `atmos auth exec` or `atmos auth shell`, or to remove the registry from `credHelpers`. When `credsStore` is `ecr-login` too, removing the
+  entry still selects `ecr-login`; set an explicit empty entry for the registry (`"public.ecr.aws": ""`) to
+  override the global store.

@@ -136,18 +136,7 @@ func (m *ConfigManager) writeAuthLocked(registry, username, password string) err
 	if helper := config.credentialHelperFor(registry); helper != "" {
 		// Docker ignores inline auths for this registry, so writing them would
 		// make the login silently ineffective. Store through the helper.
-		if err := m.credentialHelper().Store(helper, registry, username, password); err != nil {
-			if errors.Is(err, errUtils.ErrDockerCredentialHelperStoreUnsupported) {
-				// The helper gets credentials itself; see HelperManagedNotice.
-				return &helperManagedError{registry: registry, helper: helper, err: err}
-			}
-			return withHelperHint(err, helper)
-		}
-		config.setAuth(registry, helperPlaceholderEntry)
-		if err := m.saveConfig(config); err != nil {
-			return m.rollbackHelperStore(err, helper, registry)
-		}
-		return nil
+		return m.writeHelperAuth(config, helper, registry, username, password)
 	}
 
 	// Encode credentials as base64(username:password).
@@ -157,6 +146,26 @@ func (m *ConfigManager) writeAuthLocked(registry, username, password string) err
 	config.setAuth(registry, inlineAuthEntry(authValue))
 
 	return m.saveConfig(config)
+}
+
+// writeHelperAuth stores the credentials in the helper Docker uses for registry
+// and records the registry in config.json. If config.json cannot be saved, the
+// helper is rolled back to what it held before.
+func (m *ConfigManager) writeHelperAuth(config *rawConfig, helper, registry, username, password string) error {
+	previous := m.snapshotHelperCredential(config, helper, registry)
+
+	if err := m.credentialHelper().Store(helper, registry, username, password); err != nil {
+		if errors.Is(err, errUtils.ErrDockerCredentialHelperStoreUnsupported) {
+			// The helper gets credentials itself; see HelperManagedNotice.
+			return &helperManagedError{registry: registry, helper: helper, err: err}
+		}
+		return withHelperHint(err, helper)
+	}
+	config.setAuth(registry, helperPlaceholderEntry)
+	if err := m.saveConfig(config); err != nil {
+		return m.rollbackHelperStore(err, helper, registry, previous)
+	}
+	return nil
 }
 
 // RemoveAuth removes ECR authorization from Docker config.
@@ -208,13 +217,52 @@ func (m *ConfigManager) RemoveAuth(registries ...string) error {
 	})
 }
 
-// rollbackHelperStore undoes a helper store whose config.json save failed.
-// Without the auths placeholder, RemoveAuth would never erase the credential
-// and it would be orphaned in the helper (for example the OS keychain), so it is
-// erased on a best-effort basis. The save error is always returned, joined
-// with the erase error when the rollback also fails.
-func (m *ConfigManager) rollbackHelperStore(saveErr error, helper, registry string) error {
-	if err := m.credentialHelper().Erase(helper, registry); err != nil {
+// helperSnapshot is what a credential helper held for a registry before a store.
+type helperSnapshot struct {
+	// known is false when the previous credential could not be read, in which
+	// case a rollback must leave the helper alone rather than guess.
+	known bool
+	// found reports whether the helper held a credential for the registry.
+	found    bool
+	username string
+	secret   string
+}
+
+// snapshotHelperCredential reads the credential the helper holds for registry
+// before it is replaced. Only a registry config.json already lists can have a
+// credential Atmos must not lose (`docker login` records the registry there), so
+// other registries are not read: that also avoids asking helpers such as
+// docker-credential-ecr-login to fetch credentials just to take a snapshot.
+func (m *ConfigManager) snapshotHelperCredential(config *rawConfig, helper, registry string) helperSnapshot {
+	if !config.hasAuth(registry) {
+		return helperSnapshot{known: true}
+	}
+	username, secret, found, err := m.credentialHelper().Get(helper, registry)
+	if err != nil {
+		return helperSnapshot{}
+	}
+	return helperSnapshot{known: true, found: found, username: username, secret: secret}
+}
+
+// rollbackHelperStore undoes a helper store whose config.json save failed, on a
+// best-effort basis. When the helper held a credential before, it is restored,
+// so a failed save does not leave the registry without its working login.
+// Otherwise the new credential is erased, because without the auths placeholder
+// RemoveAuth would never erase it and it would be orphaned in the helper (for
+// example the OS keychain). When the previous credential could not be read the
+// helper is left as is. The save error is always returned, joined with the
+// rollback error when the rollback also fails.
+func (m *ConfigManager) rollbackHelperStore(saveErr error, helper, registry string, previous helperSnapshot) error {
+	var err error
+	switch {
+	case !previous.known:
+		return saveErr
+	case previous.found:
+		err = m.credentialHelper().Store(helper, registry, previous.username, previous.secret)
+	default:
+		err = m.credentialHelper().Erase(helper, registry)
+	}
+	if err != nil {
 		return errors.Join(saveErr, withHelperHint(err, helper))
 	}
 	return saveErr
@@ -299,10 +347,7 @@ func (m *ConfigManager) saveConfig(config *rawConfig) error {
 		return fmt.Errorf("%w: failed to marshal config: %w", errUtils.ErrDockerConfigWrite, err)
 	}
 
-	target := m.configPath
-	if resolved, err := filepath.EvalSymlinks(target); err == nil {
-		target = resolved
-	}
+	target := resolveConfigTarget(m.configPath)
 
 	perm := os.FileMode(dockerConfigFilePerm)
 	if info, err := os.Stat(target); err == nil && info.Mode().IsRegular() {

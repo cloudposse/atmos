@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	// fakeACRHelperModeEnv turns the test binary into a fake docker-credential-*
-	// helper. "unsupported" mimics a helper whose store and erase are not
+	// Setting this variable (fakeACRHelperModeEnv) turns the test binary into a
+	// fake docker-credential-* helper. "unsupported" mimics a helper whose store and erase are not
 	// implemented (it gets registry credentials itself); "fail" is a helper whose
 	// store genuinely fails.
 	fakeACRHelperModeEnv     = "_ATMOS_TEST_FAKE_ACR_CRED_HELPER_MODE"

@@ -222,7 +222,7 @@ A helper that gets registry credentials itself, such as `ecr-login` from [amazon
 }
 ```
 
-The `ecr-login` helper fetches tokens with the AWS credentials in Docker's own environment, not with the Atmos identity. To have Docker use an Atmos identity, run it under `atmos auth exec` or `atmos auth shell`, or remove the registry from `credHelpers` so Atmos can write the credentials.
+The `ecr-login` helper fetches tokens with the AWS credentials in Docker's own environment, not with the Atmos identity. To have Docker use an Atmos identity, run it under `atmos auth exec` or `atmos auth shell`, or remove the registry from `credHelpers` so Atmos can write the credentials. If `credsStore` is also `ecr-login`, removing the entry still selects `ecr-login`, so also set an explicit empty entry for the registry (for example `"public.ecr.aws": ""`), which overrides the global store and makes Docker read inline credentials.
 
 ## Auto-Provisioning
 

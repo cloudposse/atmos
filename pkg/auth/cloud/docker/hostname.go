@@ -19,20 +19,25 @@ import (
 func convertToHostname(maybeURL string) string {
 	stripped := maybeURL
 	if strings.Contains(stripped, "://") {
-		u, err := url.Parse(stripped)
-		if err == nil && u.Hostname() != "" {
-			if u.Port() == "" {
-				return u.Hostname()
-			}
-			return net.JoinHostPort(u.Hostname(), u.Port())
-		}
-
-		if hostName := hostFromURLFallback(stripped); hostName != "" {
+		if hostName := hostFromSchemeURL(stripped); hostName != "" {
 			return hostName
 		}
 	}
 	hostName, _, _ := strings.Cut(stripped, "/")
 	return hostName
+}
+
+// hostFromSchemeURL returns the host[:port] of a URL that carries a scheme,
+// falling back to hostFromURLFallback for URLs net/url rejects. It returns ""
+// when neither yields a host.
+func hostFromSchemeURL(rawURL string) string {
+	if u, err := url.Parse(rawURL); err == nil && u.Hostname() != "" {
+		if u.Port() == "" {
+			return u.Hostname()
+		}
+		return net.JoinHostPort(u.Hostname(), u.Port())
+	}
+	return hostFromURLFallback(rawURL)
 }
 
 // hostFromURLFallback extracts a host from scheme URLs that net/url rejects,
