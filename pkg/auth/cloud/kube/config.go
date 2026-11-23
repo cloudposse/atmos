@@ -3,7 +3,9 @@ package kube
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -393,7 +395,10 @@ func (m *KubeconfigManager) mergeIfChanged(newConfig *clientcmdapi.Config, migra
 // exists=false when the file does not exist.
 func (m *KubeconfigManager) loadExisting() (config *clientcmdapi.Config, exists bool, err error) {
 	if _, statErr := os.Stat(m.path); statErr != nil {
-		return clientcmdapi.NewConfig(), false, nil
+		if errors.Is(statErr, fs.ErrNotExist) {
+			return clientcmdapi.NewConfig(), false, nil
+		}
+		return nil, false, fmt.Errorf("%w: %w", errUtils.ErrKubeconfigMerge, statErr)
 	}
 	loaded, loadErr := clientcmd.LoadFromFile(m.path)
 	if loadErr != nil {

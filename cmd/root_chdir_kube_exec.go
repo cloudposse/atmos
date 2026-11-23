@@ -11,8 +11,8 @@ import (
 )
 
 // The kubeExecTokenCommands are the commands that the kubeconfig exec entries
-// written by the aws/eks, azure/aks and gcp/gke integrations run. kubectl
-// invokes them with ATMOS_CHDIR set to the checkout that wrote the entry.
+// written by the aws/eks, azure/aks and gcp/gke integrations run.
+// The kubectl client invokes them with ATMOS_CHDIR set to the checkout that wrote the entry.
 var kubeExecTokenCommands = [][]string{
 	{"aws", "eks", "token"},
 	{"azure", "aks", "token"},

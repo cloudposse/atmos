@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,6 +24,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+var ansiSequence = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+// compactOutput strips ANSI sequences and whitespace so assertions on a path do
+// not depend on where the terminal renderer wrapped the line.
+func compactOutput(s string) string {
+	return strings.Join(strings.Fields(ansiSequence.ReplaceAllString(s, "")), "")
+}
 
 // dryRunAuthManager records whether Authenticate was asked to skip the
 // identity's auto-provisioned integrations (ECR login, kubeconfig writes).
@@ -132,7 +142,7 @@ func TestUpdateKubeconfig_DryRunDirectWritesNothing(t *testing.T) {
 	assert.Equal(t, []string{"aws", "eks", "token", "--cluster-name", "bar", "--region", "eu-central-1", "--identity=foo"},
 		preview.AuthInfos["atmos-eks-bar-eu-central-1-123456789012-foo"].Exec.Args)
 	assert.Contains(t, stderr.String(), "Dry run")
-	assert.Contains(t, stderr.String(), path)
+	assert.Contains(t, compactOutput(stderr.String()), compactOutput(path))
 
 	assert.NoFileExists(t, path, "--dry-run must not write the kubeconfig")
 	assert.NoDirExists(t, filepath.Dir(path), "--dry-run must not create the kubeconfig directory")
@@ -173,7 +183,7 @@ func TestUpdateKubeconfig_DryRunIntegrationWritesNothing(t *testing.T) {
 	preview, err := clientcmd.Load(stdout.Bytes())
 	require.NoError(t, err)
 	assert.Equal(t, "cli-alias", preview.CurrentContext, "the CLI alias overrides the configured one")
-	assert.Contains(t, stderr.String(), path, "the CLI kubeconfig path overrides the configured one")
+	assert.Contains(t, compactOutput(stderr.String()), compactOutput(path), "the CLI kubeconfig path overrides the configured one")
 	assert.NoFileExists(t, path, "--dry-run must not write the kubeconfig")
 	assert.False(t, fake.executedIntegration, "--dry-run must not execute the integration")
 	assert.True(t, fake.skippedIntegrations, "--dry-run must not run auto-provisioned integrations such as ECR login")
