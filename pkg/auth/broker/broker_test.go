@@ -31,13 +31,13 @@ func (f *fakeProvider) Provision(context.Context, *schema.AtmosConfiguration) (m
 	return f.env, f.err
 }
 
-// resetRegistry clears the package-global registry and once guard for test isolation.
+// resetRegistry clears the package-global registry and run state for test isolation.
 // Safe because tests in this package run in the same process and are not parallel.
 func resetRegistry() {
 	registryMu.Lock()
 	registry = nil
 	registryMu.Unlock()
-	ensureOnce = sync.Once{}
+	resetEnsureStateForTest()
 	resetBrokeredForTest()
 }
 
@@ -105,7 +105,7 @@ func TestEnsureCredentials_ProcessOnce(t *testing.T) {
 	EnsureCredentials(context.Background(), cfg)
 	EnsureCredentials(context.Background(), cfg)
 
-	assert.Equal(t, 1, p.provisioned, "EnsureCredentials must provision at most once per process")
+	assert.Equal(t, 1, p.provisioned, "EnsureCredentials must not re-provision within the refresh interval")
 }
 
 func TestEnsureCredentials_NoProviders(t *testing.T) {
@@ -165,7 +165,7 @@ func TestHasBrokeredCredentials_FalseWhenExportFails(t *testing.T) {
 	assert.False(t, HasBrokeredCredentials(), "no variable was exported, so nothing is brokered")
 }
 
-// TestEnsureCredentials_ConcurrentProvisionOnce proves the sync.Once happens-before barrier:
+// TestEnsureCredentials_ConcurrentProvisionOnce proves the ensureMu happens-before barrier:
 // concurrent callers provision exactly once AND every caller observes the exported env after
 // EnsureCredentials returns (the credential is in place before any caller proceeds to clone).
 // Run under -race to catch ordering regressions if vendoring is ever parallelized.
@@ -198,4 +198,49 @@ func TestEnsureCredentials_ConcurrentProvisionOnce(t *testing.T) {
 		assert.Equal(t, "ready", v, "goroutine %d must observe the exported credential after EnsureCredentials returns", i)
 	}
 	require.NoError(t, os.Unsetenv(key))
+}
+
+// GIT_CONFIG_COUNT is published after the indexed pairs it counts, so a concurrent subprocess
+// never sees a count larger than the number of complete pairs.
+func TestExportOrder_GitConfigCountLast(t *testing.T) {
+	env := map[string]string{
+		"GIT_CONFIG_COUNT":   "2",
+		"GIT_CONFIG_KEY_0":   "k0",
+		"GIT_CONFIG_VALUE_0": "v0",
+		"GIT_CONFIG_KEY_1":   "k1",
+		"GIT_CONFIG_VALUE_1": "v1",
+		"GH_TOKEN":           "t",
+	}
+
+	order := exportOrder(env)
+
+	require.Len(t, order, len(env))
+	assert.Equal(t, "GIT_CONFIG_COUNT", order[len(order)-1])
+	assert.NotContains(t, order[:len(order)-1], "GIT_CONFIG_COUNT")
+	assert.Equal(t, []string{"GH_TOKEN", "GIT_CONFIG_KEY_0", "GIT_CONFIG_KEY_1", "GIT_CONFIG_VALUE_0", "GIT_CONFIG_VALUE_1", "GIT_CONFIG_COUNT"}, order)
+	// Without a count nothing is appended.
+	assert.Equal(t, []string{"A"}, exportOrder(map[string]string{"A": "1"}))
+}
+
+func TestRefreshInterval_MatchesSchedule(t *testing.T) {
+	assert.Equal(t, refreshInterval, RefreshInterval())
+}
+
+// TestRunEnabledBrokers_PartialEnvWithErrorIsFailedRun asserts that a broker returning both an
+// environment and an error exports the environment but reports the run as failed, so it is
+// retried on retryBackoff rather than waiting the full refreshInterval.
+func TestRunEnabledBrokers_PartialEnvWithErrorIsFailedRun(t *testing.T) {
+	resetRegistry()
+	t.Cleanup(resetRegistry)
+
+	key := "ATMOS_BROKER_TEST_PARTIAL"
+	require.NoError(t, os.Unsetenv(key))
+	t.Cleanup(func() { _ = os.Unsetenv(key) })
+
+	Register(&fakeProvider{name: "partial", enabled: true, env: map[string]string{key: "1"}, err: errors.New("mint failed")})
+
+	ok := runEnabledBrokers(context.Background(), &schema.AtmosConfiguration{})
+
+	assert.False(t, ok, "a broker error must mark the run failed")
+	assert.Equal(t, "1", os.Getenv(key), "partial env must still be exported")
 }

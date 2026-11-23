@@ -153,13 +153,6 @@ func TestProcessCredentialCache_ExpiredCredsReauthenticate(t *testing.T) {
 	resetProcessCredentialCache()
 	t.Cleanup(resetProcessCredentialCache)
 
-	// Seed the cache with expired credentials.
-	expiredTime := time.Now().UTC().Add(-1 * time.Hour)
-	expiredCreds := &testCreds{exp: &expiredTime}
-	processCredentialCache.Store("test-realm:prov->role", &processCachedCreds{
-		credentials: expiredCreds,
-	})
-
 	freshExp := time.Now().UTC().Add(1 * time.Hour)
 	freshCreds := &testCreds{exp: &freshExp}
 	identity := &countingIdentity{provider: "prov", creds: freshCreds}
@@ -181,6 +174,13 @@ func TestProcessCredentialCache_ExpiredCredsReauthenticate(t *testing.T) {
 		chain:           []string{"prov", "role"},
 		realm:           realm.RealmInfo{Value: "test-realm"},
 	}
+
+	// Seed the cache with expired credentials under this manager's key.
+	expiredTime := time.Now().UTC().Add(-1 * time.Hour)
+	expiredCreds := &testCreds{exp: &expiredTime}
+	processCredentialCache.Store(m.chainCacheKey(), &processCachedCreds{
+		credentials: expiredCreds,
+	})
 
 	creds, err := m.authenticateChain(context.Background(), "role")
 	require.NoError(t, err)
