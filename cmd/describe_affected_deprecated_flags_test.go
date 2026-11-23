@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,8 +34,11 @@ func TestDescribeAffectedDeprecatedFlagsWarnOnStderr(t *testing.T) {
 			})
 			assert.Empty(t, commandOutput.String(), "deprecation notices must not reach the command output writer")
 			assert.Empty(t, stdout)
+			// The warning is styled when color is on (CI forces it), and styling splits the text into
+			// several ANSI segments, so compare against the plain text.
+			plain := ansi.Strip(stderr)
 			for _, flag := range tc.want {
-				assert.Contains(t, stderr, "Flag "+flag+" has been deprecated, use --base instead")
+				assert.Contains(t, plain, "Flag "+flag+" has been deprecated, use --base instead")
 			}
 		})
 	}
