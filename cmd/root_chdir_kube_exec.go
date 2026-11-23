@@ -78,7 +78,7 @@ func isKubeExecTokenInvocation(args []string) bool {
 			break
 		}
 		if len(arg) > 0 && arg[0] == '-' {
-			if flagTakesSeparateValue(arg) {
+			if flagConsumesNext(arg, args, i+1, words) {
 				i++ // Skip the flag's value.
 			}
 			continue
@@ -93,27 +93,79 @@ func isKubeExecTokenInvocation(args []string) bool {
 	})
 }
 
-// flagTakesSeparateValue reports whether arg is a global flag that requires
-// its value in the next argument: it has no inline value ("--name=value"), is
-// not a boolean, and has no NoOptDefVal. It reads the global flag registry
+// flagConsumesNext reports whether the argument at args[next] is the separate
+// value of the flag arg. A flag that requires a value always consumes it. A
+// NoOptDefVal flag such as --identity consumes it too, as the optional-value
+// normalization does at startup, unless it is the next word of a token
+// command, so bare "--identity aws eks token" keeps "aws" as a command word.
+func flagConsumesNext(arg string, args []string, next int, words []string) bool {
+	if next >= len(args) {
+		return false
+	}
+	kind := flagValueKind(arg)
+	switch kind {
+	case flagValueRequired:
+		return true
+	case flagValueOptional:
+		value := args[next]
+		if len(value) == 0 || value[0] == '-' {
+			return false
+		}
+		return !isNextTokenCommandWord(words, value)
+	default:
+		return false
+	}
+}
+
+// isNextTokenCommandWord reports whether word would extend words toward one of
+// kubeExecTokenCommands.
+func isNextTokenCommandWord(words []string, word string) bool {
+	return slices.ContainsFunc(kubeExecTokenCommands, func(command []string) bool {
+		return len(command) > len(words) && slices.Equal(command[:len(words)], words) && command[len(words)] == word
+	})
+}
+
+// Kinds of value a global flag takes in the next argument.
+const (
+	flagValueNone = iota
+	flagValueRequired
+	flagValueOptional
+)
+
+// flagValueKind classifies arg: it has no inline value ("--name=value"), and
+// is a non-boolean global flag that either requires a value (no NoOptDefVal)
+// or accepts an optional one (NoOptDefVal consuming the next argument). It reads the global flag registry
 // rather than RootCmd, which cannot be referenced here without an
 // initialization cycle (RootCmd -> processChdirFlag -> checkChdirTarget).
-func flagTakesSeparateValue(arg string) bool {
+func flagValueKind(arg string) int {
 	if strings.Contains(arg, "=") {
-		return false
+		return flagValueNone
 	}
 	name := strings.TrimLeft(arg, "-")
 	isShorthand := !strings.HasPrefix(arg, "--") && len(name) == 1
 	if !strings.HasPrefix(arg, "--") && !isShorthand {
-		return false
+		return flagValueNone
 	}
 	for _, flag := range flags.GlobalFlagsRegistry().All() {
 		if globalFlagMatches(flag, name, isShorthand) {
-			_, isBool := flag.(*flags.BoolFlag)
-			return !isBool && flag.GetNoOptDefVal() == ""
+			return classifyFlagValue(flag)
 		}
 	}
-	return false
+	return flagValueNone
+}
+
+// classifyFlagValue returns the kind of separate value flag takes.
+func classifyFlagValue(flag flags.Flag) int {
+	if _, isBool := flag.(*flags.BoolFlag); isBool {
+		return flagValueNone
+	}
+	if flag.GetNoOptDefVal() == "" {
+		return flagValueRequired
+	}
+	if flag.GetNoOptDefValConsumesNextArg() {
+		return flagValueOptional
+	}
+	return flagValueNone
 }
 
 // globalFlagMatches reports whether flag is the one called name, compared by

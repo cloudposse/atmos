@@ -75,7 +75,7 @@ func collidingCluster(existing, newConfig *clientcmdapi.Config) (string, bool) {
 // existing with different content, unless migration owns the existing one.
 func collidingContext(existing, newConfig *clientcmdapi.Config, migration *contextMigration) (string, bool) {
 	for id, kubeContext := range newConfig.Contexts {
-		if current, exists := existing.Contexts[id]; exists && !contextsEqual(current, kubeContext) && !migration.ownsLegacyContext(current, kubeContext) {
+		if current, exists := existing.Contexts[id]; exists && !contextsEqual(current, kubeContext) && !migration.ownsLegacyContext(existing, current, kubeContext) {
 			return id, true
 		}
 	}

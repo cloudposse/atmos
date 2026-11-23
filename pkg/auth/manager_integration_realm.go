@@ -23,3 +23,13 @@ func (m *manager) integrationRealmSource() string {
 	}
 	return realm.SourceAuto
 }
+
+// explicitIntegrationRealm returns the realm value when it was configured
+// explicitly, else "". Only an explicit realm changes the kubeconfig names the
+// integrations write, so it is the only realm that belongs in a dedupe key.
+func (m *manager) explicitIntegrationRealm() string {
+	if m.integrationRealmSource() == realm.SourceAuto {
+		return ""
+	}
+	return m.realm.Value
+}

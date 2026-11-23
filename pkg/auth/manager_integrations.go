@@ -33,10 +33,10 @@ func resetProcessIntegrationCache() {
 // For ECR integrations: "aws/ecr:<account_id>:<region>" — two configs pointing at the same
 // registry (e.g. a global + component-level duplicate) collapse to a single login.
 // For EKS and GKE integrations: the cluster plus everything that shapes the kubeconfig entries
-// written (identity, alias, kubeconfig settings), so two identities for one cluster each write
+// written (identity, alias, kubeconfig settings, explicit realm), so two identities for one cluster each write
 // their own kubeconfig user and only exact duplicates collapse.
 // All other integration types fall back to the config name to preserve existing behaviour.
-func integrationTargetKey(name string, cfg schema.Integration) string {
+func integrationTargetKey(name string, cfg schema.Integration, explicitRealm string) string {
 	switch cfg.Kind {
 	case integrations.KindAWSECR:
 		if cfg.Spec != nil && cfg.Spec.Registry != nil {
@@ -47,11 +47,11 @@ func integrationTargetKey(name string, cfg schema.Integration) string {
 		return integrations.KindAWSECRPublic
 	case integrations.KindAWSEKS:
 		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
-			return eksIntegrationTargetKey(cfg)
+			return eksIntegrationTargetKey(cfg, explicitRealm)
 		}
 	case integrations.KindGCPGKE:
 		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
-			return gkeIntegrationTargetKey(cfg)
+			return gkeIntegrationTargetKey(cfg, explicitRealm)
 		}
 	}
 	return name
@@ -59,13 +59,17 @@ func integrationTargetKey(name string, cfg schema.Integration) string {
 
 // eksIntegrationTargetKey builds a cache key that includes the identity and
 // kubeconfig output behavior, because the EKS kubeconfig user name depends on
-// the identity.
-func eksIntegrationTargetKey(cfg schema.Integration) string {
+// the identity and an explicitly configured realm. A derived realm does not
+// change the names, so it is not part of the key.
+func eksIntegrationTargetKey(cfg schema.Integration, explicitRealm string) string {
 	cluster := cfg.Spec.Cluster
 	values := url.Values{
 		"alias":  {cluster.Alias},
 		"name":   {cluster.Name},
 		"region": {cluster.Region},
+	}
+	if explicitRealm != "" {
+		values.Set("realm", explicitRealm)
 	}
 	if cfg.Via != nil {
 		values.Set("identity", cfg.Via.Identity)
@@ -78,14 +82,18 @@ func eksIntegrationTargetKey(cfg schema.Integration) string {
 	return integrations.KindAWSEKS + ":" + values.Encode()
 }
 
-// gkeIntegrationTargetKey builds a cache key that includes GKE output behavior.
-func gkeIntegrationTargetKey(cfg schema.Integration) string {
+// gkeIntegrationTargetKey builds a cache key that includes GKE output behavior
+// and an explicitly configured realm.
+func gkeIntegrationTargetKey(cfg schema.Integration, explicitRealm string) string {
 	cluster := cfg.Spec.Cluster
 	values := url.Values{
 		"alias":    {cluster.Alias},
 		"location": {cluster.Location},
 		"name":     {cluster.Name},
 		"project":  {cluster.ProjectID},
+	}
+	if explicitRealm != "" {
+		values.Set("realm", explicitRealm)
 	}
 	if cfg.Via != nil {
 		values.Set("identity", cfg.Via.Identity)
@@ -124,7 +132,7 @@ func (m *manager) triggerIntegrations(ctx context.Context, identityName string, 
 	// than its config name so that duplicate entries from merged global+component configs that
 	// point to the same endpoint are collapsed to a single execution.
 	for _, integrationName := range linkedIntegrations {
-		cacheKey := integrationTargetKey(integrationName, m.config.Integrations[integrationName])
+		cacheKey := integrationTargetKey(integrationName, m.config.Integrations[integrationName], m.explicitIntegrationRealm())
 		if _, alreadyRan := processIntegrationCache.LoadOrStore(cacheKey, struct{}{}); alreadyRan {
 			log.Debug("Skipping already-executed integration", "integration", integrationName, "target", cacheKey)
 			continue

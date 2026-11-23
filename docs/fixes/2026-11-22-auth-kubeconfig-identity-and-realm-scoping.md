@@ -50,10 +50,10 @@ value with the `config` source, so the realm value alone cannot tell a configure
 - **Fix.** `kube.ClusterInfo` gained `Identity` and `LegacyUserNames`, and moved to
   `pkg/auth/cloud/kube/cluster_info.go`. `kube.UserName` now builds
   `atmos-[<realm>-]<prefix>-<name>-<region>[-<account>][-<identity>][-<hash>]`:
-  - EKS: `atmos-eks-<name>-<region>-<account>-<identity>`. The account comes from the cluster ARN
+  - EKS: `atmos-eks-<name>-<region>-<account>-<identity>-<hash>`. The account comes from the cluster ARN
     (`pkg/auth/cloud/aws/eks.go`).
-  - AKS: `atmos-aks-<name>-<resource-group>-<subscription>-<identity>` (`pkg/auth/cloud/azure/aks.go`).
-  - GKE: `atmos-gke-<name>-<project>-<location>-<identity>` (`pkg/auth/cloud/gcp/gke.go`).
+  - AKS: `atmos-aks-<name>-<resource-group>-<subscription>-<identity>-<hash>` (`pkg/auth/cloud/azure/aks.go`).
+  - GKE: `atmos-gke-<name>-<project>-<location>-<identity>-<hash>` (`pkg/auth/cloud/gcp/gke.go`).
   - **Hash suffix.** Realms, cluster names and identities can contain `-`, which is also the separator, so
     different tuples could build the same name (realm `r` with cluster `b-eks-c` and realm `r-eks-b` with
     cluster `c`) and the merge would overwrite one user with the other. When the name includes a realm or an
@@ -100,7 +100,7 @@ value with the `config` source, so the realm value alone cannot tell a configure
   one user and one default context.
 - **Fix.** With an explicit realm (from `auth.realm` or `ATMOS_AUTH_REALM`):
   - The user name gets `<realm>-` after `atmos-`, for example
-    `atmos-acme-eks-<name>-<region>-<account>-<identity>`.
+    `atmos-acme-eks-<name>-<region>-<account>-<identity>-<hash>`.
   - The exec env gets `ATMOS_AUTH_REALM=<realm>`, so `kubectl` gets its token in that realm
     (`execEnv` in `pkg/auth/cloud/kube/cluster_info.go`).
   - Without an alias, the default context name is `<realm>/<cluster-id>` (`kube.ContextName` in

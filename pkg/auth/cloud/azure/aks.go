@@ -265,10 +265,28 @@ func BuildKubeClusterInfo(info *AKSClusterInfo, identityName string) *kube.Clust
 		UserPrefix:               aksUserPrefix,
 		AccountID:                strings.ToLower(info.SubscriptionID), // Matches AKSKubeUserName.
 		Identity:                 identityName,
-		LegacyUserNames:          []string{LegacyAKSKubeUserName(info.Name, info.ResourceGroup, info.SubscriptionID)},
+		LegacyUserNames:          legacyAKSUserNames(info.Name, info.ResourceGroup, info.SubscriptionID),
 		ExecArgs:                 execArgs,
 		ExecEnv:                  execEnv,
 	}
+}
+
+// legacyAKSUserNames returns the pre-identity user names for the cluster: the
+// lowercased-subscription form and, when the configured subscription ID has
+// uppercase letters, the form with the ID as written, because earlier builds
+// did not lowercase it, so those entries must still count as owned.
+func legacyAKSUserNames(clusterName, resourceGroup, subscriptionID string) []string {
+	names := []string{LegacyAKSKubeUserName(clusterName, resourceGroup, subscriptionID)}
+	if strings.ToLower(subscriptionID) == subscriptionID {
+		return names
+	}
+	asWritten := &kube.ClusterInfo{
+		Name:       clusterName,
+		Region:     resourceGroup,
+		UserPrefix: aksUserPrefix,
+		AccountID:  subscriptionID,
+	}
+	return append(names, kube.UserName(asWritten))
 }
 
 // AKSKubeUserName returns the kubeconfig exec-plugin username that

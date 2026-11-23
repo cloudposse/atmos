@@ -104,3 +104,17 @@ func TestAKSKubeUserName_SubscriptionCaseInsensitive(t *testing.T) {
 	assert.Equal(t, AKSKubeUserName("c", "rg", lower, "dev", ""), kube.UserName(written))
 	assert.Equal(t, AKSKubeUserName("c", "rg", upper, "dev", ""), AKSKubeUserName("c", "rg", lower, "dev", ""))
 }
+
+// TestBuildKubeClusterInfo_OwnsUserWrittenWithMixedCaseSubscription verifies
+// that an entry earlier builds wrote with the subscription ID as configured
+// stays owned, while an all-lowercase ID adds no duplicate name.
+func TestBuildKubeClusterInfo_OwnsUserWrittenWithMixedCaseSubscription(t *testing.T) {
+	mixed := BuildKubeClusterInfo(&AKSClusterInfo{Name: "dev-cluster", ResourceGroup: "dev-rg", SubscriptionID: "SUB-ABC"}, "azure-admin")
+	owned := kube.OwnedUserNames(mixed)
+	assert.Contains(t, owned, "atmos-aks-dev-cluster-dev-rg-SUB-ABC", "the name written with the configured case")
+	assert.Contains(t, owned, "atmos-aks-dev-cluster-dev-rg-sub-abc", "the lowercased pre-identity name")
+	assert.Contains(t, owned, kube.UserName(mixed), "the current name")
+
+	lower := BuildKubeClusterInfo(&AKSClusterInfo{Name: "dev-cluster", ResourceGroup: "dev-rg", SubscriptionID: "sub-abc"}, "azure-admin")
+	assert.Equal(t, []string{"atmos-aks-dev-cluster-dev-rg-sub-abc"}, lower.LegacyUserNames)
+}

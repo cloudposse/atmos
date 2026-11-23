@@ -106,6 +106,10 @@ type contextMigration struct {
 	currentUser string
 	// ownedUsers are the user names that mark a context as this entry's.
 	ownedUsers []string
+	// identity is the identity the entry is written for. An older user whose
+	// exec plugin names a different identity (ATMOS_IDENTITY) is someone
+	// else's, even when its name is one of ownedUsers.
+	identity string
 }
 
 // newContextMigration returns the migration for writing info under alias.
@@ -116,6 +120,7 @@ func newContextMigration(info *ClusterInfo, alias string) *contextMigration {
 		oldContextNames: names[1:],
 		currentUser:     UserName(info),
 		ownedUsers:      OwnedUserNames(info),
+		identity:        info.Identity,
 	}
 }
 
@@ -130,7 +135,7 @@ func (u *contextMigration) apply(config *clientcmdapi.Config) bool {
 	}
 	changed := false
 	for _, name := range u.oldContextNames {
-		if !contextOwnedBy(config, name, u.ownedUsers) {
+		if !contextOwnedBy(config, name, u.ownedUsers) || !userIdentityMatches(config, config.Contexts[name].AuthInfo, u.identity) {
 			continue
 		}
 		delete(config.Contexts, name)
@@ -143,7 +148,7 @@ func (u *contextMigration) apply(config *clientcmdapi.Config) bool {
 		if name == u.currentUser {
 			continue
 		}
-		if _, exists := config.AuthInfos[name]; !exists || userReferencedOutside(config, name, u.contextName) {
+		if _, exists := config.AuthInfos[name]; !exists || userReferencedOutside(config, name, u.contextName) || !userIdentityMatches(config, name, u.identity) {
 			continue
 		}
 		delete(config.AuthInfos, name)
@@ -166,14 +171,16 @@ func userReferencedOutside(config *clientcmdapi.Config, userName, contextName st
 // ownsLegacyContext reports whether current is this entry's own context that
 // still points at an older user: it targets the same cluster and namespace as
 // next, and its user is one of the entry's owned users other than the current
-// one. Writing next replaces it, so it is a migration, not a conflict. A nil
-// migration owns nothing.
-func (u *contextMigration) ownsLegacyContext(current, next *clientcmdapi.Context) bool {
+// one, and the user's exec plugin names no other identity than the one being
+// written. Writing next replaces it, so it is a migration, not a conflict. A
+// nil migration owns nothing.
+func (u *contextMigration) ownsLegacyContext(config *clientcmdapi.Config, current, next *clientcmdapi.Context) bool {
 	if u == nil || current == nil || next == nil {
 		return false
 	}
 	return current.Cluster == next.Cluster &&
 		current.Namespace == next.Namespace &&
 		current.AuthInfo != u.currentUser &&
-		slices.Contains(u.ownedUsers, current.AuthInfo)
+		slices.Contains(u.ownedUsers, current.AuthInfo) &&
+		userIdentityMatches(config, current.AuthInfo, u.identity)
 }
