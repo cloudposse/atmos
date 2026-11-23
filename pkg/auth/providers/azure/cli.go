@@ -194,10 +194,15 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 // audience; a non-empty resource (an app ID or App ID URI) requests a token
 // scoped to that resource instead (e.g., the AKS-managed server app).
 func (p *cliProvider) executeAzCommand(ctx context.Context, resource string) (*azureCliTokenResponse, error) {
-	// Build az command args.
-	args := []string{"account", "get-access-token", "--tenant", p.tenantID}
+	// Build az command args. az rejects --tenant and --subscription together
+	// ("Please specify only one of subscription and tenant, not both"), so pass
+	// --subscription when configured (the token is issued in that subscription's
+	// tenant) and fall back to --tenant otherwise.
+	args := []string{"account", "get-access-token"}
 	if p.subscriptionID != "" {
 		args = append(args, "--subscription", p.subscriptionID)
+	} else {
+		args = append(args, "--tenant", p.tenantID)
 	}
 	if resource != "" {
 		args = append(args, "--resource", resource)

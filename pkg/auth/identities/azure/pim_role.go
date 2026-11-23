@@ -506,16 +506,16 @@ func (i *pimRoleIdentity) PostAuthenticate(ctx context.Context, params *authType
 		return fmt.Errorf("%w: PostAuthenticate requires credentials", errUtils.ErrInvalidAuthConfig)
 	}
 
-	if err := azureCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, "", i.realm); err != nil {
+	// Every post-authenticate step must agree on one subscription: the one from
+	// principal.scope (what Environment() exports), falling back to the parent's.
+	creds := i.scopedCredentials(params.Credentials)
+
+	if err := azureCloud.SetupFiles(params.ProviderName, params.IdentityName, creds, "", i.realm); err != nil {
 		return fmt.Errorf("failed to setup Azure files: %w", err)
 	}
 
-	subscriptionID := subscriptionIDFromScope(i.scope)
-	if azureCreds, ok := params.Credentials.(*authTypes.AzureCredentials); ok {
-		if subscriptionID == "" {
-			subscriptionID = azureCreds.SubscriptionID
-		}
-		if err := azureCloud.UpdateAzureCLIFiles(params.Credentials, azureCreds.TenantID, subscriptionID, azureCreds.CloudEnvironment, i.realm); err != nil {
+	if azureCreds, ok := creds.(*authTypes.AzureCredentials); ok {
+		if err := azureCloud.UpdateAzureCLIFiles(creds, azureCreds.TenantID, azureCreds.SubscriptionID, azureCreds.CloudEnvironment, i.realm); err != nil {
 			log.Debug("Failed to update Azure CLI files", "error", err)
 		}
 	}
@@ -525,7 +525,7 @@ func (i *pimRoleIdentity) PostAuthenticate(ctx context.Context, params *authType
 		StackInfo:    params.StackInfo,
 		ProviderName: params.ProviderName,
 		IdentityName: params.IdentityName,
-		Credentials:  params.Credentials,
+		Credentials:  creds,
 		BasePath:     "",
 		Realm:        i.realm,
 	}); err != nil {
@@ -536,6 +536,24 @@ func (i *pimRoleIdentity) PostAuthenticate(ctx context.Context, params *authType
 		return fmt.Errorf("failed to set Azure environment variables: %w", err)
 	}
 	return nil
+}
+
+// scopedCredentials returns the pass-through credentials with the subscription taken
+// from principal.scope. The parent credentials are shared with the parent identity, so
+// they are copied (wholesale, so newly added fields are never dropped) rather than
+// mutated. Non-Azure credentials and non-subscription scopes are returned unchanged.
+func (i *pimRoleIdentity) scopedCredentials(creds authTypes.ICredentials) authTypes.ICredentials {
+	azureCreds, ok := creds.(*authTypes.AzureCredentials)
+	if !ok || azureCreds == nil {
+		return creds
+	}
+	sub := subscriptionIDFromScope(i.scope)
+	if sub == "" || sub == azureCreds.SubscriptionID {
+		return creds
+	}
+	credsCopy := *azureCreds
+	credsCopy.SubscriptionID = sub
+	return &credsCopy
 }
 
 // Logout is a no-op: this identity mints no credentials of its own.

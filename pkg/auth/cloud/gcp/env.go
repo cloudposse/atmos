@@ -24,6 +24,36 @@ var GCPEnvironmentVariables = []string{
 	"CLOUDSDK_COMPUTE_ZONE",
 }
 
+// gcpCredentialOverrideEnvironmentVariables are ambient variables that make
+// Google tools authenticate as someone other than the Atmos identity, even when
+// GOOGLE_OAUTH_ACCESS_TOKEN is set: Terraform's google provider credentials and
+// impersonation, and gcloud's account, access-token, impersonation, and
+// credential-file overrides.
+var gcpCredentialOverrideEnvironmentVariables = []string{
+	"GOOGLE_CREDENTIALS",
+	"GOOGLE_CLOUD_KEYFILE_JSON",
+	"GCLOUD_KEYFILE_JSON",
+	"GOOGLE_IMPERSONATE_SERVICE_ACCOUNT",
+	"CLOUDSDK_CORE_ACCOUNT",
+	"CLOUDSDK_AUTH_ACCESS_TOKEN_FILE",
+	"CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT",
+	"CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
+}
+
+// ScrubAmbientEnvironment removes, in place, the caller's GCP variables that
+// Atmos manages (GCPEnvironmentVariables) and the credential overrides that would
+// otherwise take effect next to the Atmos-issued token. Callers then add the
+// identity's own variables, so the subprocess sees only the identity's credentials,
+// project, region, and zone.
+func ScrubAmbientEnvironment(env map[string]string) {
+	for _, key := range GCPEnvironmentVariables {
+		delete(env, key)
+	}
+	for _, key := range gcpCredentialOverrideEnvironmentVariables {
+		delete(env, key)
+	}
+}
+
 // PrepareEnvironment clears GCP-related environment variables to ensure
 // a clean state before setting up isolated credentials.
 // This prevents conflicts between user's existing gcloud config and Atmos-managed credentials.
@@ -150,7 +180,9 @@ func GetEnvironmentVariablesForIdentity(realm, providerName, identityName string
 	}
 
 	env["CLOUDSDK_CONFIG"] = configDir
-	env["CLOUDSDK_ACTIVE_CONFIG_NAME"] = "config_atmos"
+	// The configuration NAME (gcloud adds the "config_" file prefix itself), so gcloud
+	// loads the properties WritePropertiesFile writes to configurations/config_atmos.
+	env["CLOUDSDK_ACTIVE_CONFIG_NAME"] = ActiveConfigName
 
 	// Determine if we have an access token available.
 	hasAccessToken := gcpAuth != nil && gcpAuth.AccessToken != ""

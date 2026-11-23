@@ -33,8 +33,15 @@ const (
 	ActiveConfigFileName = "active_config"
 	// ConfigurationsSubdir is the gcloud configurations directory.
 	ConfigurationsSubdir = "configurations"
-	// PropertiesFileName is the gcloud properties file.
+	// PropertiesFileName is the legacy gcloud properties file at the config root.
+	// gcloud does not read it while a named configuration is active.
 	PropertiesFileName = "properties"
+	// ActiveConfigName is the gcloud named configuration Atmos selects through
+	// CLOUDSDK_ACTIVE_CONFIG_NAME. gcloud loads its properties from
+	// {CLOUDSDK_CONFIG}/configurations/config_{name}.
+	ActiveConfigName = "atmos"
+	// namedConfigFilePrefix is the prefix gcloud gives named configuration files.
+	namedConfigFilePrefix = "config_"
 	// AccessTokenFileName is the filename for the access token file.
 	AccessTokenFileName = "access_token"
 
@@ -176,8 +183,10 @@ func GetConfigDir(realm, providerName, identityName string) (string, error) {
 	return dir, nil
 }
 
-// GetPropertiesFilePath returns the path to the gcloud properties file.
-// Path structure: {baseDir}/[realm]/gcp/{provider}/config/{identity}/properties.
+// GetPropertiesFilePath returns the path to the gcloud properties file of the
+// named configuration Atmos activates (ActiveConfigName), which is the file gcloud
+// reads when CLOUDSDK_ACTIVE_CONFIG_NAME is set.
+// Path structure: {baseDir}/[realm]/gcp/{provider}/config/{identity}/configurations/config_atmos.
 func GetPropertiesFilePath(realm, providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetPropertiesFilePath")()
 
@@ -185,7 +194,11 @@ func GetPropertiesFilePath(realm, providerName, identityName string) (string, er
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, PropertiesFileName), nil
+	configurationsDir := filepath.Join(dir, ConfigurationsSubdir)
+	if err := os.MkdirAll(configurationsDir, permDir); err != nil {
+		return "", credentialFileError(errUtils.ErrInvalidAuthConfig, "Failed to create gcloud configurations directory", err)
+	}
+	return filepath.Join(configurationsDir, namedConfigFilePrefix+ActiveConfigName), nil
 }
 
 // GetAccessTokenFilePath returns the path to the access token file for an identity.

@@ -31,6 +31,9 @@ type CloudEnvironment struct {
 	PortalURL string
 	// AzureProfileEnvName is the environment name used in azureProfile.json (e.g., "AzureCloud").
 	AzureProfileEnvName string
+	// ACRLoginServerSuffix is the Azure Container Registry login server DNS suffix
+	// (e.g., "azurecr.io"); a registry's login server is "<name>.<suffix>".
+	ACRLoginServerSuffix string
 }
 
 // Well-known Azure cloud environments.
@@ -45,6 +48,7 @@ var cloudEnvironments = map[string]*CloudEnvironment{
 		BlobStorageSuffix:      "blob.core.windows.net",
 		PortalURL:              "https://portal.azure.com/",
 		AzureProfileEnvName:    "AzureCloud",
+		ACRLoginServerSuffix:   "azurecr.io",
 	},
 	"usgovernment": {
 		Name:                   "usgovernment",
@@ -56,6 +60,7 @@ var cloudEnvironments = map[string]*CloudEnvironment{
 		BlobStorageSuffix:      "blob.core.usgovcloudapi.net",
 		PortalURL:              "https://portal.azure.us/",
 		AzureProfileEnvName:    "AzureUSGovernment",
+		ACRLoginServerSuffix:   "azurecr.us",
 	},
 	"china": {
 		Name:                   "china",
@@ -67,6 +72,7 @@ var cloudEnvironments = map[string]*CloudEnvironment{
 		BlobStorageSuffix:      "blob.core.chinacloudapi.cn",
 		PortalURL:              "https://portal.azure.cn/",
 		AzureProfileEnvName:    "AzureChinaCloud",
+		ACRLoginServerSuffix:   "azurecr.cn",
 	},
 }
 
