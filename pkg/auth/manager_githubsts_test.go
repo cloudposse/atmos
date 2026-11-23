@@ -33,6 +33,28 @@ func TestFindIntegrationsForIdentity_ViaProvider(t *testing.T) {
 		assert.Equal(t, []string{"gh-identity", "gh-provider"}, got)
 	})
 
+	t.Run("matches via.identity case-insensitively", func(t *testing.T) {
+		mixed := &manager{config: &schema.AuthConfig{
+			Integrations: map[string]schema.Integration{
+				"gh-mixed": {Kind: integrations.KindGitHubSTS, Via: &schema.IntegrationVia{Identity: "Pro-ID"}},
+			},
+		}}
+		assert.Equal(t, []string{"gh-mixed"}, mixed.findIntegrationsForIdentity("pro-id", false))
+	})
+
+	t.Run("matches via.identity the way identity keys are lowercased, not by Unicode folding", func(t *testing.T) {
+		// Unicode case folding treats final sigma (ς) and sigma (σ) as equal, but identity keys
+		// are built with strings.ToLower, which keeps them distinct, so two such identities can
+		// coexist and must not pick up each other's integrations.
+		sigma := &manager{config: &schema.AuthConfig{
+			Integrations: map[string]schema.Integration{
+				"gh-final-sigma": {Kind: integrations.KindGitHubSTS, Via: &schema.IntegrationVia{Identity: "ops-ς"}},
+			},
+		}}
+		assert.Empty(t, sigma.findIntegrationsForIdentity("ops-σ", false))
+		assert.Equal(t, []string{"gh-final-sigma"}, sigma.findIntegrationsForIdentity("OPS-ς", false))
+	})
+
 	t.Run("does not match a provider-bound integration for an unrelated identity", func(t *testing.T) {
 		got := m.findIntegrationsForIdentity("other-id", false)
 		assert.Equal(t, []string{"ecr-other"}, got)

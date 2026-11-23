@@ -163,6 +163,8 @@ When run without arguments, presents an interactive menu to choose what to logou
     All identities (complete logout)
 ```
 
+Identities and providers are listed in alphabetical order. The menu needs an interactive terminal. Without one (no TTY, in CI, or with `--interactive=false`), `atmos auth logout` exits with an error instead of choosing for you. Name the target explicitly in scripts: `atmos auth logout <identity>`, `--identity=<name>`, `--provider`, `--tags`, or `--all`.
+
 ### Dry Run Mode
 
 ```shell
@@ -310,7 +312,7 @@ All logout commands preserve your `atmos.yaml` configuration. Run `atmos auth lo
     Specify the identity to logout from. Alternative to using the positional argument. This flag has three modes:
 
     - **With value** (`--identity admin`): Logout from the specified identity
-    - **Without value** (`--identity`): Show interactive selector to choose identity (same as omitting both flag and argument)
+    - **Without value** (`--identity`): Show the identity selector to choose the identity to logout from. Without an interactive terminal this fails with an error, the same as other `atmos auth` commands given a bare `--identity`
     - **Omitted**: Enter interactive mode if no positional argument is provided
 
     **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
@@ -325,6 +327,8 @@ All logout commands preserve your `atmos.yaml` configuration. Run `atmos auth lo
   <dt>`--tags`</dt>
   <dd>
     Logout from every provider and identity matching any of the given tags (comma-separated): `--tags=production`. Providers and identities are tagged via an optional `tags: [...]` list in `atmos.yaml`. Uses the same confirmation flow as `--all`. Combine with `--keychain` to also remove stored credentials.
+
+    `--tags` cannot be combined with `--identity`, `--provider`, `--all`, or a positional identity. `ATMOS_IDENTITY` (which `atmos auth shell` exports) does not count as a selection, so `--tags` still works inside an Atmos auth shell.
 
     Environment variable: `ATMOS_AUTH_TAGS`
   </dd>

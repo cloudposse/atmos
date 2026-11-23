@@ -332,6 +332,10 @@ var (
 	ErrIdentityNotInConfig                  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
+	// ErrAuthDisabledIdentityRequired is returned when `--identity=false` (or
+	// ATMOS_IDENTITY=false) disables authentication for an auth subcommand that
+	// cannot run without an identity, such as `atmos auth whoami`.
+	ErrAuthDisabledIdentityRequired = errors.New("authentication is disabled, but this command requires an identity")
 
 	// Provision target (delivery destination) errors.
 	ErrProvisionTargetNotFound    = errors.New("provision target not found")
@@ -422,6 +426,20 @@ var (
 	ErrManifestPrototypeNil   = errors.New("manifest prototype is nil")
 	ErrManifestSchemaGenerate = errors.New("failed to generate manifest JSON schema")
 	ErrManifestValidation     = errors.New("manifest validation failed")
+)
+
+// Interactive auth logout selection errors.
+var (
+	// ErrLogoutSelectionRequiresTTY reports that `atmos auth logout` needs to ask what to log out of,
+	// but no interactive prompt can be shown (no TTY, CI, or --interactive=false).
+	ErrLogoutSelectionRequiresTTY = fmt.Errorf("interactive logout selection: %w", ErrTTYRequired)
+)
+
+// Credential validation errors.
+var (
+	// ErrCredentialValidationUnavailable reports that credentials could not be validated because the
+	// validation service could not be reached (network, proxy, timeout). The credentials may still be valid.
+	ErrCredentialValidationUnavailable = errors.New("credential validation could not be performed")
 )
 
 // Cross-process chain credential cache errors (#3720).

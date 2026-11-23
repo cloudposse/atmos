@@ -58,18 +58,40 @@ func RunCommand(args []string, env []string) error {
 	execCmd.Stdout = os.Stdout
 	execCmd.Stderr = os.Stderr
 
-	// Run the command and wait for completion.
-	err = execCmd.Run()
+	// Start the command, keep it in step with signals sent to Atmos (see
+	// superviseChild), and wait for completion.
+	if err = execCmd.Start(); err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrSubcommandFailed, err)
+	}
+	stopSupervision := superviseChild(execCmd.Process, commandTerminationSignals)
+	err = execCmd.Wait()
+	stopSupervision()
 	if err != nil {
 		// If it's an exit error, propagate as a typed error so the root can exit with the same code.
 		var exitError *exec.ExitError
 		if errors.As(err, &exitError) {
 			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-				return errUtils.ExitCodeError{Code: status.ExitStatus()}
+				return errUtils.ExitCodeError{Code: childExitCode(status)}
 			}
 		}
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrSubcommandFailed, err)
 	}
 
 	return nil
+}
+
+// signalExitCodeBase is added to a signal number to form the exit status of a
+// child killed by that signal, following the POSIX shell convention (128+N).
+const signalExitCodeBase = 128
+
+// childExitCode returns the exit status to propagate for a finished child.
+// ExitStatus() is -1 for a child terminated by a signal, which the process
+// would report as 255, so a signaled child maps to 128+N (for example 137 for
+// SIGKILL) like a shell does. Windows has no POSIX signals, so Signaled() is
+// always false there and the child's own exit code is used.
+func childExitCode(status syscall.WaitStatus) int {
+	if status.Signaled() {
+		return signalExitCodeBase + int(status.Signal())
+	}
+	return status.ExitStatus()
 }

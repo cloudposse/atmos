@@ -94,6 +94,8 @@ atmos auth login --profile=legacy --identity=cp-root/admin --webflow
     - **Multiple matches**: Shows an interactive picker restricted to the matching identities
     - **No matches**: Returns an error listing the available tags
 
+    An explicit `--identity` takes precedence over `--tags`. `--tags` takes precedence over `ATMOS_IDENTITY`, so inside an Atmos auth shell (which exports `ATMOS_IDENTITY`) `--tags` still selects by tag.
+
     ```shell
     atmos auth login --tags admin,production
     ```

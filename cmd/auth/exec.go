@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/shell"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
@@ -75,6 +76,11 @@ func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "auth.executeAuthExecCommand")()
 
 	handleHelpRequest(cmd, args)
+
+	if err := validateAuthExecArgs(cmd, args); err != nil {
+		return err
+	}
+
 	// Skip stack validation since auth exec only needs auth configuration, not stack manifests.
 	if err := internal.ValidateAtmosConfig(internal.WithStackValidation(false)); err != nil {
 		return err
@@ -126,6 +132,14 @@ func revokeEphemeralAuthExec(execCtx *authExecContext) {
 	}
 }
 
+// unauthenticatedExecContext is the exec context when authentication is
+// disabled: the OS environment plus the global env from atmos.yaml, with no
+// identity, so nothing is authenticated and nothing is revoked afterwards.
+func unauthenticatedExecContext(atmosConfig *schema.AtmosConfiguration) *authExecContext {
+	log.Debug("Authentication disabled; running the command without Atmos credentials")
+	return &authExecContext{envList: envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)}
+}
+
 // prepareAuthenticatedEnv loads config, authenticates, and prepares the shell
 // environment. Returns the sanitized env list (os.Environ + global env + auth
 // vars, with credential leaks removed) for direct use as the child process's
@@ -140,6 +154,13 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (*authExecConte
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
+	}
+
+	// `--identity=false` / `ATMOS_IDENTITY=false` disables Atmos authentication:
+	// run the command with the ambient environment so cloud SDKs use their own
+	// default credential resolution.
+	if resolveIdentityRequest(cmd, v).disabled() {
+		return unauthenticatedExecContext(&atmosConfig), nil
 	}
 
 	// Create auth manager.
@@ -217,6 +238,26 @@ func resolveIdentityNameForExec(cmd *cobra.Command, v *viper.Viper, authManager 
 	}
 
 	return identityName, nil
+}
+
+// validateAuthExecArgs rejects positional args that aren't located strictly
+// after `--`. Cobra's ArgsLenAtDash returns -1 when no "--" appears, 0 when
+// "--" is the first non-flag token, and >0 when N positional args appeared
+// before "--".
+//
+// Without this guard, getSeparatedArgsForExec() returns args[dashIndex:] and
+// silently drops anything before "--": `atmos auth exec aws -- s3 ls` would run
+// `s3 ls`. This mirrors validateAuthShellArgs. The correct invocation is
+// `atmos auth exec -- aws s3 ls`.
+func validateAuthExecArgs(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "auth.exec.validateAuthExecArgs")()
+
+	dashIndex := cmd.ArgsLenAtDash()
+	if len(args) > 0 && (dashIndex == -1 || dashIndex > 0) {
+		return fmt.Errorf("%w: place the command and all of its arguments after `--`, e.g. `atmos auth exec -- aws s3 ls`",
+			errUtils.ErrInvalidArguments)
+	}
+	return nil
 }
 
 // getSeparatedArgsForExec returns args after "--" separator for the exec command.
