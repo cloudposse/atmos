@@ -259,13 +259,32 @@ before and after:
 `pkg/component/terraform` is low because its logic is covered from `internal/exec`. Packages showing
 no change got one-line fixes whose lines were already covered.
 
+**Timing.** `go tool mage bench:fieldTest v1.234.1,5a1bf052a6` was run twice: once with the default
+workload, then with `ATMOS_BENCH_FIELD_FILTER='^BenchmarkCLI$'` for the whole CLI suite. Both builds
+used the same harness and Go 1.27.4, on darwin/arm64 (Apple M3 Max), `GOMAXPROCS=2`, with 10 samples
+each and nothing else running.
+
+- **No significant regressions.** The threshold is 10% and p < 0.05.
+- **Backend reads are unchanged:**
+  - 22 for `describe affected` store lookups;
+  - 22 for caller-stack store lookups;
+  - 11 for `describe stacks` store lookups.
+- The largest timing change is `list instances` with 1,000 instances: 0.685 s to 0.709 s (+3.5%,
+  p < 0.001).
+- Most other workloads changed by 0% to 1.5%. Examples:
+  - `describe affected` with 10,000 instances: 17.36 s to 17.42 s (+0.4%);
+  - `describe stacks` with 1,000 instances: 1.084 s to 1.094 s (+1.0%).
+
+**Website.** `cd website && npm run build` succeeds.
+
+- It reports no broken links.
+- It reports broken anchors only on AI skill pages that this change does not touch
+  (`atmos-aws-cloudformation`, `atmos-cast`, `atmos-ci`, `atmos-helm`, `atmos-hooks`).
+
 **Not run.**
 
 - golangci-lint.
-- The website build: no website pages changed.
 - Native Linux and Windows test runs, beyond the cross-compiles above.
-- The `bench:fieldTest` timing comparison. It was deferred while the disk was nearly full and is
-  recorded below once run.
 
 ## Follow-ups
 
@@ -303,10 +322,9 @@ none is edition-gated.
   `docs/prd/editions.md`).
 - `settings.configuration.atmos_provider_owned` is visible in describe output for discovered units.
 
-**Still to do in this branch.**
-
-- `atmos packer --help` now lists `--dry-run`. Regenerate the screengrab casts
-  (`atmos --chdir=demo/casts casts generate screengrabs cli`).
+**Help cast.** `atmos packer --help` now lists `--dry-run`, and its screengrab cast was regenerated
+with `atmos --chdir=demo/casts casts generate screengrabs cli --filter "atmos packer"`. The packer
+subcommand casts render the same text as before, so they were left unchanged.
 
 **Bugs present in both v1.234.1 and the candidate that were not fixed here.** Each needs a decision
 (fix now, or open an issue):
