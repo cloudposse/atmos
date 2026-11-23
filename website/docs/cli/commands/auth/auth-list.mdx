@@ -92,6 +92,17 @@ atmos auth list --format markdown > auth.md
   <dd>
     Human-readable YAML output of provider and identity configurations. Good for reviewing configuration or generating documentation.
   </dd>
+</dl>
+
+In the `json` and `yaml` formats, secret values are replaced with `[redacted]` and everything else is shown with its original type. A value is treated as secret when:
+
+- It is a provider `password`.
+- Its key, in `credentials`, `spec`, or `env`, contains `secret`, `password`, `passwd`, `passphrase`, `token`, `access_key`, `private_key`, `api_key`, `apikey`, or `client_assertion` (case-insensitive, `-` and `_` are equivalent). This covers fields such as `access_key_id`, `secret_access_key`, `session_token`, and `client_secret`.
+- It looks like an AWS access key ID (`AKIA...` or `ASIA...`), under any key.
+
+Booleans and numbers are never secrets, so a field like `webflow_enabled: false` stays a boolean, and configuration such as `region` or `endpoint_url` is shown as is. The `tree` format prints `Credentials: [redacted]` for any identity with inline credentials.
+
+<dl>
 
   <dt>`graphviz` / `dot`</dt>
   <dd>

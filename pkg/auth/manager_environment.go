@@ -17,6 +17,8 @@ import (
 // without performing authentication. Authentication admission still applies.
 func (m *manager) GetEnvironmentVariables(identityName string) (map[string]string, error) {
 	defer perf.Track(nil, "auth.Manager.GetEnvironmentVariables")()
+	// Resolve the name case-insensitively, as Authenticate does.
+	identityName = m.canonicalIdentityName(identityName)
 	if err := m.enforceAuthPolicy(context.Background(), identityName, nil); err != nil {
 		return nil, err
 	}
@@ -50,6 +52,9 @@ func (m *manager) GetEnvironmentVariables(identityName string) (map[string]strin
 // This calls identity.PrepareEnvironment() internally to configure file-based credentials.
 func (m *manager) PrepareShellEnvironment(ctx context.Context, identityName string, currentEnv []string) ([]string, error) {
 	defer perf.Track(nil, "auth.Manager.PrepareShellEnvironment")()
+	// Resolve the name case-insensitively, as Authenticate does, so `auth exec`,
+	// `auth shell`, workflows, and custom-command `identity:` accept any casing.
+	identityName = m.canonicalIdentityName(identityName)
 	if err := m.enforceAuthPolicy(ctx, identityName, nil); err != nil {
 		return nil, err
 	}

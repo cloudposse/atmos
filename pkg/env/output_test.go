@@ -1,6 +1,7 @@
 package env
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -195,6 +196,43 @@ func TestOutput(t *testing.T) {
 		assert.Contains(t, output, "<MASKED>")
 		assert.NotContains(t, output, secret)
 	})
+
+	// `atmos auth env --format json` passes an Atmos config and no mask option.
+	// The credentials are what the user asked for (for example
+	// `atmos auth env --format json | ConvertFrom-Json`), so they must stay raw,
+	// exactly like the bash/dotenv/env/github formats.
+	for name, opts := range map[string][]OutputOption{
+		"json format to stdout with atmosConfig stays raw without mask option":    {WithAtmosConfig(&schema.AtmosConfiguration{})},
+		"json format to stdout without atmosConfig stays raw without mask option": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			secret := "gho_jsonraw23456789012345678901234567890"
+			iolib.RegisterSecret(secret)
+			data := map[string]string{
+				"GITHUB_TOKEN": secret,
+			}
+
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			err := Output(data, "json", "", opts...)
+			w.Close()
+			os.Stdout = oldStdout
+
+			require.NoError(t, err)
+
+			buf := make([]byte, 1024)
+			n, _ := r.Read(buf)
+			output := string(buf[:n])
+
+			assert.Contains(t, output, secret)
+			assert.NotContains(t, output, "<MASKED>")
+			var decoded map[string]string
+			require.NoError(t, json.Unmarshal([]byte(output), &decoded), "JSON output must stay machine-readable")
+			assert.Equal(t, secret, decoded["GITHUB_TOKEN"])
+		})
+	}
 
 	t.Run("env format to stdout", func(t *testing.T) {
 		data := map[string]string{

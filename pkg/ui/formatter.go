@@ -79,7 +79,15 @@ func InitFormatter(ioCtx io.Context) {
 func ReinitFormatter() {
 	defer perf.Track(nil, "ui.ReinitFormatter")()
 
-	ioCtx, err := io.NewContext()
+	// Share the global masker (and the global streams, which mask with it and
+	// resolve os.Stdout/os.Stderr at write time): a fresh context builds its own
+	// masker, which would not know the secrets registered with io.RegisterSecret
+	// during the command, so the UI channel would stop masking them.
+	var opts []io.ContextOption
+	if global := io.GetContext(); global != nil {
+		opts = append(opts, io.WithMasker(global.Masker()), io.WithStreams(global.Streams()))
+	}
+	ioCtx, err := io.NewContext(opts...)
 	if err != nil {
 		log.Debug("ui.ReinitFormatter: failed to create I/O context", "error", err)
 		return
