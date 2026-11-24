@@ -33,46 +33,32 @@ Discovery expands explicit stacks in memory. Planning and applying use isolated 
 
 The example keeps a Terragrunt unit under `live/`, discovers it as an Atmos Terraform component, and plans a built-in `terraform_data` resource with OpenTofu. It requires no cloud credentials or Terragrunt executable.
 
-:::note Development build required
-The plugin and example are not yet released. Build Atmos and the native plugin from this PR's checkout before running the commands below. The example initializer in the widget uses `main`; until this PR merges, copy the example from your checkout instead:
-
-```shell
-# Run from the Atmos repository checkout for this PR.
-go build -o build/atmos .
-./build/atmos plugin build plugins/terragrunt
-export PATH="$PWD/build:$PATH"
-export ATMOS_TERRAGRUNT_PLUGIN_PATH="$PWD/plugins/terragrunt"
-atmos init ./examples/terragrunt-native ./terragrunt-native \
-  --copy --no-git
-cd terragrunt-native
-export ATMOS_PROFILE=dev
-```
-
-Install OpenTofu before planning. The recording starts after the host and plugin have been built and the package path configured.
+:::note Experimental release
+The plugin and example are experimental. The registry installation requires a published plugin release matching the example's version constraint.
 :::
 
 <TryExample example="terragrunt-native">
 
-The example's `dev` profile reads the package path from `ATMOS_TERRAGRUNT_PLUGIN_PATH`. Select it, then inspect and plan the discovered unit:
+Install OpenTofu and the example's declared plugin, then inspect and plan the discovered unit:
 
 ```shell
-export ATMOS_PROFILE=dev
+atmos plugin install
 atmos list stacks
 atmos list instances
 atmos terraform plan demo -s live
 ```
 
-The example already enables native discovery. It stores state locally if you choose to apply it; its README includes apply, output, and cleanup commands.
+The example already enables native discovery. Commit `.atmos.plugins.lock.yaml` to pin the plugin release for your team and CI; use `atmos plugin install --frozen` to restore the locked release. The example stores state locally if you choose to apply it; its README includes apply, output, and cleanup commands.
 
 </TryExample>
 
 ## Enable compatibility in an existing project
 
-From your project's root, register the built plugin and opt into native discovery with [config set](/cli/commands/config/config-set):
+From your project's root, install the plugin and opt into native discovery with [config set](/cli/commands/config/config-set):
 
 ```shell
-atmos config set plugins.packages.terragrunt.path \
-  "$ATMOS_TERRAGRUNT_PLUGIN_PATH"
+atmos plugin install oci://ghcr.io/cloudposse/atmos/plugins/terragrunt \
+  --as=terragrunt
 atmos config set components.terraform.base_path \
   components/terraform
 atmos config set components.terraform.command tofu
