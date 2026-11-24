@@ -1457,6 +1457,17 @@
             "create_namespace": {
               "type": "boolean"
             },
+            "kube_version": {
+              "type": "string",
+              "description": "Kubernetes version reported as .Capabilities.KubeVersion when the chart is rendered client-side (helm template --kube-version)"
+            },
+            "api_versions": {
+              "type": "array",
+              "description": "Extra Kubernetes API versions reported through .Capabilities.APIVersions when the chart is rendered client-side (helm template --api-versions)",
+              "items": {
+                "type": "string"
+              }
+            },
             "name": {
               "type": "string"
             },

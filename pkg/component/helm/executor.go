@@ -291,6 +291,9 @@ func prepareChartSpec(
 	if dependencyUpdate, ok := ctx.Flags[cfg.HelmDependencyUpdateSectionName].(bool); ok {
 		spec.DependencyUpdate = dependencyUpdate
 	}
+	if err := applyCapabilityFlags(spec, ctx.Flags); err != nil {
+		return nil, err
+	}
 	if operation == OperationApply {
 		spec.LifecycleFlags = ctx.Flags
 	}

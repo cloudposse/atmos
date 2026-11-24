@@ -90,6 +90,9 @@ through the masked UI stream; chart hook container logs are not streamed automat
   <dt>`--dependency-update` <em>(optional)</em></dt>
   <dd>Fetch declared chart dependencies when they are missing. This may access dependency repositories and update the chart's <code>charts/</code> directory and lock file.</dd>
 
+  <dt>`--kube-version` / `--api-versions` <em>(optional)</em></dt>
+  <dd>Kubernetes version and API versions reported through <code>.Capabilities</code> when the chart is rendered client-side, for an external provision target such as a Git deployment repository. Installs and upgrades against a cluster use the cluster's own capabilities and ignore these. See the component's [`kube_version`](/stacks/components/helm) and [`api_versions`](/stacks/components/helm).</dd>
+
   <dt>`-f` / `--values`, `--set`, `--set-string`, `--set-file`, `--set-json`, `--set-literal` <em>(optional)</em></dt>
   <dd>Repeatable Helm-compatible value overrides for this apply. They override stack-resolved values only for this invocation. See <a href="/cli/commands/helm/usage#runtime-value-overrides">runtime value overrides</a>.</dd>
 
