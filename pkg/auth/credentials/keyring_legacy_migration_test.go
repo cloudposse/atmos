@@ -207,3 +207,61 @@ func stripEnvelopeAlias(t *testing.T, raw string) string {
 	require.NoError(t, err)
 	return string(stripped)
 }
+
+// TestKeyringStore_StoreKeepsRetainedLegacyKeyInSync verifies that once a legacy entry is kept
+// for a downgrade, storing new credentials (for example `atmos auth user configure` replacing the
+// long-lived keys) also updates it. Otherwise v1.234.1, which reads only the legacy key, would
+// silently use the superseded keys after a downgrade.
+func TestKeyringStore_StoreKeepsRetainedLegacyKeyInSync(t *testing.T) {
+	store := newMemoryKeyringStore()
+	writeLegacyRealmEntry(t, store, "admin", "acme", "old-token")
+	_, err := store.Retrieve("admin", "acme")
+	require.NoError(t, err)
+
+	require.NoError(t, store.Store("admin", &types.OIDCCredentials{Token: "new-token"}, "acme"))
+
+	current, err := store.kr.Get(buildKeyringKey("admin", "acme"))
+	require.NoError(t, err)
+	legacy, err := store.kr.Get(legacyRealmKeyringKey("admin", "acme"))
+	require.NoError(t, err)
+	assert.Equal(t, current, legacy, "the retained legacy key must hold the credentials just stored")
+	assert.Contains(t, legacy, "new-token")
+}
+
+// TestKeyringStore_StoreDoesNotCreateOrTouchOtherLegacyKeys is the negative path: Store never
+// creates a legacy key that does not exist, never writes an ambiguous one, and never overwrites a
+// legacy entry recorded for another alias.
+func TestKeyringStore_StoreDoesNotCreateOrTouchOtherLegacyKeys(t *testing.T) {
+	t.Run("no legacy key", func(t *testing.T) {
+		store := newMemoryKeyringStore()
+		require.NoError(t, store.Store("admin", &types.OIDCCredentials{Token: "t"}, "acme"))
+		_, err := store.kr.Get(legacyRealmKeyringKey("admin", "acme"))
+		require.ErrorIs(t, err, keyring.ErrNotFound)
+	})
+
+	t.Run("ambiguous legacy key", func(t *testing.T) {
+		store := newMemoryKeyringStore()
+		writeLegacyRealmEntry(t, store, "prod_admin", "acme", "maybe-another-realm")
+		before, err := store.kr.Get(legacyRealmKeyringKey("prod_admin", "acme"))
+		require.NoError(t, err)
+
+		require.NoError(t, store.Store("prod_admin", &types.OIDCCredentials{Token: "t"}, "acme"))
+		after, err := store.kr.Get(legacyRealmKeyringKey("prod_admin", "acme"))
+		require.NoError(t, err)
+		assert.Equal(t, before, after)
+	})
+
+	t.Run("legacy key of another alias", func(t *testing.T) {
+		store := newMemoryKeyringStore()
+		other := newMemoryKeyringStore()
+		require.NoError(t, other.Store("someone-else", &types.OIDCCredentials{Token: "theirs"}, ""))
+		raw, err := other.kr.Get(buildKeyringKey("someone-else", ""))
+		require.NoError(t, err)
+		require.NoError(t, store.kr.Set(legacyRealmKeyringKey("admin", "acme"), raw))
+
+		require.NoError(t, store.Store("admin", &types.OIDCCredentials{Token: "mine"}, "acme"))
+		kept, err := store.kr.Get(legacyRealmKeyringKey("admin", "acme"))
+		require.NoError(t, err)
+		assert.Equal(t, raw, kept)
+	})
+}

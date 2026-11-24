@@ -48,7 +48,34 @@ func (s *keyringCredentialStore) storeEnvelope(alias string, creds types.ICreden
 	if err := s.kr.Set(buildKeyringKey(alias, realm), string(data)); err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to store credentials: %w", err))
 	}
+	s.syncRetainedLegacyEntry(alias, realm, string(data))
 	return nil
+}
+
+// syncRetainedLegacyEntry rewrites the previous-layout entry of alias that migration kept for a
+// downgrade (see migrateLegacyRealmEntry) with the entry just stored, so the two never diverge:
+// otherwise v1.234.1, which reads only the legacy key, would use credentials that `atmos auth user
+// configure` or a later login replaced. Only an existing, unambiguous legacy entry that belongs to
+// alias is rewritten; none is ever created. It is best effort: the current key is already stored.
+func (s *keyringCredentialStore) syncRetainedLegacyEntry(alias, realm, data string) {
+	if realm == "" || !s.legacyKeyIsUnambiguous(alias, realm) {
+		return
+	}
+	legacy := legacyRealmKeyringKey(alias, realm)
+	exists, err := s.kr.Has(legacy)
+	if err != nil || !exists {
+		return
+	}
+	owned, err := s.keyBelongsTo(legacy, alias)
+	if err != nil || !owned {
+		log.Debug("Not updating a legacy keyring entry this alias does not own",
+			logKeyAlias, alias, logKeyRealm, realm, "error", err)
+		return
+	}
+	if err := s.kr.Set(legacy, data); err != nil {
+		log.Debug("Failed to update the retained legacy keyring entry",
+			logKeyAlias, alias, logKeyRealm, realm, "error", err)
+	}
 }
 
 // Retrieve retrieves credentials for the given alias within the specified realm.
