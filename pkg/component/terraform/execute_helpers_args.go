@@ -16,6 +16,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/planout"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -113,9 +114,9 @@ func buildPlanSubcommandArgs( //nolint:revive // argument-limit: uploadStatusFla
 
 	allArgsAndFlags = append(allArgsAndFlags, varFileFlag, varFile)
 
-	if !slices.Contains(info.AdditionalArgsAndFlags, outFlag) &&
-		!slices.ContainsFunc(info.AdditionalArgsAndFlags, func(s string) bool { return strings.HasPrefix(s, outFlag+"=") }) &&
-		!atmosConfig.Components.Terraform.Plan.SkipPlanfile {
+	// A user-supplied plan file in any form (-out, -out=, --out, --out=) replaces Atmos's own;
+	// adding both would give Terraform two destinations.
+	if !planout.Contains(info.AdditionalArgsAndFlags) && !atmosConfig.Components.Terraform.Plan.SkipPlanfile {
 		allArgsAndFlags = append(allArgsAndFlags, outFlag, planFile)
 	}
 

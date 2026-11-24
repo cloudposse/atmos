@@ -235,6 +235,10 @@ func TestExtractOutFlag(t *testing.T) {
 		{"no flag", []string{"plan"}, ""},
 		{"other flags only", []string{"plan", "-var", "foo=bar"}, ""},
 		{"flag at end without value", []string{"plan", "-out"}, ""},
+		{"double-dash flag with separate value", []string{"plan", "--out", "myplan.tfplan"}, "myplan.tfplan"},
+		{"double-dash flag with equals", []string{"plan", "--out=myplan.tfplan"}, "myplan.tfplan"},
+		{"double-dash flag at end without value", []string{"plan", "--out"}, ""},
+		{"flag with a longer name", []string{"plan", "-outline=x"}, ""},
 		{"empty args", []string{}, ""},
 	}
 

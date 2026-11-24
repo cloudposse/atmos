@@ -186,6 +186,10 @@ atmos terraform plan vpc -s dev -out=/tmp/my-plan.tfplan
 atmos terraform plan vpc -s dev -out=plans/vpc.tfplan
 ```
 
+Terraform also accepts the flag with two dashes, so `-- --out=plans/vpc.tfplan` and
+`-- --out plans/vpc.tfplan` select the planfile the same way as `-out`. Atmos then
+writes no planfile of its own.
+
 ### Skipping Planfile Generation
 
 To run a plan without generating a planfile (useful for quick checks or remote configurations that reject saved plans):

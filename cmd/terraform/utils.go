@@ -329,8 +329,13 @@ func terraformHookOutcome(event h.HookEvent, commandErr error) h.Outcome {
 	if event.Normalize() != h.AfterTerraformPlan || outcome.ExitCode != 2 {
 		return outcome
 	}
-	// Exit 2 is the plan's own "changes present" status only when the plan subcommand produced it;
-	// an exit 2 from init or workspace selection is an ordinary failure.
+	// Exit 2 is the plan's own "changes present" status only when the plan subcommand produced it
+	// with -detailed-exitcode in effect, which the executor records with the DetailedPlanChangesError
+	// marker. An exit 2 from anything else (an authentication failure before Terraform ran, init,
+	// workspace selection, or a hook) is an ordinary failure.
+	if !errUtils.IsDetailedPlanChanges(commandErr) {
+		return outcome
+	}
 	var prerequisiteErr *errUtils.PrerequisiteError
 	if errors.As(commandErr, &prerequisiteErr) {
 		return outcome
