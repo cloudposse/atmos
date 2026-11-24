@@ -108,6 +108,11 @@ func buildSpaceliftStackNameAndPrefix(
 
 	context := cfg.GetContextFromVars(componentVars)
 
+	// Set the base component before resolving the name, as the Spacelift stack processor does, so naming
+	// patterns that use `{base-component}` resolve the same way here.
+	_, baseComponentName, _, _, _ := ProcessComponentMetadata(component, componentMap)
+	context.BaseComponent = baseComponentName
+
 	contextPrefix, err := ResolveSpaceliftContextPrefix(atmosConfig, stackName, &context, componentVars, naming)
 	if err != nil {
 		return "", "", err
@@ -129,12 +134,13 @@ type SpaceliftStackKey struct {
 	Component string
 }
 
-// NewSpaceliftStackKey builds the lookup key for a logical stack and component, normalizing `/` the same way
-// Spacelift stack names are normalized.
+// NewSpaceliftStackKey builds the lookup key for a logical stack and component. The stack is normalized the same
+// way Spacelift stack names are normalized; the component is kept exact so distinct component names (for example
+// `tgw/hub` and `tgw-hub`) stay distinct.
 func NewSpaceliftStackKey(stack, component string) SpaceliftStackKey {
 	return SpaceliftStackKey{
 		Stack:     strings.ReplaceAll(stack, "/", "-"),
-		Component: strings.ReplaceAll(component, "/", "-"),
+		Component: component,
 	}
 }
 

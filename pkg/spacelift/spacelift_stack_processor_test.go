@@ -474,6 +474,21 @@ func TestTransformStackConfigToSpaceliftStacks_DependenciesComponents(t *testing
 		assert.Equal(t, []string{"depends-on:net-ue1-vpc"}, dependsOnLabels(t, templatesEnabled, stacks))
 	})
 
+	t.Run("a target's stack_name_pattern can use the base component token", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, depOnVpc)
+		setVpc(stacks, "settings", map[string]any{"spacelift": map[string]any{"workspace_enabled": true, "stack_name_pattern": "{base-component}-{environment}"}})
+		setVpc(stacks, "metadata", map[string]any{"component": "vpc-base"})
+		assert.Equal(t, []string{"depends-on:vpc-base-ue1"}, dependsOnLabels(t, templatesEnabled, stacks))
+	})
+
+	t.Run("component names that differ only by slash are distinct targets", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, map[string]any{"components": []any{map[string]any{"name": "tgw-hub"}}})
+		terraform := stacks["orgs/tenant1/dev/ue1"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)
+		terraform["tgw/hub"] = terraform["vpc"]
+		_, err := TransformStackConfigToSpaceliftStacks(templatesEnabled, stacks, "stacks/%s.yaml", "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}", "", false, nil)
+		require.ErrorIs(t, err, errUtils.ErrInvalidDependenciesComponents)
+	})
+
 	t.Run("a required target without workspace_enabled is an error", func(t *testing.T) {
 		stacks := dependsOnTestStacks(nil, depOnVpc)
 		setVpc(stacks, "settings", map[string]any{"spacelift": map[string]any{"workspace_enabled": false}})
