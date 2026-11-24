@@ -99,7 +99,9 @@ integration scenarios pass on macOS.
     `.tofu.json`, and OpenTofu skips `name.tf` or `name.tf.json` when `name.tofu` or `name.tofu.json`
     exists. `GenerateFile` takes `WithOpenTofuDetector`; the terraform component passes `IsOpenTofu`, which
     runs only when a provider-owned module is inspected (`TestModuleDeclaresBackendFollowsTheEngineFileRules`,
-    `TestGenerateFileUsesTheEngineDetector`).
+    `TestGenerateFileUsesTheEngineDetector`). Detection follows the component's resolved command
+    (`info.Command`), not only the global one, and the files both engines skip (hidden files, names ending
+    in `~`, and `#name#`) are ignored.
 - **Plugin version.** `plugins/terragrunt/plugin.yaml` is bumped from 0.1.1 to 0.1.2.
 - **Docs.** `website/docs/migration/terragrunt.mdx`, `website/docs/cli/commands/terraform/generate/backend.mdx`
   and `plugins/terragrunt/README.md` describe the masking, generate, generate backend, `remote_state` without

@@ -57,7 +57,7 @@ func engineConfigFiles(entries []os.DirEntry, openTofu bool) []string {
 	var files []string
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.IsDir() {
+		if entry.IsDir() || ignoredConfigFile(name) {
 			continue
 		}
 		if !openTofu {
@@ -76,6 +76,13 @@ func engineConfigFiles(entries []os.DirEntry, openTofu bool) []string {
 		}
 	}
 	return files
+}
+
+// ignoredConfigFile reports whether Terraform and OpenTofu skip a file when loading a module: hidden files,
+// editor backups ending in `~`, and Emacs autosave files named `#...#`.
+func ignoredConfigFile(name string) bool {
+	return strings.HasPrefix(name, ".") || strings.HasSuffix(name, "~") ||
+		(strings.HasPrefix(name, "#") && strings.HasSuffix(name, "#"))
 }
 
 // configSuffix returns the first suffix of suffixes that name ends with, or "". The longer `.json` forms

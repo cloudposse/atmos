@@ -152,6 +152,8 @@ func TestModuleDeclaresBackendFollowsTheEngineFileRules(t *testing.T) {
 		{"backend in a .tf file shadowed by .tofu", map[string][]byte{"main.tf": backendBlock, "main.tofu": noBackend}, true, false},
 		{"backend in a .tf.json shadowed by .tofu.json", map[string][]byte{"main.tf.json": backendJSON, "main.tofu.json": []byte(`{}`)}, true, false},
 		{"backend in another .tf file stays visible", map[string][]byte{"backend.tf": backendBlock, "main.tofu": noBackend}, true, true},
+		{"backend in a hidden file", map[string][]byte{".backend.tf": backendBlock, "main.tf": noBackend}, false, false},
+		{"backend in an editor backup", map[string][]byte{"backend.tf~": backendBlock, "#backend.tf#": backendBlock}, false, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -189,8 +191,12 @@ func TestGenerateFileUsesTheEngineDetector(t *testing.T) {
 	assert.FileExists(t, filepath.Join(tfDir, backendConfigFileName))
 
 	config.Components.Terraform.Command = filepath.Join("bin", "tofu")
-	assert.True(t, commandNamesOpenTofu(config))
+	assert.True(t, commandNamesOpenTofu(config, nil))
 	config.Components.Terraform.Command = "terraform"
-	assert.False(t, commandNamesOpenTofu(config))
-	assert.False(t, commandNamesOpenTofu(nil))
+	assert.False(t, commandNamesOpenTofu(config, nil))
+	assert.False(t, commandNamesOpenTofu(nil, nil))
+	// The component's resolved command wins over the global one.
+	assert.True(t, commandNamesOpenTofu(config, &schema.ConfigAndStacksInfo{Command: filepath.Join("tools", "tofu")}))
+	config.Components.Terraform.Command = "tofu"
+	assert.False(t, commandNamesOpenTofu(config, &schema.ConfigAndStacksInfo{Command: "terraform"}))
 }

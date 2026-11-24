@@ -39,10 +39,7 @@ func GenerateFile(
 ) error {
 	defer perf.Track(atmosConfig, "backend.GenerateFile")()
 
-	options := fileOptions{openTofu: func() bool { return commandNamesOpenTofu(atmosConfig) }}
-	for _, opt := range opts {
-		opt(&options)
-	}
+	options := newFileOptions(atmosConfig, info, opts)
 
 	// Terraform tests use their own state and do not need a generated backend.
 	if info.SubCommand == "test" || !schema.GenerateBackendFile(atmosConfig, info) {
@@ -61,16 +58,32 @@ func GenerateFile(
 	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		return u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode)
 	}
-	// A provider-owned unit whose module declares its own backend block gets the settings at init instead
-	// of a second backend file.
-	settings, isBackend := backendSettings(componentBackendConfig, info.ComponentBackendType)
+	return writeOwnedBackend(info, workingDir, backendFileName, componentBackendConfig, &options)
+}
+
+// newFileOptions applies opts over the default engine detection, which reads the component's resolved
+// command and falls back to the configured one.
+func newFileOptions(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, opts []FileOption) fileOptions {
+	options := fileOptions{openTofu: func() bool { return commandNamesOpenTofu(atmosConfig, info) }}
+	for _, opt := range opts {
+		opt(&options)
+	}
+	return options
+}
+
+// writeOwnedBackend writes the backend of a provider-owned unit. A unit whose module declares its own backend
+// block gets the settings at init instead of a second backend file.
+func writeOwnedBackend(
+	info *schema.ConfigAndStacksInfo, workingDir, backendFileName string, backendConfig map[string]any, options *fileOptions,
+) error {
+	settings, isBackend := backendSettings(backendConfig, info.ComponentBackendType)
 	if isBackend && moduleDeclaresBackend(workingDir, options.openTofu()) {
 		return passBackendToInit(info, workingDir, settings)
 	}
 	// The write and its receipt share the workdir lock with RemoveHostBackend, so a handoff never
 	// removes a backend written after it verified the receipt.
-	err = configuration.WithWorkdirLock(workingDir, func() error {
-		if err := u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode); err != nil {
+	err := configuration.WithWorkdirLock(workingDir, func() error {
+		if err := u.WriteToFileAsJSON(backendFileName, backendConfig, backendFileMode); err != nil {
 			return err
 		}
 		return recordHostBackend(workingDir)
@@ -83,12 +96,17 @@ func GenerateFile(
 
 const backendFileMode = 0o600
 
-// commandNamesOpenTofu reports whether the configured Terraform command's executable name contains "tofu".
-func commandNamesOpenTofu(atmosConfig *schema.AtmosConfiguration) bool {
-	if atmosConfig == nil {
-		return false
+// commandNamesOpenTofu reports whether the component's resolved command, or else the configured Terraform
+// command, has an executable name that contains "tofu".
+func commandNamesOpenTofu(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
+	command := ""
+	if info != nil {
+		command = info.Command
 	}
-	return strings.Contains(strings.ToLower(filepath.Base(atmosConfig.Components.Terraform.Command)), "tofu")
+	if command == "" && atmosConfig != nil {
+		command = atmosConfig.Components.Terraform.Command
+	}
+	return command != "" && strings.Contains(strings.ToLower(filepath.Base(command)), "tofu")
 }
 
 // backendSettings returns the settings of the `backend` block in a generated backend configuration. A
