@@ -46,6 +46,7 @@ var (
 	ErrHelmUnsupportedOperation      = errors.New("unsupported helm operation")
 	ErrHelmUnsupportedSubcommand     = errors.New("unsupported helm subcommand")
 	ErrHelmChartNotConfigured        = errors.New("helm component is missing a 'chart' reference")
+	ErrHelmKubeVersionInvalid        = errors.New("invalid helm kube_version")
 	ErrHelmRenderFailed              = errors.New("failed to render helm chart")
 	ErrHelmReleaseNameRequired       = errors.New("helm component is missing a release name")
 	ErrHelmDiffFailed                = errors.New("failed to compute helm diff")

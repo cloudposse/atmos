@@ -117,6 +117,8 @@ var nonManifestSections = map[string]struct{}{
 	"force_conflicts":    {}, // Native Helm server-side apply force-conflicts opt-in.
 	"dependency_update":  {}, // Native Helm invocation summary field; not stack-authored.
 	"create_namespace":   {}, // Native Helm component sub-field (modeled in helm_component_manifest); not a standalone section.
+	"kube_version":       {}, // Native Helm component sub-field (modeled in helm_component_manifest); not a standalone section.
+	"api_versions":       {}, // Native Helm component sub-field (modeled in helm_component_manifest); not a standalone section.
 	"workspace":          {}, // Terraform workspace (derived/metadata).
 	"inheritance":        {}, // Describe output.
 	"integrations":       {}, // atmos.yaml / describe output.

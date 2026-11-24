@@ -371,6 +371,8 @@ var helmComponentSectionKeys = []string{
 	"name",
 	cfg.HelmReleaseSectionName,
 	cfg.HelmCreateNamespaceSectionName,
+	cfg.HelmKubeVersionSectionName,
+	cfg.HelmAPIVersionsSectionName,
 }
 
 var helmLifecycleSectionKeys = []string{
