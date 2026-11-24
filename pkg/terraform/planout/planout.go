@@ -6,7 +6,11 @@
 // that only knows `-out` adds a second destination next to the user's.
 package planout
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
+)
 
 const (
 	// Flag is the single-dash form Atmos itself writes.
@@ -27,6 +31,8 @@ type Arg struct {
 
 // Parse reports whether arg is a plan output flag, in any of its four forms.
 func Parse(arg string) (Arg, bool) {
+	defer perf.Track(nil, "planout.Parse")()
+
 	for _, name := range []string{DoubleDashFlag, Flag} {
 		if arg == name {
 			return Arg{Name: name}, true
@@ -40,12 +46,16 @@ func Parse(arg string) (Arg, bool) {
 
 // IsFlag reports whether arg is a plan output flag, with or without a value.
 func IsFlag(arg string) bool {
+	defer perf.Track(nil, "planout.IsFlag")()
+
 	_, ok := Parse(arg)
 	return ok
 }
 
 // Contains reports whether args hold any plan output flag.
 func Contains(args []string) bool {
+	defer perf.Track(nil, "planout.Contains")()
+
 	for _, arg := range args {
 		if IsFlag(arg) {
 			return true
@@ -57,6 +67,8 @@ func Contains(args []string) bool {
 // Value returns the path selected by the first plan output flag that carries one, or "".
 // A separate-form flag takes the following argument; one at the end of args has no value.
 func Value(args []string) string {
+	defer perf.Track(nil, "planout.Value")()
+
 	for i, arg := range args {
 		parsed, ok := Parse(arg)
 		switch {

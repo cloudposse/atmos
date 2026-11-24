@@ -7,14 +7,14 @@
 Three behavior changes found by the 1.235.0 regression run against v1.234.1 are fixed:
 
 1. An after-plan hook reported success when `terraform plan` failed with any exit code `2` before
-   Terraform ran (for example an SSO identity that "needs an interactive terminal"). Only the plan
-   subprocess's own exit `2` with `-detailed-exitcode` now counts as a successful plan with changes.
+    Terraform ran (for example an SSO identity that "needs an interactive terminal"). Only the plan
+    subprocess's own exit `2` with `-detailed-exitcode` now counts as a successful plan with changes.
 2. `atmos terraform plan <c> -s <s> -- --out=my.tfplan` failed with "plan verification failed: stored
-   plan differs from current state: multiple plan output flags". `--out`, `--out=X` and `--out X` are now
-   recognized exactly like `-out`, so Atmos no longer adds its own planfile next to the user's.
+    plan differs from current state: multiple plan output flags". `--out`, `--out=X` and `--out X` are now
+    recognized exactly like `-out`, so Atmos no longer adds its own planfile next to the user's.
 3. A plain (non-Terragrunt) component whose free-form `settings` contained `terragrunt.exclude` was
-   silently skipped by `plan --all` and `apply --all` (exit 0, `if: false` ignored). The exclude block is
-   now honored only on units the Terragrunt configuration provider owns.
+    silently skipped by `plan --all` and `apply --all` (exit 0, `if: false` ignored). The exclude block is
+    now honored only on units the Terragrunt configuration provider owns.
 
 ## Context
 
@@ -22,27 +22,27 @@ All three were introduced after v1.234.1 and reproduced with the regression run'
 (`review/bin/hookexit2.sh`, `review/bin/dashout.sh`, `terragrunt/bin/nb.sh tg-exclude`).
 
 1. `terraformHookOutcome` (cmd/terraform/utils.go, #3562) mapped every after-plan error with exit code
-   `2` to `RunSuccess` unless it was a `PrerequisiteError` or a policy error. Its comment said exit `2`
-   counts only when the plan subcommand produced it, but nothing checked that. An auth failure in the
-   command layer carries exit `2`, so the success hook ran and the failure hook did not; v1.234.1 ran the
-   failure hook. The bulk scheduler (`terraformPlanChangedError`) and the operation-policy status
-   (`policyOperationStatus`) used the same "any exit 2" mapping, so a node failing with exit `2` was
-   reported as changed and its dependents ran, and policy input said `success`. Those two mappings already
-   existed in v1.234.1; they are fixed here so every consumer agrees with the hook outcome. The CI exit code is
-   derived from the hook outcome (`terraformCIExitCode`), so it reported "changes" for the auth failure.
-   The executor already marked the real plan status internally (`successfulPlanChanges`, set only when
-   the plan command returned `2` with `-detailed-exitcode` in effect), but the marker was unexported.
+    `2` to `RunSuccess` unless it was a `PrerequisiteError` or a policy error. Its comment said exit `2`
+    counts only when the plan subcommand produced it, but nothing checked that. An auth failure in the
+    command layer carries exit `2`, so the success hook ran and the failure hook did not; v1.234.1 ran the
+    failure hook. The bulk scheduler (`terraformPlanChangedError`) and the operation-policy status
+    (`policyOperationStatus`) used the same "any exit 2" mapping, so a node failing with exit `2` was
+    reported as changed and its dependents ran, and policy input said `success`. Those two mappings already
+    existed in v1.234.1; they are fixed here so every consumer agrees with the hook outcome. The CI exit code is
+    derived from the hook outcome (`terraformCIExitCode`), so it reported "changes" for the auth failure.
+    The executor already marked the real plan status internally (`successfulPlanChanges`, set only when
+    the plan command returned `2` with `-detailed-exitcode` in effect), but the marker was unexported.
 2. `buildPlanSubcommandArgs` (pkg/component/terraform/execute_helpers_args.go, #3576) checked only for
-   `-out` and `-out=`, so with `--out=my.tfplan` it also appended `-out <atmos planfile>`.
-   `validatePlanOutputFlags` (generate_planfile.go), which already knows both dash forms, then rejected the
-   two destinations. The TUI plan path (`extractOutFlag`) and the saved-plan policy guard
-   (`planSelection`) also recognized only `-out`, so with `--out` the TUI planned into a temporary file
-   instead of the user's, and the policy guard reported "plan policies require a saved plan" (both behaved
-   the same in v1.234.1 and are fixed for consistency). Terraform
-   parses flags with Go's flag package, which accepts one or two dashes.
+    `-out` and `-out=`, so with `--out=my.tfplan` it also appended `-out <atmos planfile>`.
+    `validatePlanOutputFlags` (generate_planfile.go), which already knows both dash forms, then rejected the
+    two destinations. The TUI plan path (`extractOutFlag`) and the saved-plan policy guard
+    (`planSelection`) also recognized only `-out`, so with `--out` the TUI planned into a temporary file
+    instead of the user's, and the policy guard reported "plan policies require a saved plan" (both behaved
+    the same in v1.234.1 and are fixed for consistency). Terraform
+    parses flags with Go's flag package, which accepts one or two dashes.
 3. `terraformExcludeBlock` (pkg/scheduler/adapters/terraform_exclude.go, #3598) read
-   `settings.terragrunt.exclude` from every graph node. The Terragrunt provider writes that block for its
-   units after evaluating `if`; on a plain component it is free-form user data, and `if` is never evaluated.
+    `settings.terragrunt.exclude` from every graph node. The Terragrunt provider writes that block for its
+    units after evaluating `if`; on a plain component it is free-form user data, and `if` is never evaluated.
 
 The intended behavior recorded in `docs/fixes/2026-10-28-terraform-detailed-plan-hooks.md` is kept: a real
 plan that returns `2` with `-detailed-exitcode` runs success hooks once, does not run failure hooks, and
