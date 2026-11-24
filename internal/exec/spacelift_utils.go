@@ -23,7 +23,7 @@ func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Co
 		return spaceliftStackName, contextPrefix, nil
 	} else {
 		defaultSpaceliftStackNamePattern := fmt.Sprintf("%s-%s", contextPrefix, context.Component)
-		return strings.Replace(defaultSpaceliftStackNamePattern, "/", spaceliftNameSeparator, -1), contextPrefix, nil
+		return strings.ReplaceAll(defaultSpaceliftStackNamePattern, "/", spaceliftNameSeparator), contextPrefix, nil
 	}
 }
 
@@ -257,7 +257,7 @@ func BuildSpaceliftStackNameFromComponentConfig(
 	// Spacelift stack
 	if spaceliftWorkspaceEnabled, ok := spaceliftSettingsSection["workspace_enabled"].(bool); ok && spaceliftWorkspaceEnabled {
 		context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-		context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", spaceliftNameSeparator, -1)
+		context.Component = strings.ReplaceAll(configAndStacksInfo.ComponentFromArg, "/", spaceliftNameSeparator)
 
 		if atmosConfig.Stacks.NameTemplate != "" {
 			contextPrefix, err = processStackNameTemplate(atmosConfig, configAndStacksInfo.Stack, atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
