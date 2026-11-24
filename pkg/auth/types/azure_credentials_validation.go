@@ -55,7 +55,13 @@ func (c *AzureCredentials) armValidationOptions() *arm.ClientOptions {
 // isAzureTokenRejection reports whether err shows that Resource Manager answered and rejected the
 // access token: an HTTP 401, or a known token rejection code. Other answers (no access to the
 // subscription, an unknown subscription, a server fault) and transport failures are not.
-func isAzureTokenRejection(err error) bool {
+// lastStatus is the HTTP status of the last answer (see azureStatusRecorder). It keeps a 401
+// recognizable when its body could not be read: the SDK then returns the read error instead of a
+// ResponseError.
+func isAzureTokenRejection(err error, lastStatus int) bool {
+	if lastStatus == http.StatusUnauthorized {
+		return true
+	}
 	var respErr *azcore.ResponseError
 	if !errors.As(err, &respErr) {
 		return false
@@ -65,4 +71,21 @@ func isAzureTokenRejection(err error) bool {
 	}
 	_, ok := azureTokenRejectionCodes[respErr.ErrorCode]
 	return ok
+}
+
+// azureStatusRecorder is a per-retry pipeline policy that records the HTTP status of the last
+// answer. It runs below the bearer token policy, which drops the response when reading the body
+// fails, so the status survives even then. A try without a response resets it to 0.
+type azureStatusRecorder struct {
+	statusCode int
+}
+
+// Do records the status of the response the rest of the pipeline returned.
+func (r *azureStatusRecorder) Do(req *policy.Request) (*http.Response, error) {
+	resp, err := req.Next()
+	r.statusCode = 0
+	if resp != nil {
+		r.statusCode = resp.StatusCode
+	}
+	return resp, err
 }

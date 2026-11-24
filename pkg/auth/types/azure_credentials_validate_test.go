@@ -210,3 +210,31 @@ func (f failingTransport) Do(req *http.Request) (*http.Response, error) {
 	f.t.Errorf("unexpected request to %s", req.URL)
 	return nil, errors.New("no network in this test")
 }
+
+// TestAzureCredentials_ValidateKeeps401WhenBodyIsTruncated verifies a 401 whose body cannot be
+// read is still a rejection. The SDK returns the body read error instead of a ResponseError in
+// that case, so the status must come from the captured raw response.
+func TestAzureCredentials_ValidateKeeps401WhenBodyIsTruncated(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Promise more bytes than are sent, then drop the connection.
+		w.Header().Set("Content-Length", "4096")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"code":"Invalid`))
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		if hijacker, ok := w.(http.Hijacker); ok {
+			if conn, _, err := hijacker.Hijack(); err == nil {
+				_ = conn.Close()
+			}
+		}
+	}))
+	t.Cleanup(server.Close)
+	creds := validAzureCredentials()
+	creds.validationClientOptions = armOptionsFor(server.URL, server.Client())
+
+	_, err := creds.Validate(t.Context())
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	assert.NotErrorIs(t, err, errUtils.ErrCredentialValidationUnavailable)
+}

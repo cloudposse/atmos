@@ -137,8 +137,12 @@ func (c *AzureCredentials) Validate(ctx context.Context) (*ValidationInfo, error
 		},
 	}
 
-	// Create subscriptions client with cloud configuration.
-	subscriptionsClient, err := armsubscriptions.NewClient(tokenCred, c.armValidationOptions())
+	// Create subscriptions client with cloud configuration. The status recorder keeps the HTTP
+	// status of the last answer, so a 401 whose body cannot be read is still recognized.
+	options := *c.armValidationOptions()
+	status := &azureStatusRecorder{}
+	options.PerRetryPolicies = append(append([]policy.Policy{}, options.PerRetryPolicies...), status)
+	subscriptionsClient, err := armsubscriptions.NewClient(tokenCred, &options)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create Azure subscriptions client: %w", errUtils.ErrCredentialValidationUnavailable, err)
 	}
@@ -149,7 +153,7 @@ func (c *AzureCredentials) Validate(ctx context.Context) (*ValidationInfo, error
 	// Get subscription details to validate credentials.
 	result, err := subscriptionsClient.Get(callCtx, c.SubscriptionID, nil)
 	if err != nil {
-		if isAzureTokenRejection(err) {
+		if isAzureTokenRejection(err, status.statusCode) {
 			return nil, fmt.Errorf("%w: failed to validate Azure credentials: %w", errUtils.ErrAuthenticationFailed, err)
 		}
 		return nil, fmt.Errorf("%w: Azure Resource Manager could not confirm the credentials: %w", errUtils.ErrCredentialValidationUnavailable, err)
