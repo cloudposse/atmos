@@ -40,8 +40,9 @@ func HelperManagedNotice(err error) (string, bool) {
 }
 
 // The selfResolvingHelpers set holds credential helpers that get registry credentials themselves
-// instead of returning stored ones. The docker-credential-ecr-login helper answers `get` by calling ECR with the AWS
-// credentials in its own environment, and replies "not implemented" to `store`.
+// instead of returning stored ones. The docker-credential-ecr-login helper answers `get` by
+// calling ECR with the AWS credentials in its own environment, and replies "not implemented"
+// to `store`.
 var selfResolvingHelpers = map[string]struct{}{
 	"ecr-login": {},
 }
