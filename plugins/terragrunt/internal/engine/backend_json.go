@@ -35,6 +35,9 @@ func jsonBodyDeclaresBackend(decoder *json.Decoder, property func(string) (bool,
 		return false, err
 	}
 	switch token {
+	case nil:
+		// A null body (`"terraform": null`) declares nothing; later duplicate properties are still read.
+		return false, nil
 	case json.Delim('{'):
 		return jsonObjectDeclaresBackend(decoder, property)
 	case json.Delim('['):

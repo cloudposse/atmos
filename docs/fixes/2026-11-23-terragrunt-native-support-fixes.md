@@ -93,7 +93,13 @@ integration scenarios pass on macOS.
     punctuation-only lines of a sensitive text are still skipped. The complete sensitive text is also
     registered in base64 (all four variants), URL-escaped and JSON-escaped forms, without its lines.
   - `plugins/terragrunt/internal/engine/backend_json.go` (new): HCL JSON backend detection reads tokens, so
-    duplicate `terraform` properties and top-level body arrays are inspected.
+    duplicate `terraform` properties and top-level body arrays are inspected. A `null` `terraform` property
+    declares nothing and the scan continues to later duplicates.
+  - The module backend check reads only the files the engine reads: Terraform ignores `.tofu` and
+    `.tofu.json`, and OpenTofu skips `name.tf` or `name.tf.json` when `name.tofu` or `name.tofu.json`
+    exists. `GenerateFile` takes `WithOpenTofuDetector`; the terraform component passes `IsOpenTofu`, which
+    runs only when a provider-owned module is inspected (`TestModuleDeclaresBackendFollowsTheEngineFileRules`,
+    `TestGenerateFileUsesTheEngineDetector`).
 - **Plugin version.** `plugins/terragrunt/plugin.yaml` is bumped from 0.1.1 to 0.1.2.
 - **Docs.** `website/docs/migration/terragrunt.mdx`, `website/docs/cli/commands/terraform/generate/backend.mdx`
   and `plugins/terragrunt/README.md` describe the masking, generate, generate backend, `remote_state` without

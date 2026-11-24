@@ -15,6 +15,8 @@ func TestJSONDeclaresBackend(t *testing.T) {
 		`{"terraform":{"backend":{}},"terraform":{}}`:                              true,
 		`{"locals":{"a":[1,{"b":2}]},"terraform":[{"x":1},{"backend":{"s3":{}}}]}`: true,
 		`[{"output":{"a":{"value":"x"}}},{"terraform":{"cloud":{}}}]`:              true,
+		`{"terraform":null,"terraform":{"backend":{"local":{}}}}`:                  true,
+		`{"terraform":null}`:                     false,
 		`{"terraform":{}}`:                       false,
 		`{"terraform":{"required_version":"1"}}`: false,
 		`[{"variable":{"a":{}}}]`:                false,

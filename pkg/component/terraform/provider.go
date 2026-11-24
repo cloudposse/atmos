@@ -388,7 +388,10 @@ func (s *Operations) GenerateConfigFilesWithContext(ctx context.Context, atmosCo
 func GenerateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	defer perf.Track(atmosConfig, "terraform.GenerateBackendConfig")()
 
-	return tfbackend.GenerateFile(atmosConfig, info, workingDir)
+	// Full detection (it may run the engine's version command) happens only when a provider-owned
+	// module is inspected for its own backend block.
+	return tfbackend.GenerateFile(atmosConfig, info, workingDir,
+		tfbackend.WithOpenTofuDetector(func() bool { return IsOpenTofu(atmosConfig, nil) }))
 }
 
 // GenerateProviderOverrides writes `providers_override.tf.json` from the component's `providers`

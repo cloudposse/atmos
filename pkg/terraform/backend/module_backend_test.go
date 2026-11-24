@@ -34,6 +34,8 @@ func ownedInfo() *schema.ConfigAndStacksInfo {
 func TestGenerateFilePassesTheBackendToInitWhenTheModuleDeclaresOne(t *testing.T) {
 	config := &schema.AtmosConfiguration{}
 	config.Components.Terraform.AutoGenerateBackendFile = true
+	// OpenTofu reads every form, including `.tofu`, which Terraform ignores.
+	config.Components.Terraform.Command = "tofu"
 	for name, module := range map[string]string{
 		"main.tf":      "terraform {\n  backend \"local\" {}\n}\n",
 		"main.tf.json": `{"terraform":{"backend":{"local":{}}}}`,
@@ -125,10 +127,70 @@ func TestPassBackendToInitEdgeCases(t *testing.T) {
 
 // Files that are not root configuration, or whose `terraform` is not a block, declare no backend.
 func TestModuleDeclaresBackendIgnoresWhatIsNotABackendBlock(t *testing.T) {
-	assert.False(t, moduleDeclaresBackend(filepath.Join(t.TempDir(), "absent")))
+	assert.False(t, moduleDeclaresBackend(filepath.Join(t.TempDir(), "absent"), false))
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "attribute.tf"), []byte("terraform = \"backend\"\n"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("terraform { backend \"s3\" {} }\n"), 0o600))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "nested.tf"), 0o700))
-	assert.False(t, moduleDeclaresBackend(dir))
+	assert.False(t, moduleDeclaresBackend(dir, false))
+}
+
+// Each engine is judged by the files it reads: Terraform ignores `.tofu` files, and OpenTofu skips a `.tf`
+// or `.tf.json` file whose `.tofu` or `.tofu.json` counterpart exists.
+func TestModuleDeclaresBackendFollowsTheEngineFileRules(t *testing.T) {
+	backendBlock := []byte("terraform {\n  backend \"local\" {}\n}\n")
+	backendJSON := []byte(`{"terraform":{"backend":{"local":{}}}}`)
+	noBackend := []byte("terraform {\n  required_version = \">= 1.0\"\n}\n")
+	for _, test := range []struct {
+		name      string
+		files     map[string][]byte
+		terraform bool
+		tofu      bool
+	}{
+		{"backend in a .tf file", map[string][]byte{"main.tf": backendBlock}, true, true},
+		{"backend in a .tofu file", map[string][]byte{"main.tofu": backendBlock}, false, true},
+		{"backend in a .tf file shadowed by .tofu", map[string][]byte{"main.tf": backendBlock, "main.tofu": noBackend}, true, false},
+		{"backend in a .tf.json shadowed by .tofu.json", map[string][]byte{"main.tf.json": backendJSON, "main.tofu.json": []byte(`{}`)}, true, false},
+		{"backend in another .tf file stays visible", map[string][]byte{"backend.tf": backendBlock, "main.tofu": noBackend}, true, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for name, content := range test.files {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, name), content, 0o600))
+			}
+			assert.Equal(t, test.terraform, moduleDeclaresBackend(dir, false), "terraform")
+			assert.Equal(t, test.tofu, moduleDeclaresBackend(dir, true), "opentofu")
+		})
+	}
+}
+
+// Without an explicit detector, the configured command's executable name selects OpenTofu.
+func TestGenerateFileUsesTheEngineDetector(t *testing.T) {
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	backendBlock := []byte("terraform {\n  backend \"local\" {}\n}\n")
+	noBackend := []byte("terraform {}\n")
+	module := func(t *testing.T) string {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "main.tf"), backendBlock, 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "main.tofu"), noBackend, 0o600))
+		return dir
+	}
+
+	// OpenTofu reads only main.tofu, which declares no backend, so the host backend file is written.
+	tofuDir := module(t)
+	require.NoError(t, GenerateFile(config, ownedInfo(), tofuDir, WithOpenTofuDetector(func() bool { return true })))
+	assert.FileExists(t, filepath.Join(tofuDir, hostBackendName))
+
+	// Terraform reads main.tf, which declares one, so the settings go to init instead.
+	tfDir := module(t)
+	require.NoError(t, GenerateFile(config, ownedInfo(), tfDir, WithOpenTofuDetector(func() bool { return false })))
+	assert.NoFileExists(t, filepath.Join(tfDir, hostBackendName))
+	assert.FileExists(t, filepath.Join(tfDir, backendConfigFileName))
+
+	config.Components.Terraform.Command = filepath.Join("bin", "tofu")
+	assert.True(t, commandNamesOpenTofu(config))
+	config.Components.Terraform.Command = "terraform"
+	assert.False(t, commandNamesOpenTofu(config))
+	assert.False(t, commandNamesOpenTofu(nil))
 }

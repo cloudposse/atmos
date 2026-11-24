@@ -20,31 +20,84 @@ import (
 // declares its own backend block.
 const backendConfigFileName = "atmos-backend.tfbackend"
 
-// rootConfigSuffixes are the Terraform and OpenTofu configuration files of a root module.
-var rootConfigSuffixes = []string{".tf", ".tf.json", ".tofu", ".tofu.json"}
+// The terraformConfigSuffixes are the root module files Terraform reads; it ignores OpenTofu's `.tofu` files.
+var terraformConfigSuffixes = []string{".tf", ".tf.json"}
 
-// moduleDeclaresBackend reports whether a root module file other than the host backend declares a
-// `backend` block inside a `terraform` block. A file that does not parse is skipped: Terraform reports it.
-func moduleDeclaresBackend(directory string) bool {
+// The tofuShadowedSuffixes map each OpenTofu-only suffix to the Terraform suffix it overrides: when both
+// `name.tofu` and `name.tf` exist, OpenTofu reads only `name.tofu` (and likewise for `.tofu.json`).
+var tofuShadowedSuffixes = map[string]string{".tofu": ".tf", ".tofu.json": ".tf.json"}
+
+// moduleDeclaresBackend reports whether a root module file the selected engine reads, other than the host
+// backend, declares a `backend` block inside a `terraform` block. A file that does not parse is skipped:
+// Terraform reports it.
+func moduleDeclaresBackend(directory string, openTofu bool) bool {
 	entries, err := os.ReadDir(directory)
 	if err != nil {
 		return false
 	}
 	parser := hclparse.NewParser()
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || name == hostBackendName || !rootConfigFile(name) {
-			continue
-		}
-		if fileDeclaresBackend(parser, filepath.Join(directory, name)) {
+	for _, name := range engineConfigFiles(entries, openTofu) {
+		if name != hostBackendName && fileDeclaresBackend(parser, filepath.Join(directory, name)) {
 			return true
 		}
 	}
 	return false
 }
 
-func rootConfigFile(name string) bool {
-	return slices.ContainsFunc(rootConfigSuffixes, func(suffix string) bool { return strings.HasSuffix(name, suffix) })
+// engineConfigFiles returns the root module files the engine reads. Terraform reads `.tf` and `.tf.json`.
+// OpenTofu also reads `.tofu` and `.tofu.json`, and skips a `.tf` or `.tf.json` file that has an OpenTofu
+// counterpart with the same name.
+func engineConfigFiles(entries []os.DirEntry, openTofu bool) []string {
+	present := map[string]bool{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			present[entry.Name()] = true
+		}
+	}
+	var files []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() {
+			continue
+		}
+		if !openTofu {
+			if configSuffix(name, terraformConfigSuffixes) != "" {
+				files = append(files, name)
+			}
+			continue
+		}
+		if suffix := configSuffix(name, []string{".tofu.json", ".tofu"}); suffix != "" {
+			files = append(files, name)
+			continue
+		}
+		suffix := configSuffix(name, terraformConfigSuffixes)
+		if suffix != "" && !shadowedByTofu(name, suffix, present) {
+			files = append(files, name)
+		}
+	}
+	return files
+}
+
+// configSuffix returns the first suffix of suffixes that name ends with, or "". The longer `.json` forms
+// are listed first by callers that need to tell `.tofu.json` from `.tofu`.
+func configSuffix(name string, suffixes []string) string {
+	for _, suffix := range suffixes {
+		if strings.HasSuffix(name, suffix) {
+			return suffix
+		}
+	}
+	return ""
+}
+
+// shadowedByTofu reports whether OpenTofu skips the Terraform file name because its OpenTofu counterpart exists.
+func shadowedByTofu(name, suffix string, present map[string]bool) bool {
+	base := strings.TrimSuffix(name, suffix)
+	for tofuSuffix, shadowed := range tofuShadowedSuffixes {
+		if shadowed == suffix && present[base+tofuSuffix] {
+			return true
+		}
+	}
+	return false
 }
 
 var (
