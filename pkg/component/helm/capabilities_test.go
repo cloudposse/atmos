@@ -34,6 +34,7 @@ func TestResolveKubeVersion(t *testing.T) {
 	}{
 		{name: "absent keeps the Helm default", section: map[string]any{}},
 		{name: "explicit null keeps the Helm default", section: map[string]any{cfg.HelmKubeVersionSectionName: nil}},
+		{name: "empty string keeps the Helm default", section: map[string]any{cfg.HelmKubeVersionSectionName: ""}},
 		{name: "plain semver", section: map[string]any{cfg.HelmKubeVersionSectionName: "1.37.0"}, wantVersion: "v1.37.0", wantMinor: "37"},
 		{name: "v-prefixed semver", section: map[string]any{cfg.HelmKubeVersionSectionName: "v1.30.2"}, wantVersion: "v1.30.2", wantMinor: "30"},
 		{name: "distribution suffix is preserved", section: map[string]any{cfg.HelmKubeVersionSectionName: "v1.33.4+k3s1"}, wantVersion: "v1.33.4+k3s1", wantMinor: "33"},
