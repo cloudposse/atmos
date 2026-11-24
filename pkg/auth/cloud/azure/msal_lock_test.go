@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -58,7 +59,8 @@ func TestMSALLockfileClaim_AbandonOnlyRemovesTheSameFile(t *testing.T) {
 
 	claim := claimMSALLockfile(context.Background(), lockPath)
 	require.True(t, claim.created())
-	require.NoError(t, os.Remove(lockPath))
+	// The original is renamed aside, not deleted, so the replacement cannot reuse its inode.
+	require.NoError(t, os.Rename(lockPath, lockPath+".original"))
 	require.NoError(t, os.WriteFile(lockPath, []byte("67890 az"), 0o600))
 
 	claim.abandon(lockPath)
@@ -112,4 +114,28 @@ func TestMSALCacheLock_DoesNotHoldARemovedLockfile(t *testing.T) {
 	require.NoError(t, replacement.release())
 	require.NoError(t, <-done)
 	<-ran
+}
+
+// TestMSALLockfileClaim_AbandonKeepsAFileAnotherProcessLocked verifies a claim is not withdrawn
+// when another process took over this process's own lock file and holds its lock: removing it
+// would let az create a new lock file and write the cache during that holder's write.
+func TestMSALLockfileClaim_AbandonKeepsAFileAnotherProcessLocked(t *testing.T) {
+	_, cachePath := newAzureDir(t)
+	lockPath := AzureCLIMSALCacheLockPath(cachePath)
+
+	claim := claimMSALLockfile(context.Background(), lockPath)
+	require.True(t, claim.created())
+	holder := flock.New(lockPath)
+	locked, err := holder.TryLock()
+	require.NoError(t, err)
+	require.True(t, locked, "precondition: the other holder locks the claimed file")
+
+	claim.abandon(lockPath)
+	_, err = os.Stat(lockPath)
+	require.NoError(t, err, "a lock file another process holds is kept")
+
+	require.NoError(t, holder.Unlock())
+	claim.abandon(lockPath)
+	_, err = os.Stat(lockPath)
+	require.ErrorIs(t, err, os.ErrNotExist, "once nobody holds it, the own claim is withdrawn")
 }

@@ -186,8 +186,9 @@ are recorded in `docs/fixes/2026-11-22-auth-command-behavior.md`,
     - The file is deleted when the lock is released (`releaseMSALLockfile`).
     - When the lock cannot be acquired after this process created the lock file (a timeout or a
       cancellation), the claim is withdrawn (`msalLockfileClaim.abandon`). It is removed only while the
-      path still names the file this process created, so a lock file another process created since, or
-      one Atmos took over, is kept.
+      path still names the file this process created and a probe lock shows nobody holds it, so a lock
+      file another process created since, or this same file after another process took it over and
+      locked it, is kept (`TestMSALLockfileClaim_AbandonKeepsAFileAnotherProcessLocked`).
     - The flock still provides the exclusion. The legacy `<cache>.lock` is unchanged.
   - `UpdateAzureCLIMSALCache` and `msalCache.Export` write through the new `writeSharedMSALCache`. It
     resolves symlinks first (`filesystem.ResolveSymlinkTarget`), so the target is updated and the link

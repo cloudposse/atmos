@@ -78,8 +78,10 @@ func (c msalLockfileClaim) created() bool {
 
 // abandon removes the lock file when the lock could not be acquired after this process created
 // it, so az does not wait on a claim nobody will release. The file is removed only while lockPath
-// still names the file this process created: a lock file another process created since (or one
-// this process took over) is left alone.
+// still names the file this process created and nobody holds its lock: a lock file another
+// process created since, or the same file another process took over and locked before this one
+// could, is left alone. As on release, the probe lock is released before the file is deleted (the
+// msal-extensions order, which also works on Windows, where a locked file may not be deletable).
 func (c msalLockfileClaim) abandon(lockPath string) {
 	if !c.created() {
 		return
@@ -88,6 +90,13 @@ func (c msalLockfileClaim) abandon(lockPath string) {
 	if err != nil || !os.SameFile(c.file, current) {
 		return
 	}
+	probe := flock.New(lockPath)
+	locked, err := probe.TryLock()
+	if err != nil || !locked {
+		log.Debug("Keeping the MSAL cache lock file another process holds", "path", lockPath)
+		return
+	}
+	_ = probe.Unlock()
 	releaseMSALLockfile(lockPath)
 }
 
