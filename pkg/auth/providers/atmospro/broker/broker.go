@@ -54,7 +54,27 @@ func (proBroker) Provision(ctx context.Context, atmosConfig *schema.AtmosConfigu
 		return nil, err
 	}
 
-	return mgr.EnsureIdentityEnvironment(ctx, identity)
+	env, err := mgr.EnsureIdentityEnvironment(ctx, identity)
+	if err != nil {
+		return nil, err
+	}
+
+	// Integration failures are non-fatal for interactive authentication, so the manager does not
+	// return them from EnsureIdentityEnvironment. Report them here so the broker records the run
+	// as failed and retries on its short backoff. The env is still returned: it may hold usable
+	// cached tokens.
+	if reporter, ok := mgr.(integrationFailureReporter); ok {
+		if failures := reporter.IntegrationFailures(); failures != nil {
+			return env, failures
+		}
+	}
+
+	return env, nil
+}
+
+// integrationFailureReporter is implemented by managers that record non-fatal integration failures.
+type integrationFailureReporter interface {
+	IntegrationFailures() error
 }
 
 // findProGitHubSTSIdentity returns the name of the atmos/pro identity bound to an

@@ -13,9 +13,8 @@ jobs:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          # This job makes no network calls at all (just echo); block all egress.
+          # No workload endpoints are needed; retain StepSecurity implicit endpoints.
           policies: >-
             none
-          # The echo-only job needs no DNS; eBPF agents do not expose the legacy resolver.
-          dns-repair: 'false'
+          # Keep default DNS repair: the runner still needs final job reporting.
       - run: echo "See Atmos Pro"

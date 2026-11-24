@@ -30,6 +30,11 @@ func init() {
 	packerCmd.PersistentFlags().StringP("template", "t", "", "Packer template for building machine images")
 	packerCmd.PersistentFlags().StringP("query", "q", "", "YQ expression to read an output from the Packer manifest")
 	flags.RegisterComponentCommandFlags(packerCmd, "packer")
+	// Register --dry-run so Cobra parses it into info.DryRun. As an unknown flag, the
+	// FParseErrWhitelist above silently dropped it, so `packer build --dry-run` ran a real build.
+	flags.NewStandardParser(
+		flags.WithBoolFlag("dry-run", "", false, "Preview the Packer invocation without executing Packer"),
+	).RegisterPersistentFlags(packerCmd)
 
 	AddStackCompletion(packerCmd)
 	RootCmd.AddCommand(packerCmd)

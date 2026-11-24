@@ -178,14 +178,10 @@ func TestCommentPaginationIsCapped(t *testing.T) {
 
 func TestAPIRejectsUnsafeConfigAndRedirects(t *testing.T) {
 	p := NewProvider()
-	for _, endpoint := range []string{"", "http://git.example/api/v1", "https://user:pass@git.example/api/v1", "https://git.example/api/v1?token=secret"} {
+	for _, endpoint := range []string{"https://user:pass@git.example/api/v1", "https://git.example/api/v1?token=secret", "https://git.example/api/v1#frag", "ftp://git.example/api/v1", ":bad"} {
+		clearAPIEnv(t)
 		t.Setenv("ATMOS_CI_GITEA_API_URL", endpoint)
-		t.Setenv("GITEA_API_URL", "")
-		t.Setenv("GITHUB_API_URL", "")
-		t.Setenv("GITEA_SERVER_URL", "")
-		t.Setenv("GITHUB_SERVER_URL", "")
-		t.Setenv("ATMOS_CI_GITEA_ALLOW_INSECURE", "")
-		require.Error(t, p.ValidateConfig())
+		require.ErrorIs(t, p.ValidateConfig(), errUtils.ErrInvalidURL, endpoint)
 	}
 	redirected := false
 	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { redirected = true }))

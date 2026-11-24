@@ -9,7 +9,9 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/downloader"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -73,18 +75,40 @@ func (p *Provider) pushWithRetry(ctx context.Context, opts *atmosgit.PushOptions
 	}
 	start := time.Now()
 	state := &pushRetryState{provider: p, opts: opts, config: config, patterns: patterns}
+	var last error
 	err = retry.New(*config, executorOptions...).ExecuteWithPredicate(ctx, func() error {
-		return state.attempt(ctx)
+		last = state.attempt(ctx)
+		return last
 	}, func(err error) bool { return state.rejected || errors.Is(err, errUtils.ErrGitRateLimited) })
 	if err == nil {
 		return nil
 	}
+	// The attempt count below already says the attempts ran out, so drop the executor's
+	// generic "max attempts (N) exceeded, last error:" wrapper around the last attempt's error.
+	if last != nil && errors.Is(errors.Unwrap(err), last) {
+		err = last
+	}
 	if state.rejected && !errors.Is(err, errUtils.ErrGitPushRejected) {
 		err = errors.Join(errUtils.ErrGitPushRejected, err)
 	}
-	// Do not include remote URLs, ref names or subprocess output in diagnostics.
-	return fmt.Errorf("git push after %d attempt(s), %d retr%s, elapsed %s: %w",
-		state.attempts, max(0, state.attempts-1), pluralRetry(max(0, state.attempts-1)), time.Since(start).Round(time.Millisecond), err)
+	retries := max(0, state.attempts-1)
+	target := pushTarget(opts)
+	// The elapsed time varies from run to run, so it goes to the debug log, not the error.
+	log.Debug("Git push failed", "target", target, "attempts", state.attempts, "retries", retries,
+		"elapsed", time.Since(start).Round(time.Millisecond))
+	// Name the remote and branch, but never credentials or subprocess output.
+	return fmt.Errorf("%w: %s after %d attempt(s), %d retr%s", err, target, state.attempts, retries, pluralRetry(retries))
+}
+
+// pushTarget names the pushed remote and branch ("origin/main") for diagnostics. A remote
+// given as a URL is redacted so credentials, queries, and fragments never reach the error.
+// Without a branch (Git pushes the current one), only the remote is named.
+func pushTarget(opts *atmosgit.PushOptions) string {
+	remote := downloader.RedactSource(remoteOrDefault(opts.Remote))
+	if opts.Branch == "" {
+		return remote
+	}
+	return remote + "/" + opts.Branch
 }
 
 // pushOnce performs a single push attempt.

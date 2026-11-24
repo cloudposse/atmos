@@ -1,0 +1,537 @@
+package terraform
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	awsidentity "github.com/cloudposse/atmos/pkg/auth/identities/aws"
+	componentpkg "github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+//go:generate go run go.uber.org/mock/mockgen -destination=mock_configuration_test.go -package=terraform github.com/cloudposse/atmos/pkg/schema ComponentConfigurationRuntime
+
+func TestPrepareConfiguration(t *testing.T) {
+	runtime := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", Stack: "live/dev", ComponentFromArg: "app", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
+	expected := &schema.PreparedComponentConfiguration{Engine: "terraform", Source: filepath.Join(t.TempDir(), "module"), Inputs: map[string]any{"fresh": "output"}, BackendType: "local", Backend: map[string]any{"path": "state.tfstate"}, Workspace: "default"}
+	runtime.EXPECT().Prepare(gomock.Any(), info).Return(expected, nil)
+	result, err := prepareConfiguration(t.Context(), config, info)
+	require.NoError(t, err)
+	require.Same(t, expected, result)
+	require.True(t, filepath.IsAbs(info.Command))
+	require.Equal(t, expected.Inputs, info.ComponentVarsSection)
+	// Local module edits are detected by the source provisioner, so no TTL forces a refresh.
+	require.Equal(t, map[string]any{"uri": expected.Source}, info.ComponentSection["source"])
+	require.Equal(t, expected.Backend, info.ComponentBackendSection)
+	require.Equal(t, "default", info.TerraformWorkspace)
+	require.False(t, config.Components.Terraform.AutoGenerateBackendFile, "preparation leaves the shared project default unchanged")
+	require.False(t, schema.GenerateBackendFile(config, info), "a provider that does not own the backend leaves the project setting in charge")
+}
+
+func TestPreparedBackendChoiceDoesNotLeakBetweenInvocations(t *testing.T) {
+	config := &schema.AtmosConfiguration{}
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	newInfo := func() *schema.ConfigAndStacksInfo {
+		return &schema.ConfigAndStacksInfo{SubCommand: "plan", ComponentSection: map[string]any{}, ComponentBackendType: "local", ComponentBackendSection: map[string]any{}}
+	}
+	providerOwned := newInfo()
+	applyPreparedConfiguration(config, providerOwned, &schema.PreparedComponentConfiguration{BackendGenerated: true, BackendType: "local", Backend: map[string]any{}})
+	hostOwned := newInfo()
+	applyPreparedConfiguration(config, hostOwned, &schema.PreparedComponentConfiguration{BackendGenerated: false, BackendType: "local", Backend: map[string]any{}})
+	require.True(t, config.Components.Terraform.AutoGenerateBackendFile)
+	require.False(t, schema.GenerateBackendFile(config, providerOwned))
+	require.True(t, schema.GenerateBackendFile(config, hostOwned))
+
+	providerDir := t.TempDir()
+	hostDir := t.TempDir()
+	require.NoError(t, GenerateBackendConfig(config, providerOwned, providerDir))
+	require.NoFileExists(t, filepath.Join(providerDir, "backend.tf.json"))
+	require.NoError(t, GenerateBackendConfig(config, hostOwned, hostDir))
+	require.FileExists(t, filepath.Join(hostDir, "backend.tf.json"))
+	require.NoError(t, GenerateBackendConfig(config, providerOwned, providerDir))
+	require.NoFileExists(t, filepath.Join(providerDir, "backend.tf.json"))
+}
+
+func TestPrepareConfigurationNeverForcesSourceRefresh(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		source string
+	}{
+		{name: "relative path", source: "./modules/unit"},
+		{name: "absolute path", source: filepath.Join(t.TempDir(), "module")},
+		{name: "git", source: "git::https://example.invalid/modules.git//unit?ref=v1"},
+		{name: "archive", source: "https://example.invalid/unit.zip"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runtime := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+			config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+			binary, err := os.Executable()
+			require.NoError(t, err)
+			info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
+			runtime.EXPECT().Prepare(gomock.Any(), info).Return(&schema.PreparedComponentConfiguration{Engine: "terraform", Source: test.source}, nil)
+
+			_, err = prepareConfiguration(t.Context(), config, info)
+
+			require.NoError(t, err)
+			source, ok := info.ComponentSection["source"].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, test.source, source["uri"])
+			require.NotContains(t, source, "ttl", "a TTL of zero would re-copy the module and discard saved plans on every run")
+		})
+	}
+}
+
+func TestPrepareConfigurationGuards(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		info    schema.ConfigAndStacksInfo
+		runtime bool
+		want    error
+	}{
+		{name: "ordinary"},
+		{name: "explicitly disabled", info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": false}}},
+		{name: "null", info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": nil}}},
+		{name: "unavailable", info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}, want: errUtils.ErrPluginUnsupportedExtension},
+		{name: "abstract", runtime: true, info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, SubCommand: "apply", ComponentIsAbstract: true}, want: errUtils.ErrAbstractComponentCantBeProvisioned},
+		{name: "dry run", runtime: true, info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, DryRun: true}},
+		{name: "missing binary", runtime: true, info: schema.ConfigAndStacksInfo{ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, Command: "atmos-no-such-engine-234856"}, want: errUtils.ErrPluginInvalidConfig},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{}
+			config.Components.Terraform.AutoGenerateBackendFile = true
+			if test.runtime {
+				config.ComponentConfigurations = NewMockComponentConfigurationRuntime(gomock.NewController(t))
+			}
+			result, err := prepareConfiguration(t.Context(), config, &test.info)
+			require.ErrorIs(t, err, test.want)
+			require.Nil(t, result)
+			require.Nil(t, test.info.BackendFileGeneration)
+			require.True(t, config.Components.Terraform.AutoGenerateBackendFile)
+		})
+	}
+}
+
+func TestConfigurationArtifactNames(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{Stack: "live/dev", ComponentFromArg: "region/app", ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
+	names := []string{ConstructTerraformComponentVarfileName(info), ConstructTerraformComponentPlanfileName(info), ConstructTerraformComponentTestVarfileName(info)}
+	for _, name := range names {
+		require.Equal(t, filepath.Base(name), name)
+		require.Contains(t, name, "atmos-")
+	}
+	first := names[0]
+	info.Stack = "live/prod"
+	require.NotEqual(t, first, ConstructTerraformComponentVarfileName(info))
+	info.Stack = "live/dev"
+	info.ComponentFromArg = "other/app"
+	require.NotEqual(t, first, ConstructTerraformComponentVarfileName(info))
+	// Without ComponentFromArg the component identity still keeps names distinct.
+	info.ComponentFromArg, info.Component = "", "region/app"
+	app := ConstructTerraformComponentPlanfileName(info)
+	info.Component = "region/other"
+	require.NotEqual(t, app, ConstructTerraformComponentPlanfileName(info))
+	info.ComponentFromArg, info.Component = "region/app", "ignored"
+	require.Equal(t, app, ConstructTerraformComponentPlanfileName(info), "ComponentFromArg keeps precedence")
+	info.ComponentSettingsSection = nil
+	_, owned := configurationArtifactName(info, ".plan")
+	require.False(t, owned)
+}
+
+// A plan written by one process is applied by another, so the artifact name must never depend on
+// process state. The digest is pinned so a change to the naming scheme is deliberate.
+func TestConfigurationIdentityIsStableAndSeparatesFields(t *testing.T) {
+	const pinned = "060d8d2f24f80685c67572911d8f2cd5"
+	first := configurationIdentity("live/dev", "region/app")
+	require.Equal(t, pinned, first)
+	require.Equal(t, first, configurationIdentity("live/dev", "region/app"))
+	require.NotEqual(t, first, configurationIdentity("live/dev", "region/app2"))
+	// The separator keeps adjacent fields from sliding into each other.
+	require.NotEqual(t, configurationIdentity("ab", "c"), configurationIdentity("a", "bc"))
+}
+
+func TestCacheLocalStatePath(t *testing.T) {
+	cache := filepath.Join("live", "dev", "unit", ".terragrunt-cache", "abc", "def", "terraform.tfstate")
+	for _, test := range []struct {
+		name     string
+		prepared schema.PreparedComponentConfiguration
+		want     bool
+	}{
+		{"default local state inside the cache", schema.PreparedComponentConfiguration{BackendType: "local", Backend: map[string]any{"path": cache}}, true},
+		{"stable local path", schema.PreparedComponentConfiguration{BackendType: "local", Backend: map[string]any{"path": filepath.Join("live", "dev", "unit", "state", "terraform.tfstate")}}, false},
+		{"similar name is not the cache", schema.PreparedComponentConfiguration{BackendType: "local", Backend: map[string]any{"path": filepath.Join("a", "x.terragrunt-cache", "terraform.tfstate")}}, false},
+		{"remote backend", schema.PreparedComponentConfiguration{BackendType: "s3", Backend: map[string]any{"path": cache}}, false},
+		{"no backend settings", schema.PreparedComponentConfiguration{BackendType: "local"}, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path, found := cacheLocalStatePath(&test.prepared)
+			require.Equal(t, test.want, found)
+			if found {
+				require.Equal(t, cache, path)
+			}
+		})
+	}
+}
+
+func TestCheckConfigurationWorkspace(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		base      []string
+		component []string
+		want      error
+	}{
+		{name: "unset", base: []string{}},
+		{name: "empty", base: []string{"TF_WORKSPACE="}},
+		{name: "matching base", base: []string{"TF_WORKSPACE=stage"}},
+		{name: "matching component", base: []string{}, component: []string{"TF_WORKSPACE=stage"}},
+		{name: "conflicting base", base: []string{"TF_WORKSPACE=prod"}, want: errUtils.ErrPluginInvalidConfig},
+		{name: "conflicting component", base: []string{"TF_WORKSPACE=stage"}, component: []string{"TF_WORKSPACE=prod"}, want: errUtils.ErrPluginInvalidConfig},
+		{name: "component overrides conflicting base", base: []string{"TF_WORKSPACE=prod"}, component: []string{"TF_WORKSPACE=stage"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{TerraformWorkspace: "stage", SanitizedEnv: test.base, ComponentEnvList: test.component}
+			require.ErrorIs(t, checkConfigurationWorkspace(info), test.want)
+		})
+	}
+}
+
+// Warning about cache-local state must never change where the state lives or fail the command.
+func TestPrepareConfigurationKeepsCacheLocalStateLocation(t *testing.T) {
+	runtime := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", Stack: "live/dev", ComponentFromArg: "app", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
+	cache := filepath.Join(t.TempDir(), ".terragrunt-cache", "a", "b", "terraform.tfstate")
+	runtime.EXPECT().Prepare(gomock.Any(), info).Return(&schema.PreparedComponentConfiguration{Engine: "terraform", Source: "./module", BackendType: "local", Backend: map[string]any{"path": cache}}, nil)
+
+	_, err = prepareConfiguration(t.Context(), config, info)
+
+	require.NoError(t, err)
+	require.Equal(t, cache, info.ComponentBackendSection["path"])
+}
+
+// fakeAssume replaces STS and records what it was asked to assume and with which environment.
+func fakeAssume(t *testing.T, err error) *struct {
+	role    awsidentity.InlineRole
+	environ []string
+	calls   int
+} {
+	t.Helper()
+	recorded := &struct {
+		role    awsidentity.InlineRole
+		environ []string
+		calls   int
+	}{}
+	previous := assumeInlineRole
+	assumeInlineRole = func(_ context.Context, role awsidentity.InlineRole, environ []string) (map[string]string, error) {
+		recorded.role, recorded.environ, recorded.calls = role, environ, recorded.calls+1
+		if err != nil {
+			return nil, err
+		}
+		return map[string]string{"AWS_ACCESS_KEY_ID": "ASIASESSION", "AWS_SESSION_TOKEN": "session-token", "AWS_PROFILE": ""}, nil
+	}
+	t.Cleanup(func() { assumeInlineRole = previous })
+	return recorded
+}
+
+// iamProbingRuntime is a configuration runtime whose provider also probes IAM before preparation.
+type iamProbingRuntime interface {
+	schema.ComponentConfigurationRuntime
+	schema.ComponentConfigurationIAMProbe
+}
+
+var _ iamProbingRuntime = (*MockIAMProbingRuntime)(nil)
+
+// deferredSourceRuntime is a configuration runtime whose provider can leave a module source
+// unresolved until the unit's read-config hooks have run.
+type deferredSourceRuntime interface {
+	schema.ComponentConfigurationRuntime
+	schema.ComponentConfigurationDeferredSource
+}
+
+var _ deferredSourceRuntime = (*MockDeferredSourceRuntime)(nil)
+
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_iam_probing_runtime_test.go -package=$GOPACKAGE -mock_names=iamProbingRuntime=MockIAMProbingRuntime,deferredSourceRuntime=MockDeferredSourceRuntime
+
+func TestPrepareConfigurationStagesIAMForEvaluation(t *testing.T) {
+	recorded := fakeAssume(t, nil)
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	iam := &schema.ComponentIAM{Role: "arn:aws:iam::1:role/x"}
+	runtime := NewMockIAMProbingRuntime(gomock.NewController(t))
+	runtime.EXPECT().ProbeIAM(gomock.Any(), gomock.Any()).Return(iam, nil).Times(1)
+	runtime.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, info *schema.ConfigAndStacksInfo) (*schema.PreparedComponentConfiguration, error) {
+		require.Contains(t, info.ComponentEnvList, "AWS_ACCESS_KEY_ID=ASIASESSION", "the probed role is assumed before the unit is evaluated")
+		return &schema.PreparedComponentConfiguration{Engine: "terraform", Source: "./module", IAM: iam}, nil
+	})
+	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}, SanitizedEnv: []string{"AWS_ACCESS_KEY_ID=BASE", "AWS_SECRET_ACCESS_KEY=base-secret"}}
+	_, err = prepareConfiguration(t.Context(), config, info)
+	require.NoError(t, err)
+	require.Equal(t, 1, recorded.calls, "the staged session is reused for execution")
+	require.Contains(t, recorded.environ, "AWS_ACCESS_KEY_ID=BASE")
+}
+
+func TestPrepareConfigurationRejectsChangedIAMAfterStaging(t *testing.T) {
+	fakeAssume(t, nil)
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	runtime := NewMockIAMProbingRuntime(gomock.NewController(t))
+	runtime.EXPECT().ProbeIAM(gomock.Any(), gomock.Any()).Return(&schema.ComponentIAM{Role: "role-a"}, nil)
+	runtime.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&schema.PreparedComponentConfiguration{Engine: "terraform", Source: "./module", IAM: &schema.ComponentIAM{Role: "role-b"}}, nil)
+	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "plan", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
+	_, err = prepareConfiguration(t.Context(), &schema.AtmosConfiguration{ComponentConfigurations: runtime}, info)
+	require.ErrorContains(t, err, "changed between role and unit evaluation")
+}
+
+func TestApplyIAMRoleExportsTheSessionToTheComponent(t *testing.T) {
+	recorded := fakeAssume(t, nil)
+	info := &schema.ConfigAndStacksInfo{Stack: "live/dev", ComponentFromArg: "app", SanitizedEnv: []string{"AWS_PROFILE=atmos", "PATH=/bin"}, ComponentEnvList: []string{"TF_IN_AUTOMATION=true"}}
+	iam := &schema.ComponentIAM{Role: "arn:aws:iam::1:role/x", SessionName: "s", DurationSeconds: 1800}
+	require.NoError(t, applyIAMRole(t.Context(), info, iam))
+	require.Equal(t, 1, recorded.calls)
+	require.Equal(t, awsidentity.InlineRole{Role: "arn:aws:iam::1:role/x", SessionName: "s", Duration: 30 * time.Minute}, recorded.role)
+	require.Equal(t, []string{"AWS_PROFILE=atmos", "PATH=/bin", "TF_IN_AUTOMATION=true"}, recorded.environ, "the role is assumed on top of the invocation's own credentials")
+	require.Equal(t, []string{"TF_IN_AUTOMATION=true", "AWS_ACCESS_KEY_ID=ASIASESSION", "AWS_PROFILE=", "AWS_SESSION_TOKEN=session-token"}, info.ComponentEnvList)
+	require.Equal(t, map[string]string{"AWS_ACCESS_KEY_ID": "ASIASESSION", "AWS_SESSION_TOKEN": "session-token", "AWS_PROFILE": ""}, info.IAMSession, "source downloads use the same session")
+}
+
+func TestApplyIAMRoleIsSkippedForAnExplicitIdentity(t *testing.T) {
+	recorded := fakeAssume(t, nil)
+	asked := func(identity string) *string { return &identity }
+	iam := &schema.ComponentIAM{Role: "arn:aws:iam::1:role/x"}
+
+	for name, info := range map[string]*schema.ConfigAndStacksInfo{
+		"requested with --identity":   {Identity: "deployer", RequestedIdentity: asked("deployer")},
+		"requested interactively":     {Identity: "picked", RequestedIdentity: asked(cfg.IdentityFlagSelectValue)},
+		"identity without a recorder": {Identity: "deployer"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			info.Stack, info.ComponentFromArg = "live/dev", "app"
+			require.NoError(t, applyIAMRole(t.Context(), info, iam))
+			require.Empty(t, info.ComponentEnvList, "the selected identity decides who the component runs as")
+			require.Nil(t, info.IAMSession, "source downloads keep the selected identity")
+		})
+	}
+	require.Zero(t, recorded.calls)
+
+	// A default identity that authentication chose, and disabled authentication, request nothing: the
+	// role is assumed on top of whatever credentials the invocation has.
+	for name, info := range map[string]*schema.ConfigAndStacksInfo{
+		"default identity chosen by authentication": {Identity: "mock-identity", RequestedIdentity: asked("")},
+		"authentication disabled":                   {Identity: cfg.IdentityFlagDisabledValue, RequestedIdentity: asked(cfg.IdentityFlagDisabledValue)},
+		"no identity":                               {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			before := recorded.calls
+			info.Stack, info.ComponentFromArg = "live/dev", "app"
+			require.NoError(t, applyIAMRole(t.Context(), info, iam))
+			require.Equal(t, before+1, recorded.calls)
+		})
+	}
+}
+
+func TestApplyIAMRoleWithoutARoleDoesNothing(t *testing.T) {
+	recorded := fakeAssume(t, nil)
+	info := &schema.ConfigAndStacksInfo{}
+	require.NoError(t, applyIAMRole(t.Context(), info, nil))
+	require.Zero(t, recorded.calls)
+	require.Empty(t, info.ComponentEnvList)
+}
+
+func TestApplyIAMRoleReadsTheTokenFileAtAssumptionTime(t *testing.T) {
+	recorded := fakeAssume(t, nil)
+	file := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(file, []byte("  file-token \n"), 0o600))
+	info := &schema.ConfigAndStacksInfo{Stack: "s", ComponentFromArg: "app"}
+	require.NoError(t, applyIAMRole(t.Context(), info, &schema.ComponentIAM{Role: "r", WebIdentityTokenFile: file}))
+	require.Equal(t, "file-token", recorded.role.WebIdentityToken)
+
+	require.NoError(t, applyIAMRole(t.Context(), info, &schema.ComponentIAM{Role: "r", WebIdentityToken: "literal", WebIdentityTokenLiteral: true}))
+	require.Equal(t, "literal", recorded.role.WebIdentityToken)
+}
+
+func TestApplyIAMRoleFailuresNameTheRoleAndLeakNothing(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{Stack: "live/dev", ComponentFromArg: "app"}
+	for name, test := range map[string]struct {
+		iam    *schema.ComponentIAM
+		assume error
+	}{
+		"STS rejects the role":           {&schema.ComponentIAM{Role: "arn:aws:iam::1:role/x"}, errUtils.ErrAuthenticationFailed},
+		"missing token file":             {&schema.ComponentIAM{Role: "arn:aws:iam::1:role/x", WebIdentityTokenFile: filepath.Join(t.TempDir(), "absent")}, nil},
+		"literal token lost with a plan": {&schema.ComponentIAM{Role: "arn:aws:iam::1:role/x", WebIdentityTokenLiteral: true}, nil},
+		"empty token file":               {&schema.ComponentIAM{Role: "arn:aws:iam::1:role/x", WebIdentityTokenFile: emptyTokenFile(t)}, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fakeAssume(t, test.assume)
+			err := applyIAMRole(t.Context(), info, test.iam)
+			require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+			rendered := errUtils.Format(err, errUtils.FormatterConfig{})
+			require.Contains(t, rendered, "arn:aws:iam::1:role/x")
+			require.Contains(t, rendered, "--identity")
+		})
+	}
+}
+
+func TestComponentIAMNeverSerializesALiteralToken(t *testing.T) {
+	prepared := &schema.PreparedComponentConfiguration{IAM: &schema.ComponentIAM{Role: "r", WebIdentityToken: "super-secret-token", WebIdentityTokenLiteral: true}}
+	record, err := json.Marshal(prepared)
+	require.NoError(t, err)
+	require.NotContains(t, string(record), "super-secret-token")
+	require.Contains(t, string(record), "WebIdentityTokenLiteral")
+}
+
+func emptyTokenFile(t *testing.T) string {
+	t.Helper()
+	file := filepath.Join(t.TempDir(), "token")
+	require.NoError(t, os.WriteFile(file, []byte(" \n"), 0o600))
+	return file
+}
+
+func TestRejectRuntimeArtifacts(t *testing.T) {
+	require.NoError(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{{Path: "backend.tf", IfExists: "overwrite"}}))
+	// The unit's own lock file copy carries its provider pins; only that exact copy is allowed.
+	require.NoError(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{{Path: ".terraform.lock.hcl", IfExists: "overwrite", UnitFileCopy: true}}))
+	for _, file := range []schema.ComponentConfigurationFile{
+		{Path: "nested/.terraform.lock.hcl", IfExists: "overwrite", UnitFileCopy: true},
+		{Path: ".terraform.lock.hcl", IfExists: "overwrite_terragrunt", UnitFileCopy: true},
+		{Path: "terraform.tfstate", IfExists: "overwrite", UnitFileCopy: true},
+	} {
+		require.ErrorIs(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{file}), errUtils.ErrPluginInvalidConfig, file.Path)
+	}
+	for _, path := range []string{"examples/terraform.tfstate", "nested/provider.tf", "Nested/PROVIDER.tf", "terraform.tfstate.example"} {
+		require.NoError(t, rejectRuntimeArtifacts([]schema.ComponentConfigurationFile{{Path: path}}), path)
+	}
+	for _, path := range []string{"terraform.tfstate", "terraform.tfstate.backup", ".terraform.tfstate.lock.info", ".terraform/environment", "nested/.terraform/modules/modules.json", "terraform.tfstate.d/stage/terraform.tfstate", ".terraform.lock.hcl", "nested/.dev-app.terraform.lock.hcl", ".atmos/metadata.json"} {
+		files := []schema.ComponentConfigurationFile{{Path: "backend.tf", IfExists: "overwrite"}, {Path: path, IfExists: "overwrite"}}
+		require.ErrorIs(t, rejectRuntimeArtifacts(files), errUtils.ErrPluginInvalidConfig, path)
+		files[1].Path = strings.ToUpper(path)
+		require.ErrorIs(t, rejectRuntimeArtifacts(files), errUtils.ErrPluginInvalidConfig, files[1].Path)
+	}
+}
+
+func TestPreparedConfigurationSensitiveInputsNeverHitDisk(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+	for _, disabled := range []bool{false, true} {
+		atmosio.ApplyMaskingConfig(&atmosio.Config{DisableMasking: disabled})
+		runtime := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+		config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+		binary, err := os.Executable()
+		require.NoError(t, err)
+		info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}}}
+		inputs := map[string]any{"credentials": map[string]any{"secret-input-key": ""}, "empty": map[string]any{}, "null": nil, "public": "visible"}
+		prepared := &schema.PreparedComponentConfiguration{Inputs: inputs, SensitiveInputKeys: map[string]bool{"credentials": true, "empty": true, "null": true, "absent": true}}
+		runtime.EXPECT().Prepare(gomock.Any(), info).Return(prepared, nil)
+		_, err = prepareConfiguration(t.Context(), config, info)
+		require.NoError(t, err)
+		// Partition repeatedly without relying on registered secret strings.
+		ComputeTerraformSecretVarKeys(info)
+		ComputeTerraformSecretVarKeys(info)
+		require.Equal(t, map[string]bool{"credentials": true, "empty": true, "null": true}, info.TerraformSecretVarKeys)
+		require.Equal(t, map[string]any{"public": "visible"}, DiskSafeVars(info))
+		env, err := SecretVarEnv(info)
+		require.NoError(t, err)
+		require.ElementsMatch(t, []string{`TF_VAR_credentials={"secret-input-key":""}`, `TF_VAR_empty={}`, `TF_VAR_null=null`}, env)
+	}
+}
+
+func TestGetTerraformStateStopsWhenProviderCannotResolveBackend(t *testing.T) {
+	failure := errors.New("provider could not locate state")
+	executor := testExecutor(t)
+	executor.services.ExecuteDescribeComponent = func(params *componentpkg.ExecuteDescribeComponentParams) (map[string]any, error) {
+		assert.Equal(t, "network", params.Component)
+		assert.Equal(t, "live", params.Stack)
+		return map[string]any{
+			"settings": map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true}},
+			"backend":  map[string]any{"path": "must-not-be-read"},
+		}, nil
+	}
+	runtime := NewMockReviewedPlanRuntime(gomock.NewController(t))
+	runtime.EXPECT().ResolveState(gomock.Any(), gomock.Any()).Return(nil, failure)
+	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+
+	result, err := executor.GetTerraformState(config, "!terraform.state", "live", "network", "vpc_id", true, nil, nil)
+	require.ErrorIs(t, err, failure, "the provider's failure is returned as is, not retried against a guessed backend")
+	require.Nil(t, result)
+}
+
+func TestConfigurationCommandPrecedence(t *testing.T) {
+	for _, tc := range []struct{ name, global, stack, flag, want string }{
+		{"default", "", "", "", "terraform"},
+		{"global", "tofu", "", "", "tofu"},
+		{"component", "tofu", "terraform", "", "terraform"},
+		{"inherited command", "tofu", "/inherited/terraform", "", "/inherited/terraform"},
+		{"override command", "tofu", "/overrides/terraform", "", "/overrides/terraform"},
+		{"explicit flag wins over global and stack", "tofu", "/stack/tofu", "/cli/terraform", "/cli/terraform"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &schema.AtmosConfiguration{}
+			config.Components.Terraform.Command = tc.global
+			info := &schema.ConfigAndStacksInfo{Command: tc.stack, ComponentCommand: tc.flag}
+			resolveTerraformCommand(config, info)
+			require.Equal(t, tc.want, info.Command)
+			require.Equal(t, tc.flag, info.ComponentCommand, "explicit flag provenance survives resolution")
+		})
+	}
+}
+
+func TestPreparedFilesRefreshSensitiveDeclarations(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+	atmosio.ApplyMaskingConfig(&atmosio.Config{DisableMasking: false})
+	directory := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "main.tf"), []byte(""), 0o600))
+	info := &schema.ConfigAndStacksInfo{
+		ComponentSection:                map[string]any{"component_info": map[string]any{}},
+		ComponentVarsSection:            map[string]any{"token": "private-input", "provider_secret": "", "public": "visible"},
+		ConfigurationSensitiveInputKeys: map[string]bool{"provider_secret": true},
+	}
+	loadTerraformModuleInfo(info, directory)
+	require.Empty(t, terraformSensitiveVarKeys(info))
+	prepared := &schema.PreparedComponentConfiguration{Files: []schema.ComponentConfigurationFile{{Path: "variables.tf", Content: []byte("variable \"token\" {\n type = string\n sensitive = true\n}\n"), IfExists: "overwrite"}}}
+	require.NoError(t, writePreparedConfigurationFiles(info, prepared, directory))
+	ComputeTerraformSecretVarKeys(info)
+	require.Equal(t, map[string]bool{"token": true, "provider_secret": true}, info.TerraformSecretVarKeys)
+	require.Equal(t, map[string]any{"public": "visible"}, VarfileVarsToWrite(info, false, "test.tfvars.json"))
+	env, err := SecretVarEnv(info)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"TF_VAR_token=private-input", "TF_VAR_provider_secret="}, env)
+}
+
+func TestConfigurationWorkspaceEnvironmentCase(t *testing.T) {
+	for _, platform := range []string{"windows", "linux"} {
+		for _, key := range []string{"tf_workspace", "Tf_Workspace"} {
+			info := &schema.ConfigAndStacksInfo{TerraformWorkspace: "stage", SanitizedEnv: []string{"TF_WORKSPACE=stage"}, ComponentEnvList: []string{key + "=prod"}}
+			err := checkConfigurationWorkspaceForPlatform(info, platform)
+			if platform == "windows" {
+				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+			} else {
+				require.NoError(t, err)
+			}
+			info.ComponentEnvList = []string{key + "=stage"}
+			require.NoError(t, checkConfigurationWorkspaceForPlatform(info, platform))
+			info.SanitizedEnv = []string{key + "=prod"}
+			info.ComponentEnvList = []string{"TF_WORKSPACE=stage"}
+			require.NoError(t, checkConfigurationWorkspaceForPlatform(info, platform), "last component value overrides base")
+		}
+	}
+}

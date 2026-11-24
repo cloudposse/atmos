@@ -35,6 +35,9 @@ const (
 
 	// eksPresignLifetimeSeconds is the presigned URL lifetime (60 seconds).
 	eksPresignLifetimeSeconds = 60
+
+	// The eksUserPrefix constant distinguishes EKS exec-plugin usernames in a kubeconfig.
+	eksUserPrefix = "eks"
 )
 
 // EKSClusterInfo contains cluster data needed for kubeconfig generation.
@@ -190,10 +193,90 @@ func BuildKubeClusterInfo(info *EKSClusterInfo, identityName string) (*kube.Clus
 		CertificateAuthorityData: info.CertificateAuthorityData,
 		ID:                       info.ARN,
 		Region:                   info.Region,
-		UserPrefix:               "eks",
+		UserPrefix:               eksUserPrefix,
+		AccountID:                clusterAccountID(info.ARN),
+		Identity:                 identityName,
+		LegacyUserNames:          []string{LegacyEKSKubeUserName(info.Name, info.Region)},
 		ExecArgs:                 execArgs,
 		ExecEnv:                  execEnv,
 	}, nil
+}
+
+// EKSKubeUserName returns the kubeconfig exec-plugin username that
+// BuildKubeClusterInfo produces for the cluster with the given ARN, name and
+// region when authenticating as identityName from realm:
+// atmos-[<realm>-]eks-<name>-<region>-<account>-<identity>. The realm, account
+// ID and identity keep contexts for different repositories, accounts or
+// identities from sharing one user.
+func EKSKubeUserName(clusterARN, clusterName, region, identityName, realm string) string {
+	defer perf.Track(nil, "aws.EKSKubeUserName")()
+
+	return kube.UserName(eksUserInfo(clusterARN, clusterName, region, identityName, realm))
+}
+
+// eksUserInfo returns the ClusterInfo fields that make up an EKS user name.
+func eksUserInfo(clusterARN, clusterName, region, identityName, realm string) *kube.ClusterInfo {
+	return &kube.ClusterInfo{
+		Name:       clusterName,
+		Region:     region,
+		UserPrefix: eksUserPrefix,
+		AccountID:  clusterAccountID(clusterARN),
+		Identity:   identityName,
+		Realm:      realm,
+	}
+}
+
+// EKSKubeUserNames returns EKSKubeUserName followed by the names older
+// versions wrote for the same entry, so cleanup can remove any of them: the
+// name without the realm (when realm is set), the names under each of
+// legacyRealms (see kube.ClusterInfo.LegacyRealms) and the legacy
+// atmos-eks-<name>-<region> name. Realm- or identity-scoped names also list
+// their unhashed form (see kube.UserName).
+func EKSKubeUserNames(clusterARN, clusterName, region, identityName string, scope kube.RealmScope) []string {
+	defer perf.Track(nil, "aws.EKSKubeUserNames")()
+
+	// Each realm variant also lists its unhashed form, which earlier builds wrote.
+	names := kube.UserNameForms(eksUserInfo(clusterARN, clusterName, region, identityName, scope.Realm))
+	if scope.Realm != "" {
+		names = append(names, kube.UserNameForms(eksUserInfo(clusterARN, clusterName, region, identityName, ""))...)
+	}
+	for _, legacyRealm := range scope.LegacyRealms {
+		names = append(names, kube.UserNameForms(eksUserInfo(clusterARN, clusterName, region, identityName, legacyRealm))...)
+	}
+	return append(names, LegacyEKSKubeUserName(clusterName, region))
+}
+
+// LegacyEKSKubeUserName returns the atmos-eks-<name>-<region> username that
+// versions before the account ID and identity were added wrote, so cleanup can
+// still remove entries those versions left in a kubeconfig.
+func LegacyEKSKubeUserName(clusterName, region string) string {
+	defer perf.Track(nil, "aws.LegacyEKSKubeUserName")()
+
+	return kube.UserName(&kube.ClusterInfo{Name: clusterName, Region: region, UserPrefix: eksUserPrefix})
+}
+
+// clusterAccountID returns the account ID in an EKS cluster ARN, or "" when
+// the ARN cannot be parsed.
+func clusterAccountID(clusterARN string) string {
+	parsed, err := arn.Parse(clusterARN)
+	if err != nil {
+		return ""
+	}
+	return parsed.AccountID
+}
+
+// IsEKSClusterARN reports whether id is the ARN of the EKS cluster with the
+// given name in the given region.
+func IsEKSClusterARN(id, clusterName, region string) bool {
+	defer perf.Track(nil, "aws.IsEKSClusterARN")()
+
+	parsed, err := arn.Parse(id)
+	if err != nil {
+		return false
+	}
+	return parsed.Service == "eks" &&
+		parsed.Region == region &&
+		parsed.Resource == "cluster/"+clusterName
 }
 
 // addPresignExpiry returns a middleware that adds X-Amz-Expires to the presigned URL query string.

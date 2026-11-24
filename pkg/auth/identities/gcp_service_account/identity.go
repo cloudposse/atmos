@@ -301,6 +301,10 @@ func (i *Identity) PrepareEnvironment(ctx context.Context, environ map[string]st
 		return nil, fmt.Errorf("get GCP environment variables: %w", err)
 	}
 
+	// Drop the caller's own GCP credentials, project, and location (for example
+	// GOOGLE_APPLICATION_CREDENTIALS or CLOUDSDK_COMPUTE_REGION) so they are not
+	// passed through next to the Atmos token, then apply the identity's variables.
+	gcp.ScrubAmbientEnvironment(out)
 	for k, v := range gcpEnv {
 		out[k] = v
 	}

@@ -947,6 +947,33 @@ func TestValidateAndResolveComponentRequiresInputSource(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrInvalidComponent)
 }
 
+// A dry run never downloads source, so a cold source component has no directory yet and must not be
+// rejected as missing input; a component without a source still is.
+func TestValidateAndResolveComponentDryRunAcceptsColdSource(t *testing.T) {
+	original := provisionAndResolveComponentPath
+	t.Cleanup(func() { provisionAndResolveComponentPath = original })
+	missingPath := filepath.Join(t.TempDir(), "missing")
+	provisionAndResolveComponentPath = func(context.Context, *schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string) (string, bool, error) {
+		return missingPath, false, nil
+	}
+	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	atmosConfig.Components.Kubernetes.BasePath = filepath.Join("components", "kubernetes")
+
+	newInfo := func(dryRun bool, section map[string]any) *schema.ConfigAndStacksInfo {
+		return &schema.ConfigAndStacksInfo{DryRun: dryRun, FinalComponent: "api", ComponentFromArg: "api", ComponentSection: section}
+	}
+	cold := map[string]any{"provider": ProviderKubectl, "source": map[string]any{"uri": "github.com/acme/manifests"}}
+
+	_, err := validateAndResolveComponent(atmosConfig, newInfo(true, cold))
+	require.NoError(t, err)
+
+	_, err = validateAndResolveComponent(atmosConfig, newInfo(false, cold))
+	require.ErrorIs(t, err, errUtils.ErrInvalidComponent, "a real run must still require the provisioned directory")
+
+	_, err = validateAndResolveComponent(atmosConfig, newInfo(true, map[string]any{"provider": ProviderKubectl}))
+	require.ErrorIs(t, err, errUtils.ErrInvalidComponent, "a dry run must still reject a missing local component")
+}
+
 func TestMaybeAutoGenerateFilesGeneratesConfiguredFiles(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	atmosConfig.Components.Kubernetes.AutoGenerateFiles = true

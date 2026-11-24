@@ -10,7 +10,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
-	"github.com/aws/aws-sdk-go-v2/service/ssooidc/types"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
@@ -54,6 +53,9 @@ type ssoProvider struct {
 	ssoClient    ssoClient          // For dependency injection in tests.
 	sessionStore *sessionTokenStore // In-process registry that coalesces same-portal providers.
 	realm        string             // Credential isolation realm set by auth manager.
+	// pollWait waits between device-token polls; nil uses waitForPollInterval.
+	// Tests inject it to observe the polling intervals without sleeping.
+	pollWait func(ctx context.Context, d time.Duration) error
 }
 
 // NewSSOProvider creates a new AWS SSO provider.
@@ -145,32 +147,21 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		return ssoCacheToCredentials(cached, p.region), nil
 	}
 
-	// 2. On-disk cache. Survives process restart; populated by prior atmos sessions.
-	if diskCached, ok := p.loadFullCachedToken(); ok {
-		log.Debug("Using on-disk cached SSO token", "expiresAt", diskCached.ExpiresAt)
-		p.sessionStore.Put(key, diskCached)
-		return ssoCacheToCredentials(diskCached, p.region), nil
-	}
-
-	// Prepare AWS config once — both the refresh path and the device-auth path need it.
-	oidcClient, err := p.newOIDCClient(ctx)
+	// 2. On-disk cache and 3. refresh-token exchange, under a cross-process lock
+	//    (see loadOrRefreshDiskToken).
+	diskToken, ok, err := p.loadOrRefreshDiskToken(ctx)
 	if err != nil {
 		return nil, err
 	}
+	if ok {
+		p.sessionStore.Put(key, diskToken)
+		return ssoCacheToCredentials(diskToken, p.region), nil
+	}
 
-	// 3. Refresh-token exchange. Skipped if the on-disk cache had no refresh token
-	//    (e.g., written by an older atmos version, or registration expired).
-	if expired, ok := p.loadExpiredCachedTokenForRefresh(); ok {
-		if refreshed, rerr := tryRefreshToken(ctx, oidcClient, expired); rerr == nil {
-			log.Debug("SSO token refreshed without browser interaction")
-			if serr := p.saveFullCachedToken(refreshed); serr != nil {
-				log.Debug("Failed to persist refreshed token", "error", serr)
-			}
-			p.sessionStore.Put(key, refreshed)
-			return ssoCacheToCredentials(refreshed, p.region), nil
-		} else {
-			log.Debug("Refresh-token exchange failed; falling through to device authorization", "error", rerr)
-		}
+	// Prepare the OIDC client for the device-auth path.
+	oidcClient, err := p.newOIDCClient(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	// 4. Device-authorization flow. Requires an interactive terminal.
@@ -192,9 +183,14 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		return nil, err
 	}
 
-	if err := p.saveFullCachedToken(freshToken); err != nil {
-		log.Debug("Failed to cache SSO token", "error", err)
-	}
+	// Save under the cache lock so a process reading or refreshing the cache
+	// never interleaves with this write.
+	p.withTokenCacheLock(ctx, func() error {
+		if err := p.saveFullCachedToken(freshToken); err != nil {
+			log.Debug("Failed to cache SSO token", "error", err)
+		}
+		return nil
+	})
 	p.sessionStore.Put(key, freshToken)
 	return ssoCacheToCredentials(freshToken, p.region), nil
 }
@@ -611,74 +607,6 @@ func (m spinnerModel) checkResult() tea.Cmd {
 			return m.checkResult()()
 		}
 	}
-}
-
-// pollForAccessToken polls the device authorization endpoint until an access token is
-// available or times out. The returned ssoTokenCache carries AccessToken, RefreshToken
-// (when issued), and ExpiresAt; remaining fields are populated by runDeviceAuthFlow.
-func (p *ssoProvider) pollForAccessToken(ctx context.Context, oidcClient *ssooidc.Client, registerResp *ssooidc.RegisterClientOutput, authResp *ssooidc.StartDeviceAuthorizationOutput) (ssoTokenCache, error) {
-	var result ssoTokenCache
-	expiresIn := authResp.ExpiresIn
-	interval := authResp.Interval
-	// Normalize to a sane minimum to avoid divide-by-zero and busy-waiting.
-	if interval <= 0 {
-		interval = 1
-	}
-
-	intervalDur := time.Duration(interval) * time.Second
-
-	// Initial delay before first poll.
-	time.Sleep(intervalDur)
-	for i := 0; i < int(expiresIn/interval); i++ {
-		tokenResp, err := oidcClient.CreateToken(ctx, &ssooidc.CreateTokenInput{
-			ClientId:     registerResp.ClientId,
-			ClientSecret: registerResp.ClientSecret,
-			DeviceCode:   authResp.DeviceCode,
-			GrantType:    aws.String("urn:ietf:params:oauth:grant-type:device_code"),
-		})
-		if err == nil {
-			result.AccessToken = aws.ToString(tokenResp.AccessToken)
-			result.RefreshToken = aws.ToString(tokenResp.RefreshToken)
-			result.ExpiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
-			break
-		}
-
-		var authPendingErr *types.AuthorizationPendingException
-		var slowDownErr *types.SlowDownException
-
-		if errors.As(err, &authPendingErr) {
-			time.Sleep(intervalDur)
-			continue
-		} else if errors.As(err, &slowDownErr) {
-			// Slow down: double the interval as requested by the server.
-			intervalDur = time.Duration(interval*2) * time.Second
-			time.Sleep(intervalDur)
-			continue
-		}
-
-		return ssoTokenCache{}, errUtils.Build(errUtils.ErrSSOTokenCreationFailed).
-			WithExplanation("Failed to create AWS SSO access token").
-			WithHint("Ensure you completed the device authorization in your browser").
-			WithHint("The verification code may have expired - try authenticating again").
-			WithContext("provider", p.name).
-			WithContext("start_url", p.startURL).
-			WithExitCode(1).
-			Err()
-	}
-
-	if result.AccessToken == "" {
-		return ssoTokenCache{}, errUtils.Build(errUtils.ErrSSOTokenCreationFailed).
-			WithExplanation("AWS SSO authentication timed out waiting for browser confirmation").
-			WithHint("Complete the device authorization in your browser within the time limit").
-			WithHint("Visit the verification URL and enter the code displayed earlier").
-			WithHintf("Try again with `atmos auth login --provider=%s`; Atmos keeps its own SSO token cache, so `aws sso login` does not help", p.name).
-			WithContext("provider", p.name).
-			WithContext("start_url", p.startURL).
-			WithContext("region", p.region).
-			WithExitCode(1).
-			Err()
-	}
-	return result, nil
 }
 
 // Logout removes provider-specific credential storage.

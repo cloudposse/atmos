@@ -1,0 +1,64 @@
+# The latest published Atmos release and the edition journal entries it shipped.
+#
+# A journal entry that is not listed here has not been published yet, so it must be
+# dated after this release: a project pinned to the release date (or any earlier date)
+# while running this release must keep that release's behavior after upgrading.
+# Listed entries are frozen: re-dating or removing one changes what existing pins resolve to.
+#
+# Update this file whenever a release is published (see "Release boundary" in
+# docs/prd/editions.md). From the commit the release was built from, run:
+#
+#   ATMOS_REGENERATE_EDITION_RELEASE=v1.235.0@2026-11-25 go test ./pkg/edition -run TestJournalReleaseBoundary
+version: v1.234.1
+date: "2026-11-10"
+entries:
+  - date: "2025-02-11"
+    key: logs.file
+  - date: "2025-09-23"
+    key: logs.level
+  - date: "2025-10-16"
+    key: settings.terminal.pager
+  - date: "2025-12-06"
+    key: stacks.inherit.metadata
+  - date: "2026-02-10"
+    key: components.helmfile.use_eks
+  - date: "2026-07-06"
+    key: settings.terminal.help.filter
+  - date: "2026-07-13"
+    key: describe.error_mode
+  - date: "2026-07-13"
+    key: list.error_mode
+  - date: "2026-07-16"
+    key: describe.provenance
+  - date: "2026-07-17"
+    key: describe.component.filter
+  - date: "2026-08-05"
+    key: toolchain.use_lock_file
+  - date: "2026-09-12"
+    key: components.terraform.init.mode
+  - date: "2026-09-12"
+    key: components.terraform.init.upgrade
+  - date: "2026-09-14"
+    key: settings.experimental
+  - date: "2026-09-15"
+    key: vendor.max_concurrency
+  - date: "2026-10-01"
+    key: components.terraform.mocks.mode
+  - date: "2026-10-09"
+    key: toolchain.install
+  - date: "2026-10-13"
+    key: terraform.plan_diff.show_computed_attributes
+  - date: "2026-10-17"
+    key: docs.terraform.formatter_settings
+  - date: "2026-10-19"
+    key: hooks.registered_events
+  - date: "2026-10-19"
+    key: templates.step_delimiters
+  - date: "2026-10-20"
+    key: yaml_functions.explicit_tags
+  - date: "2026-10-26"
+    key: templates.settings.enabled
+  - date: "2026-10-26"
+    key: templates.settings.gomplate.enabled
+  - date: "2026-10-26"
+    key: templates.settings.sprig.enabled

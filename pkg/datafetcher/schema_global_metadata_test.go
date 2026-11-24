@@ -75,3 +75,36 @@ func TestGlobalMetadataSchema_ValidatesAllowlist(t *testing.T) {
 		})
 	}
 }
+
+// TestSourceSubdirMetadataSchema keeps discovered local modules valid without
+// allowing component-only source metadata at global scope in the manifest schema.
+// The legacy stack-config schema permits additional root properties.
+func TestSourceSubdirMetadataSchema(t *testing.T) {
+	for _, source := range []string{embeddedSchemaSource, "atmos://schema/stacks/stack-config/1.0"} {
+		t.Run(source, func(t *testing.T) {
+			data, err := (&atmosFetcher{}).FetchData(source)
+			require.NoError(t, err)
+			tests := []struct {
+				name   string
+				value  any
+				global bool
+				valid  bool
+			}{
+				{name: "module subdirectory", value: "modules/app", valid: true},
+				{name: "wrong type", value: 42},
+				{name: "global metadata", value: "modules/app", global: true, valid: source != embeddedSchemaSource},
+			}
+			for _, tc := range tests {
+				t.Run(tc.name, func(t *testing.T) {
+					doc := map[string]any{"metadata": map[string]any{"source_subdir": tc.value}}
+					if !tc.global {
+						doc = map[string]any{"components": map[string]any{"terraform": map[string]any{"app": doc}}}
+					}
+					result, err := gojsonschema.Validate(gojsonschema.NewBytesLoader(data), gojsonschema.NewGoLoader(doc))
+					require.NoError(t, err)
+					require.Equal(t, tc.valid, result.Valid(), "%v", result.Errors())
+				})
+			}
+		})
+	}
+}

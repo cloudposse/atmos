@@ -19,6 +19,11 @@ message Invocation {
   string component = 7;
   string component_type = 8;
   bool interactive = 9;
+  // The host's effective log level: "trace", "debug", "info", "warn", "error", or "off". Engine log events
+  // are diagnostic chatter, so a plugin returns LogEntry messages only for "debug" and "trace" and none
+  // for any other level, including the Atmos default "warn". Anything the user must act on belongs in a
+  // Diagnostic or an ErrorDetail instead. The host filters entries by its level as well.
+  string log_level = 10;
 }
 
 message Credentials {
@@ -74,7 +79,110 @@ message AuthenticateEvent {
     Credentials result = 3;
   }
 }
-message Diagnostic { string field = 1; string message = 2; }
+// SourceLocation points at a position in a user-authored file. Paths are
+// relative to the project root when the file lives below it; line and column
+// are 1-based and zero means unknown.
+message SourceLocation {
+  string file = 1;
+  uint32 line = 2;
+  uint32 column = 3;
+}
+
+// LogLevel is the severity of a LogEntry, from most to least verbose.
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_TRACE = 1;
+  LOG_LEVEL_DEBUG = 2;
+  LOG_LEVEL_INFO = 3;
+  LOG_LEVEL_WARN = 4;
+  LOG_LEVEL_ERROR = 5;
+}
+
+// LogEntry is one structured log event from a plugin's engine, for example a Terragrunt logger event.
+// A plugin delivers entries while the call runs through the Log service of the Atmos API, so a slow
+// operation shows progress as it happens. A response carries only the entries that could not be delivered
+// that way, in order, and never an entry that was delivered live. The host renders them through
+// the Atmos logger on the UI channel (stderr), scoped to the component and stack of the call, with secret
+// masking, at the level each entry carries. They are hidden at the Atmos default level and shown with
+// --logs-level=Debug or Trace. Entries never change the outcome of the call and are never written to the
+// data channel.
+// A plugin must not put evaluated values in message or fields; the host masks them anyway.
+message LogEntry {
+  LogLevel level = 1;
+  string message = 2;
+  // Structured fields of the event, rendered as key/value pairs.
+  map<string, string> fields = 3;
+  google.protobuf.Timestamp time = 4;
+  // Unit the event is about, relative to the project root, when the engine reports one.
+  string unit = 5;
+}
+
+// Log is served by Atmos on the Atmos API broker connection, next to the API services, and called by the
+// plugin. It delivers LogEntry messages while a call is still running, instead of in the response where they
+// show only when the call ends. Atmos renders each entry through its logger on the UI channel (stderr),
+// scoped to the component and stack of the call, with secret masking, and drops entries below the Atmos log
+// level. Entries arrive in the order of the calls, and a call returns only after Atmos has rendered its
+// entries, so a plugin that waits for its last call before it returns the result shows every entry before the
+// result. Delivery never changes the outcome of the call and is never part of a result. A call that fails with
+// UNAVAILABLE, PERMISSION_DENIED, UNIMPLEMENTED, or FAILED_PRECONDITION delivered nothing, and the plugin then
+// returns those entries in the logs field of its response. Entries delivered here are never repeated there.
+// Like the API services, Log accepts only calls that carry the active invocation ID in the
+// atmos-invocation-id metadata.
+service Log { rpc Write(LogRequest) returns (google.protobuf.Empty); }
+message LogRequest { repeated LogEntry entries = 1; }
+
+// ErrorDetail is the structured, user-facing description of a plugin failure.
+// A plugin returns it as a gRPC status detail (google.rpc.Status.details) on a
+// failed call, or inside Diagnostic.detail for a per-item failure that must not
+// fail the whole call. The host renders it with the Atmos error builder.
+//
+// Secret safety contract: code, summary, hints, location, unit, stack,
+// config_key, and operation are always shown and MUST NOT contain evaluated
+// values. detail is shown only when user_safe is true. When user_safe is false
+// the host omits detail from the error, names the unit and operation, hints at
+// the debug log level, and records the masked detail in the debug log only.
+// The host also applies secret masking to every field before display.
+message ErrorDetail {
+  // Stable machine-readable identifier such as "unsupported_setting" or "syntax_error".
+  string code = 1;
+  // One-line headline naming what failed, for example "Unsupported Terragrunt setting".
+  string summary = 2;
+  // Longer explanation. Shown only when user_safe is true.
+  string detail = 3;
+  // Actionable remedies, shown as hints in order.
+  repeated string hints = 4;
+  // Where the problem is authored.
+  SourceLocation location = 5;
+  // Component (unit) name, in Atmos terms.
+  string unit = 6;
+  // Stack the unit belongs to.
+  string stack = 7;
+  // Configuration key, setting, or block that caused the failure, for example "terraform_binary".
+  string config_key = 8;
+  // True when detail contains no evaluated values and is safe to print.
+  bool user_safe = 9;
+  // The operation that failed, such as "discover", "prepare", or "validate".
+  string operation = 10;
+  // Severity of the problem. Unset means ERROR.
+  Severity severity = 11;
+  // Log entries produced before the failure, in order. Only a failed call's status detail carries them,
+  // so that Debug and Trace output explains the failure. The host renders them like LogEntry messages
+  // of a successful response.
+  repeated LogEntry logs = 12;
+}
+
+// Severity classifies an ErrorDetail. A WARNING never fails a command: the host
+// prints it on the UI channel and continues. An ERROR fails the commands that
+// target the named unit, or the whole command when no unit is named.
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_ERROR = 1;
+  SEVERITY_WARNING = 2;
+}
+
+// Diagnostic describes one problem. field and message keep their original meaning;
+// detail adds the structured form and takes precedence when present.
+message Diagnostic { string field = 1; string message = 2; ErrorDetail detail = 3; }
 message ValidateResponse { repeated Diagnostic diagnostics = 1; }
 message Unsupported { string operation = 1; string reason = 2; }
 message RefreshRequest { ProviderRequest provider = 1; Credentials current = 2; }
@@ -122,4 +230,303 @@ message CommandEvent {
 }
 service Commands {
   rpc Run(CommandRequest) returns (stream CommandEvent);
+}
+
+// Component capabilities are independent. A configuration provider need not
+// implement an executor or replace the built-in Terraform component provider.
+// Negotiate each service through Info using component.discovery,
+// component.validation, component.preparation, and component.state respectively.
+// component.preparation is version 2: it adds terraform_arguments,
+// backend_generated, and execution. A version-1 host must reject the plugin.
+
+// ComponentValue uses cty's JSON type encoding and MessagePack value encoding.
+// Unlike protobuf.Struct, it preserves exact numbers, nulls, unknowns, and
+// collection types. Marks are removed from MessagePack and carried as paths.
+// An empty sensitive path marks the entire value. Never log these payloads.
+message ComponentValue {
+  bytes type_json = 1;
+  bytes msgpack = 2;
+  repeated ComponentValuePath sensitive_paths = 3;
+}
+message ComponentValuePath { repeated ComponentValueStep steps = 1; }
+message ComponentValueStep {
+  oneof selector {
+    string attribute = 1;
+    ComponentValue index = 2;
+  }
+}
+
+// Coordinates are logical identities, independent of generated/cache paths.
+// Native HCL adaptation has type terraform and engine terraform or opentofu.
+message ComponentAddress {
+  string stack = 1;
+  string component = 2;
+  string component_type = 3;
+}
+
+// Paths are relative to root_directory in the requested revision. A directory
+// watch includes additions/deletions; a file list alone cannot represent it.
+message ComponentSource {
+  enum Kind { KIND_UNSPECIFIED = 0; FILE = 1; DIRECTORY = 2; GLOB = 3; }
+  string path = 1;
+  Kind kind = 2;
+  string reason = 3;
+}
+message ComponentDependency {
+  enum Kind { KIND_UNSPECIFIED = 0; ORDER = 1; OUTPUT = 2; }
+  ComponentAddress target = 1;
+  Kind kind = 2;
+}
+message DiscoveredComponent {
+  ComponentAddress address = 1;
+  string provider = 2;
+  string engine = 3;
+  string source = 4;
+  ComponentValue configuration = 5;
+  repeated ComponentSource sources = 6;
+  repeated ComponentDependency dependencies = 7;
+}
+
+// Omission denies effects. The host must enforce the same policy on API calls;
+// this declaration is not an operating-system sandbox for trusted plugin code.
+message ComponentEffects {
+  bool commands = 1;
+  bool network = 2;
+  bool secrets = 3;
+  bool writes = 4;
+  bool state_reads = 5;
+}
+
+// Provider options have already passed host parsing/precedence. Map presence
+// distinguishes an unset option from an explicit false, zero, or empty value.
+// These are not Terraform argv. The provider validates supported semantics.
+message ComponentOperation {
+  string command = 1;
+  string mode = 2;
+  map<string, ComponentValue> options = 3;
+  // Resolved engine arguments are distinct from provider options. They let
+  // configuration semantics inspect flags such as plan/apply -destroy.
+  repeated string terraform_arguments = 4;
+}
+message DiscoverComponentsRequest {
+  Invocation invocation = 1;
+  string provider = 2;
+  string root_directory = 3;
+  string revision = 4;
+  repeated string include_paths = 5;
+  repeated string exclude_paths = 6;
+  // Explicit imports and automatic discovery share one evaluator.
+  repeated string imports = 7;
+  ComponentOperation operation = 8;
+  ComponentEffects effects = 9;
+  // Provider settings are distinct from resolved component configuration.
+  ComponentValue provider_configuration = 10;
+}
+message DiscoverComponentsResponse {
+  // Healthy components. One failing component must not hide the others.
+  repeated DiscoveredComponent components = 1;
+  // Per-component failures. A diagnostic whose detail names a unit and stack is
+  // reported only to commands that target that component; others keep working.
+  // A diagnostic without a unit is a project-level failure.
+  repeated Diagnostic diagnostics = 2;
+  // Engine log events produced while discovering. See LogEntry.
+  repeated LogEntry logs = 3;
+}
+service ComponentDiscovery {
+  rpc Discover(DiscoverComponentsRequest) returns (DiscoverComponentsResponse);
+}
+
+message ComponentRequest {
+  Invocation invocation = 1;
+  string provider = 2;
+  ComponentAddress address = 3;
+  string root_directory = 4;
+  string source = 5;
+  ComponentOperation operation = 6;
+  ComponentEffects effects = 7;
+  ComponentValue configuration = 8;
+  ComponentValue provider_configuration = 9;
+}
+// Validation must precede discovery/preparation effects. It cannot silently
+// substitute CLI mode for unsupported native semantics.
+service ComponentValidation {
+  rpc Validate(ComponentRequest) returns (ValidateResponse);
+}
+
+message ComponentStateIdentity {
+  string backend_type = 1;
+  ComponentValue backend = 2;
+  string workspace = 3;
+  // Relative backend paths are interpreted against this directory. It can be
+  // different from the directory where Atmos prepares Terraform execution.
+  string working_directory = 4;
+}
+message ComponentGeneratedFile {
+  string path = 1;
+  bytes content = 2;
+  // The adapter must reject unknown ownership policies, never overwrite by
+  // default. Content is evaluated bytes, not another template language.
+  string if_exists = 3;
+  bool sensitive = 4;
+  // Optional POSIX permission bits. Zero means the host default (0644, or 0600
+  // for sensitive files). The host keeps only owner/group/other read and
+  // execute bits plus owner write, and ignores the field on Windows.
+  uint32 mode = 5;
+  // True only for a literal file copied from beside the configuration unit,
+  // never for an explicit generate block. Absent means normal policy handling.
+  bool unit_file_copy = 6;
+}
+// Evaluated command metadata; the host executes it with the invocation's
+// environment, toolchain, cancellation, and I/O. Lists retain declaration order.
+message ComponentExecutionConfiguration {
+  repeated ComponentExtraArguments extra_arguments = 1;
+  repeated ComponentHook before_hooks = 2;
+  repeated ComponentHook after_hooks = 3;
+  repeated ComponentHook error_hooks = 4;
+  // Metadata evaluated as the apply command would see it. Providers set it when
+  // preparing a plan whose execution depends on the command, so a saved plan
+  // applied later runs the apply-time hooks recorded with the reviewed plan.
+  // Unset means the plan-time metadata applies unchanged; an empty message
+  // means apply adds nothing.
+  ComponentExecutionConfiguration apply = 5;
+}
+message ComponentExtraArguments {
+  repeated string commands = 1;
+  repeated string arguments = 2;
+  repeated string required_var_files = 3;
+  repeated string optional_var_files = 4;
+  map<string, string> environment = 5;
+}
+message ComponentHook {
+  string name = 1;
+  repeated string commands = 2;
+  repeated string execute = 3;
+  // Empty means the provisioned module directory; relative paths resolve there.
+  string working_directory = 4;
+  bool run_on_error = 5;
+  bool suppress_stdout = 6;
+  // Error hooks run when any pattern matches the errors from preceding phases.
+  repeated string on_errors = 7;
+}
+message PrepareComponentResponse {
+  string engine = 1;
+  string working_directory = 2;
+  string module_source = 3;
+  // The evaluated variables of the unit, an object. Numbers keep their exact decimal value, null and
+  // empty collections are preserved, and the value is wholly known: an unknown value is a plugin bug and
+  // the host rejects it naming the input. sensitive_paths mark every input path the unit declared
+  // sensitive. The host masks those values in all output and logs and keeps them out of variable files,
+  // exactly like secrets.
+  ComponentValue inputs = 4;
+  ComponentStateIdentity state = 5;
+  repeated ComponentGeneratedFile files = 6;
+  repeated ComponentDependency dependencies = 7;
+  repeated ComponentSource sources = 8;
+  repeated Diagnostic diagnostics = 9;
+  // A returned generated file owns the backend block. The host must not also
+  // emit its default backend file.
+  bool backend_generated = 10;
+  ComponentExecutionConfiguration execution = 11;
+  // Maps each input name to the authored file, line, and column that produced
+  // its value, for provenance reporting. Missing entries mean unknown origin.
+  map<string, SourceLocation> input_origins = 12;
+
+  // Fields 13-18 carry Terragrunt settings that decide how the host runs the unit. The host reads
+  // terraform_binary, errors, exclude, iam, and feature_flags (13-16 and 18). It does not read
+  // encryption (17) yet. A plugin that cannot honor a setting must reject it with an ErrorDetail
+  // instead of returning a value the host would silently ignore.
+  // Engine executable selected by terraform_binary. Empty means the engine of the component.
+  string terraform_binary = 13;
+  // errors block: retry and ignore policies. The host applies them around the engine subprocess.
+  ComponentErrorsConfiguration errors = 14;
+  // exclude block, set only when its condition holds and it applies to the current operation.
+  // The host skips the operation for the component and runs nothing. See ComponentExclude.
+  ComponentExclude exclude = 15;
+  // iam_role, iam_assume_role_session_name, iam_assume_role_duration, iam_web_identity_token.
+  // The host assumes the role, never the plugin.
+  ComponentIam iam = 16;
+  // encryption block as opaque, provider-defined data. The host ignores it.
+  ComponentValue encryption = 17;
+  // Feature flag name to its evaluated value rendered as a string. The plugin has already applied
+  // the flags while evaluating the unit, so they are reflected in every other field. The host keeps
+  // them with the prepared configuration for display and no host behavior depends on them. A plugin
+  // may leave this field unset.
+  map<string, string> feature_flags = 18;
+  // Engine log events produced while preparing. See LogEntry.
+  repeated LogEntry logs = 22;
+  // Authorization for an archive returned by a module registry. This value is
+  // sensitive and may be sent only to module_source_auth_origin.
+  ComponentValue module_source_authorization = 19;
+  string module_source_auth_origin = 20;
+  // Time spent resolving a tfr:// source, including its bounded retries.
+  uint64 registry_resolution_nanos = 21;
+  // True when an errors-block ignore policy matched a failure the plugin hit while preparing the unit,
+  // for example a registry resolution failure, so no source could be resolved. The host ends the unit's
+  // run successfully without executing it, as it does for an ignored source fetch. The remaining fields
+  // describe the unit as written.
+  bool run_ignored = 23;
+  // Name of the ignore policy that matched. Set with run_ignored.
+  string ignored_policy = 24;
+  // Message of the ignore policy that matched. Set with run_ignored.
+  string ignored_message = 25;
+}
+
+// ComponentErrorsConfiguration mirrors the Terragrunt errors block. The host retries or ignores a failed
+// engine command according to these policies, in declaration order.
+message ComponentErrorsConfiguration {
+  repeated ComponentRetryPolicy retry = 1;
+  repeated ComponentIgnorePolicy ignore = 2;
+}
+message ComponentRetryPolicy {
+  string name = 1;
+  // Regular expressions matched against command errors.
+  repeated string retryable_errors = 2;
+  uint32 max_attempts = 3;
+  uint32 sleep_interval_seconds = 4;
+}
+message ComponentIgnorePolicy {
+  string name = 1;
+  // Regular expressions matched against command errors.
+  repeated string ignorable_errors = 2;
+  string message = 3;
+  // Extra signals written for the caller, keyed by name.
+  map<string, ComponentValue> signals = 4;
+}
+// ComponentExclude mirrors the Terragrunt exclude block for the operation being prepared. It does not
+// carry no_run: the plugin applies no_run itself. The plugin sets the PrepareComponentResponse.exclude
+// field only when the host must not run the command, and then actions equals that command. A response
+// without the field means run the command. exclude_dependencies is informational for the host's graph.
+message ComponentExclude {
+  // Evaluated "if" condition. The host skips the operation when it is true and the field is set.
+  bool condition = 1;
+  // Commands the exclusion applies to; "all" and "all_except_output" are plugin vocabulary.
+  repeated string actions = 2;
+  bool exclude_dependencies = 3;
+}
+// ComponentIam mirrors the Terragrunt IAM settings. The host assumes the role for the unit's commands, on
+// top of the credentials of the invocation, unless an Atmos identity is selected explicitly.
+// The web identity token is a secret and must be carried as a sensitive value.
+message ComponentIam {
+  string role = 1;
+  string session_name = 2;
+  uint32 duration_seconds = 3;
+  ComponentValue web_identity_token = 4;
+}
+// Reevaluate immediately before the selected operation, after its dependencies.
+// Preparing configuration does not authorize executing infrastructure commands.
+service ComponentPreparation {
+  rpc Prepare(ComponentRequest) returns (PrepareComponentResponse);
+}
+
+message ResolveComponentStateResponse {
+  ComponentStateIdentity state = 1;
+  repeated ComponentSource sources = 2;
+  repeated Diagnostic diagnostics = 3;
+  // Engine log events produced while resolving. See LogEntry.
+  repeated LogEntry logs = 4;
+}
+// Resolve backend identity without preparing a component, running hooks,
+// writing generated files, or reading unrelated dependency outputs.
+service ComponentState {
+  rpc Resolve(ComponentRequest) returns (ResolveComponentStateResponse);
 }

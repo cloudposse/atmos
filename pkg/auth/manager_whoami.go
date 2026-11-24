@@ -75,7 +75,7 @@ func (m *manager) cacheWhoamiCredentials(identityName string, creds types.ICrede
 		// Still set the reference so callers can look up the in-memory credentials.
 		info.CredentialsRef = identityName
 	case !isSessionToken(creds):
-		if err := m.credentialStore.Store(identityName, creds, m.realm.Value); err == nil {
+		if err := m.storeNamedCredentials(identityName, creds); err == nil {
 			info.CredentialsRef = identityName
 			// Note: We keep info.Credentials populated for validation purposes.
 			// The Credentials field is marked with json:"-" yaml:"-" tags to prevent

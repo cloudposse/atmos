@@ -2197,3 +2197,12 @@ func TestServiceProvision_FailsClosedWhenExistingWorkdirBelongsToDifferentIdenti
 	_, ok := componentConfig[WorkdirPathKey]
 	assert.False(t, ok, "WorkdirPathKey must not be set when the existing workdir fails identity verification")
 }
+
+// A stamp recorded for the same local source survives a sync; a stamp of another source does not.
+func TestBuildLocalMetadata_PreservesStampOfTheSameSource(t *testing.T) {
+	existing := &WorkdirMetadata{Source: "components/terraform/vpc", SourceStamp: "stamp"}
+	same := buildLocalMetadata(&localMetadataParams{componentPath: "components/terraform/vpc", existingMetadata: existing})
+	assert.Equal(t, "stamp", same.SourceStamp)
+	other := buildLocalMetadata(&localMetadataParams{componentPath: "components/terraform/other", existingMetadata: existing})
+	assert.Empty(t, other.SourceStamp)
+}

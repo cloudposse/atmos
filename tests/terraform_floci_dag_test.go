@@ -1,4 +1,3 @@
-//nolint:forbidigo // This opt-in integration test is configured through environment variables.
 package tests
 
 import (
@@ -303,7 +302,7 @@ func runFlociGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 
 	cmdArgs := append([]string{"-C", dir}, args...)
-	cmd := exec.Command("git", cmdArgs...) //nolint:gosec // Test helper runs fixed git commands against temp fixtures.
+	cmd := exec.Command("git", cmdArgs...)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %s failed:\n%s", strings.Join(args, " "), string(output))
 }

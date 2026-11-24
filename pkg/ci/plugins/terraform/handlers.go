@@ -569,6 +569,16 @@ func (p *Plugin) uploadPlanfile(ctx *plugin.HookContext) error {
 		files = append(files, planfile.FileEntry{Name: planfile.LockFilename, Data: lf, Size: -1})
 	}
 
+	// Include the plan record when the component keeps one, so another runner can verify and apply the plan.
+	entry, closer, err := planfile.OpenBinding(planfilePath)
+	if err != nil {
+		return err
+	}
+	if closer != nil {
+		defer closer.Close()
+		files = append(files, entry)
+	}
+
 	metadata := p.buildPlanfileMetadata(ctx)
 	if err := metadata.Validate(); err != nil {
 		return errUtils.Build(errUtils.ErrPlanfileUploadFailed).WithCause(err).
@@ -721,7 +731,7 @@ func (p *Plugin) createPerOperationStatuses(ctx *plugin.HookContext, result *plu
 		})
 		switch {
 		case err != nil:
-			log.Warn("CI per-operation status creation skipped", logKeyName, opName, "error", err)
+			logOperationStatusError(opName, err)
 		case rc.Gate == ci.FeatureForkGate:
 			noteHeld(rc, "the per-operation status", logKeyName, opName)
 		default:
@@ -963,7 +973,8 @@ func runURL(hookCtx *plugin.HookContext) string {
 }
 
 // logCheckRunError logs check run errors at an appropriate level.
-// Token-related errors (missing GITHUB_TOKEN) are logged at Debug level since
+// Configuration gaps (a missing GitHub or Gitea token, or no usable Gitea API URL;
+// see configurationGapReason) are logged at Debug level since
 // they indicate a configuration gap rather than a runtime failure. A missing
 // component is expected and routine for bulk (--affected/--all) invocations'
 // global before-hook, which fires before components are resolved — the
@@ -971,8 +982,8 @@ func runURL(hookCtx *plugin.HookContext) string {
 // instead, so this is not a warning-worthy condition.
 // Other errors are logged at Warn level.
 func logCheckRunError(msg string, err error) {
-	if errors.Is(err, errUtils.ErrGitHubTokenNotFound) {
-		log.Debug(msg, "reason", "GITHUB_TOKEN not set")
+	if reason, ok := configurationGapReason(err); ok {
+		log.Debug(msg, "reason", reason)
 		return
 	}
 	if errors.Is(err, errUtils.ErrCICheckRunMissingComponent) {

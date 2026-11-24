@@ -442,7 +442,11 @@ func TestAKSIntegration_Cleanup_RemovesEntries(t *testing.T) {
 		ID:                       resourceID,
 		Region:                   "dev-rg",
 		UserPrefix:               "aks",
-		ExecArgs:                 []string{"azure", "aks", "token"},
+		// The subscription makes this the legacy atmos-aks-<name>-<rg>-<subscription>
+		// user, which Cleanup recognizes as its own; contexts that point at any
+		// other user are left alone.
+		AccountID: "sub-123",
+		ExecArgs:  []string{"azure", "aks", "token"},
 	}
 
 	mgr, err := kube.NewKubeconfigManager(kubeconfigPath, "")

@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/keyring"
 	"github.com/cloudposse/atmos/pkg/perf"
 	apiv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/api/v1"
+	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 )
 
 // InvocationMetadata is set by Plugin SDK calls back into the Atmos API.
@@ -24,13 +25,27 @@ const InvocationMetadata = "atmos-invocation-id"
 // Invocation scopes API services to a single active call. Namespace includes the
 // package, configured provider, realm, and configuration fingerprint.
 type Invocation struct {
-	Context     context.Context
-	Browser     api.Browser
-	HTTP        api.HTTP
-	Secrets     SecretReader
-	Keyring     keyring.Keyring
+	Context context.Context
+	Browser api.Browser
+	HTTP    api.HTTP
+	Secrets SecretReader
+	Keyring keyring.Keyring
+	// Logs shows the log entries the plugin delivers while the call runs. Nil grants no live delivery.
+	Logs        LogSink
 	Namespace   string
 	Interactive bool
+	// AwaitUser marks the call as waiting for the user and returns the function that ends the
+	// wait, so the call timeout does not run while a person signs in. Nil means no such pause;
+	// the native runtime sets it for interactive invocations with a call timeout.
+	AwaitUser func() (resume func())
+}
+
+// awaitUser starts a user wait when the invocation supports pausing its call timeout.
+func (i *Invocation) awaitUser() func() {
+	if i.AwaitUser == nil {
+		return func() {}
+	}
+	return i.AwaitUser()
 }
 
 // Server rejects API requests after their invocation has completed.
@@ -39,6 +54,7 @@ type Server struct {
 	apiv1.UnimplementedBrowserServer
 	apiv1.UnimplementedCredentialsServer
 	apiv1.UnimplementedSecretsServer
+	pluginv1.UnimplementedLogServer
 	storageMu sync.Mutex
 	mu        sync.RWMutex
 	calls     map[string]*activeInvocation
@@ -57,6 +73,7 @@ func (s *Server) Register(server *grpc.Server) {
 	apiv1.RegisterBrowserServer(server, s)
 	apiv1.RegisterCredentialsServer(server, s)
 	apiv1.RegisterSecretsServer(server, s)
+	pluginv1.RegisterLogServer(server, s)
 }
 
 // Begin grants API access until the returned cleanup function is called.

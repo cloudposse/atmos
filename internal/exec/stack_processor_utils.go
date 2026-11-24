@@ -19,6 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	configurationadapter "github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/condition"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/function/yamlsource"
@@ -961,6 +962,9 @@ func ProcessYAMLConfigFileWithContext(
 
 // importFileResult holds the result of processing a single import file in parallel.
 type importFileResult struct {
+	unitFragments                []map[string]any
+	yamlOnlyConfig               map[string]any
+	importedUnitSources          map[string]string
 	importMetadata               schema.StackImportMetadata
 	index                        int
 	importFile                   string
@@ -1230,6 +1234,10 @@ func processYAMLConfigFileWithContextInternal(
 	stackConfig.PreserveStackLiterals = true
 	atmosConfig = &stackConfig
 	var stackConfigs []map[string]any
+	// Units imported from a configuration provider are the base layer of the manifest: any YAML
+	// component of the same name, wherever it is imported, merges over the unit's own data.
+	var unitFragments []map[string]any
+	importedUnitSources := map[string]string{}
 	inheritedNestedImports = normalizeNestedImports(inheritedNestedImports)
 	if localBasePath == "" {
 		localBasePath = basePath
@@ -1383,6 +1391,11 @@ func processYAMLConfigFileWithContextInternal(
 			e := fmt.Errorf("%w: stack manifest %q\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 			return nil, nil, e
 		}
+	}
+
+	// A null mapping key (`null:` or `~:`) would panic JSON Schema validation and merging below.
+	if err := checkStackManifestNullKeys(stackConfigMap, relativeFilePath); err != nil {
+		return nil, nil, err
 	}
 
 	// Store resolved file-level sections in stackConfigMap so they're available during describe_stacks.
@@ -1634,6 +1647,23 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, impErr
 		}
 		imp = renderedImp
+		if fragment, handled, importErr := importConfigurationComponents(atmosConfig, imp, &importStruct, loadOptions); handled || importErr != nil {
+			if importErr != nil {
+				return nil, nil, importErr
+			}
+			if err := configurationadapter.MergeImportUnitSources(relativeFilePath, importedUnitSources, configurationadapter.ImportUnitSources(fragment)); err != nil {
+				return nil, nil, err
+			}
+			unitFragments = append(unitFragments, fragment)
+			// Report the provider import with the stack's other imports, keyed by its URI as
+			// remote imports are. It contributes no YAML, so its recorded configuration is empty.
+			importsConfigLock.Lock()
+			if _, recorded := importsConfig[imp]; !recorded {
+				importsConfig[imp] = map[string]any{}
+			}
+			importsConfigLock.Unlock()
+			continue
+		}
 
 		// Snapshot the accumulated context for the child import. The outer loop is
 		// sequential, so this captures only the sections from earlier siblings.
@@ -1843,7 +1873,10 @@ func processYAMLConfigFileWithContextInternal(
 					index:                        index,
 					importFile:                   file,
 					yamlConfig:                   importResult.DeepMergedConfig,
+					yamlOnlyConfig:               importResult.YAMLConfig,
+					unitFragments:                importResult.UnitFragments,
 					importMetadata:               importResult.ImportMetadata,
+					importedUnitSources:          importResult.ImportedUnitSources,
 					yamlConfigRaw:                importResult.StackConfig,
 					terraformOverridesInline:     importResult.TerraformOverridesInline,
 					terraformOverridesImports:    importResult.TerraformOverridesImports,
@@ -1864,6 +1897,10 @@ func processYAMLConfigFileWithContextInternal(
 		for _, result := range results {
 			if result.err != nil {
 				return nil, nil, result.err
+			}
+
+			if err := configurationadapter.MergeImportUnitSources(relativeFilePath, importedUnitSources, result.importedUnitSources); err != nil {
+				return nil, nil, err
 			}
 
 			importedMetadata, err = metadataScope.Merge(importedMetadata, result.importMetadata)
@@ -1896,8 +1933,10 @@ func processYAMLConfigFileWithContextInternal(
 				return nil, nil, err
 			}
 
-			// Append to stackConfigs in order.
-			stackConfigs = append(stackConfigs, result.yamlConfig)
+			// Keep provider defaults below all YAML layers, even when a unit arrives
+			// through a nested mixin after an earlier catalog override.
+			unitFragments = append(unitFragments, result.unitFragments...)
+			stackConfigs = append(stackConfigs, result.yamlOnlyConfig)
 
 			// Record metadata for this import.
 			// We record every time we encounter an import to track all files that import it,
@@ -1998,6 +2037,23 @@ func processYAMLConfigFileWithContextInternal(
 		stackConfigs = append(stackConfigs, stackConfigMap)
 	}
 
+	var yamlConfig map[string]any
+	// Imported units are the lowest layer, so the imports and the manifest itself deep-merge over
+	// them with the usual rules. Only two different units that share a component name conflict,
+	// including units that arrive through different YAML imports, so every manifest checks.
+	if len(unitFragments) > 0 {
+		// Preserve YAML separately before adding defaults, without recording provenance twice.
+		yamlConfig, err = m.Merge(atmosConfig, stackConfigs)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := applyHelmTypeOverrides(atmosConfig, yamlConfig, relativeFilePath); err != nil {
+			return nil, nil, err
+		}
+		configurationadapter.ApplyUnitOverrides(unitFragments, finalTerraformOverrides)
+		stackConfigs = append(slices.Clone(unitFragments), stackConfigs...)
+	}
+
 	// Deep-merge the stack manifest and all the imports
 	stackConfigsDeepMerged, err := m.MergeWithContext(atmosConfig, stackConfigs, mergeContext)
 	if err != nil {
@@ -2006,6 +2062,9 @@ func processYAMLConfigFileWithContextInternal(
 	}
 	if err := applyHelmTypeOverrides(atmosConfig, stackConfigsDeepMerged, relativeFilePath); err != nil {
 		return nil, nil, err
+	}
+	if len(unitFragments) == 0 {
+		yamlConfig = stackConfigsDeepMerged
 	}
 
 	// NOTE: We don't store merge context here because ProcessYAMLConfigFileWithContext
@@ -2018,6 +2077,9 @@ func processYAMLConfigFileWithContextInternal(
 	}
 	return &schema.StackManifestProcessingResult{
 		DeepMergedConfig:          stackConfigsDeepMerged,
+		YAMLConfig:                yamlConfig,
+		UnitFragments:             unitFragments,
+		ImportedUnitSources:       importedUnitSources,
 		ImportMetadata:            finalMetadata,
 		ImportsConfig:             importsConfig,
 		StackConfig:               stackConfigMap,

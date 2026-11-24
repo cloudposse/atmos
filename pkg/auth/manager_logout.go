@@ -56,8 +56,16 @@ func (m *manager) logoutIdentity(ctx context.Context, identityName string, delet
 	// Step 1: Delete keyring entry ONLY if deleteKeychain flag is set.
 	errs := m.deleteIdentityKeyringEntries(identityName, deleteKeychain, bestEffort)
 
+	// The configuration digest record describes the credential files Step 3 removes, so it is
+	// removed whether or not the keyring entry is kept.
+	m.deleteExternalStepDigest(identityName)
+
 	// Step 2: Clean up linked integrations (non-fatal).
 	m.cleanupIntegrations(ctx, identityName)
+
+	// Bind the auth chain and manager so AWS materializers resolve the root provider's
+	// spec.files.base_path in a fresh process; otherwise cleanup targets the default location.
+	_ = m.ensureIdentityHasManager(identityName)
 
 	// Step 3: Call identity-specific cleanup (each identity type handles its own file cleanup).
 	if err := identity.Logout(ctx); err != nil {
@@ -109,6 +117,9 @@ func (m *manager) deleteIdentityKeyringEntries(identityName string, deleteKeycha
 		log.Debug("Deleted keyring entry", logKeyIdentity, identityName, logKeyRealm, m.realm.Value)
 	}
 
+	// Also delete the identity's ambiguous previous-layout entry, which v1.234.1 deleted as its own.
+	errs = append(errs, m.deleteAmbiguousLegacyKeyringEntry(identityName, logKeyIdentity, bestEffort)...)
+
 	// Also delete legacy entry (pre-realm format) for backward compatibility cleanup.
 	if m.realm.Value != "" {
 		if err := m.credentialStore.Delete(identityName, ""); err != nil {
@@ -141,9 +152,10 @@ func (m *manager) cleanupIntegrations(ctx context.Context, identityName string) 
 		}
 
 		integration, err := integrations.Create(&integrations.IntegrationConfig{
-			Name:   integrationName,
-			Config: &integrationConfig,
-			Realm:  m.realm.Value,
+			Name:        integrationName,
+			Config:      &integrationConfig,
+			Realm:       m.realm.Value,
+			RealmSource: m.integrationRealmSource(),
 		})
 		if err != nil {
 			log.Warn("Failed to create integration for cleanup", "integration", integrationName, "error", err)
@@ -265,6 +277,9 @@ func (m *manager) deleteProviderKeyringEntries(providerName string, deleteKeycha
 			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, providerName, err))
 		}
 	}
+
+	// Also delete the provider's ambiguous previous-layout entry, which v1.234.1 deleted as its own.
+	errs = append(errs, m.deleteAmbiguousLegacyKeyringEntry(providerName, logKeyProvider, bestEffort)...)
 
 	// Also delete legacy entry (pre-realm format) for backward compatibility cleanup.
 	if m.realm.Value != "" {

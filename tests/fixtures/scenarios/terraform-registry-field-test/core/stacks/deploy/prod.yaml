@@ -1,0 +1,9 @@
+vars:
+  stage: prod
+components:
+  terraform:
+    producer:
+      metadata:
+        component: marker
+      vars:
+        name: prod-producer-v1

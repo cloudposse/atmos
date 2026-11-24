@@ -139,7 +139,7 @@ auth:
   <dd>**Required.** SAML SSO URL from your identity provider.</dd>
 
   <dt>`driver`</dt>
-  <dd>Optional. Authentication method: `Browser` (default, requires Playwright), `GoogleApps`, `Okta`, or `ADFS`.</dd>
+  <dd>Optional. Authentication method: `Browser` (default, requires Playwright), `GoogleApps`, `Okta`, or `ADFS`. Driver names are case-sensitive, and any other value fails when this provider is used to log in. `Browser` works with identity providers that submit the SAML response to the AWS SAML sign-in page from the login tab. A flow that opens the AWS sign-in in a new tab or window is not captured, and the login times out.</dd>
 </dl>
 
 :::note
@@ -436,6 +436,7 @@ When `cloud_environment` is set, Atmos automatically adjusts:
 - **API scopes** (Azure Resource Manager, Microsoft Graph, KeyVault)
 - **Blob storage URLs** used by `!terraform.state` YAML functions
 - **Portal URLs** for `atmos auth console`
+- **ACR login servers** (`azurecr.us`, `azurecr.cn`) for `azure/acr` integrations configured by registry name (see [ACR login](/cli/commands/azure/acr-login#sovereign-clouds))
 
 | Cloud | `cloud_environment` | Login Endpoint | Blob Storage Suffix |
 |-------|---------------------|----------------|---------------------|

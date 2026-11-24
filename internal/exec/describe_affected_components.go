@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -33,6 +34,12 @@ const (
 	affectedReasonStackValuesFile = "stack.values_files"
 	affectedReasonStackChart      = "stack.chart"
 	affectedReasonStackRepos      = "stack.repositories"
+	affectedReasonStackRepository = "stack.repository"
+	affectedReasonStackVersion    = "stack.version"
+	affectedReasonStackNamespace  = "stack.namespace"
+	affectedReasonStackName       = "stack.name"
+	affectedReasonStackCreateNS   = "stack.create_namespace"
+	affectedReasonStackRelease    = "stack.release"
 	affectedReasonDeleted         = "deleted"
 	affectedReasonDeletedStack    = "deleted.stack"
 
@@ -83,19 +90,23 @@ const (
 
 // Section name constants for isEqual comparisons.
 const (
-	sectionNameMetadata  = "metadata"
-	sectionNameVars      = "vars"
-	sectionNameEnv       = "env"
-	sectionNameSource    = "source"
-	sectionNameProvision = "provision"
-	sectionNameGenerate  = "generate"
-	sectionNamePaths     = "paths"
-	sectionNameManifests = "manifests"
-	sectionNameRender    = "render"
-	sectionNameValues    = "values"
-	sectionNameValuesF   = "values_files"
-	sectionNameChart     = "chart"
-	sectionNameRepos     = "repositories"
+	sectionNameMetadata   = "metadata"
+	sectionNameVars       = "vars"
+	sectionNameEnv        = "env"
+	sectionNameSource     = "source"
+	sectionNameProvision  = "provision"
+	sectionNameGenerate   = "generate"
+	sectionNamePaths      = "paths"
+	sectionNameManifests  = "manifests"
+	sectionNameRender     = "render"
+	sectionNameValues     = "values"
+	sectionNameValuesF    = "values_files"
+	sectionNameChart      = "chart"
+	sectionNameRepos      = "repositories"
+	sectionNameRepository = "repository"
+	sectionNameVersion    = "version"
+	sectionNameNamespace  = "namespace"
+	sectionNameName       = "name"
 
 	// Section name constants for aws/cloudformation-specific isEqual comparisons.
 	sectionNameStackName             = "stack_name"
@@ -977,7 +988,7 @@ func addCloudFormationSectionAffected(
 
 	for _, section := range sections {
 		value, localOk := (*componentSection)[section.name]
-		remoteValue, remoteOk := remoteCloudFormationSectionValue(remoteStacks, stackName, componentName, section.name)
+		remoteValue, remoteOk := remoteComponentSectionValue(remoteStacks, stackName, cfg.CloudFormationComponentType, componentName, section.name)
 
 		// Compare presence and values on both sides: a section present on
 		// only one side (added or removed) is a change, not just a differing
@@ -1002,10 +1013,8 @@ func addCloudFormationSectionAffected(
 	return nil
 }
 
-// remoteCloudFormationSectionValue reports whether the named aws/cloudformation
-// section exists on the remote-ref version of the component (regardless of
-// whether its value matches the local one), and returns that value if so.
-func remoteCloudFormationSectionValue(remoteStacks *map[string]any, stackName, componentName, sectionName string) (any, bool) {
+// remoteComponentSectionValue returns a section and its presence on the remote component.
+func remoteComponentSectionValue(remoteStacks *map[string]any, stackName, componentType, componentName, sectionName string) (any, bool) {
 	remoteStackSection, ok := (*remoteStacks)[stackName].(map[string]any)
 	if !ok {
 		return nil, false
@@ -1014,7 +1023,7 @@ func remoteCloudFormationSectionValue(remoteStacks *map[string]any, stackName, c
 	if !ok {
 		return nil, false
 	}
-	remoteComponentTypeSection, ok := remoteComponentsSection[cfg.CloudFormationComponentType].(map[string]any)
+	remoteComponentTypeSection, ok := remoteComponentsSection[componentType].(map[string]any)
 	if !ok {
 		return nil, false
 	}
@@ -1051,14 +1060,26 @@ func addHelmSectionAffected(
 		{sectionNameValuesF, affectedReasonStackValuesFile},
 		{sectionNameChart, affectedReasonStackChart},
 		{sectionNameRepos, affectedReasonStackRepos},
+		{sectionNameRepository, affectedReasonStackRepository},
+		{sectionNameVersion, affectedReasonStackVersion},
+		{sectionNameNamespace, affectedReasonStackNamespace},
+		{sectionNameName, affectedReasonStackName},
+		{cfg.HelmCreateNamespaceSectionName, affectedReasonStackCreateNS},
+		{cfg.HelmReleaseSectionName, affectedReasonStackRelease},
 	}
 
 	for _, section := range sections {
 		value, ok := (*componentSection)[section.name]
 		if !ok {
-			continue
-		}
-		if isComponentSectionEqual(remoteStacks, stackName, cfg.HelmComponentType, componentName, value, section.name) {
+			switch section.name {
+			case sectionNameRepository, sectionNameVersion, sectionNameNamespace, sectionNameName, cfg.HelmCreateNamespaceSectionName, cfg.HelmReleaseSectionName:
+				if _, remoteOK := remoteComponentSectionValue(remoteStacks, stackName, cfg.HelmComponentType, componentName, section.name); !remoteOK {
+					continue
+				}
+			default:
+				continue
+			}
+		} else if isComponentSectionEqual(remoteStacks, stackName, cfg.HelmComponentType, componentName, value, section.name) {
 			continue
 		}
 		err := addAffectedComponent(affected, atmosConfig, componentName, stackName, cfg.HelmComponentType,
@@ -1173,15 +1194,22 @@ func checkDependencyChangesIndexed(
 ) error {
 	// Get file/folder dependencies from dependencies.components or settings.depends_on.
 	deps := getFileFolderDependencies(*componentSection, settingsSection)
+	provider := configuration.WatchPaths(atmosConfig, settingsSection, deps)
+	watchIndex, err := configurationWatchIndex(atmosConfig, settingsSection, filesIndex)
+	if err != nil {
+		return err
+	}
 	if len(deps) > 0 {
+		index, matched := configurationMatchInputs(watchIndex, deps, provider)
 		isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChangedIndexed(
-			filesIndex,
-			deps,
+			index,
+			matched,
 		)
 		if err != nil {
 			return err
 		}
 		if isFolderOrFileChanged {
+			changedFileOrFolder = configuration.ConfiguredDependencyPath(deps, matched, changedFileOrFolder)
 			return addDependencyAffectedItem(
 				affected, atmosConfig, componentName, stackName, componentType,
 				componentSection, changedType, changedFileOrFolder,

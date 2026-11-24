@@ -34,7 +34,18 @@ import (
 // the test binary itself (via os.Executable) so they work on every platform without Unix-only tools.
 const testCredentialProcessJSONEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_JSON"
 
+// testCredentialBrokerEnv, when set to "1", turns the test binary into a fake credential_process broker
+// that returns the access key "AKIABROKER" followed by the value of BROKER_PROFILE in its own environment,
+// so a test can tell which environment the broker ran with.
+const testCredentialBrokerEnv = "_ATMOS_TEST_CREDENTIAL_BROKER"
+
 func TestMain(m *testing.M) {
+	// Act as the environment-sensitive credential_process broker when requested.
+	if os.Getenv(testCredentialBrokerEnv) == "1" {
+		fmt.Fprintf(os.Stdout, `{"Version":1,"AccessKeyId":"AKIABROKER%s","SecretAccessKey":"broker-secret"}`, os.Getenv("BROKER_PROFILE"))
+		os.Exit(0)
+	}
+
 	// Act as the fake credential_process helper when requested.
 	if out, ok := os.LookupEnv(testCredentialProcessJSONEnv); ok {
 		fmt.Fprint(os.Stdout, out)

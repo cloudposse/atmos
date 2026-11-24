@@ -42,6 +42,9 @@ var (
 	ErrPluginUnauthorized         = errors.New("plugin API invocation is not authorized")
 	ErrPluginPayloadTooLarge      = errors.New("plugin payload exceeds size limit")
 
+	// ErrPluginComponentsFailed identifies selected components whose configuration provider reported a failure.
+	ErrPluginComponentsFailed = errors.New("selected components failed configuration discovery; no infrastructure command was run")
+
 	// ErrPluginBundlePathForbidden rejects hidden, credential-like, or special files in a plugin bundle.
 	ErrPluginBundlePathForbidden = errors.New("plugin bundle contains a forbidden file")
 	// ErrPluginBundleExecutableInvalid rejects an executable that is not a native binary for its declared platform.
@@ -72,6 +75,40 @@ var (
 	ErrPluginUnlockedInCI = errors.New("plugin is declared but not locked; automatic installation is disabled in CI")
 	// ErrPluginFlagConflict identifies flags that cannot be combined.
 	ErrPluginFlagConflict = errors.New("plugin flags cannot be combined")
+	// ErrConfigurationImportConflict identifies two different imported provider units that would become
+	// one component of a stack. A YAML component of the same name is an override, not a conflict.
+	ErrConfigurationImportConflict = errors.New("provider import conflicts with another component definition")
+	// ErrConfigurationOverrideUnsupported identifies stack configuration that tries to change a setting
+	// a configuration provider owns, such as the state backend or the module of a unit.
+	ErrConfigurationOverrideUnsupported = errors.New("stack configuration cannot override a setting owned by the configuration provider")
+	// ErrConfigurationImportEmpty identifies a provider import that resolved to no components.
+	ErrConfigurationImportEmpty = errors.New("provider import matched no components")
+	// ErrComponentHookFailed identifies a provider-supplied hook that exited unsuccessfully or could not run.
+	ErrComponentHookFailed = errors.New("component hook failed")
+	// ErrComponentVarFileMissing identifies a required variable file that does not exist.
+	ErrComponentVarFileMissing = errors.New("required variable file does not exist")
+	// ErrComponentHookWorkingDirectory identifies a hook whose working directory does not exist.
+	ErrComponentHookWorkingDirectory = errors.New("hook working directory does not exist")
+	// ErrComponentMaxAttempts identifies a command that kept failing with a retryable error until its retry policy ran out of attempts.
+	ErrComponentMaxAttempts = errors.New("maximum retry attempts reached")
+	// ErrComponentBinaryChanged identifies a unit whose terraform_binary differs from the one it was discovered with.
+	ErrComponentBinaryChanged = errors.New("terraform_binary changed after discovery")
+	// ErrComponentRunIgnored ends a component run successfully after error handling ignored a failure in a preparatory step.
+	ErrComponentRunIgnored = errors.New("component run ended by an ignored error")
+	// ErrComponentExcluded ends a component run successfully because the provider excluded the operation.
+	ErrComponentExcluded = errors.New("component excluded from this operation")
+	// ErrProviderOption identifies a configuration provider option that is declared or supplied incorrectly.
+	ErrProviderOption = errors.New("invalid configuration provider option")
+	// ErrProviderOptionCollision identifies a provider option whose flag name an Atmos or another provider flag already uses.
+	ErrProviderOptionCollision = errors.New("configuration provider option collides with an existing flag")
+	// ErrExecutableModeUnsupported identifies a command or stack override that executable mode cannot honor.
+	ErrExecutableModeUnsupported = errors.New("not supported in executable mode")
+	// ErrExecutableNotFound identifies a missing or unusable terragrunt executable in executable mode.
+	ErrExecutableNotFound = errors.New("terragrunt executable not found")
+	// ErrExecutableVersion identifies a terragrunt executable that is older than the supported minimum.
+	ErrExecutableVersion = errors.New("terragrunt version is not supported")
+	// ErrComponentOutputCapture identifies output that could not be recorded for error hook matching.
+	ErrComponentOutputCapture = errors.New("failed to capture command output for error hooks")
 
 	ErrInvalidCredentialCodec    = errors.New("invalid credential codec")
 	ErrDuplicateCredentialCodec  = errors.New("duplicate credential codec")

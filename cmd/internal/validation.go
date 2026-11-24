@@ -48,7 +48,7 @@ func ValidateAtmosConfig(opts ...ValidateOption) error {
 		return err
 	}
 
-	if vCfg.CheckStack {
+	if vCfg.CheckStack && !atmosConfig.HasComponentDiscovery() {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
 			// Return an error with context instead of printing and exiting.

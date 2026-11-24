@@ -771,3 +771,25 @@ func TestExtractComponentConfig_InitPolicy(t *testing.T) {
 	assert.Equal(t, schema.TerraformInitReconfigureAlways, config.InitReconfigure)
 	assert.Equal(t, schema.TerraformInitUpgradeAlways, config.InitUpgrade)
 }
+
+func TestExtractComponentConfigUsesInvocationBackendChoice(t *testing.T) {
+	config := validAtmosConfig(t)
+	config.Components.Terraform.AutoGenerateBackendFile = true
+	sections := validSections()
+	info := &schema.ConfigAndStacksInfo{ComponentSection: sections}
+	info.SetBackendFileGeneration(false)
+	selected, err := ExtractComponentConfig(config, sections, "app", "dev")
+	require.NoError(t, err)
+	require.False(t, selected.AutoGenerateBackend)
+	state, err := extractConfigurationStateConfig(config, sections, "app", "dev")
+	require.NoError(t, err)
+	require.False(t, state.AutoGenerateBackend)
+	defaulted, err := ExtractComponentConfig(config, validSections(), "app", "dev")
+	require.NoError(t, err)
+	require.True(t, defaulted.AutoGenerateBackend)
+	forged := validSections()
+	forged["_backend_file_generation"] = false
+	defaulted, err = ExtractComponentConfig(config, forged, "app", "dev")
+	require.NoError(t, err)
+	require.True(t, defaulted.AutoGenerateBackend)
+}

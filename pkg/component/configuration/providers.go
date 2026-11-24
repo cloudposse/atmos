@@ -1,0 +1,92 @@
+package configuration
+
+import (
+	"context"
+	"maps"
+	"slices"
+	"sync"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// builtinProviders are the configuration providers Atmos knows by name. A section that selects one is a
+// provider section even before its plugin package is installed, so a missing package is reported.
+var builtinProviders = map[string]bool{"terragrunt": true}
+
+// ProviderCatalog lists the configuration providers that the enabled plugin packages export.
+// The boolean result is false when an enabled package's exports cannot be read without installing it.
+type ProviderCatalog func(ctx context.Context, config *schema.AtmosConfiguration) (names map[string]bool, complete bool, err error)
+
+var catalogs = struct {
+	sync.RWMutex
+	value ProviderCatalog
+}{}
+
+// RegisterProviderCatalog sets the catalog that tells provider sections from unrelated mappings under
+// `components.terraform`. It is registered once during host composition.
+func RegisterProviderCatalog(catalog ProviderCatalog) error {
+	defer perf.Track(nil, "configuration.RegisterProviderCatalog")()
+
+	if catalog == nil {
+		return errUtils.ErrPluginInvalidConfig
+	}
+	catalogs.Lock()
+	defer catalogs.Unlock()
+	if catalogs.value != nil {
+		return errUtils.ErrDuplicatePluginExtension
+	}
+	catalogs.value = catalog
+	return nil
+}
+
+// providerName is the configuration provider a `components.terraform` section selects.
+func providerName(section string, settings *schema.ComponentConfiguration) string {
+	if settings.Provider != "" {
+		return settings.Provider
+	}
+	return section
+}
+
+// selectProviders keeps only the `components.terraform` sections that select a configuration provider:
+// a built-in provider name or one an enabled plugin package exports. Any other mapping, such as a
+// team's own `team_defaults: {enabled: true}`, is ignored as it was before configuration providers
+// existed, so it neither starts a provider session nor appears as a provider section. When the exports
+// cannot be determined, every section is kept and the provider that uses it reports the problem.
+func selectProviders(ctx context.Context, config *schema.AtmosConfiguration) {
+	sections := config.Components.Terraform.ConfigurationProviders
+	var unknown []string
+	for _, section := range slices.Sorted(maps.Keys(sections)) {
+		settings := sections[section]
+		if !builtinProviders[providerName(section, &settings)] {
+			unknown = append(unknown, section)
+		}
+	}
+	if len(unknown) == 0 {
+		return
+	}
+	catalogs.RLock()
+	catalog := catalogs.value
+	catalogs.RUnlock()
+	if catalog == nil {
+		return
+	}
+	exported, complete, err := catalog(ctx, config)
+	if err != nil || !complete {
+		log.Debug("Could not determine the configuration providers of the plugin packages; keeping every section under components.terraform", "error", err)
+		return
+	}
+	kept := maps.Clone(sections)
+	for _, section := range unknown {
+		settings := sections[section]
+		name := providerName(section, &settings)
+		if exported[name] {
+			continue
+		}
+		log.Debug("Ignoring a section under components.terraform that selects no known configuration provider", "section", section, "provider", name)
+		delete(kept, section)
+	}
+	config.Components.Terraform.ConfigurationProviders = kept
+}

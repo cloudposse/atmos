@@ -84,6 +84,20 @@ func TestInstalledReportsCorruptionDistinctFromAbsence(t *testing.T) {
 	require.NotErrorIs(t, err, errUtils.ErrPluginCacheCorrupt, "an absent release is not corrupt")
 }
 
+func TestDiscoveryDirectoryDoesNotVerifyPayload(t *testing.T) {
+	service, release, _ := installFixture(t)
+	payload, err := service.Cache.Store(t.Context(), release, CurrentPlatform(), service.Descriptors)
+	require.NoError(t, err)
+	entry := lockedEntry(release)
+	require.NoError(t, os.WriteFile(filepath.Join(payload, "planted"), []byte("x"), 0o600))
+
+	directory, err := service.Cache.DiscoveryDirectory(entry, CurrentPlatform())
+	require.NoError(t, err)
+	require.Equal(t, payload, directory)
+	_, err = service.Cache.Installed(entry, CurrentPlatform())
+	require.ErrorIs(t, err, errUtils.ErrPluginCacheCorrupt, "activation still verifies payload bytes")
+}
+
 func TestInstalledTreatsDamagedLayoutAsCorruption(t *testing.T) {
 	service, release, _ := installFixture(t)
 	payload, err := service.Cache.Store(t.Context(), release, CurrentPlatform(), service.Descriptors)

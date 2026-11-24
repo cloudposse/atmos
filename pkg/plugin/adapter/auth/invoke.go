@@ -33,7 +33,8 @@ func (d *Definition) invoke(ctx context.Context, name, realm string, settings ma
 		return err
 	}
 	return d.transaction(ctx, namespace, func(ctx context.Context) error {
-		handle, err := native.Start(ctx, d.Executable, native.WithDirectory(d.Directory), native.WithDescription(d.Expected), native.WithCallTimeout(d.Timeout))
+		handle, err := native.Start(ctx, d.Executable, native.WithDirectory(d.Directory), native.WithDescription(d.Expected),
+			native.WithCallTimeout(d.Timeout), native.WithInteractionLimit(d.InteractionLimit), native.WithPackageAlias(d.Alias))
 		if err != nil {
 			return err
 		}
@@ -61,11 +62,18 @@ func toStruct(value map[string]any) (*structpb.Struct, error) {
 	return result, nil
 }
 
+// awaitUser pauses the package timeout while the user completes a prompt the plugin sent.
+func (c *invocation) awaitUser() func() { return c.handle.AwaitUser(c.request.GetId()) }
+
 // receiveCredentials handles at most one interaction and requires the credential
-// result to terminate the bounded event stream.
-func receiveCredentials(stream grpc.ServerStreamingClient[pluginv1.AuthenticateEvent], interact func(*pluginv1.Interaction) error) (*pluginv1.Credentials, error) {
+// result to terminate the bounded event stream. Once a prompt has been shown, the plugin
+// is waiting for the user until its next event arrives, so awaitUser (when not nil) pauses
+// the call timeout until then. Progress events do not end that wait.
+func receiveCredentials(stream grpc.ServerStreamingClient[pluginv1.AuthenticateEvent], interact func(*pluginv1.Interaction) error, awaitUser func() func()) (*pluginv1.Credentials, error) {
 	// Progress is bounded and not blindly printed: plugin text can contain secrets.
 	interactionSeen := false
+	resume := func() {}
+	defer func() { resume() }()
 	for range maxCredentialEvents {
 		event, err := stream.Recv()
 		if err != nil {
@@ -79,11 +87,16 @@ func receiveCredentials(stream grpc.ServerStreamingClient[pluginv1.AuthenticateE
 			if err := interact(prompt); err != nil {
 				return nil, err
 			}
+			if awaitUser != nil {
+				resume = awaitUser()
+			}
 			continue
 		}
 		if event.GetResult() == nil {
 			continue
 		}
+		// The user finished signing in; the rest of the stream is plugin work again.
+		resume()
 		result := event.GetResult()
 		if _, err := stream.Recv(); !errors.Is(err, io.EOF) {
 			return nil, errUtils.ErrPluginProtocol

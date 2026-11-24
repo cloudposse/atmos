@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -40,6 +42,15 @@ const (
 //
 //nolint:gocritic
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+	return InitCliConfigWithContext(context.Background(), configAndStacksInfo, processStacks)
+}
+
+// InitCliConfigWithContext retains cancellation for invocation-owned configuration providers.
+//
+//nolint:gocritic // Copy invocation options; initialization must not mutate the caller.
+func InitCliConfigWithContext(ctx context.Context, configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+	defer perf.Track(nil, "config.InitCliConfigWithContext")()
+
 	atmosConfig, err := processAtmosConfigs(&configAndStacksInfo)
 	if err != nil {
 		return atmosConfig, err
@@ -81,6 +92,10 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		}
 	}
 
+	atmosConfig.ComponentProviderOptions = configAndStacksInfo.ComponentProviderOptions
+	if err := configuration.Attach(ctx, &atmosConfig, configAndStacksInfo.SubCommand); err != nil {
+		return atmosConfig, err
+	}
 	atmosConfig.Initialized = true
 	return atmosConfig, nil
 }
@@ -648,11 +663,11 @@ func processStackConfigs(atmosConfig *schema.AtmosConfiguration, configAndStacks
 		includeStackAbsPaths,
 		excludeStackAbsPaths,
 	)
-	if err != nil {
+	if err != nil && (!atmosConfig.AllowsEmptyStackInventory() || !errors.Is(err, errUtils.ErrNoStackManifestsFound)) {
 		return err
 	}
 
-	if len(stackFiles.AbsolutePaths) < 1 {
+	if len(stackFiles.AbsolutePaths) < 1 && !atmosConfig.AllowsEmptyStackInventory() {
 		j, err := u.ConvertToYAML(includeStackAbsPaths)
 		if err != nil {
 			return err
@@ -660,7 +675,7 @@ func processStackConfigs(atmosConfig *schema.AtmosConfiguration, configAndStacks
 		errorMessage := fmt.Sprintf("\nno stack manifests found in the provided "+
 			"paths:\n%s\n\nCheck if `base_path`, 'stacks.base_path', 'stacks.included_paths' and 'stacks.excluded_paths' are correctly set in CLI config "+
 			"files or ENV vars.", j)
-		return errors.New(errorMessage)
+		return fmt.Errorf("%w: %s", errUtils.ErrNoStackManifestsFound, errorMessage)
 	}
 
 	atmosConfig.StackConfigFilesAbsolutePaths = stackFiles.AbsolutePaths

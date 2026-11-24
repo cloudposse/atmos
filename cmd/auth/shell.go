@@ -141,6 +141,12 @@ func resolveIdentityNameForShell(cmd *cobra.Command, v *viper.Viper, authManager
 		identityName = v.GetString(IdentityFlagName)
 	}
 
+	// `--identity=false` disables authentication; an unauthenticated shell is
+	// just the user's own shell, so reject it instead of looking up "false".
+	if err := checkIdentityNotDisabled("shell", identityName); err != nil {
+		return "", err
+	}
+
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue
 

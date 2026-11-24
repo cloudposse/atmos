@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -17,7 +18,7 @@ const malformedYqDefault = `.missing // (`
 
 func TestTerraformLookupErrorHandlersWithMalformedYqDefault(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
-	lookup := &terraformStateLookup{yamlFunc: "!terraform.output vpc " + malformedYqDefault, stack: "dev", component: "vpc", output: malformedYqDefault}
+	lookup := &terraformcomponent.TerraformStateLookup{YamlFunc: "!terraform.output vpc " + malformedYqDefault, Stack: "dev", Component: "vpc", Output: malformedYqDefault}
 	notProvisioned := fmt.Errorf("not yet: %w", errUtils.ErrTerraformStateNotProvisioned)
 
 	t.Run("output error keeps the original recoverable error", func(t *testing.T) {
@@ -41,21 +42,13 @@ func TestTerraformLookupErrorHandlersWithMalformedYqDefault(t *testing.T) {
 }
 
 func TestResolveTerraformOutputWithMocksMalformedExpression(t *testing.T) {
-	lookup := &terraformStateLookup{stack: "dev", component: "vpc", output: ".vpc_id["}
+	lookup := &terraformcomponent.TerraformStateLookup{Stack: "dev", Component: "vpc", Output: ".vpc_id["}
 
-	value, err := resolveTerraformOutputWithMocks(&schema.AtmosConfiguration{}, lookup, map[string]any{"vpc_id": "vpc-mock"}, nil, nil)
+	value, err := terraformExecutor.ResolveTerraformOutputWithMocks(&schema.AtmosConfiguration{}, lookup, map[string]any{"vpc_id": "vpc-mock"}, nil, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "against component mocks")
 	assert.Nil(t, value)
-}
-
-func TestTerraformMocksModeGuards(t *testing.T) {
-	assert.Equal(t, schema.TerraformMocksModeFallback, terraformMocksMode(nil))
-
-	invalid := &schema.AtmosConfiguration{}
-	invalid.Components.Terraform.Mocks.Mode = "bogus"
-	require.NoError(t, validateTerraformMocksMode(invalid, nil), "a nil stack info means mocks are off")
 }
 
 func TestTerraformLookupAuth(t *testing.T) {
@@ -68,9 +61,9 @@ func TestTerraformLookupAuth(t *testing.T) {
 	// AuthDisabled without an AuthManager still propagates downstream through the wrapper.
 	stackInfo := &schema.ConfigAndStacksInfo{AuthDisabled: true}
 	_, authManager = terraformLookupAuth(atmosConfig, stackInfo)
-	wrapper, ok := authManager.(*authContextWrapper)
+	wrapper, ok := authManager.(*terraformcomponent.AuthContextWrapper)
 	require.True(t, ok)
-	assert.Same(t, stackInfo, wrapper.stackInfo)
+	assert.Same(t, stackInfo, wrapper.StackInfo)
 
 	// Auth enabled with no manager passes nothing through.
 	_, authManager = terraformLookupAuth(atmosConfig, &schema.ConfigAndStacksInfo{})

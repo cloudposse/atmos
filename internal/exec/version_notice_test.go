@@ -13,10 +13,20 @@ import (
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
+// useReleasedVersion sets a parseable current version; the default development version "test"
+// cannot be ordered against a release, so it never receives an update suggestion.
+func useReleasedVersion(t *testing.T) {
+	t.Helper()
+	original := version.Version
+	version.Version = "1.0.0"
+	t.Cleanup(func() { version.Version = original })
+}
+
 func TestVersionExecuteUsesInjectedNotice(t *testing.T) {
-	t.Parallel()
+	useReleasedVersion(t)
 	var notified string
 	v := versionExec{
 		atmosConfig:                &schema.AtmosConfiguration{Version: schema.Version{Check: schema.VersionCheck{Enabled: true}}},
@@ -60,6 +70,7 @@ func TestVersionDefaultNotice(t *testing.T) {
 }
 
 func TestVersionStructuredOutputDoesNotNotify(t *testing.T) {
+	useReleasedVersion(t)
 	for _, format := range []string{"json", "yaml"} {
 		t.Run(format, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer

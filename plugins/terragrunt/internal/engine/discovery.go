@@ -1,0 +1,600 @@
+package engine
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"maps"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
+	"github.com/gruntwork-io/terragrunt/pkg/config"
+	"github.com/gruntwork-io/terragrunt/pkg/log"
+	"github.com/spf13/afero"
+	"github.com/zclconf/go-cty/cty"
+
+	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
+)
+
+// errDependencyConfigPath rejects a dependency whose config_path is not a string.
+var errDependencyConfigPath = errors.New("dependency config_path must be a string")
+
+// canonicalPath preserves physical ancestor identity for files generated only in
+// the discovery overlay. Actual existence is checked through the active FS.
+func canonicalPath(path string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		return resolved, nil
+	}
+	if !os.IsNotExist(err) {
+		return "", err
+	}
+	parent := filepath.Dir(path)
+	if parent == path {
+		return "", err
+	}
+	resolved, err = canonicalPath(parent)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(resolved, filepath.Base(path)), nil
+}
+
+// logicalPath resolves symlinks in a configuration file's directory but not in the file
+// itself. Like upstream Terragrunt, a symlinked terragrunt.hcl is a unit at the place the
+// link lives, and the configuration is read through the link.
+func logicalPath(path string) (string, error) {
+	dir, err := canonicalPath(filepath.Dir(path))
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, filepath.Base(path)), nil
+}
+
+func within(path, directory string) bool {
+	rel, err := filepath.Rel(directory, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// discoveryResolver evaluates one configuration file in the discovery overlay.
+type discoveryResolver func(context.Context, *model.Request, afero.Fs) (*model.Resolution, error)
+
+// projectDiscovery holds one inventory pass. Its overlay is invocation-local:
+// generated HCL retains its original virtual path and no source files or state
+// are moved or written.
+type projectDiscovery struct {
+	ctx       context.Context
+	request   *model.Request
+	root      string
+	evaluate  discoveryResolver
+	overlay   afero.Fs
+	result    *model.Resolution
+	templates map[string]bool
+	// generated records units and stacks reached through parent traversal so an
+	// independent pass cannot discover materialized children again.
+	generated map[string]bool
+	// ownedTrees holds directories of stacks that failed before their outputs could be listed, so
+	// stale materialized children under them are not discovered as standalone units.
+	ownedTrees []string
+	// childFailures holds generated children that failed, with their generation root, so the
+	// failures of stacks that turn out to be templates can be dropped.
+	childFailures []childFailure
+}
+
+// childFailure is a generated child recorded at its own address so its siblings stay usable.
+type childFailure struct {
+	generationRoot string
+	failure        model.UnitFailure
+}
+
+// discoverProject discovers live stacks first, then standalone units that no
+// stack owns, and rejects colliding Atmos identities.
+func discoverProject(ctx context.Context, request *model.Request) (*model.Resolution, error) {
+	return discoverProjectWithResolver(ctx, request, resolve)
+}
+
+func discoverProjectWithResolver(ctx context.Context, request *model.Request, evaluate discoveryResolver) (*model.Resolution, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	root, err := canonicalPath(request.BasePath)
+	if err != nil {
+		return nil, err
+	}
+	scan, err := discoveryPaths(root, request.IncludedPaths, request.ExcludedPaths)
+	if err != nil {
+		return nil, err
+	}
+	d := &projectDiscovery{
+		ctx: ctx, request: request, root: root, evaluate: evaluate,
+		overlay:   afero.NewCopyOnWriteFs(afero.NewReadOnlyFs(afero.NewOsFs()), afero.NewMemMapFs()),
+		result:    &model.Resolution{Warnings: scan.Warnings},
+		templates: map[string]bool{},
+		generated: map[string]bool{},
+	}
+	if err := d.discoverStacks(scan.Stacks); err != nil {
+		return nil, err
+	}
+	if err := d.discoverStandaloneUnits(scan.Units); err != nil {
+		return nil, err
+	}
+	slices.SortFunc(d.result.Inventory, func(a, b model.DiscoveredUnit) int { return strings.Compare(a.Stack+"/"+a.Name, b.Stack+"/"+b.Name) })
+	d.result.Warnings = append(d.result.Warnings, featureOverrideWarnings(request.Features, d.result.Inventory)...)
+	if err := checkIdentityCollisions(d.root, d.result.Inventory); err != nil {
+		return nil, err
+	}
+	return d.result, nil
+}
+
+func isDiscoveryCancellation(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+func (d *projectDiscovery) nameFor(dir string) string {
+	rel, _ := filepath.Rel(d.root, dir)
+	if rel == "." {
+		return "default"
+	}
+	return filepath.ToSlash(rel)
+}
+
+func (d *projectDiscovery) parse(path string, generate bool) (*model.Resolution, error) {
+	req := *d.request
+	req.Path, req.Phase = path, "discover"
+	if generate {
+		req.Command = "generate"
+	}
+	if err := d.ctx.Err(); err != nil {
+		return nil, err
+	}
+	resolved, err := d.evaluate(d.ctx, &req, d.overlay)
+	if contextErr := d.ctx.Err(); contextErr != nil {
+		return nil, contextErr
+	}
+	return resolved, err
+}
+
+// discoverStacks visits live stacks. Catalog stack templates may require values
+// supplied by a live stack, so their errors wait until successful roots have
+// identified the referenced templates.
+func (d *projectDiscovery) discoverStacks(stacks []string) error {
+	failures := map[string]error{}
+	for _, path := range stacks {
+		if !d.independentStack(path) {
+			continue
+		}
+		if err := d.discoverStack(path); err != nil {
+			if isDiscoveryCancellation(err) {
+				return err
+			}
+			failures[path] = err
+			// Outputs of an earlier generation may remain on disk and still belong to this stack.
+			d.claimDeclaredOutputs(path)
+		}
+	}
+	for _, path := range stacks {
+		if err := failures[path]; err != nil && d.independentStack(path) {
+			// The components of a stack that cannot be generated are unknown, so the stack file itself is the unit.
+			d.result.Failures = append(d.result.Failures, model.UnitFailure{Stack: d.nameFor(filepath.Dir(path)), Name: filepath.Base(path), Err: problemFor(err, path)})
+		}
+	}
+	// Templates and generated child stacks discovered before their parent are not independent roots.
+	d.result.Inventory = slices.DeleteFunc(d.result.Inventory, func(unit model.DiscoveredUnit) bool { return !d.independentStack(unit.GenerationRoot) })
+	for _, child := range d.childFailures {
+		if d.independentStack(child.generationRoot) {
+			d.result.Failures = append(d.result.Failures, child.failure)
+		}
+	}
+	return nil
+}
+
+// discoverStandaloneUnits visits units that no stack owns. A unit already
+// materialized by a stack (for example with no_dot_terragrunt_stack, or left on
+// disk by an earlier generate) belongs to that stack and is not added twice.
+func (d *projectDiscovery) discoverStandaloneUnits(units []string) error {
+	for _, path := range units {
+		if d.skipped(path) || d.generated[path] || d.ownedByFailedStack(path) {
+			continue
+		}
+		dir := filepath.Dir(path)
+		stack, name := d.nameFor(filepath.Dir(dir)), filepath.Base(dir)
+		if dir == d.root {
+			stack, name = "default", "root"
+		}
+		// One failing unit is recorded and reported on its own; the other units stay usable.
+		if err := d.visit(path, &unitPlacement{stack: stack, name: name}, 0); err != nil {
+			if isDiscoveryCancellation(err) {
+				return err
+			}
+			d.result.Failures = append(d.result.Failures, model.UnitFailure{Stack: stack, Name: filepath.ToSlash(name), Err: problemFor(err, path)})
+		}
+	}
+	return nil
+}
+
+// unitPlacement is the Atmos identity and provenance inherited through nested stacks.
+type unitPlacement struct {
+	stack, name, generationRoot string
+	files, folders              []string
+}
+
+func (p *unitPlacement) child(name, source string, files []string) *unitPlacement {
+	return &unitPlacement{
+		stack: p.stack, name: filepath.Join(p.name, name), generationRoot: p.generationRoot,
+		files: files, folders: append(slices.Clone(p.folders), source),
+	}
+}
+
+func (d *projectDiscovery) visit(path string, placement *unitPlacement, depth int) error {
+	if depth > maxStackDepth {
+		return &model.Problem{Code: model.CodeEvaluationError, Summary: "Terragrunt stacks are nested too deeply", Detail: fmt.Sprintf("Nested `terragrunt.stack.hcl` generation exceeded %d levels, which usually means a stack includes itself.", maxStackDepth), Hints: []string{"Remove the circular `stack` reference."}, File: path, Safe: true}
+	}
+	resolved, err := d.parse(path, false)
+	if err != nil {
+		return err
+	}
+	if filepath.Base(path) == stackFile {
+		return d.visitStack(resolved, placement, depth)
+	}
+	return d.visitUnit(path, resolved, placement)
+}
+
+func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement *unitPlacement, depth int) error {
+	for _, source := range resolved.OwnedSources {
+		d.templates[source] = true
+	}
+	for _, path := range resolved.OwnedPaths {
+		if logical, err := logicalPath(path); err == nil {
+			d.generated[logical] = true
+		}
+	}
+	files := append(slices.Clone(placement.files), resolved.Files...)
+	for _, child := range slices.Sorted(maps.Keys(resolved.StackConfigs)) {
+		source := resolved.StackSources[child]
+		d.templates[source] = true
+		if logical, err := logicalPath(resolved.StackConfigs[child]); err == nil {
+			d.generated[logical] = true
+		}
+		if err := d.visitChild(resolved.StackConfigs[child], placement.child(resolved.Stacks[child], source, files), depth); err != nil {
+			return err
+		}
+	}
+	for _, child := range slices.Sorted(maps.Keys(resolved.UnitConfigs)) {
+		source := resolved.UnitSources[child]
+		d.templates[source] = true
+		if logical, err := logicalPath(resolved.UnitConfigs[child]); err == nil {
+			d.generated[logical] = true
+		}
+		if err := d.visitChild(resolved.UnitConfigs[child], placement.child(child, source, files), depth); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// visitChild visits a generated child. Only cancellation stops the stack; any other failure is
+// recorded at the child's own address so its siblings stay usable.
+func (d *projectDiscovery) visitChild(path string, placement *unitPlacement, depth int) error {
+	err := d.visit(path, placement, depth+1)
+	if err == nil || isDiscoveryCancellation(err) {
+		return err
+	}
+	d.childFailures = append(d.childFailures, childFailure{placement.generationRoot, model.UnitFailure{Stack: placement.stack, Name: filepath.ToSlash(placement.name), Err: problemFor(err, path)}})
+	return nil
+}
+
+func (d *projectDiscovery) visitUnit(path string, resolved *model.Resolution, placement *unitPlacement) error {
+	if resolved.Source == "" && len(resolved.Folders) == 0 {
+		if placement.generationRoot != "" {
+			return missingSourceProblem(path)
+		}
+		inline, err := d.checkInlineModule(path)
+		if err != nil || !inline {
+			return err
+		}
+		if d.request.Mode != "executable" {
+			return missingSourceProblem(path)
+		}
+		resolved.Source = filepath.Dir(path)
+		resolved.Folders = []string{resolved.Source}
+	}
+	resolved.Files = append(resolved.Files, placement.files...)
+	resolved.Folders = append(resolved.Folders, placement.folders...)
+	if err := trackInputSources(d.overlay, d.root, resolved); err != nil {
+		return err
+	}
+	d.result.Inventory = append(d.result.Inventory, model.DiscoveredUnit{Stack: placement.stack, Name: filepath.ToSlash(placement.name), GenerationRoot: placement.generationRoot, Config: *resolved})
+	return nil
+}
+
+// resolveStack reads the units and nested stacks one stack file declares. With
+// generation, only this file and the nested stacks it declares are generated;
+// other stack files under the same directory are never listed or generated.
+func (e *unitEvaluator) resolveStack(ctx context.Context) (*model.Resolution, error) {
+	if generating(e.request) {
+		if err := e.generateStack(ctx, e.path, 0); err != nil {
+			return nil, err
+		}
+	}
+	stack, err := readStack(ctx, e.logger, e.environment, e.pctx, e.path)
+	if err != nil {
+		return nil, err
+	}
+	return stackResolution(e.pctx, stack, e.path)
+}
+
+func readStack(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, path string) (*config.StackConfig, error) {
+	values, err := config.ReadValues(ctx, logger, environment, pctx, filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	return config.ReadStackConfigFile(ctx, logger, environment, pctx, path, values)
+}
+
+// generateStack generates path and then, recursively, each enabled nested stack
+// it declares. Units are generated by their declaring stack file.
+func (e *unitEvaluator) generateStack(ctx context.Context, path string, depth int) error {
+	if depth > maxStackDepth {
+		return fmt.Errorf("%w at %s", errStackDepth, path)
+	}
+	if err := atmosbridge.GenerateStack(ctx, e.logger, e.environment, path, e.request.Tofu); err != nil {
+		return err
+	}
+	stack, err := readStack(ctx, e.logger, e.environment, requestParsingContext(e.request, path), path)
+	if err != nil {
+		return err
+	}
+	for _, child := range stack.Stacks {
+		if !child.IsEnabled() {
+			continue
+		}
+		if err := e.generateStack(ctx, filepath.Join(child.GeneratedPath(filepath.Dir(path)), stackFile), depth+1); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// instanceIdentity keeps expansion elements that share a block label distinct.
+// An unexpanded block keeps its label, so ordinary discovery is unchanged.
+func instanceIdentity(kind, name, key string, expanded bool) (string, error) {
+	if !expanded {
+		return name, nil
+	}
+	if key == "" || key == "." || key == ".." || strings.ContainsAny(key, `/\`) {
+		return "", fmt.Errorf("%w %s expansion key %q in %s", errExpansionKey, kind, key, name)
+	}
+	return name + "/" + key, nil
+}
+
+func stackResolution(pctx *config.ParsingContext, stack *config.StackConfig, path string) (*model.Resolution, error) {
+	dir := filepath.Dir(path)
+	result := &model.Resolution{
+		Path: path, Files: append(pctx.FilesRead.Paths(), path),
+		Units: map[string]string{}, UnitSources: map[string]string{}, UnitConfigs: map[string]string{},
+		Stacks: map[string]string{}, StackSources: map[string]string{}, StackConfigs: map[string]string{},
+	}
+	for _, unit := range stack.Units {
+		result.OwnedPaths = append(result.OwnedPaths, filepath.Join(unit.GeneratedPath(dir), unitFile))
+		if unit.Source != "" {
+			result.OwnedSources = append(result.OwnedSources, localPath(dir, unit.Source))
+		}
+		if !unit.IsEnabled() {
+			continue
+		}
+		key, expanded := unit.InstanceKey()
+		id, err := instanceIdentity("unit", unit.Name, key, expanded)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := result.Units[id]; exists {
+			return nil, fmt.Errorf("%w unit instance %s in %s", errDuplicateInstance, id, path)
+		}
+		result.Units[id] = unit.Path
+		result.UnitSources[id] = localPath(dir, unit.Source)
+		result.UnitConfigs[id] = filepath.Join(unit.GeneratedPath(dir), unitFile)
+	}
+	for _, child := range stack.Stacks {
+		if !child.IsEnabled() {
+			continue
+		}
+		key, expanded := child.InstanceKey()
+		id, err := instanceIdentity("stack", child.Name, key, expanded)
+		if err != nil {
+			return nil, err
+		}
+		if _, exists := result.Stacks[id]; exists {
+			return nil, fmt.Errorf("%w stack instance %s in %s", errDuplicateInstance, id, path)
+		}
+		result.Stacks[id] = child.Path
+		result.StackSources[id] = localPath(dir, child.Source)
+		result.StackConfigs[id] = filepath.Join(child.GeneratedPath(dir), stackFile)
+	}
+	return result, nil
+}
+
+// inventorySource records the module a unit names. A local module must exist, so a bulk run stops
+// before any unit runs, and a remote source must use a supported transport.
+func inventorySource(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string, result *model.Resolution) error {
+	if cfg.Terraform == nil || cfg.Terraform.Source == nil {
+		return nil
+	}
+	result.Source = *cfg.Terraform.Source
+	// The active filesystem also sees modules that a generated stack unit names in the overlay.
+	local, problem := resolveLocalModuleSource(environment.FS, path, result.Source)
+	if problem != nil {
+		return problem
+	}
+	if local == nil {
+		// An unsupported remote transport fails discovery too, before any unit runs.
+		return validateRemoteSource(result.Source)
+	}
+	result.Source = local.source
+	result.Folders = []string{local.root}
+	return nil
+}
+
+// resolveUnitInventory reads only the source and dependency blocks of a unit.
+func (e *unitEvaluator) resolveUnitInventory(ctx context.Context) (*model.Resolution, error) {
+	cfg, err := config.PartialParseConfigFile(ctx, e.logger, e.environment,
+		e.pctx.WithDecodeList(config.DependenciesBlock, config.DependencyBlock, config.TerraformSource, config.TerragruntFlags, config.TerragruntVersionConstraints, config.FeatureFlagsBlock, config.ExcludeBlock, config.ErrorsBlock), e.path, nil)
+	if err != nil {
+		return nil, err
+	}
+	// Reject unsupported settings now, so every selected unit is validated before any
+	// infrastructure command runs.
+	if err := rejectUnsupported(cfg, e.path); err != nil {
+		return nil, err
+	}
+	if err := checkExecutionSyntax(e.environment.FS, cfg, e.path); err != nil {
+		return nil, err
+	}
+	// A literal generated backend fails preparation, so it fails discovery too, before preflight.
+	if err := checkLiteralGeneratedBackends(e.environment.FS, backendConfigurationPaths(cfg, e.path)); err != nil {
+		return nil, err
+	}
+	result := &model.Resolution{Path: e.path, Files: append(e.pctx.FilesRead.Paths(), e.path)}
+	if err := applyParity(cfg, e.request, e.path, result); err != nil {
+		return nil, err
+	}
+	if err := inventoryWorkspaceProblem(e.request, cfg, e.path); err != nil {
+		return nil, err
+	}
+	if err := inventorySource(e.environment, cfg, e.path, result); err != nil && !e.operationExcluded(result) {
+		// A unit that cannot run this operation keeps its evaluated exclusion, so the bulk
+		// pre-flight skips it instead of rejecting the run; an active unit still fails.
+		return nil, err
+	}
+	if err := e.populateInventoryDependencies(cfg, result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// operationExcluded reports whether the unit's exclude block makes the requested operation a no-op.
+func (e *unitEvaluator) operationExcluded(result *model.Resolution) bool {
+	return PreventsRun(result.Exclude, OperationCommand(e.request.Command, e.request.Arguments))
+}
+
+// populateInventoryDependencies keeps output reads in the scheduling dependency set. A unit that
+// cannot run the operation is not validated against its dependencies. When its block sets
+// exclude_dependencies the scheduler still needs the edges to exclude the targets, so the resolvable
+// ones are kept and unresolvable targets are tolerated.
+func (e *unitEvaluator) populateInventoryDependencies(cfg *config.TerragruntConfig, result *model.Resolution) error {
+	excluded := e.operationExcluded(result)
+	if excluded && !result.Exclude.ExcludeDependencies {
+		return nil
+	}
+	var err error
+	if result.OutputDependencies, err = outputDependencies(e.environment, cfg, e.path, excluded); err != nil {
+		return err
+	}
+	// Output reads also require a scheduling edge before preparation.
+	order, err := orderDependencies(e.environment, cfg, e.path, excluded)
+	if err != nil {
+		return err
+	}
+	for _, dependency := range append(slices.Clone(result.OutputDependencies), order...) {
+		if !slices.Contains(result.Dependencies, dependency) {
+			result.Dependencies = append(result.Dependencies, dependency)
+		}
+	}
+	return nil
+}
+
+// outputDependencies lists the units whose outputs the unit reads. With tolerant set, a target that
+// cannot be resolved is skipped instead of failing the unit.
+func outputDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string, tolerant bool) ([]string, error) {
+	var result []string
+	for _, dep := range cfg.TerragruntDependencies {
+		if (dep.Enabled != nil && !*dep.Enabled) || (dep.SkipOutputs != nil && *dep.SkipOutputs) {
+			continue
+		}
+		if !dep.ConfigPath.IsKnown() || dep.ConfigPath.IsNull() {
+			continue
+		}
+		if dep.ConfigPath.Type() != cty.String {
+			if tolerant {
+				continue
+			}
+			return nil, fmt.Errorf("%w: unit %s, dependency %q", errDependencyConfigPath, path, dep.Name)
+		}
+		physical, err := dependencyConfigPath(environment, path, dep.ConfigPath.AsString())
+		if err != nil {
+			if tolerant {
+				continue
+			}
+			return nil, err
+		}
+		if !slices.Contains(result, physical) {
+			result = append(result, physical)
+		}
+	}
+	return result, nil
+}
+
+// orderDependencies lists the units the unit waits for, tolerating unresolvable targets as outputDependencies does.
+func orderDependencies(environment *atmosbridge.Venv, cfg *config.TerragruntConfig, path string, tolerant bool) ([]string, error) {
+	if cfg.Dependencies == nil {
+		return nil, nil
+	}
+	var result []string
+	for _, dependency := range cfg.Dependencies.Paths {
+		physical, err := dependencyConfigPath(environment, path, dependency)
+		if err != nil {
+			if tolerant {
+				continue
+			}
+			return nil, err
+		}
+		if !slices.Contains(result, physical) {
+			result = append(result, physical)
+		}
+	}
+	return result, nil
+}
+
+func (d *projectDiscovery) discoverStack(path string) error {
+	if _, err := d.parse(path, true); err != nil {
+		return err
+	}
+	return d.visit(path, &unitPlacement{stack: d.nameFor(filepath.Dir(path)), generationRoot: path}, 0)
+}
+
+var (
+	errStackDepth        = errors.New("nested-stack generation depth exceeded")
+	errExpansionKey      = errors.New("unsupported")
+	errDuplicateInstance = errors.New("duplicate")
+)
+
+// dependencyConfigPath shares overlay-aware directory/default-config resolution for both
+// edge kinds while retaining the logical file identity used by L6 inventory.
+func dependencyConfigPath(environment *atmosbridge.Venv, path, configured string) (string, error) {
+	dependency := localPath(filepath.Dir(path), configured)
+	info, err := environment.FS.Stat(dependency)
+	if err != nil {
+		return "", dependencyProblem(path, dependency, err)
+	}
+	if info.IsDir() {
+		dependency = config.GetDefaultConfigPath(environment.FS, dependency)
+	}
+	physical, err := logicalPath(dependency)
+	if err != nil {
+		return "", dependencyProblem(path, dependency, err)
+	}
+	if _, err := environment.FS.Stat(physical); err != nil {
+		return "", dependencyProblem(path, dependency, err)
+	}
+	return physical, nil
+}
+
+func inventoryWorkspaceProblem(request *model.Request, cfg *config.TerragruntConfig, path string) error {
+	if unsupportedDependencyWorkspace(request, cfg) {
+		workspace := request.Environment["TF_WORKSPACE"]
+		return workspaceDependencyProblem(path, workspace)
+	}
+	return nil
+}

@@ -69,21 +69,25 @@ func scopedConfig(config *schema.AuthConfig, identity string) (*schema.AuthConfi
 	return &scoped, nil
 }
 
-func integrationHost(integration schema.Integration) string {
+// integrationHosts returns the registry hosts an integration can mint credentials for.
+// An azure/acr registry name has a login server in every Azure cloud; the integration
+// picks the one of its provider's cloud when it mints, and the minted host is checked
+// against the requested host afterwards.
+func integrationHosts(integration schema.Integration) []string {
 	if integration.Kind == "aws/ecr-public" {
-		return "public.ecr.aws"
+		return []string{"public.ecr.aws"}
 	}
 	if integration.Spec == nil || integration.Spec.Registry == nil {
-		return ""
+		return nil
 	}
 	registry := integration.Spec.Registry
 	switch integration.Kind {
 	case "aws/ecr":
-		return awscloud.BuildRegistryURL(registry.AccountID, registry.Region)
+		return []string{awscloud.BuildRegistryURL(registry.AccountID, registry.Region)}
 	case "azure/acr":
-		return azurecloud.BuildRegistryURL(registry.Name)
+		return azurecloud.RegistryURLsForAllClouds(registry.Name)
 	default:
-		return ""
+		return nil
 	}
 }
 

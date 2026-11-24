@@ -126,19 +126,6 @@ func outputJSON(data map[string]string, outputFile string, cfg *outputConfig) er
 		return u.WriteToFileAsJSON(outputFile, data, cfg.fileMode)
 	}
 
-	// For stdout, use PrintAsJSON if atmosConfig is available for pretty printing,
-	// otherwise fall back to standard JSON encoding.
-	if cfg.atmosConfig != nil {
-		if cfg.maskStdout {
-			content, err := u.GetHighlightedJSON(cfg.atmosConfig, data)
-			if err != nil {
-				return err
-			}
-			return pkgdata.Write(content)
-		}
-		return u.PrintAsJSON(cfg.atmosConfig, data)
-	}
-
 	if cfg.maskStdout {
 		content, err := u.GetHighlightedJSON(cfg.atmosConfig, data)
 		if err != nil {
@@ -147,10 +134,36 @@ func outputJSON(data map[string]string, outputFile string, cfg *outputConfig) er
 		return pkgdata.Write(content)
 	}
 
-	// Fallback: encode JSON directly to stdout.
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(data)
+	// Without the mask option the values are exactly what the caller asked to
+	// receive (for example `atmos auth env --format json | ConvertFrom-Json`), so
+	// JSON is written unmasked like the bash/dotenv/env/github formats. Routing it
+	// through the masked writer (as u.PrintAsJSON does) would replace the
+	// credentials with "<MASKED>" and break the output for its stated purpose.
+	content, err := unmaskedJSON(cfg.atmosConfig, data)
+	if err != nil {
+		return err
+	}
+	// codeql[go/clear-text-logging]: intentional stdout output for programmatic consumption.
+	return pkgdata.WriteUnmasked(content)
+}
+
+// unmaskedJSON renders the JSON document for unmasked stdout output. With an
+// Atmos config it is pretty printed (and highlighted where the config allows);
+// otherwise it uses standard indented JSON encoding. The result ends with a newline.
+func unmaskedJSON(atmosConfig *schema.AtmosConfiguration, data map[string]string) (string, error) {
+	if atmosConfig != nil {
+		content, err := u.GetHighlightedJSON(atmosConfig, data)
+		if err != nil {
+			return "", err
+		}
+		return content + "\n", nil
+	}
+
+	encoded, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrWriteToStream).WithCause(err).Err()
+	}
+	return string(encoded) + "\n", nil
 }
 
 // writeToFileWithMode writes content to a file with specified permissions.

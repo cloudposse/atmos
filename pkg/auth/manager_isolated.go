@@ -12,6 +12,35 @@ import (
 	"github.com/cloudposse/atmos/pkg/signals"
 )
 
+// Operation-scoped acquisition bounds. The grace period starts only once the caller
+// cancels (or its deadline passes), so an interactive login (SSO device code, browser
+// OIDC) is not cut off; the ceiling still bounds an acquisition nobody cancels.
+var (
+	operationAcquisitionGrace   = 45 * time.Second
+	operationAcquisitionCeiling = 30 * time.Minute
+)
+
+// operationAcquisitionContext returns a context that ignores the caller's cancellation
+// for up to grace after it happens (a server may already have minted credentials that
+// still need logout), with ceiling as an absolute bound. The release function stops
+// the watcher and cancels the returned context.
+func operationAcquisitionContext(ctx context.Context, grace, ceiling time.Duration) (context.Context, context.CancelFunc) {
+	acquire, cancel := signals.OwnedCleanupContext(ctx, ceiling)
+	stop := context.AfterFunc(ctx, func() {
+		timer := time.NewTimer(grace)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			cancel()
+		case <-acquire.Done():
+		}
+	})
+	return acquire, func() {
+		stop()
+		cancel()
+	}
+}
+
 // AuthenticateIsolated authenticates identityName on a separate manager that shares
 // this manager's effective configuration, credential store, validator, realm, and
 // stack metadata, but owns its own provider/identity instances, chain, and auth
@@ -44,6 +73,12 @@ func (m *manager) WithIsolatedIdentity(ctx context.Context, identityName string,
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// Resolve the name case-insensitively, like Authenticate and AuthenticateIsolated,
+	// so a store configured with the YAML spelling ("Automation") finds its identity.
+	// An unknown name is kept as-is so the chain builder reports it.
+	if resolved, found := m.resolveIdentityName(identityName); found {
+		identityName = resolved
+	}
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
 		return err
@@ -63,7 +98,9 @@ func (m *manager) WithIsolatedIdentity(ctx context.Context, identityName string,
 		}()
 		// Retain custody of a bounded acquisition even after caller cancellation:
 		// a server may already have minted credentials that still need logout.
-		acquire, cancel := signals.OwnedCleanupContext(ctx, 45*time.Second)
+		// The grace period starts only when the caller cancels, so interactive
+		// logins are not capped at the grace period.
+		acquire, cancel := operationAcquisitionContext(ctx, operationAcquisitionGrace, operationAcquisitionCeiling)
 		_, err = isolated.Authenticate(ContextWithSkipIntegrations(acquire), identityName)
 		cancel()
 		if err != nil {

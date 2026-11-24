@@ -406,7 +406,7 @@ func TestValidateCredentials(t *testing.T) {
 			whoami := tt.setupWhoami(c)
 			ctx := context.Background()
 			result := validateCredentials(ctx, whoami)
-			assert.Equal(t, tt.expectedResult, result)
+			assert.Equal(t, tt.expectedResult, result.valid)
 		})
 	}
 }

@@ -346,6 +346,11 @@ func resolveIdentityName(cmd *cobra.Command, v *viper.Viper, authManager types.A
 		identityName = v.GetString(IdentityFlagName)
 	}
 
+	// `--identity=false` disables authentication, which leaves no console to open.
+	if err := checkIdentityNotDisabled("console", identityName); err != nil {
+		return "", err
+	}
+
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue
 

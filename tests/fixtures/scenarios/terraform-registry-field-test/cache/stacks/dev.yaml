@@ -1,0 +1,24 @@
+{
+  "vars": {
+    "stage": "dev"
+  },
+  "components": {
+    "terraform": {
+      "provider-a": {
+        "vars": {
+          "value": "alpha"
+        }
+      },
+      "provider-b": {
+        "vars": {
+          "value": "beta"
+        }
+      },
+      "modules": {
+        "vars": {
+          "name": "fieldtest"
+        }
+      }
+    }
+  }
+}

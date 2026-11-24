@@ -173,14 +173,21 @@ func TestRenderWebflowDialog_URLPlacement(t *testing.T) {
 		wantFallbackHint bool
 	}{
 		{
-			name:             "80-column URL stays in dialog",
-			authURL:          urlWithWidth(link.MaxInlineWidth),
+			// The dialog adds two border columns and four columns of padding.
+			name:             "74-column URL stays in dialog",
+			authURL:          urlWithWidth(link.MaxInlineWidth - 6),
 			containsURL:      true,
 			wantFallbackHint: false,
 		},
 		{
-			name:             "81-column URL stays outside dialog",
-			authURL:          urlWithWidth(link.MaxInlineWidth + 1),
+			name:             "75-column URL stays outside dialog",
+			authURL:          urlWithWidth(link.MaxInlineWidth - 5),
+			containsURL:      false,
+			wantFallbackHint: true,
+		},
+		{
+			name:             "80-column URL stays outside dialog",
+			authURL:          urlWithWidth(link.MaxInlineWidth),
 			containsURL:      false,
 			wantFallbackHint: true,
 		},

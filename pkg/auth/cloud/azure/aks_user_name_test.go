@@ -1,0 +1,120 @@
+package azure
+
+// Tests for the AKS kubeconfig exec-user names shared by the writer
+// (BuildKubeClusterInfo) and AKS integration cleanup.
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
+)
+
+// TestAKSKubeUserName_MatchesWrittenUser verifies that cleanup computes exactly
+// the user name the kubeconfig writer used, for every identity and subscription shape.
+func TestAKSKubeUserName_MatchesWrittenUser(t *testing.T) {
+	tests := []struct {
+		name           string
+		subscriptionID string
+		identity       string
+		want           string
+	}{
+		{name: "subscription and identity", subscriptionID: "sub-123", identity: "azure-admin", want: "atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin-e1743c31"},
+		{name: "no identity", subscriptionID: "sub-123", want: "atmos-aks-dev-cluster-dev-rg-sub-123"},
+		{name: "no subscription keeps the identity", identity: "azure-admin", want: "atmos-aks-dev-cluster-dev-rg-azure-admin-9d6d21c7"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			written := BuildKubeClusterInfo(&AKSClusterInfo{Name: "dev-cluster", ResourceGroup: "dev-rg", SubscriptionID: tt.subscriptionID}, tt.identity)
+
+			assert.Equal(t, tt.identity, written.Identity)
+			assert.Equal(t, tt.want, kube.UserName(written))
+			assert.Equal(t, kube.UserName(written), AKSKubeUserName("dev-cluster", "dev-rg", tt.subscriptionID, tt.identity, ""))
+		})
+	}
+}
+
+// TestLegacyAKSKubeUserName verifies the name versions before the identity was added wrote.
+func TestLegacyAKSKubeUserName(t *testing.T) {
+	assert.Equal(t, "atmos-aks-dev-cluster-dev-rg-sub-123", LegacyAKSKubeUserName("dev-cluster", "dev-rg", "sub-123"))
+}
+
+// TestAKSKubeUserNames verifies the cleanup candidates: the current name first,
+// then the pre-realm name (only with a realm) and the legacy name.
+func TestAKSKubeUserNames(t *testing.T) {
+	assert.Equal(t, []string{
+		"atmos-acme-aks-dev-cluster-dev-rg-sub-123-azure-admin-f150508f",
+		"atmos-acme-aks-dev-cluster-dev-rg-sub-123-azure-admin",
+		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin-e1743c31",
+		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin",
+		"atmos-aks-dev-cluster-dev-rg-sub-123",
+	}, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", kube.RealmScope{Realm: "acme"}))
+	assert.Equal(t, []string{
+		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin-e1743c31",
+		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin",
+		"atmos-aks-dev-cluster-dev-rg-sub-123",
+	}, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", kube.RealmScope{Realm: ""}))
+}
+
+// TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup verifies that the users
+// the writer treats as its own when migrating an unprefixed context are the
+// same names cleanup removes, with and without a realm.
+func TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup(t *testing.T) {
+	for _, realm := range []string{"", "acme"} {
+		t.Run("realm="+realm, func(t *testing.T) {
+			written := BuildKubeClusterInfo(&AKSClusterInfo{Name: "dev-cluster", ResourceGroup: "dev-rg", SubscriptionID: "sub-123"}, "azure-admin")
+			written.Realm = realm
+
+			assert.Equal(t, []string{LegacyAKSKubeUserName("dev-cluster", "dev-rg", "sub-123")}, written.LegacyUserNames)
+			assert.Equal(t, AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", kube.RealmScope{Realm: realm}), kube.OwnedUserNames(written))
+		})
+	}
+}
+
+// TestAKSKubeUserNames_LegacyRealms verifies that names an unreleased build
+// wrote under a derived realm are cleanup candidates, in the same order as
+// kube.OwnedUserNames.
+func TestAKSKubeUserNames_LegacyRealms(t *testing.T) {
+	const derived = "462813558259d41c"
+
+	written := BuildKubeClusterInfo(&AKSClusterInfo{Name: "dev-cluster", ResourceGroup: "dev-rg", SubscriptionID: "sub-123"}, "azure-admin")
+	written.Realm, written.LegacyRealms = kube.NameRealm(derived, false)
+	names := AKSKubeUserNames("dev-cluster", "dev-rg", "sub-123", "azure-admin", kube.RealmScope{Realm: written.Realm, LegacyRealms: written.LegacyRealms})
+
+	assert.Equal(t, []string{
+		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin-e1743c31",
+		"atmos-aks-dev-cluster-dev-rg-sub-123-azure-admin",
+		"atmos-" + derived + "-aks-dev-cluster-dev-rg-sub-123-azure-admin-a986975a",
+		"atmos-" + derived + "-aks-dev-cluster-dev-rg-sub-123-azure-admin",
+		"atmos-aks-dev-cluster-dev-rg-sub-123",
+	}, names)
+	assert.Equal(t, names, kube.OwnedUserNames(written))
+}
+
+// TestAKSKubeUserName_SubscriptionCaseInsensitive guards that the writer's
+// subscription (configured or from credentials) and the one cleanup parses from
+// the ARM resource ID produce the same kubeconfig user even when they differ in case.
+func TestAKSKubeUserName_SubscriptionCaseInsensitive(t *testing.T) {
+	const upper, lower = "ABCDEF12-0000-0000-0000-000000000001", "abcdef12-0000-0000-0000-000000000001"
+
+	written := BuildKubeClusterInfo(&AKSClusterInfo{Name: "c", ResourceGroup: "rg", SubscriptionID: upper}, "dev")
+
+	assert.Equal(t, AKSKubeUserName("c", "rg", lower, "dev", ""), kube.UserName(written))
+	assert.Equal(t, AKSKubeUserName("c", "rg", upper, "dev", ""), AKSKubeUserName("c", "rg", lower, "dev", ""))
+}
+
+// TestBuildKubeClusterInfo_OwnsUserWrittenWithMixedCaseSubscription verifies
+// that an entry earlier builds wrote with the subscription ID as configured
+// stays owned, while an all-lowercase ID adds no duplicate name.
+func TestBuildKubeClusterInfo_OwnsUserWrittenWithMixedCaseSubscription(t *testing.T) {
+	mixed := BuildKubeClusterInfo(&AKSClusterInfo{Name: "dev-cluster", ResourceGroup: "dev-rg", SubscriptionID: "SUB-ABC"}, "azure-admin")
+	owned := kube.OwnedUserNames(mixed)
+	assert.Contains(t, owned, "atmos-aks-dev-cluster-dev-rg-SUB-ABC", "the name written with the configured case")
+	assert.Contains(t, owned, "atmos-aks-dev-cluster-dev-rg-sub-abc", "the lowercased pre-identity name")
+	assert.Contains(t, owned, kube.UserName(mixed), "the current name")
+
+	lower := BuildKubeClusterInfo(&AKSClusterInfo{Name: "dev-cluster", ResourceGroup: "dev-rg", SubscriptionID: "sub-abc"}, "azure-admin")
+	assert.Equal(t, []string{"atmos-aks-dev-cluster-dev-rg-sub-abc"}, lower.LegacyUserNames)
+}

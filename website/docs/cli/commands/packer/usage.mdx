@@ -103,6 +103,12 @@ atmos packer build bastion/dev --stack dev    # ✓ Explicit and unambiguous
         [YQ](https://mikefarah.gitbook.io/yq/) expression to get sections and attributes from a [Packer manifest](https://developer.hashicorp.com/packer/docs/post-processors/manifest).
         Used in the `atmos packer output` command.
     </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Print the Packer command that would run, with secrets masked, without running Packer or writing the
+        variable file. Stack configuration is still processed.
+    </dd>
 </dl>
 
 ## Examples

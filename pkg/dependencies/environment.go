@@ -6,6 +6,7 @@ import (
 	"os"
 	execPkg "os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -172,13 +173,7 @@ func ForCommand(atmosConfig *schema.AtmosConfiguration, commandDef *schema.Comma
 func (e *ToolchainEnvironment) Resolve(command string) string {
 	defer perf.Track(nil, "dependencies.ToolchainEnvironment.Resolve")()
 
-	if filepath.IsAbs(command) {
-		return command
-	}
-
-	// Strip extension for cross-platform matching (e.g. "tofu.exe" → "tofu").
-	key := strings.TrimSuffix(command, filepath.Ext(command))
-	if p, ok := e.resolved[key]; ok {
+	if p, ok := e.ResolvePinned(command); ok {
 		return p
 	}
 
@@ -187,6 +182,23 @@ func (e *ToolchainEnvironment) Resolve(command string) string {
 	}
 
 	return command
+}
+
+// ResolvePinned returns a toolchain-resolved path without consulting the process PATH.
+func (e *ToolchainEnvironment) ResolvePinned(command string) (string, bool) {
+	defer perf.Track(nil, "dependencies.ToolchainEnvironment.ResolvePinned")()
+
+	if filepath.IsAbs(command) {
+		return command, true
+	}
+
+	// Strip extension for cross-platform matching (e.g. "tofu.exe" → "tofu").
+	key := strings.TrimSuffix(command, filepath.Ext(command))
+	if p, ok := e.resolved[key]; ok {
+		return p, true
+	}
+
+	return "", false
 }
 
 // EnvVars returns a slice containing "PATH=<toolchain-augmented-path>" ready
@@ -435,7 +447,9 @@ func resolveBinaryPaths(env *ToolchainEnvironment, cfg *envConfig, deps map[stri
 	}
 
 	seenDir := make(map[string]struct{})
-	for tool, version := range deps {
+	// Tool name order keeps ToolchainDirs and same-named binaries deterministic.
+	for _, tool := range slices.Sorted(maps.Keys(deps)) {
+		version := deps[tool]
 		owner, repo, err := resolveFunc(tool)
 		if err != nil {
 			log.Debug("Could not resolve tool for toolchain environment", "tool", tool, "error", err)

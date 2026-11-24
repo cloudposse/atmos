@@ -71,7 +71,9 @@ Alternatively, export a suitable job token as `GITEA_TOKEN`; the permissions a j
 
 ## API URL
 
-Atmos calls the Gitea API at `ATMOS_CI_GITEA_API_URL`, then the runner's API URL, then its server URL plus `/api/v1`. HTTPS is required and redirects are rejected. For a local emulator only, set `ATMOS_CI_GITEA_ALLOW_INSECURE=true` to allow HTTP.
+Atmos calls the Gitea API at `ATMOS_CI_GITEA_API_URL`, then the runner's API URL, then its server URL plus `/api/v1`. API requests require HTTPS and redirects are rejected. For a local emulator only, set `ATMOS_CI_GITEA_ALLOW_INSECURE=true` to allow HTTP.
+
+When no API URL is available, or it uses HTTP without that opt-in, the command still runs and Atmos still writes the job summary and output variables. Only commit statuses and pull request comments are skipped, and Atmos logs the reason once: as a warning when a token is configured, otherwise at debug level. A malformed API URL, or one that embeds credentials, a query, or a fragment, stops the run before anything is reported.
 
 ## Cloud Authentication
 

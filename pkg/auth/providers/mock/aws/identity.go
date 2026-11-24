@@ -11,6 +11,7 @@ import (
 	"time"
 
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
+	awsIdentity "github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -172,12 +173,14 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 	}
 
 	// Step 1: Write AWS-format credential files (for external tools and SDK).
-	// Use realm from params if available for credential isolation.
-	realm := ""
+	// Use realm from params if available for credential isolation. Like the real AWS
+	// identities, files go under the root provider's spec.files.base_path.
+	realm, basePath := "", ""
 	if params != nil {
 		realm = params.Realm
+		basePath = awsIdentity.FilesBasePath(params.Manager, i.name)
 	}
-	if err := awsCloud.SetupFiles(providerName, i.name, awsCreds, "", realm); err != nil {
+	if err := awsCloud.SetupFiles(providerName, i.name, awsCreds, basePath, realm); err != nil {
 		return fmt.Errorf("mock identity failed to setup AWS files: %w", err)
 	}
 
@@ -189,7 +192,7 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 			ProviderName: providerName,
 			IdentityName: i.name,
 			Credentials:  awsCreds,
-			BasePath:     "",
+			BasePath:     basePath,
 			Manager:      params.Manager,
 			Realm:        realm,
 		}); err != nil {

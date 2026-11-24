@@ -1,0 +1,15 @@
+commands:
+  - name: casts generate demo fixtures terragrunt-native
+    description: Regenerate casts sourced from demo/casts/fixtures/terragrunt-native
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-terragrunt-native-plan
+        command: atmos casts generate demo fixtures terragrunt-native plan
+  - name: casts validate demo fixtures terragrunt-native
+    description: Validate casts sourced from demo/casts/fixtures/terragrunt-native
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-terragrunt-native-plan
+        command: atmos casts validate demo fixtures terragrunt-native plan

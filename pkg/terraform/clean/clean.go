@@ -310,7 +310,7 @@ func (s *Service) initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosC
 		files = append(files, TerraformLockFile)
 	}
 
-	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
+	if schema.GenerateBackendFile(atmosConfig, &info) {
 		files = append(files, BackendConfigFile)
 	}
 

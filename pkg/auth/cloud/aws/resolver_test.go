@@ -7,6 +7,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestGetBaseEndpointURL(t *testing.T) {
+	assert.Empty(t, GetBaseEndpointURL(nil, nil))
+	assert.Empty(t, GetBaseEndpointURL(&schema.Identity{}, &schema.Provider{}))
+
+	identity := &schema.Identity{Spec: map[string]interface{}{"endpoint_url": "http://identity:4566"}}
+	provider := &schema.Provider{Spec: map[string]interface{}{"endpoint_url": "http://provider:4566"}}
+	assert.Equal(t, "http://identity:4566", GetBaseEndpointURL(identity, provider))
+	assert.Equal(t, "http://provider:4566", GetBaseEndpointURL(nil, provider))
+}
+
 func TestGetResolverConfigOption_NoResolver(t *testing.T) {
 	// Test with nil identity and provider
 	opt := GetResolverConfigOption(nil, nil)

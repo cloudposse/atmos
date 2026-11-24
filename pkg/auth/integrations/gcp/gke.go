@@ -37,7 +37,13 @@ func init() {
 type GKEIntegration struct {
 	name     string
 	identity string
-	cluster  *schema.Cluster
+	// realm is the explicitly configured auth realm (see kube.NameRealm); a
+	// non-empty realm scopes the kubeconfig user and default context names.
+	realm string
+	// legacyRealms are derived realms whose names unreleased builds wrote;
+	// they count as this integration's own (see kube.ClusterInfo.LegacyRealms).
+	legacyRealms []string
+	cluster      *schema.Cluster
 }
 
 // NewGKEIntegration creates a GKE integration from config.
@@ -61,7 +67,8 @@ func NewGKEIntegration(config *integrations.IntegrationConfig) (integrations.Int
 		return nil, err
 	}
 
-	return &GKEIntegration{name: config.Name, identity: identity, cluster: cluster}, nil
+	nameRealm, legacyRealms := kube.NameRealm(config.Realm, config.RealmExplicit())
+	return &GKEIntegration{name: config.Name, identity: identity, realm: nameRealm, legacyRealms: legacyRealms, cluster: cluster}, nil
 }
 
 // validateGKECluster validates the cluster and kubeconfig portions of an integration.
@@ -134,16 +141,16 @@ func (g *GKEIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
 
-	changed, err := mgr.WriteClusterConfig(gcpCloud.BuildKubeClusterInfo(info, g.identity), g.cluster.Alias, update)
+	clusterInfo := gcpCloud.BuildKubeClusterInfo(info, g.identity)
+	clusterInfo.Realm = g.realm
+	clusterInfo.LegacyRealms = g.legacyRealms
+	changed, err := mgr.WriteClusterConfig(clusterInfo, g.cluster.Alias, update)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
 	gkeExpectedServers.Store(expectedServerKey, info.Endpoint)
 
-	displayName := g.cluster.Alias
-	if displayName == "" {
-		displayName = info.ID
-	}
+	displayName := kube.ContextName(info.ID, g.cluster.Alias, g.realm)
 	if changed {
 		ui.Success(fmt.Sprintf("GKE kubeconfig: %s → %s", displayName, mgr.GetPath()))
 		log.Debug("GKE kubeconfig written", "cluster", g.cluster.Name, "context", displayName, "path", mgr.GetPath())
@@ -163,16 +170,17 @@ func (g *GKEIntegration) Cleanup(_ context.Context) error {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
 	clusterID := gcpCloud.ClusterResourceName(g.cluster.ProjectID, g.cluster.Location, g.cluster.Name)
-	contextName := g.cluster.Alias
-	if contextName == "" {
-		contextName = clusterID
-	}
-	userName := kube.UserName(gcpCloud.BuildKubeClusterInfo(&gcpCloud.GKEClusterInfo{
-		Name:      g.cluster.Name,
-		ProjectID: g.cluster.ProjectID,
-		Location:  g.cluster.Location,
-	}, g.identity))
-	if err := mgr.RemoveClusterConfig(clusterID, contextName, userName); err != nil {
+	// The default context name is [<realm>/]<resource name>; with a realm, the
+	// unprefixed resource name that older versions wrote is checked too, and
+	// without one, the <derived-realm>/<resource name> name unreleased builds wrote.
+	contextNames := kube.ContextNames(clusterID, g.cluster.Alias, g.realm, g.legacyRealms...)
+	// The username includes the realm and identity (see
+	// gcpCloud.BuildKubeClusterInfo). Also remove the names older versions
+	// wrote, without the realm or the identity. A context is removed only when
+	// it points at one of these users, and a user is kept while another
+	// context still references it.
+	userNames := gcpCloud.GKEKubeUserNames(g.cluster.ProjectID, g.cluster.Location, g.cluster.Name, g.identity, kube.RealmScope{Realm: g.realm, LegacyRealms: g.legacyRealms})
+	if err := mgr.RemoveOwnedClusterConfig(clusterID, contextNames, userNames, kube.WithIdentity(g.identity)); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrGKEIntegrationFailed, err)
 	}
 	gkeExpectedServers.Delete(g.expectedServerKey(mgr.GetPath()))
