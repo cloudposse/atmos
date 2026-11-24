@@ -190,6 +190,9 @@ func TestWriteFileAtomicOrInPlace_TightensBroadModeBeforeInPlaceWrite(t *testing
 // in-place write is refused, and the file left unchanged, when a too-broad mode cannot be
 // restricted first.
 func TestWriteFileAtomicOrInPlace_RefusesInPlaceWriteWhenModeCannotBeTightened(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not keep Unix permission bits, so the mode is not restricted there")
+	}
 	target := filepath.Join(t.TempDir(), "msal_token_cache.json")
 	writeFixture(t, target, []byte("old"), 0o644)
 	atomicErr := &os.LinkError{Op: "rename", Err: syscall.EBUSY}
@@ -207,4 +210,23 @@ func TestWriteFileAtomicOrInPlace_RefusesInPlaceWriteWhenModeCannotBeTightened(t
 	got, readErr := os.ReadFile(target)
 	require.NoError(t, readErr)
 	assert.Equal(t, "old", string(got))
+}
+
+// TestWriteFileAtomicOrInPlace_SkipsModeRestrictionWithoutPermissionBits verifies that where Unix
+// permission bits do not apply (Windows), the in-place write does not try to restrict the mode,
+// whatever mode the file reports.
+func TestWriteFileAtomicOrInPlace_SkipsModeRestrictionWithoutPermissionBits(t *testing.T) {
+	enforced := permissionBitsEnforced
+	permissionBitsEnforced = false
+	t.Cleanup(func() { permissionBitsEnforced = enforced })
+
+	target := filepath.Join(t.TempDir(), "config.json")
+	writeFixture(t, target, []byte("old"), 0o644)
+	mock := NewMockFileSystem(gomock.NewController(t))
+	mock.EXPECT().WriteFileAtomic(gomock.Any(), gomock.Any(), gomock.Any()).Return(&os.LinkError{Op: "rename", Err: syscall.EBUSY})
+	mock.EXPECT().Stat(target).DoAndReturn(os.Stat)
+	// No Chmod is expected: gomock fails the test on an unexpected call.
+	mock.EXPECT().WriteFile(target, []byte("new"), os.FileMode(0o600)).Return(nil)
+
+	require.NoError(t, WriteFileAtomicOrInPlace(mock, target, []byte("new"), 0o600))
 }

@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"syscall"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -24,9 +25,10 @@ const maxSymlinkHops = 40
 // the temporary file cannot be created. Older Atmos versions wrote these files in place, so they
 // worked there. The fallback applies only when the replace failed with EBUSY, EXDEV, EROFS or a
 // permission error and name is an existing regular file. An in-place write keeps the file's
-// permission bits, except that it first removes any bit perm does not grant, so a token cache
-// that other users can read is never rewritten with new secrets: the atomic write would have
-// created a new file with perm. When the mode cannot be restricted, the in-place write is refused.
+// permission bits, except that, where Unix permission bits apply, it first removes any bit perm
+// does not grant, so a token cache that other users can read is never rewritten with new secrets:
+// the atomic write would have created a new file with perm. When the mode cannot be restricted,
+// the in-place write is refused.
 // When the in-place write fails, both errors are returned.
 func WriteFileAtomicOrInPlace(fsys FileSystem, name string, data []byte, perm os.FileMode) error {
 	defer perf.Track(nil, "filesystem.WriteFileAtomicOrInPlace")()
@@ -39,7 +41,7 @@ func WriteFileAtomicOrInPlace(fsys FileSystem, name string, data []byte, perm os
 	if err != nil || !info.Mode().IsRegular() {
 		return atomicErr
 	}
-	if current := info.Mode().Perm(); current&^perm != 0 {
+	if current := info.Mode().Perm(); permissionBitsEnforced && current&^perm != 0 {
 		if err := fsys.Chmod(name, current&perm); err != nil {
 			return errors.Join(atomicErr, err)
 		}
@@ -49,6 +51,11 @@ func WriteFileAtomicOrInPlace(fsys FileSystem, name string, data []byte, perm os
 	}
 	return nil
 }
+
+// permissionBitsEnforced is false on Windows, where a file reports mode 0666 (or 0444) and Chmod only
+// toggles the read-only attribute, so restricting Unix permission bits before an in-place write is
+// meaningless there.
+var permissionBitsEnforced = runtime.GOOS != "windows"
 
 // isReplaceRefused reports whether err is a failure an in-place write can work around: the
 // rename target is busy (a mount point), on another device, or the directory cannot be written.
