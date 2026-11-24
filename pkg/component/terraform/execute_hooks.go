@@ -209,7 +209,9 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 		if err := validatePlanOutputFlags(phase.command, phase.args); err != nil {
 			return err
 		}
-		return successfulPlanResult(phase.command, phase.args, info.ComponentEnvList, action(info, phase.args, opts), opts...)
+		// The subprocess gets atmos.yaml `env` too, so -detailed-exitcode set there counts.
+		env := slices.Concat(envpkg.ConvertMapToSlice(atmosConfig.Env), info.ComponentEnvList)
+		return successfulPlanResult(phase.command, phase.args, env, action(info, phase.args, opts), opts...)
 	}
 
 	applied, err := execution.ApplyExtraArguments(config.ExtraArguments, &execution.ArgumentsRequest{
