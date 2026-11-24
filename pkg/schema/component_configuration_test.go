@@ -86,6 +86,12 @@ func TestConfigurationOwned(t *testing.T) {
 	}
 }
 
+func TestRejectedConfigurationOverride(t *testing.T) {
+	require.Empty(t, RejectedConfigurationOverride(nil))
+	require.Empty(t, RejectedConfigurationOverride(map[string]any{"configuration": map[string]any{ConfigurationRejectedOverrideKey: true}}), "only a recorded setting name counts")
+	require.Equal(t, "backend.local", RejectedConfigurationOverride(map[string]any{"configuration": map[string]any{ConfigurationRejectedOverrideKey: "backend.local"}}))
+}
+
 func TestSelectsConfigurationProvider(t *testing.T) {
 	config := &AtmosConfiguration{}
 	config.Components.Terraform.ConfigurationProviders = map[string]ComponentConfiguration{

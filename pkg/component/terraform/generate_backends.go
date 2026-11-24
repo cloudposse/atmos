@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -380,6 +381,12 @@ func (s *Operations) generateComponentBackend(run *generateRun, stackFileName, c
 	// Component metadata. Don't include abstract components.
 	metadataSection, _ := componentSection[cfg.MetadataSectionName].(map[string]any)
 	if isAbstractComponent(metadataSection) {
+		return nil
+	}
+
+	// A configuration provider owns the backend of its units and writes it when a unit runs.
+	if configuration.OwnsComponent(componentSection) {
+		log.Debug("Skipping backend generation for a component whose backend the configuration provider owns", "component", componentName, "stack", stackFileName)
 		return nil
 	}
 

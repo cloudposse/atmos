@@ -101,6 +101,7 @@ func TestCheckStackOverrides(t *testing.T) {
 		{name: "backend options", info: owned(map[string]any{"backend_type": "local", "backend": map[string]any{"local": map[string]any{"path": "x"}}}, nil), wantErr: "backend.local"},
 		{name: "module", info: owned(map[string]any{}, map[string]any{"component": "other"}), wantErr: "metadata.component: other"},
 		{name: "metadata that is not owned", info: owned(map[string]any{}, map[string]any{"enabled": true, "terraform_workspace": "blue", "inherits": []any{"base"}})},
+		{name: "override recorded by stack compilation", info: rejectedOverride("backend.local"), wantErr: "backend.local"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			err := checkStackOverrides(test.info)
@@ -112,6 +113,16 @@ func TestCheckStackOverrides(t *testing.T) {
 			require.ErrorContains(t, err, test.wantErr)
 			require.ErrorContains(t, err, `"vpc"`)
 		})
+	}
+}
+
+// rejectedOverride is a component whose stack compilation recorded a component-level backend override,
+// which only the commands that target the component reject.
+func rejectedOverride(setting string) *schema.ConfigAndStacksInfo {
+	return &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc", Stack: "dev",
+		ComponentSection:         map[string]any{"backend_type": "local", "backend": map[string]any{"local": map[string]any{}}},
+		ComponentSettingsSection: map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, schema.ConfigurationRejectedOverrideKey: setting}},
 	}
 }
 

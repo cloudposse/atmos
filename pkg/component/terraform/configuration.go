@@ -194,9 +194,16 @@ func applyPreparedConfiguration(_ *schema.AtmosConfiguration, info *schema.Confi
 	applyPreparedSource(info, prepared)
 	info.ComponentSection["backend_type"] = prepared.BackendType
 	info.ComponentSection["backend"] = prepared.Backend
-	// Only a provider that owns the backend overrides generation. Otherwise the project setting decides.
-	if prepared.BackendGenerated {
+	// A provider that generates the backend owns the file, so the host writes none. A backend the
+	// provider reports without generating it, such as Terragrunt's remote_state without `generate`, is
+	// still the state identity that dependency reads and saved plans use, so the host writes it whatever
+	// the project setting says; otherwise Terraform would keep the state where no reader looks. With no
+	// reported backend the project setting decides.
+	switch {
+	case prepared.BackendGenerated:
 		info.SetBackendFileGeneration(false)
+	case prepared.BackendType != "":
+		info.SetBackendFileGeneration(true)
 	}
 	warnOnCacheLocalState(info, prepared)
 }

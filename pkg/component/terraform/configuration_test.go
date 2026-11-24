@@ -42,7 +42,7 @@ func TestPrepareConfiguration(t *testing.T) {
 	require.Equal(t, expected.Backend, info.ComponentBackendSection)
 	require.Equal(t, "default", info.TerraformWorkspace)
 	require.False(t, config.Components.Terraform.AutoGenerateBackendFile, "preparation leaves the shared project default unchanged")
-	require.False(t, schema.GenerateBackendFile(config, info), "a provider that does not own the backend leaves the project setting in charge")
+	require.True(t, schema.GenerateBackendFile(config, info), "a backend the provider reports but does not generate is written by the host")
 }
 
 func TestPreparedBackendChoiceDoesNotLeakBetweenInvocations(t *testing.T) {

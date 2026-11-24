@@ -56,6 +56,31 @@ func TestStructuredFailureWithholdsUnsafeDetail(t *testing.T) {
 	assert.Contains(t, hints[1], "ATMOS_LOGS_LEVEL=Debug")
 }
 
+// When the user asks for Debug or Trace output, the error itself explains the failure with the plugin's
+// unsafe detail, masked, instead of pointing at the debug log; at the default level it stays hidden.
+func TestUnsafeDetailExplainsTheErrorAtDebug(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
+	atmosio.RegisterSecret("registered-secret-5e1f")
+	detail := &pluginv1.ErrorDetail{Code: "evaluation_error", Summary: "Terragrunt could not evaluate the configuration", Detail: "unit file cannot be exported: registered-secret-5e1f is a lock file"}
+
+	for _, level := range []charm.Level{charm.DebugLevel, log.TraceLevel} {
+		output := captureLogs(t, level)
+		err := DetailError(detail, codes.InvalidArgument)
+		text := strings.Join(errUtils.AllDetails(err), "\n")
+		assert.Contains(t, text, "unit file cannot be exported: <MASKED> is a lock file")
+		assert.NotContains(t, text, "registered-secret-5e1f")
+		assert.NotContains(t, strings.Join(errUtils.AllHints(err), "\n"), "ATMOS_LOGS_LEVEL=Debug", "the reason is already shown")
+		assert.Contains(t, output.String(), "Plugin diagnostic", "the detail is still logged at Debug")
+	}
+
+	captureLogs(t, charm.WarnLevel)
+	err := DetailError(detail, codes.InvalidArgument)
+	assert.NotContains(t, strings.Join(errUtils.AllDetails(err), "\n"), "lock file")
+	assert.Contains(t, strings.Join(errUtils.AllHints(err), "\n"), "ATMOS_LOGS_LEVEL=Debug")
+}
+
 func TestErrorSeverityDiagnosticFailsAndWarningDoesNot(t *testing.T) {
 	request := &pluginv1.ComponentRequest{RootDirectory: t.TempDir(), Address: fixtureAddress(), Operation: &pluginv1.ComponentOperation{Command: "diagnostic-error"}}
 	_, err := fixtureProvider(t).Prepare(t.Context(), request)

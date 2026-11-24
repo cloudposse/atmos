@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -77,6 +78,21 @@ func TestWriteFilesRegistersSensitiveContentItKeeps(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, file.Path), file.Content, 0o600))
 	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{file}))
 	require.Equal(t, "key=<MASKED>", atmosio.MaskString("key="+secret))
+}
+
+// A sensitive generated file masks its distinctive lines, but its structural lines, such as the closing
+// braces of a backend block, never mask the same text in unrelated output.
+func TestWriteFilesSensitiveContentDoesNotMaskStructure(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
+	content := "terraform {\n  backend \"local\" {\n    path = \"/state/generated-backend-path.tfstate\"\n  }\n}\n"
+	file := schema.ComponentConfigurationFile{Path: "backend.tf", Content: []byte(content), IfExists: "overwrite", Sensitive: true}
+
+	require.NoError(t, WriteFiles(t.TempDir(), []schema.ComponentConfigurationFile{file}))
+
+	assert.Equal(t, "1: variable \"marker\" {}\n  }\n}", atmosio.MaskString("1: variable \"marker\" {}\n  }\n}"))
+	assert.NotContains(t, atmosio.MaskString("path = \"/state/generated-backend-path.tfstate\""), "generated-backend-path")
 }
 
 func TestSensitiveGeneratedFileRestrictsBeforeTruncating(t *testing.T) {

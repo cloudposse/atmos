@@ -22,7 +22,7 @@ func unresolvedGeneratedBackend(path string) error {
 		Code: model.CodeUnsupportedSetting, Summary: "Cannot verify the backend identity of a `generate` block",
 		Detail: "State readers cannot use an unverified generated backend or cloud configuration.",
 		Hints:  []string{"Declare the backend in `remote_state` and use `remote_state.generate` to generate it. For state reads, other generate blocks must have literal paths and contents that can be verified without evaluating inputs or commands."},
-		File:   path, Key: "generate", Safe: true, Err: ErrUnsupportedExecution,
+		File:   path, Key: "generate", Safe: true, Err: errors.Join(ErrUnsupportedExecution, errUnverifiedGeneration),
 	}
 }
 

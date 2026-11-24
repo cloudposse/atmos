@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	charm "github.com/charmbracelet/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -94,7 +95,12 @@ func DetailError(detail *pluginv1.ErrorDetail, class codes.Code) error {
 		builder.WithHint(mask(hint))
 	}
 	if logUnsafeDetail(detail) {
-		builder.WithHint(debugHint)
+		if debugOutput() {
+			// The user asked for diagnostics, so the error explains itself, masked as the debug log is.
+			builder.WithExplanation(mask(detail.Detail))
+		} else {
+			builder.WithHint(debugHint)
+		}
 	}
 	if location := detail.GetLocation(); location.GetFile() != "" {
 		// Mask before attaching: annotation escaping can hide a mask literal from the final masker.
@@ -113,6 +119,11 @@ func logUnsafeDetail(detail *pluginv1.ErrorDetail) bool {
 	}
 	log.Debug("Plugin diagnostic", "code", detail.Code, "unit", detail.Unit, "stack", detail.Stack, "operation", detail.Operation, "detail", mask(detail.Detail))
 	return true
+}
+
+// debugOutput reports whether the Atmos log level shows Debug events, where unsafe plugin detail is logged.
+func debugOutput() bool {
+	return log.GetLevel() <= charm.DebugLevel
 }
 
 // describeWhere states where the problem is, using only the always-safe fields.

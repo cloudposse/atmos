@@ -39,9 +39,11 @@ func problemFor(err error, file string) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
-	// Other evaluator errors can contain evaluated values, so their text stays out of the safe fields.
+	// Other evaluator errors can contain evaluated values, so their text stays out of the safe fields. It is
+	// still the only explanation of the failure, so it travels as unsafe detail: the host logs it masked at
+	// Debug, and shows it in the error only when the user asked for Debug or Trace output.
 	return &model.Problem{
-		Code: model.CodeEvaluationError, Summary: "Terragrunt could not evaluate the configuration", File: file, Err: err,
+		Code: model.CodeEvaluationError, Summary: "Terragrunt could not evaluate the configuration", File: file, Detail: err.Error(), Err: err,
 		Hints: []string{"Check the unit's configuration."},
 	}
 }

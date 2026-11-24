@@ -658,6 +658,11 @@ func TestDropCIPlanLocationKeepsEveryPlanTheUserNamed(t *testing.T) {
 	}{
 		{"hook recorded the location while downloading a stored plan", schema.ConfigAndStacksInfo{SubCommand: "deploy", PlanFile: "w/plan", StoredPlanFile: "w/stored"}, ""},
 		{"explicit apply plan alongside stored path", schema.ConfigAndStacksInfo{SubCommand: "apply", PlanFile: "w/plan", StoredPlanFile: "w/stored"}, "w/plan"},
+		// Deploy verifies the stored plan with its own init, plan and show runs, which carry the hook's
+		// location too; none of them applies it, so each prepares the unit afresh.
+		{"verification init run of deploy", schema.ConfigAndStacksInfo{SubCommand: "init", PlanFile: "w/plan", StoredPlanFile: "w/stored"}, ""},
+		{"verification plan run of deploy", schema.ConfigAndStacksInfo{SubCommand: "plan", PlanFile: "w/plan", StoredPlanFile: "w/stored"}, ""},
+		{"verification show run of deploy", schema.ConfigAndStacksInfo{SubCommand: "show", PlanFile: "w/plan", StoredPlanFile: "w/stored"}, ""},
 		{"a plan the user named", schema.ConfigAndStacksInfo{PlanFile: "w/plan", UseTerraformPlan: true, StoredPlanFile: "w/stored"}, "w/plan"},
 		{"a plan named without any stored plan", schema.ConfigAndStacksInfo{PlanFile: "w/plan"}, "w/plan"},
 		{"nothing named", schema.ConfigAndStacksInfo{}, ""},

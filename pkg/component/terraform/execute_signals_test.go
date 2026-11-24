@@ -122,11 +122,16 @@ func TestOrdinaryComponentKeepsAFileNamedLikeTheSignalsFile(t *testing.T) {
 	owned := filepath.Join(dir, execution.SignalsFileName)
 	require.NoError(t, os.WriteFile(owned, []byte(`{"owner":"user"}`), 0o600))
 
-	require.NoError(t, (&Executor{}).beginPreparedConfiguration(t.Context(), cfg, info, nil))
+	require.NoError(t, (&Executor{}).beginPreparedConfiguration(t.Context(), cfg, info, nil, false))
+	require.FileExists(t, owned)
+
+	// A reviewed rebuild re-provisions the working directory, which holds only the restored plan, so it
+	// leaves the directory to the rebuild instead of resolving its owner first.
+	prepared := &schema.PreparedComponentConfiguration{}
+	require.NoError(t, (&Executor{}).beginPreparedConfiguration(t.Context(), cfg, info, prepared, true))
 	require.FileExists(t, owned)
 
 	// A prepared unit still starts from a clean signals file.
-	prepared := &schema.PreparedComponentConfiguration{}
-	require.NoError(t, (&Executor{}).beginPreparedConfiguration(t.Context(), cfg, info, prepared))
+	require.NoError(t, (&Executor{}).beginPreparedConfiguration(t.Context(), cfg, info, prepared, false))
 	require.NoFileExists(t, owned)
 }

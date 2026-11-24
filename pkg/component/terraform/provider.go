@@ -388,7 +388,22 @@ func (s *Operations) GenerateConfigFilesWithContext(ctx context.Context, atmosCo
 func GenerateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	defer perf.Track(atmosConfig, "terraform.GenerateBackendConfig")()
 
-	return tfbackend.GenerateFile(atmosConfig, info, workingDir)
+	// Full detection (it may run the engine's version command) happens only when a provider-owned
+	// module is inspected for its own backend block. It checks the component's resolved command, which
+	// can differ from the global one (a component `command`, or a toolchain-resolved path).
+	return tfbackend.GenerateFile(atmosConfig, info, workingDir,
+		tfbackend.WithOpenTofuDetector(func() bool { return IsOpenTofu(componentCommandConfig(atmosConfig, info), nil) }))
+}
+
+// componentCommandConfig returns atmosConfig with the Terraform command replaced by the component's resolved
+// command, when it has one, so engine detection follows the executable that actually runs.
+func componentCommandConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) *schema.AtmosConfiguration {
+	if atmosConfig == nil || info == nil || info.Command == "" {
+		return atmosConfig
+	}
+	copied := *atmosConfig
+	copied.Components.Terraform.Command = info.Command
+	return &copied
 }
 
 // GenerateProviderOverrides writes `providers_override.tf.json` from the component's `providers`
