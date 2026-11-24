@@ -152,6 +152,28 @@ Atmos enhances the standard Terraform CLI with several conveniences:
 Run `atmos terraform --help` to see all available options.
 :::
 
+## Interrupting Terraform
+
+Pressing Ctrl-C (or sending SIGTERM to Atmos) while Terraform or OpenTofu is running lets Terraform stop the way it does
+when you run it directly. Atmos delivers the signal to Terraform exactly once and waits for it to finish or taint the
+in-flight resource, write state, and release the state lock. Atmos then exits with status 130 for Ctrl-C (SIGINT) or
+143 for SIGTERM.
+
+- **First signal**: Atmos prints `Interrupt received; waiting for terraform to stop gracefully` and keeps waiting
+  for as long as Terraform needs. A terminal Ctrl-C already reaches Terraform directly, so Atmos does not send a second
+  one. A SIGTERM sent only to the Atmos process is forwarded to the Terraform process, as `kill -TERM <terraform pid>`
+  would be, so provider plugins keep running while Terraform finishes the in-flight resource.
+- **Second signal**: Atmos stops waiting, terminates Terraform and its child processes, and exits. Terraform aborts
+  immediately, so state can be lost, exactly as with a second Ctrl-C on plain Terraform.
+- **Multi-component runs** (`--all`, `--affected`, `--components`, `--query`): after the first signal, no new
+  components start. Components that are already running get the same graceful treatment.
+
+This applies to every Terraform, OpenTofu, and Terragrunt process that Atmos starts for a component, including the
+`init` and `workspace` commands it runs automatically. Timeouts and other cancellations that are not caused by a
+signal still terminate Terraform immediately. Lifecycle hook commands and other subprocesses keep the default
+behavior and are terminated when Atmos is interrupted. On Windows, the console already delivers Ctrl-C to Terraform,
+so Atmos only waits for it to exit.
+
 ## Examples
 
 ### Component Name Examples

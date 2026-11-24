@@ -466,6 +466,13 @@ Or use `atmos terraform deploy` for fully automated deployments:
 atmos terraform deploy vpc -s prod
 ```
 
+### Interrupting an Apply
+
+Press Ctrl-C once to stop an apply safely. Atmos waits for Terraform to finish or taint the resource it is working
+on, save state, and release the state lock before it exits. Press Ctrl-C again only if you must stop immediately; like a
+second Ctrl-C on plain Terraform, that can lose state. See
+[Interrupting Terraform](/cli/commands/terraform/usage#interrupting-terraform).
+
 ## Multi-Component Operations
 
 Execute `terraform apply` across multiple components using filtering flags. All flags can be combined with `--dry-run` to preview what would be executed.

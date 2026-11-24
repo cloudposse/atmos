@@ -54,6 +54,7 @@ func (h *terragruntHost) Execute(_ context.Context, command *terragruntexec.Comm
 
 	opts := append([]component.ExecutionOption{}, h.opts...)
 	opts = append(opts, component.WithEnvironment(h.info.SanitizedEnv))
+	opts = gracefulInterruptOptions(opts)
 	return h.executor.services.ExecuteShellCommand(*h.atmosConfig, command.Binary, command.Args, command.WorkingDir, command.Env, command.DryRun, h.info.RedirectStdErr, opts...)
 }
 

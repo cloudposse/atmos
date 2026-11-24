@@ -48,6 +48,11 @@ func TestMain(m *testing.M) {
 		time.Sleep(time.Minute)
 		os.Exit(0)
 	}
+	// Atmos passes atmos.yaml env only to the subprocesses it starts, so the binary
+	// configured as the Terraform command acts as a Terraform that stops gracefully.
+	if dir := os.Getenv(envFakeTerraform); dir != "" {
+		os.Exit(runFakeTerraform(dir))
+	}
 	if os.Getenv(envRunMain) == "1" {
 		main()
 		return

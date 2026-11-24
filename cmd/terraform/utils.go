@@ -8,12 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -43,6 +41,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/signals"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -2103,12 +2102,15 @@ func handleMissingStoredPlan(atmosConfig *schema.AtmosConfiguration, info *schem
 	return nil
 }
 
+// terraformSignalContext stops a multi-component run from starting new components on SIGINT or
+// SIGTERM. Its cancellation records the signal as the cause, so components already running Terraform
+// are not killed by it: the signal handler forwards the interrupt and waits for them to stop.
 func terraformSignalContext(actualCmd *cobra.Command) (context.Context, context.CancelFunc) {
 	ctx := actualCmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	return signals.InterruptContext(ctx)
 }
 
 // hasMultiComponentFlags checks if any multi-component flags are set.

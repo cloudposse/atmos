@@ -259,6 +259,10 @@ type ExecutionOptions struct {
 	// subprocess-tree metrics for combining with atmos's own self-usage, for
 	// both the local per-command display and the exec-metadata sync upload.
 	MetricsCallback func(*metricsprocess.ProcessMetrics)
+
+	// Interrupt selects how the subprocess reacts when Atmos receives SIGINT or SIGTERM.
+	// The zero value terminates it; process.InterruptGraceful lets it stop on its own.
+	Interrupt process.InterruptPolicy
 }
 
 // WithInvokingCommand provides the Cobra command the user actually invoked,
@@ -432,5 +436,17 @@ func WithEnvironment(env []string) ExecutionOption {
 
 	return func(c *ExecutionOptions) {
 		c.ProcessEnv = env
+	}
+}
+
+// WithGracefulInterrupt lets the subprocess stop on its own when Atmos is interrupted.
+// Terraform and OpenTofu use it so the first Ctrl-C or SIGTERM reaches them once and they
+// can finish the in-flight resource, write state, and release the lock before Atmos exits.
+// A second signal still terminates them. See process.InterruptGraceful.
+func WithGracefulInterrupt() ExecutionOption {
+	defer perf.Track(nil, "component.WithGracefulInterrupt")()
+
+	return func(c *ExecutionOptions) {
+		c.Interrupt = process.InterruptGraceful
 	}
 }
