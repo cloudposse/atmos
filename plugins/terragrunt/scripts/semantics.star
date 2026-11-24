@@ -201,6 +201,8 @@ def terraform_binary():
     config["toolchain"] = {"install": "never", "install_path": tools}
     config["stacks"] = {"base_path": "stacks", "included_paths": ["*.yaml"]}
     fixtures.write(root, "atmos.yaml", json.encode(config))
+    # A configured YAML stacks path requires a manifest; the overrides are written later in the test.
+    fixtures.write(root, "stacks/placeholder.yaml", "vars: {}\n")
     fixtures.write(root, ".tool-versions", "opentofu 9.9.9\n")
     fixtures.write(root, "modules/unit/main.tf", lifecycle.UNIT_MODULE)
     ambient = work + "/empty-path"
@@ -467,7 +469,9 @@ def lifecycle_hooks():
     root = new_project("atmos-terragrunt-lifecycle-", binary)
     tool = lifecycle.tool_of(binary)
     fixtures.write(root, "modules/local/main.tf", lifecycle.versioned_module("v1"))
-    fixtures.write(root, "live/dev/staged/marker.tf", 'variable "marker" {}\n')
+    # The unit's own Terraform files are copied into the working directory, as Terragrunt copies them,
+    # so the variable the hooks format-check needs a default to plan.
+    fixtures.write(root, "live/dev/staged/marker.tf", 'variable "marker" {\n  default = ""\n}\n')
     unit = LIFECYCLE_UNIT.replace("@TOOL@", tool).replace("../../../modules/unit", "../../../modules/local")
     lifecycle.write_unit(root, "staged", unit)
 

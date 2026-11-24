@@ -177,5 +177,10 @@ func withFailureLogs(err error, logs *callLogs) error {
 	if len(entries) > 0 {
 		failure.failure.Logs(entries)
 	}
+	// Entries settled whether the events were withheld, so the unsafe detail now gets the same treatment.
+	if detail := failure.failure.Proto(); !detail.GetUserSafe() && detail.GetDetail() != "" {
+		redacted, _ := logs.sink.RedactDetail(detail.GetDetail())
+		failure.failure.Detail(redacted)
+	}
 	return err
 }

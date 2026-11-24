@@ -470,14 +470,16 @@ func TestImportedUnitBackendOptionsBeforeNormalization(t *testing.T) {
 			loaded, err := ProcessYAMLConfigFile(config, root, file, map[string]map[string]any{}, nil, false, true, false, false, nil, nil, nil, nil, "")
 			require.NoError(t, err)
 			compiled, _, err := ProcessStackConfig(config, root, "", "", "", "", file, loaded.DeepMergedConfig, false, false, "", nil, loaded.ImportsConfig, false)
-			if tc.rejected {
-				require.ErrorIs(t, err, errUtils.ErrConfigurationOverrideUnsupported)
-				require.ErrorContains(t, err, "app")
-				require.ErrorContains(t, err, "dev")
-				return // The cleanup assertion verifies rejection before provider effects.
-			}
+			// A rejected override never fails the stack: it is recorded on the component, so only the
+			// commands that target it fail, before any provider effect (see the cleanup assertion).
 			require.NoError(t, err)
 			app := compiled["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)
+			rejected := schema.RejectedConfigurationOverride(app["settings"].(map[string]any))
+			if tc.rejected {
+				require.NotEmpty(t, rejected)
+				return
+			}
+			require.Empty(t, rejected)
 			backend, err := componentadapter.EncodeObject(map[string]any{"path": "unit.tfstate"})
 			require.NoError(t, err)
 			provider.response = &pluginv1.PrepareComponentResponse{Engine: "terraform", State: &pluginv1.ComponentStateIdentity{BackendType: "local", Backend: backend, WorkingDirectory: root}}

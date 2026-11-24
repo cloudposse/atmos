@@ -29,6 +29,10 @@ This command generates a backend config file for an Atmos terraform component in
 Run `atmos terraform generate backend --help` to see all the available options
 :::
 
+:::note
+A component supplied by a configuration provider, such as a [Terragrunt unit](/migration/terragrunt), owns its backend: the unit's own backend file is written when the unit runs. For such a component this command writes nothing and prints a warning, so the working directory never gets a second, conflicting backend. `atmos terraform generate backends` skips these components too.
+:::
+
 ## Examples
 
 ```shell

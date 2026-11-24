@@ -48,14 +48,16 @@ func mergeConfigurationStacks(config *schema.AtmosConfiguration, stacks map[stri
 	return nil
 }
 
-// checkConfigurationBackendOverrides passes the component's own backend layers to the
+// markConfigurationBackendOverrides passes the component's own backend layers to the
 // configuration package before normalization discards their origin. Global backends remain
-// allowed; the provider replaces them during preparation.
-func checkConfigurationBackendOverrides(opts *ComponentProcessorOptions, result *ComponentProcessorResult, settings map[string]any) error {
-	defer perf.Track(nil, "exec.checkConfigurationBackendOverrides")()
+// allowed; the provider replaces them during preparation. A rejected override is recorded on the
+// component's settings rather than failing the stack, so only the commands that target the
+// component fail and every other component keeps working.
+func markConfigurationBackendOverrides(result *ComponentProcessorResult, settings map[string]any) {
+	defer perf.Track(nil, "exec.markConfigurationBackendOverrides")()
 
-	return configuration.CheckBackendOverrides(
-		opts.Component, opts.StackName, settings,
+	configuration.MarkBackendOverrides(
+		settings,
 		configuration.BackendLayer{Type: result.BaseComponentBackendType, Settings: result.BaseComponentBackendSection},
 		configuration.BackendLayer{Type: result.ComponentBackendType, Settings: result.ComponentBackendSection},
 	)

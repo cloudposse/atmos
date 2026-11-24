@@ -603,9 +603,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	if opts.ComponentType == cfg.TerraformComponentType {
 		// Validate component-owned options while backend types are still nested and
 		// component inheritance is distinguishable from stack-global defaults.
-		if err := checkConfigurationBackendOverrides(opts, result, finalSettings); err != nil {
-			return nil, nil, err
-		}
+		markConfigurationBackendOverrides(result, finalSettings)
 		// Process backend configuration.
 		finalComponentBackendType, finalComponentBackend, err := processTerraformBackend(
 			&terraformBackendConfig{

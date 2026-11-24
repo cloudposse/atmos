@@ -348,20 +348,10 @@ func objectJSON(value cty.Value) (any, error) {
 	return result, nil
 }
 
+// registerSensitive registers the distinctive scalars of a declared-sensitive value for masking. Object
+// keys and trivial scalars are skipped, so masking never spills into unrelated output.
 func registerSensitive(value any) {
-	switch value := value.(type) {
-	case map[string]any:
-		for key, child := range value {
-			atmosio.RegisterSecretValue(key)
-			registerSensitive(child)
-		}
-	case []any:
-		for _, child := range value {
-			registerSensitive(child)
-		}
-	default:
-		atmosio.RegisterSecretValue(value)
-	}
+	atmosio.RegisterSensitiveValue(value)
 }
 
 func registerSensitivePaths(value cty.Value, paths []*pluginv1.ComponentValuePath) error {

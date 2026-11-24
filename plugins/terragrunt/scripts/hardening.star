@@ -154,6 +154,13 @@ def generation_lifecycle():
     lifecycle.write_unit(root, "gen", base + GENERATE_BLOCK)
     lifecycle.terraform(root, "plan", "gen")
     fixtures.check(len(workdir_files(root, "gen", "extra.tf")) == 1, "The generated file was not written")
+
+    # The unit's backend belongs to the provider: generating a backend for it writes nothing, says why,
+    # and the next plan still sees exactly one backend.
+    skipped = fixtures.run(root, ["terraform", "generate", "backend", "gen", "-s", STACK])
+    fixtures.check("owned by the configuration provider" in " ".join(output_of(skipped).split()), "generate backend did not explain the skip:\n" + output_of(skipped))
+    fixtures.check(len(workdir_files(root, "gen", "backend.tf.json")) == 0, "generate backend wrote a second backend file")
+    expect_absent(lifecycle.terraform(root, "plan", "gen"), "Duplicate backend configuration", "plan after generate backend")
     lifecycle.write_unit(root, "gen", base)
     lifecycle.terraform(root, "plan", "gen")
     fixtures.check(len(workdir_files(root, "gen", "extra.tf")) == 0, "A removed generate block still applies its file")
@@ -163,10 +170,14 @@ def generation_lifecycle():
     for _ in range(3):
         lifecycle.terraform(root, "plan", "errpolicy")
 
-    # A plain generate block that writes a backend replaces the backend Atmos would write.
+    # A plain generate block that writes a backend is rejected, as documented: its state identity cannot be
+    # verified for dependency reads and saved plans, so the unit must declare the backend in remote_state.
+    # Nothing runs, and Atmos never adds a second backend file.
     state = lifecycle.hcl_path(root) + "/live/dev/plainbackend/state/terraform.tfstate"
     fixtures.write(root, "live/dev/plainbackend/terragrunt.hcl", PLAIN_BACKEND_UNIT.replace("@STATE@", state))
-    plain = lifecycle.terraform(root, "plan", "plainbackend")
+    plain = lifecycle.terraform(root, "plan", "plainbackend", failing=True)
+    expect(plain, "Cannot verify the backend identity", "plan with a generated backend block")
+    expect(plain, "remote_state", "plan with a generated backend block")
     expect_absent(plain, "Duplicate backend configuration", "plan with a generated backend block")
     fixtures.check(len(workdir_files(root, "plainbackend", "backend.tf.json")) == 0, "Atmos wrote a second backend file")
 

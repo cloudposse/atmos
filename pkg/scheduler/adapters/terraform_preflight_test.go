@@ -68,6 +68,27 @@ func TestPreflightRejectsEveryBrokenComponentBeforeAnyRuns(t *testing.T) {
 	assert.Len(t, runtime.asked, 3, "every selected component is checked")
 }
 
+// A component whose stack configuration overrides its provider-owned backend is rejected before any
+// component of the bulk run starts, like one its provider could not evaluate.
+func TestPreflightRejectsARecordedBackendOverride(t *testing.T) {
+	runtime := &failureRuntime{}
+	config := &schema.AtmosConfiguration{ComponentConfigurations: runtime.mock(t)}
+	builder := dependency.NewBuilder()
+	settings := map[string]any{"configuration": map[string]any{schema.ConfigurationOwnedKey: true, schema.ConfigurationRejectedOverrideKey: "backend_type"}}
+	require.NoError(t, builder.AddNode(&dependency.Node{ID: terraformNodeID("a", "live"), Stack: "live", Component: "a", Metadata: map[string]any{"settings": settings}}))
+	require.NoError(t, builder.AddNode(&dependency.Node{ID: terraformNodeID("b", "live"), Stack: "live", Component: "b"}))
+	graph, err := builder.Build()
+	require.NoError(t, err)
+
+	err = preflightTerraformGraph(t.Context(), config, graph, nil)
+
+	require.ErrorIs(t, err, errUtils.ErrPluginComponentsFailed)
+	require.ErrorIs(t, err, errUtils.ErrConfigurationOverrideUnsupported)
+	assert.ErrorContains(t, err, `component "a" in stack "live"`)
+	assert.ErrorContains(t, err, "backend_type")
+	require.NoError(t, preflightTerraformGraph(t.Context(), config, graph, map[string]string{terraformNodeID("a", "live"): "excluded"}), "an excluded component is not checked")
+}
+
 func TestPreflightIgnoresHealthyGraphsAndProvidersWithoutFailures(t *testing.T) {
 	graph := graphOf(t, [2]string{"live", "a"})
 	require.NoError(t, preflightTerraformGraph(t.Context(), &schema.AtmosConfiguration{}, graph, nil))

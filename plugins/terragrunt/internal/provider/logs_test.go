@@ -154,3 +154,30 @@ func TestLogsRedactSensitiveOperationOptions(t *testing.T) {
 	require.Equal(t, "<MASKED> visible-option", entries[0].GetMessage())
 	require.Len(t, requestValues(&pluginv1.ComponentRequest{}), 2, "a request without options still lists its two configurations")
 }
+
+// The cause of a failed evaluation reaches Atmos as unsafe detail: its sensitive values are redacted as the
+// events are, and when the events were withheld because a value could not be redacted, so is the detail.
+func TestFailureDetailIsRedactedLikeTheEvents(t *testing.T) {
+	configuration, err := component.Encode(cty.ObjectVal(map[string]cty.Value{"vars": cty.ObjectVal(map[string]cty.Value{"password": cty.StringVal("pw-789").Mark(component.Sensitive)})}))
+	require.NoError(t, err)
+	failed := func() error {
+		return rpcError(&model.Problem{Code: model.CodeEvaluationError, Summary: "Terragrunt could not evaluate the configuration", Detail: "cause names pw-789"})
+	}
+
+	_, logs := (&Provider{}).withLogs(t.Context(), &pluginv1.Invocation{LogLevel: "debug"}, "", configuration)
+	detail, ok := component.FailureDetail(withFailureLogs(failed(), logs))
+	require.True(t, ok)
+	require.Equal(t, "cause names <MASKED>", detail.GetDetail())
+	require.False(t, detail.GetUserSafe())
+
+	_, logs = (&Provider{}).withLogs(t.Context(), &pluginv1.Invocation{LogLevel: "debug"}, "", configuration)
+	logs.sink.Withhold()
+	detail, ok = component.FailureDetail(withFailureLogs(failed(), logs))
+	require.True(t, ok)
+	require.Empty(t, detail.GetDetail(), "a withheld call keeps its cause out of the failure too")
+
+	_, logs = (&Provider{}).withLogs(t.Context(), &pluginv1.Invocation{LogLevel: "warn"}, "", configuration)
+	detail, ok = component.FailureDetail(withFailureLogs(failed(), logs))
+	require.True(t, ok)
+	require.Equal(t, "cause names pw-789", detail.GetDetail(), "without collected events the host keeps the detail to its debug log")
+}

@@ -1,6 +1,7 @@
 package provideroptions
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -282,6 +283,27 @@ func TestResolveRejectsInvalidValuesWithoutEchoingThem(t *testing.T) {
 		require.ErrorIs(t, err, errUtils.ErrProviderOption)
 		assert.NotContains(t, err.Error(), value)
 	}
+}
+
+// An invalid value read from the environment names the variable that supplied it, not only the flag,
+// so the user can find a value they never typed.
+func TestInvalidEnvironmentValueNamesTheVariable(t *testing.T) {
+	_, err := resolveWith(t, sample, nil, map[string]string{"ATMOS_TOOL_FEATURE": "novalue"})
+	require.ErrorIs(t, err, errUtils.ErrProviderOption)
+	text := strings.Join(append(errUtils.AllDetails(err), errUtils.AllHints(err)...), "\n")
+	assert.Contains(t, text, "`ATMOS_TOOL_FEATURE`")
+	assert.NotContains(t, text, "novalue")
+
+	_, err = resolveWith(t, sample, []string{"--tool-feature=novalue"}, nil)
+	require.ErrorIs(t, err, errUtils.ErrProviderOption)
+	assert.Contains(t, strings.Join(errUtils.AllDetails(err), "\n"), "`--tool-feature`")
+
+	option := schema.ComponentProviderOption{Type: TypeMap, EnvNames: []string{"ATMOS_TERRAGRUNT_FEATURE", "TG_FEATURE"}}
+	_, _, err = InvocationValue("feature", option, map[string]string{"TG_FEATURE": "novalue"})
+	require.ErrorIs(t, err, errUtils.ErrProviderOption)
+	text = strings.Join(append(errUtils.AllDetails(err), errUtils.AllHints(err)...), "\n")
+	assert.Contains(t, text, "`TG_FEATURE`")
+	assert.NotContains(t, text, "novalue")
 }
 
 func TestResolveMarksSensitiveValues(t *testing.T) {

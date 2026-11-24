@@ -344,7 +344,7 @@ func (e *unitEvaluator) parseUnit(ctx context.Context) (*config.TerragruntConfig
 			return nil, err
 		}
 		// Reject unverifiable backend generation before the full download_dir probe.
-		if err := checkBackendGeneration(environment.FS, backendConfigurationPaths(cfg, e.path)); err != nil {
+		if err := e.verifyBackendGeneration(ctx, environment, backendConfigurationPaths(cfg, e.path)); err != nil {
 			return nil, err
 		}
 		if e.request.Environment[downloadDirEnv] == "" && mentionsDownloadDir(environment.FS, backendConfigurationPaths(cfg, e.path)) {

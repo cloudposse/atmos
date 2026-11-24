@@ -189,6 +189,8 @@ def stand_in_project(prefix, version="9.9.9", reported=None):
     stand_in = install_terragrunt_stand_in(tools, version, real, suffix, reported)
     root = work + "/project"
     fixtures.write(root, "atmos.yaml", json.encode(executable_config(real, tools)))
+    # A configured YAML stacks path requires a manifest; scenarios add their overrides later.
+    fixtures.write(root, "stacks/placeholder.yaml", "vars: {}\n")
     fixtures.write(root, ".tool-versions", "terragrunt " + version + "\n")
     return struct(root=root, stand_in=stand_in, real=real, work=work, tools=tools, suffix=suffix)
 
@@ -373,7 +375,8 @@ def executable_requirements():
     write_stand_in_unit(old.root, "app")
     rejected = semantics.invoke(old.root, ["terraform", "plan", "app", "-s", STACK, "--", "-no-color"])
     fixtures.check(rejected.exit_code != 0, "An old terragrunt was accepted")
-    expect(rejected, "older than the minimum 1.0.0", "old terragrunt")
+    # The error wraps to the terminal width, so compare it with its whitespace collapsed.
+    fixtures.check("older than the minimum 1.0.0" in " ".join(semantics.output_of(rejected).split()), "Expected the minimum version in old terragrunt:\n" + semantics.output_of(rejected))
     fixtures.check(engine_calls(old) == [], "The unit ran with an unsupported terragrunt")
     ui.success("Executable mode: a missing or too old terragrunt is a clear error, and nothing runs")
 

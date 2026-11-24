@@ -26,7 +26,7 @@ def unit(name, dependency=None):
     return text
 
 
-def project(work, name, package, binary, discovery=True, scope="live/**", excluded=None):
+def project(work, name, package, binary, discovery=True, scope="live/**", excluded=None, stacks=True):
     root = work + "/" + name
     fixtures.project(root, package)
     config = fixtures.configuration(package, scope=scope, binary=binary)
@@ -34,7 +34,9 @@ def project(work, name, package, binary, discovery=True, scope="live/**", exclud
     settings["enabled"] = discovery
     if excluded:
         settings["excluded_paths"] = excluded
-    config["stacks"] = {"base_path": "stacks", "included_paths": ["*.yaml"], "excluded_paths": ["mixins/**"]}
+    # A configured YAML stacks path requires manifests; a discovery-only project configures none.
+    if stacks:
+        config["stacks"] = {"base_path": "stacks", "included_paths": ["*.yaml"], "excluded_paths": ["mixins/**"]}
     fixtures.write(root, "atmos.yaml", json.encode(config))
     fixtures.write(root, "modules/m/main.tf", MODULE)
     for path, text in [("dev/vpc", unit("dev/vpc")), ("dev/app", unit("dev/app", "vpc")), ("prod/vpc", unit("prod/vpc")), ("prod/db", unit("prod/db"))]:
@@ -112,12 +114,12 @@ def test_conflicts(work, package, binary):
 def test_patterns_select_alike(work, package, binary):
     expected = ["live/dev/app", "live/dev/vpc"]
     for scope in ["live/dev", "live/dev/", "./live/dev", "live/dev/*", "live/dev/**"]:
-        root = project(work, "include-" + scope.replace("/", "_").replace("*", "S").replace(".", "D"), package, binary, scope=scope)
+        root = project(work, "include-" + scope.replace("/", "_").replace("*", "S").replace(".", "D"), package, binary, scope=scope, stacks=False)
         fixtures.check(instances(root) == expected, scope + " selected " + str(instances(root)))
     for excluded in ["live/prod", "live/prod/", "./live/prod", "live/prod/*", "live/prod/**"]:
-        root = project(work, "exclude-" + excluded.replace("/", "_").replace("*", "S").replace(".", "D"), package, binary, scope="./**", excluded=[excluded])
+        root = project(work, "exclude-" + excluded.replace("/", "_").replace("*", "S").replace(".", "D"), package, binary, scope="./**", excluded=[excluded], stacks=False)
         fixtures.check(instances(root) == expected, excluded + " left " + str(instances(root)))
-    root = project(work, "warns", package, binary, scope="live/nothing")
+    root = project(work, "warns", package, binary, scope="live/nothing", stacks=False)
     result = fixtures.run(root, ["list", "instances"])
     fixtures.check("live/nothing" in result.stderr and "matched no" in result.stderr, "An unmatched pattern must be reported:\n" + result.stderr)
 
@@ -133,7 +135,7 @@ def symlink(root, path, target):
 
 
 def test_symlinks_follow_upstream(work, package, binary):
-    root = project(work, "links", package, binary)
+    root = project(work, "links", package, binary, stacks=False)
     if not symlink(root, "live/linked", "prod") or not symlink(root, "live/dev/copy/terragrunt.hcl", "../vpc/terragrunt.hcl"):
         ui.info("Symbolic links are unavailable on this host; skipping the symlink scenario")
         return
