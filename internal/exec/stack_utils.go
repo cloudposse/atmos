@@ -98,13 +98,15 @@ func BuildDependentStackNameFromDependsOn(
 // and may be a Go template, which is rendered with the component's own sections (`.vars`, `.settings`, `.env`,
 // `.metadata`) when templates are enabled. An omitted `stack` means the declaring component's own stack.
 // Entries that are not Terraform dependencies (other kinds, files, folders) have no Spacelift stack and are skipped.
-// A target that does not resolve is an error unless the entry sets `required: false`, in which case it is skipped.
+// A target must be a component that generates a Spacelift stack (see BuildSpaceliftGeneratedStackIndex), and its
+// dependency name is that stack's actual name. A target that does not resolve is an error unless the entry sets
+// `required: false`, in which case it is skipped.
 func BuildDependentStackNamesFromDependenciesComponents(
 	atmosConfig *schema.AtmosConfiguration,
 	componentMap map[string]any,
 	currentComponentName string,
 	currentStackName string,
-	allStackNames []string,
+	generatedStacks map[SpaceliftStackKey]string,
 ) ([]string, bool, error) {
 	defer perf.Track(atmosConfig, "exec.BuildDependentStackNamesFromDependenciesComponents")()
 
@@ -131,14 +133,17 @@ func BuildDependentStackNamesFromDependenciesComponents(
 			return nil, false, err
 		}
 
-		name := strings.ReplaceAll(fmt.Sprintf("%s-%s", dependsOnStackName, dep.Component), "/", "-")
+		// Use the name of the Spacelift stack the target is generated with, which honors `stack_name` and
+		// `stack_name_pattern` overrides. Targets that generate no Spacelift stack (abstract, disabled, or without
+		// `workspace_enabled`) are not in the index.
+		name, found := generatedStacks[NewSpaceliftStackKey(dependsOnStackName, dep.Component)]
 		switch {
-		case slices.Contains(allStackNames, name):
+		case found:
 			names = append(names, name)
 		case dep.IsRequired():
 			return nil, false, fmt.Errorf(
 				"%w: the component '%s' in the stack '%s' specifies a 'dependencies.components' dependency "+
-					"on the component '%s' in the stack '%s', but '%s' is not defined in the '%s' stack, or the component and stack names are not correct",
+					"on the component '%s' in the stack '%s', but '%s' is not a Spacelift-enabled component in the '%s' stack, or the component and stack names are not correct",
 				errUtils.ErrInvalidDependenciesComponents,
 				currentComponentName,
 				currentStackName,

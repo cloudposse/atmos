@@ -91,6 +91,17 @@ func CreateSpaceliftStacks(
 	}
 }
 
+// componentDeclaresDependenciesComponents reports whether a component has a `dependencies.components` section, so the
+// index of generated Spacelift stacks is only built when something needs it.
+func componentDeclaresDependenciesComponents(componentMap map[string]any) bool {
+	dependencies, ok := componentMap[cfg.DependenciesSectionName].(map[string]any)
+	if !ok {
+		return false
+	}
+	_, ok = dependencies["components"]
+	return ok
+}
+
 // TransformStackConfigToSpaceliftStacks takes a map of stack manifests and transforms it to a map of Spacelift stacks
 func TransformStackConfigToSpaceliftStacks(
 	atmosConfig *schema.AtmosConfiguration,
@@ -110,6 +121,9 @@ func TransformStackConfigToSpaceliftStacks(
 	if err != nil {
 		return nil, err
 	}
+
+	// Index of the Spacelift stacks that are actually generated, built on first use by `dependencies.components`.
+	var generatedStacks map[e.SpaceliftStackKey]string
 
 	for stackName, stackConfig := range stacks {
 		config := stackConfig.(map[string]any)
@@ -310,12 +324,19 @@ func TransformStackConfigToSpaceliftStacks(
 
 					// `dependencies.components` supersedes `settings.depends_on`. When it declares Terraform
 					// dependencies, `settings.depends_on` is ignored, matching `atmos describe dependents`.
+					if generatedStacks == nil && componentDeclaresDependenciesComponents(componentMap) {
+						generatedStacks, err = e.BuildSpaceliftGeneratedStackIndex(atmosConfig, stacks, stackNaming)
+						if err != nil {
+							return nil, err
+						}
+					}
+
 					dependenciesComponentsStackNames, dependenciesComponentsDeclared, err := e.BuildDependentStackNamesFromDependenciesComponents(
 						atmosConfig,
 						componentMap,
 						component,
 						contextPrefix,
-						allStackNames,
+						generatedStacks,
 					)
 					if err != nil {
 						return nil, err

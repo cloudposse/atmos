@@ -455,6 +455,45 @@ func TestTransformStackConfigToSpaceliftStacks_DependenciesComponents(t *testing
 		assert.Equal(t, []string{"depends-on:tenant1-ue1-dev-vpc"}, dependsOnLabels(t, templatesEnabled, stacks))
 	})
 
+	// setVpc replaces the settings/metadata of the `vpc` target in the same stack as `app`.
+	setVpc := func(stacks map[string]any, key string, value any) {
+		vpc := stacks["orgs/tenant1/dev/ue1"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)["vpc"].(map[string]any)
+		vpc[key] = value
+	}
+	depOnVpc := map[string]any{"components": []any{map[string]any{"name": "vpc"}}}
+
+	t.Run("a target with a stack_name override is labeled with its real Spacelift stack name", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, depOnVpc)
+		setVpc(stacks, "settings", map[string]any{"spacelift": map[string]any{"workspace_enabled": true, "stack_name": "network-prod"}})
+		assert.Equal(t, []string{"depends-on:network-prod"}, dependsOnLabels(t, templatesEnabled, stacks))
+	})
+
+	t.Run("a target with a stack_name_pattern override is labeled with its real Spacelift stack name", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, depOnVpc)
+		setVpc(stacks, "settings", map[string]any{"spacelift": map[string]any{"workspace_enabled": true, "stack_name_pattern": "net-{environment}-{component}"}})
+		assert.Equal(t, []string{"depends-on:net-ue1-vpc"}, dependsOnLabels(t, templatesEnabled, stacks))
+	})
+
+	t.Run("a required target without workspace_enabled is an error", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, depOnVpc)
+		setVpc(stacks, "settings", map[string]any{"spacelift": map[string]any{"workspace_enabled": false}})
+		_, err := TransformStackConfigToSpaceliftStacks(templatesEnabled, stacks, "stacks/%s.yaml", "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}", "", false, nil)
+		require.ErrorIs(t, err, errUtils.ErrInvalidDependenciesComponents)
+	})
+
+	t.Run("an optional target without workspace_enabled is skipped", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, map[string]any{"components": []any{map[string]any{"name": "vpc", "required": false}}})
+		setVpc(stacks, "settings", map[string]any{})
+		assert.Empty(t, dependsOnLabels(t, templatesEnabled, stacks))
+	})
+
+	t.Run("a required abstract target is an error", func(t *testing.T) {
+		stacks := dependsOnTestStacks(nil, depOnVpc)
+		setVpc(stacks, "metadata", map[string]any{"type": "abstract"})
+		_, err := TransformStackConfigToSpaceliftStacks(templatesEnabled, stacks, "stacks/%s.yaml", "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}", "", false, nil)
+		require.ErrorIs(t, err, errUtils.ErrInvalidDependenciesComponents)
+	})
+
 	t.Run("a non-map dependencies section is an error", func(t *testing.T) {
 		stacks := dependsOnTestStacks(nil, nil)
 		stacks["orgs/tenant1/dev/ue1"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)["app"].(map[string]any)["dependencies"] = "vpc"
