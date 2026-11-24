@@ -55,9 +55,9 @@ func (c *AzureCredentials) armValidationOptions() *arm.ClientOptions {
 // isAzureTokenRejection reports whether err shows that Resource Manager answered and rejected the
 // access token: an HTTP 401, or a known token rejection code. Other answers (no access to the
 // subscription, an unknown subscription, a server fault) and transport failures are not.
-// lastStatus is the HTTP status of the last answer (see azureStatusRecorder). It keeps a 401
-// recognizable when its body could not be read: the SDK then returns the read error instead of a
-// ResponseError.
+// The lastStatus argument is the HTTP status of the last answer (see azureStatusRecorder). It keeps
+// a 401 recognizable when its body could not be read: the SDK then returns the read error instead
+// of a ResponseError.
 func isAzureTokenRejection(err error, lastStatus int) bool {
 	if lastStatus == http.StatusUnauthorized {
 		return true
