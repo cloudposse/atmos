@@ -34,6 +34,12 @@ func GenerateFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAnd
 	if !schema.ConfigurationOwned(info.ComponentSettingsSection) {
 		return u.WriteToFileAsJSON(backendFileName, componentBackendConfig, backendFileMode)
 	}
+	// A provider-owned unit whose module declares its own backend block gets the settings at init instead
+	// of a second backend file.
+	settings, isBackend := backendSettings(componentBackendConfig, info.ComponentBackendType)
+	if isBackend && moduleDeclaresBackend(workingDir) {
+		return passBackendToInit(info, workingDir, settings)
+	}
 	// The write and its receipt share the workdir lock with RemoveHostBackend, so a handoff never
 	// removes a backend written after it verified the receipt.
 	err = configuration.WithWorkdirLock(workingDir, func() error {
@@ -49,3 +55,12 @@ func GenerateFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAnd
 }
 
 const backendFileMode = 0o600
+
+// backendSettings returns the settings of the `backend` block in a generated backend configuration. A
+// `cloud` block has none, since it is not a backend.
+func backendSettings(config map[string]any, backendType string) (map[string]any, bool) {
+	terraform, _ := config["terraform"].(map[string]any)
+	backends, _ := terraform["backend"].(map[string]any)
+	settings, ok := backends[backendType].(map[string]any)
+	return settings, ok
+}

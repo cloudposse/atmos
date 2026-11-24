@@ -440,6 +440,14 @@ func TestImportedUnitBackendOptionsBeforeNormalization(t *testing.T) {
 	}{
 		{"component local", "components:\n  terraform:\n    app:\n      backend:\n        local:\n          path: other.tfstate\n", true},
 		{"component backend type", "components:\n  terraform:\n    app:\n      backend_type: s3\n      backend:\n        s3:\n          bucket: other\n", true},
+		// The unit's placeholder backend has no `s3` key, so normalizing this override would fail the whole
+		// stack with a backend type mismatch; the rejected override must not reach normalization.
+		{"component type without options", "components:\n  terraform:\n    app:\n      backend_type: s3\n", true},
+		{
+			"component azurerm backend without a key",
+			"components:\n  terraform:\n    app:\n      backend_type: azurerm\n      backend:\n        azurerm: {}\n",
+			true,
+		},
 		{"inherited local", "components:\n  terraform:\n    base:\n      metadata:\n        type: abstract\n      backend:\n        local:\n          path: inherited.tfstate\n    app:\n      metadata:\n        inherits: [base]\n", true},
 		{"global local", "terraform:\n  backend_type: local\n  backend:\n    local:\n      path: global.tfstate\n", false},
 		{"global s3", "terraform:\n  backend_type: s3\n  backend:\n    s3:\n      bucket: global\n", false},

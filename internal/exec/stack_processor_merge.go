@@ -604,6 +604,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		// Validate component-owned options while backend types are still nested and
 		// component inheritance is distinguishable from stack-global defaults.
 		markConfigurationBackendOverrides(result, finalSettings)
+		backendLayers := componentBackendLayers(result, finalSettings)
 		// Process backend configuration.
 		finalComponentBackendType, finalComponentBackend, err := processTerraformBackend(
 			&terraformBackendConfig{
@@ -614,10 +615,10 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				componentMetadata:           finalComponentMetadata,
 				globalBackendType:           opts.GlobalBackendType,
 				globalBackendSection:        opts.GlobalBackendSection,
-				baseComponentBackendType:    result.BaseComponentBackendType,
-				baseComponentBackendSection: result.BaseComponentBackendSection,
-				componentBackendType:        result.ComponentBackendType,
-				componentBackendSection:     result.ComponentBackendSection,
+				baseComponentBackendType:    backendLayers.baseType,
+				baseComponentBackendSection: backendLayers.baseSection,
+				componentBackendType:        backendLayers.componentType,
+				componentBackendSection:     backendLayers.componentSection,
 			},
 		)
 		if err != nil {

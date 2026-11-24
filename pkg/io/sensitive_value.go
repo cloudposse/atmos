@@ -1,8 +1,10 @@
 package io
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -15,9 +17,9 @@ import (
 // words and digits ("known after apply", timings) while protecting almost nothing.
 const minMaskableRunes = 4
 
-// trivialSecret reports whether a text is too short or too common to mask without hiding unrelated output:
-// fewer than minMaskableRunes characters once trimmed, no letter or digit (a closing brace), or a boolean
-// or null literal.
+// trivialSecret reports whether a value is too short or too common to mask without hiding unrelated output:
+// fewer than minMaskableRunes characters once trimmed (a closing brace, "app", a small number), or a boolean
+// or null literal. A longer value made only of symbols, such as a password, is still a secret.
 func trivialSecret(value string) bool {
 	trimmed := strings.TrimSpace(value)
 	if utf8.RuneCountInString(trimmed) < minMaskableRunes {
@@ -27,13 +29,18 @@ func trivialSecret(value string) bool {
 	case "true", "false", "null":
 		return true
 	}
-	return !strings.ContainsFunc(trimmed, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) })
+	return false
 }
 
-// structuralLine reports whether a line of a sensitive text only opens a block, such as `terraform {` or
-// `backend "s3" {`. It names structure, not a value, and appears in unrelated output too.
+// structuralLine reports whether a line of a sensitive text is structure rather than a value: it only opens a
+// block, such as `terraform {` or `backend "s3" {`, or it has no letter or digit, such as `}},` or a `-----`
+// separator. Such a line appears in unrelated output too, so it is not masked on its own; the complete text
+// that contains it still is.
 func structuralLine(line string) bool {
 	trimmed := strings.TrimSpace(line)
+	if !strings.ContainsFunc(trimmed, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) {
+		return true
+	}
 	return strings.HasSuffix(trimmed, "{") && !strings.Contains(trimmed, "=")
 }
 
@@ -94,6 +101,21 @@ func RegisterSensitiveText(text string) {
 	registerSensitiveText(text)
 }
 
+// registerEncodedText registers a complete multi-line text and the encoded forms the masker registers for a
+// secret (base64 in every variant, URL query escaping, and JSON escaping), without registering its lines.
+func registerEncodedText(text string) {
+	RegisterValue(text)
+	for _, encoding := range []*base64.Encoding{
+		base64.StdEncoding, base64.URLEncoding, base64.RawStdEncoding, base64.RawURLEncoding,
+	} {
+		RegisterValue(encoding.EncodeToString([]byte(text)))
+	}
+	RegisterValue(url.QueryEscape(text))
+	if escaped, err := json.Marshal(text); err == nil && len(escaped) > 2 {
+		RegisterValue(string(escaped[1 : len(escaped)-1]))
+	}
+}
+
 func registerSensitiveText(text string) {
 	if trivialSecret(text) {
 		return
@@ -103,9 +125,9 @@ func registerSensitiveText(text string) {
 		RegisterSecret(text)
 		return
 	}
-	RegisterValue(text)
+	registerEncodedText(text)
 	if normalized != text {
-		RegisterValue(normalized)
+		registerEncodedText(normalized)
 	}
 	for _, line := range strings.Split(normalized, "\n") {
 		// The trimmed line also matches the line shown with a different indentation.

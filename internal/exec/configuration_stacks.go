@@ -63,6 +63,26 @@ func markConfigurationBackendOverrides(result *ComponentProcessorResult, setting
 	)
 }
 
+// backendLayers are the component-level backend layers that backend normalization merges.
+type backendLayers struct {
+	baseType, componentType       string
+	baseSection, componentSection map[string]any
+}
+
+// componentBackendLayers returns the component-level backend layers to normalize. For a component whose
+// override was rejected (see markConfigurationBackendOverrides), they are dropped: the override never
+// applies, and normalizing it, for example a backend_type without its options, could fail the whole stack
+// instead of only the commands that target the component.
+func componentBackendLayers(result *ComponentProcessorResult, settings map[string]any) backendLayers {
+	if schema.RejectedConfigurationOverride(settings) != "" {
+		return backendLayers{}
+	}
+	return backendLayers{
+		baseType: result.BaseComponentBackendType, baseSection: result.BaseComponentBackendSection,
+		componentType: result.ComponentBackendType, componentSection: result.ComponentBackendSection,
+	}
+}
+
 // validateDiscoveredManifests adapts the configuration package's manifest validation
 // to the stack processor's compiled-schema cache.
 func validateDiscoveredManifests(config *schema.AtmosConfiguration, schemaPath string) ([]string, error) {

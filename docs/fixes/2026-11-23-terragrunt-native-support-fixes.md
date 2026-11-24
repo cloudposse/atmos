@@ -81,6 +81,19 @@ integration scenarios pass on macOS.
   `semantics.star` gives the hooks' `marker` variable a default (unit `.tf` files are copied, as Terragrunt
   copies them); `hardening.star` expects the documented rejection of a generate block that writes a backend,
   and checks that `terraform generate backend` skips a unit.
+- **Review round (CodeRabbit on PR #3754).**
+  - A rejected component-level backend override is dropped before backend normalization
+    (`componentBackendLayers` in `internal/exec/configuration_stacks.go`), so a `backend_type` without
+    matching options no longer fails the whole stack with a backend type mismatch.
+  - When a provider-owned unit's module declares its own `backend` block, the host writes no
+    `backend.tf.json`; it passes the `remote_state` settings to `init` as
+    `-backend-config=atmos-backend.tfbackend` and removes a host backend file it wrote earlier
+    (`pkg/terraform/backend/module_backend.go`, `file.go`).
+  - `pkg/io/sensitive_value.go`: a long value made only of symbols, such as a password, is masked again;
+    punctuation-only lines of a sensitive text are still skipped. The complete sensitive text is also
+    registered in base64 (all four variants), URL-escaped and JSON-escaped forms, without its lines.
+  - `plugins/terragrunt/internal/engine/backend_json.go` (new): HCL JSON backend detection reads tokens, so
+    duplicate `terraform` properties and top-level body arrays are inspected.
 - **Plugin version.** `plugins/terragrunt/plugin.yaml` is bumped from 0.1.1 to 0.1.2.
 - **Docs.** `website/docs/migration/terragrunt.mdx`, `website/docs/cli/commands/terraform/generate/backend.mdx`
   and `plugins/terragrunt/README.md` describe the masking, generate, generate backend, `remote_state` without
@@ -145,15 +158,22 @@ integration scenarios pass on macOS.
 - `atmos plugin test plugins/terragrunt` (default suite, after the version bump and rebuild): 3 of 3 passed.
 - By hand: a unit whose directory holds a nested `.terraform.lock.hcl` shows only the headline and the debug
   hint at the default level, and with `--logs-level=Debug` the error includes the overlay's reason (F5).
+- Review round: new tests written first and seen failing, then passing:
+  `TestRegisterSensitiveValueMasksSymbolOnlySecrets`, `TestRegisterSensitiveTextMasksEncodedForms`, new
+  `TestTrivialSecret` and `TestProvablyWithoutBackend` cases, `TestJSONDeclaresBackend`, the "component type
+  without options" case of `TestImportedUnitBackendOptionsBeforeNormalization`,
+  `TestGenerateFilePassesTheBackendToInitWhenTheModuleDeclaresOne`,
+  `TestGenerateFileWritesTheBackendWhenTheModuleDeclaresNone`, `TestGenerateFileKeepsUnownedComponentsUnchanged`,
+  `TestPassBackendToInitEdgeCases` and `TestModuleDeclaresBackendIgnoresWhatIsNotABackendBlock`. By hand: a
+  unit whose module declares `backend "local" {}` and whose `remote_state` has no `generate` applied with its
+  state at the `remote_state` path, and a second plan reported no changes (before: "Duplicate backend
+  configuration"). After the review round: plugin default suite 3 of 3 and integration suite 44 of 44 passed
+  again, and patch coverage on added and changed non-test Go lines was 311 of 315 statements (98.7%).
 - `golangci-lint` could not be run in this environment (the command was denied). Comment punctuation,
   `perf.Track` on new exported host functions, file length and complexity were checked by hand.
 - The website was not rebuilt: `website/node_modules` is not installed in this worktree.
 
 ## Follow-ups
 
-- A unit whose module declares its own `backend` block and whose `remote_state` has no `generate` now fails
-  loudly with "Duplicate backend configuration" instead of silently writing state away from its identity.
-  Full Terragrunt parity would pass the identity as `-backend-config` init arguments for such modules. This is
-  documented in the migration guide; whether to track it as an issue is the maintainers' call.
 - Discovery diagnostics (`list instances` on a broken unit) still drop unsafe detail, so F5's Debug detail
   applies to commands that prepare a unit, not to discovery listings.

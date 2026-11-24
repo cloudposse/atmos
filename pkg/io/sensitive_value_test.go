@@ -1,7 +1,9 @@
 package io
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,10 +18,16 @@ func resetMasking(t *testing.T) {
 }
 
 func TestTrivialSecret(t *testing.T) {
-	for _, value := range []string{"", " ", "x", "app", "dev", "  }", "},", "{}", "[ ]", "true", "FALSE", "null", "0.1", "42", "  -- "} {
+	trivial := []string{
+		"", " ", "x", "app", "dev", "  }", "},", "{}", "[ ]", "true", "FALSE", "null", "0.1", "42", "  -- ",
+	}
+	for _, value := range trivial {
 		assert.True(t, trivialSecret(value), "%q is trivial", value)
 	}
-	for _, value := range []string{"abcd", "1234", "not-a-real-password", "  password = \"hunter22\"", "9007199254740993", "émoji✓"} {
+	maskable := []string{
+		"abcd", "1234", "not-a-real-password", "  password = \"hunter22\"", "9007199254740993", "émoji✓", "!@#$%^&*",
+	}
+	for _, value := range maskable {
 		assert.False(t, trivialSecret(value), "%q is maskable", value)
 	}
 }
@@ -73,6 +81,40 @@ func TestRegisterSensitiveValueMasksMultilineStrings(t *testing.T) {
 
 	RegisterSensitiveValue(map[string]any{"key": "-----BEGIN KEY-----\r\nmultiline-secret-line\r\n-----END KEY-----"})
 
-	assert.Equal(t, "<MASKED>", MaskString("-----BEGIN KEY-----\nmultiline-secret-line\n-----END KEY-----"), "the normalized text is masked whole")
+	normalized := "-----BEGIN KEY-----\nmultiline-secret-line\n-----END KEY-----"
+	assert.Equal(t, "<MASKED>", MaskString(normalized), "the normalized text is masked whole")
 	assert.NotContains(t, MaskString("line: multiline-secret-line"), "multiline-secret-line")
+}
+
+// A declared-sensitive value made only of symbols is still a secret worth masking: only short values,
+// booleans and null are too common to mask.
+func TestRegisterSensitiveValueMasksSymbolOnlySecrets(t *testing.T) {
+	resetMasking(t)
+
+	RegisterSensitiveValue(map[string]any{"password": "!@#$%^&*"})
+
+	assert.Equal(t, "password=<MASKED>", MaskString("password=!@#$%^&*"))
+}
+
+// The complete sensitive text is masked in its encoded forms too, so a hook that prints a generated file
+// base64- or URL-encoded does not reveal it, while punctuation-only lines stay unregistered.
+func TestRegisterSensitiveTextMasksEncodedForms(t *testing.T) {
+	resetMasking(t)
+	text := "terraform {\n  backend \"s3\" {\n    secret_key = \"encoded-secret-key-9f2\"\n  }\n}\n-----\n"
+
+	RegisterSensitiveText(text)
+
+	for _, encoded := range []string{
+		base64.StdEncoding.EncodeToString([]byte(text)),
+		base64.URLEncoding.EncodeToString([]byte(text)),
+		base64.RawStdEncoding.EncodeToString([]byte(text)),
+		base64.RawURLEncoding.EncodeToString([]byte(text)),
+		url.QueryEscape(text),
+	} {
+		assert.Equal(t, "value: <MASKED>", MaskString("value: "+encoded), encoded)
+	}
+	escaped, err := json.Marshal(text)
+	require.NoError(t, err)
+	assert.NotContains(t, MaskString(string(escaped)), "encoded-secret-key-9f2")
+	assert.Equal(t, "-----", MaskString("-----"), "a separator line is structure, not a secret")
 }

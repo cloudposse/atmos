@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -78,33 +77,6 @@ func hclDeclaresBackend(content []byte, path string) bool {
 			if nested.Type == "backend" || nested.Type == "cloud" {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-func jsonDeclaresBackend(content []byte) bool {
-	var document struct {
-		Terraform json.RawMessage `json:"terraform"`
-	}
-	if json.Unmarshal(content, &document) != nil || len(document.Terraform) == 0 {
-		return false
-	}
-	// "terraform" is an object, or a list of objects in the alternate JSON syntax.
-	var blocks []map[string]json.RawMessage
-	if json.Unmarshal(document.Terraform, &blocks) != nil {
-		var single map[string]json.RawMessage
-		if json.Unmarshal(document.Terraform, &single) != nil {
-			return false
-		}
-		blocks = []map[string]json.RawMessage{single}
-	}
-	for _, block := range blocks {
-		if _, ok := block["backend"]; ok {
-			return true
-		}
-		if _, ok := block["cloud"]; ok {
-			return true
 		}
 	}
 	return false
