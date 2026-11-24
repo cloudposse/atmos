@@ -50,6 +50,8 @@ func fileKeyringConfigDigestDir(dir string) string {
 // record key, so identity names with path separators or characters a file system rejects
 // (such as ':' on Windows) map to one safe file name, and realms stay separated.
 func (s *keyringCredentialStore) configDigestFile(alias, realm string) string {
+	// codeql[go/weak-sensitive-data-hashing] -- hashes the record key (realm and identity name) to
+	// derive a deterministic file name; no password or credential is hashed or verified here.
 	sum := sha256.Sum256([]byte(buildConfigDigestKey(alias, realm)))
 	return filepath.Join(s.digestDir, hex.EncodeToString(sum[:])+".json")
 }
