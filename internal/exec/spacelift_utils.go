@@ -4,10 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// spaceliftNameSeparator replaces `/` when a stack or component name is turned into a Spacelift stack name.
+const spaceliftNameSeparator = "-"
 
 // BuildSpaceliftStackName builds a Spacelift stack name from the provided context and stack name pattern.
 func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Context, contextPrefix string) (string, string, error) {
@@ -19,7 +23,7 @@ func BuildSpaceliftStackName(spaceliftSettings map[string]any, context schema.Co
 		return spaceliftStackName, contextPrefix, nil
 	} else {
 		defaultSpaceliftStackNamePattern := fmt.Sprintf("%s-%s", contextPrefix, context.Component)
-		return strings.Replace(defaultSpaceliftStackNamePattern, "/", "-", -1), contextPrefix, nil
+		return strings.ReplaceAll(defaultSpaceliftStackNamePattern, "/", spaceliftNameSeparator), contextPrefix, nil
 	}
 }
 
@@ -68,7 +72,7 @@ func ResolveSpaceliftContextPrefix(
 		}
 		return prefix, ensureLiteralStackIdentity(stackName, prefix, map[string]any{cfg.VarsSectionName: componentVars})
 	default:
-		return strings.ReplaceAll(stackName, "/", "-"), nil
+		return strings.ReplaceAll(stackName, "/", spaceliftNameSeparator), nil
 	}
 }
 
@@ -76,10 +80,23 @@ func ResolveSpaceliftContextPrefix(
 func buildSpaceliftStackNameForComponent(
 	atmosConfig *schema.AtmosConfiguration,
 	stackName string,
-	component string,
+	componentName string,
 	componentMap map[string]any,
 	naming SpaceliftStackNaming,
 ) (string, error) {
+	name, _, err := buildSpaceliftStackNameAndPrefix(atmosConfig, stackName, componentName, componentMap, naming)
+	return name, err
+}
+
+// buildSpaceliftStackNameAndPrefix resolves a single Terraform component's Spacelift stack name together with the
+// logical stack name (context prefix) it was derived from.
+func buildSpaceliftStackNameAndPrefix(
+	atmosConfig *schema.AtmosConfiguration,
+	stackName string,
+	componentName string,
+	componentMap map[string]any,
+	naming SpaceliftStackNaming,
+) (string, string, error) {
 	componentVars := map[string]any{}
 	if i, ok := componentMap["vars"]; ok {
 		componentVars = i.(map[string]any)
@@ -95,19 +112,97 @@ func buildSpaceliftStackNameForComponent(
 
 	context := cfg.GetContextFromVars(componentVars)
 
+	// Set the base component before resolving the name, as the Spacelift stack processor does, so naming
+	// patterns that use `{base-component}` resolve the same way here.
+	context.BaseComponent = component.ProcessMetadata(componentName, componentMap).BaseComponent
+
 	contextPrefix, err := ResolveSpaceliftContextPrefix(atmosConfig, stackName, &context, componentVars, naming)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	context.Component = component
+	context.Component = componentName
 
 	spaceliftStackName, _, err := BuildSpaceliftStackName(spaceliftSettings, context, contextPrefix)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	return strings.ReplaceAll(spaceliftStackName, "/", "-"), nil
+	return strings.ReplaceAll(spaceliftStackName, "/", spaceliftNameSeparator), contextPrefix, nil
+}
+
+// SpaceliftStackKey identifies a Terraform component by its logical stack name (context prefix) and component name.
+type SpaceliftStackKey struct {
+	Stack     string
+	Component string
+}
+
+// NewSpaceliftStackKey builds the lookup key for a logical stack and component. The stack is normalized the same
+// way Spacelift stack names are normalized; the component is kept exact so distinct component names (for example
+// `tgw/hub` and `tgw-hub`) stay distinct.
+func NewSpaceliftStackKey(stack, componentName string) SpaceliftStackKey {
+	defer perf.Track(nil, "exec.NewSpaceliftStackKey")()
+
+	return SpaceliftStackKey{
+		Stack:     strings.ReplaceAll(stack, "/", spaceliftNameSeparator),
+		Component: componentName,
+	}
+}
+
+// BuildSpaceliftGeneratedStackIndex maps every Terraform component that generates a Spacelift stack to that stack's
+// name. Like the Spacelift stack processor, it skips abstract and disabled components and components without
+// `settings.spacelift.workspace_enabled: true`. The name honors `settings.spacelift.stack_name` and
+// `settings.spacelift.stack_name_pattern`, so it is the name the stack is actually created with.
+func BuildSpaceliftGeneratedStackIndex(
+	atmosConfig *schema.AtmosConfiguration,
+	stacks map[string]any,
+	naming SpaceliftStackNaming,
+) (map[SpaceliftStackKey]string, error) {
+	defer perf.Track(atmosConfig, "exec.BuildSpaceliftGeneratedStackIndex")()
+
+	index := map[SpaceliftStackKey]string{}
+
+	for stackName, stackConfig := range stacks {
+		componentsSection, ok := stackConfig.(map[string]any)["components"].(map[string]any)
+		if !ok {
+			continue
+		}
+		terraformComponents, ok := componentsSection["terraform"].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		for componentName, v := range terraformComponents {
+			componentMap := v.(map[string]any)
+
+			if !spaceliftStackIsGenerated(componentName, componentMap) {
+				continue
+			}
+
+			name, contextPrefix, err := buildSpaceliftStackNameAndPrefix(atmosConfig, stackName, componentName, componentMap, naming)
+			if err != nil {
+				return nil, err
+			}
+			index[NewSpaceliftStackKey(contextPrefix, componentName)] = name
+		}
+	}
+
+	return index, nil
+}
+
+// spaceliftStackIsGenerated reports whether a Terraform component produces a Spacelift stack: it must be real
+// (not abstract), enabled, and have `settings.spacelift.workspace_enabled: true`.
+func spaceliftStackIsGenerated(componentName string, componentMap map[string]any) bool {
+	metadata := component.ProcessMetadata(componentName, componentMap)
+	if metadata.Abstract || !metadata.Enabled {
+		return false
+	}
+
+	settings, _ := componentMap["settings"].(map[string]any)
+	spaceliftSettings, _ := settings["spacelift"].(map[string]any)
+	workspaceEnabled, _ := spaceliftSettings["workspace_enabled"].(bool)
+
+	return workspaceEnabled
 }
 
 // BuildSpaceliftStackNames builds Spacelift stack names.
@@ -162,7 +257,7 @@ func BuildSpaceliftStackNameFromComponentConfig(
 	// Spacelift stack
 	if spaceliftWorkspaceEnabled, ok := spaceliftSettingsSection["workspace_enabled"].(bool); ok && spaceliftWorkspaceEnabled {
 		context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-		context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
+		context.Component = strings.ReplaceAll(configAndStacksInfo.ComponentFromArg, "/", spaceliftNameSeparator)
 
 		if atmosConfig.Stacks.NameTemplate != "" {
 			contextPrefix, err = processStackNameTemplate(atmosConfig, configAndStacksInfo.Stack, atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
