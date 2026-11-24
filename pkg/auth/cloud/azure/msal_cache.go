@@ -192,7 +192,7 @@ func (c *msalCache) Export(ctx context.Context, m cache.Marshaler, hints cache.E
 		if err != nil {
 			return fmt.Errorf("failed to marshal MSAL cache: %w", err)
 		}
-		if err := credentialFileSystem.WriteFileAtomic(c.cachePath, merged, FilePermissions); err != nil {
+		if err := writeSharedMSALCache(c.cachePath, merged); err != nil {
 			return fmt.Errorf("failed to write MSAL cache: %w", err)
 		}
 		// MSAL's in-memory state now matches what was just persisted for its entries.

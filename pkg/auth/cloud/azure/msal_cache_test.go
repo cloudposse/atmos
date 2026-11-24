@@ -409,9 +409,12 @@ func TestMSALCache_ExportWriteError(t *testing.T) {
 
 	cache, err := NewMSALCache(cachePath, "")
 	require.NoError(t, err)
-	// Replace creates both lock files; afterwards the directory is made read-only so
-	// the locks can still be taken but the atomic write cannot create its temp file.
-	require.NoError(t, cache.Replace(context.Background(), &mockUnmarshaler{}, msalcache.ReplaceHints{}))
+	// Pre-create both lock files, then make the directory and the cache file read-only,
+	// so the locks can still be taken but neither the atomic write (no temp file) nor the
+	// in-place fallback (read-only file) can write the cache.
+	require.NoError(t, os.WriteFile(AzureCLIMSALCacheLockPath(cachePath), nil, 0o600))
+	require.NoError(t, os.WriteFile(cachePath+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(cachePath, 0o400))
 	require.NoError(t, os.Chmod(tempDir, 0o555))
 	t.Cleanup(func() { _ = os.Chmod(tempDir, 0o755) })
 

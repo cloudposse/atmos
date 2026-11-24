@@ -16,3 +16,5 @@ pkg/io/masker_test.go:private-key:272
 # A fake GitHub token in the auth env JSON test (commit 09d5b5a963); the test now builds it by
 # concatenation, but the earlier commit's diff still contains the literal.
 pkg/env/output_test.go:github-oauth:209
+# A fake Docker auth value (base64 of user:token) in the bind-mount config test.
+pkg/auth/cloud/docker/config_inplace_test.go:generic-api-key:40

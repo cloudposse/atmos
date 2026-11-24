@@ -60,8 +60,9 @@ func (m *manager) logoutIdentity(ctx context.Context, identityName string, delet
 	// removed whether or not the keyring entry is kept.
 	m.deleteExternalStepDigest(identityName)
 
-	// Step 2: Clean up linked integrations (non-fatal).
-	m.cleanupIntegrations(ctx, identityName)
+	// Step 2: Clean up linked integrations. A failure does not stop the logout, but it makes
+	// it partial: a registry credential left in Docker's config.json is reported, not hidden.
+	errs = append(errs, m.cleanupIntegrations(ctx, identityName)...)
 
 	// Bind the auth chain and manager so AWS materializers resolve the root provider's
 	// spec.files.base_path in a fresh process; otherwise cleanup targets the default location.
@@ -133,17 +134,23 @@ func (m *manager) deleteIdentityKeyringEntries(identityName string, deleteKeycha
 }
 
 // cleanupIntegrations runs Cleanup() on all integrations linked to the identity.
-// Failures are non-fatal and logged as warnings to avoid blocking logout.
-func (m *manager) cleanupIntegrations(ctx context.Context, identityName string) {
+// Failures never block the logout: every integration is still cleaned up, and the
+// cleanup errors are returned so the caller reports a partial logout instead of
+// success (for example when an ECR or ACR credential could not be removed from
+// Docker's config.json). An integration that cannot be created from its config is
+// only logged, as before.
+func (m *manager) cleanupIntegrations(ctx context.Context, identityName string) []error {
 	defer perf.Track(nil, "auth.Manager.cleanupIntegrations")()
 
 	// Find all integrations that reference this identity (not just auto_provision ones).
 	linkedIntegrations := m.findIntegrationsForIdentity(identityName, false)
 	if len(linkedIntegrations) == 0 {
-		return
+		return nil
 	}
 
 	log.Debug("Cleaning up linked integrations", logKeyIdentity, identityName, "count", len(linkedIntegrations))
+
+	var errs []error
 
 	for _, integrationName := range linkedIntegrations {
 		integrationConfig, exists := m.config.Integrations[integrationName]
@@ -163,11 +170,13 @@ func (m *manager) cleanupIntegrations(ctx context.Context, identityName string) 
 		}
 
 		if err := integration.Cleanup(ctx); err != nil {
-			log.Warn("Integration cleanup failed", "integration", integrationName, "error", err)
+			log.Debug("Integration cleanup failed", "integration", integrationName, "error", err)
+			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrIntegrationCleanup, integrationName, err))
 		} else {
 			log.Debug("Integration cleanup succeeded", "integration", integrationName)
 		}
 	}
+	return errs
 }
 
 // resolveProviderForIdentity follows the Via chain to find the root provider for an identity.

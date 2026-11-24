@@ -33,7 +33,8 @@ type Integration interface {
 	// Cleanup reverses the effects of Execute (e.g., removes kubeconfig entries, docker logout).
 	// Called during identity/provider logout to clean up integration artifacts.
 	// Idempotent — returns nil if nothing to clean up.
-	// Errors are non-fatal during logout (logged as warnings, do not block logout).
+	// Errors do not block logout: the remaining cleanup still runs, and the logout is
+	// reported as partial with the error, so artifacts left behind are not hidden.
 	Cleanup(ctx context.Context) error
 
 	// Environment returns environment variables contributed by this integration.

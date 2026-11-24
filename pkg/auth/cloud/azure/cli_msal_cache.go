@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/cache"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -38,14 +39,28 @@ func AzureCLIMSALCacheLockPath(cachePath string) string {
 // one of them, so no lock-order cycle (deadlock) is possible. Windows FileLock is a
 // no-op. A lock that cannot be acquired within fileLockTimeout (or before ctx is
 // done) returns ErrFileLockTimeout.
+//
+// The `<cache>.lockfile` follows the msal-extensions convention (see
+// msal_lockfile.go): it is claimed before it is locked and deleted when the lock is
+// released, because az waits about 5 seconds for any such file that still exists.
 func withMSALCacheFileLock(ctx context.Context, cachePath string, fn func() error) error {
 	lockCtx, cancel := context.WithTimeout(ctx, fileLockTimeout)
 	defer cancel()
 
-	err := cache.NewFileLockAtPath(AzureCLIMSALCacheLockPath(cachePath)).WithLockContext(lockCtx, func() error {
+	lockPath := AzureCLIMSALCacheLockPath(cachePath)
+	claim := claimMSALLockfile(lockCtx, lockPath)
+	locked := false
+	err := cache.NewFileLockAtPath(lockPath).WithLockContext(lockCtx, func() error {
+		locked = true
+		// Deleted while still locked, so nobody can lock this file once it is gone.
+		defer releaseMSALLockfile(lockPath)
 		// cache.NewFileLock locks cachePath + ".lock", the legacy Atmos lock name.
 		return cache.NewFileLock(cachePath).WithLockContext(lockCtx, fn)
 	})
+	if !locked {
+		// The lock was never acquired, so the release above did not run: withdraw the claim.
+		claim.abandon(lockPath)
+	}
 	if errors.Is(err, errUtils.ErrCacheLocked) {
 		return fmt.Errorf("%w: %w", ErrFileLockTimeout, err)
 	}
@@ -82,7 +97,7 @@ func UpdateAzureCLIMSALCache(cachePath string, mutate func(msalCache map[string]
 		if err != nil {
 			return fmt.Errorf("%w: failed to marshal: %w", errUtils.ErrAzureCLIMSALCacheUpdate, err)
 		}
-		if err := credentialFileSystem.WriteFileAtomic(cachePath, data, FilePermissions); err != nil {
+		if err := writeSharedMSALCache(cachePath, data); err != nil {
 			return fmt.Errorf("%w: failed to write %s: %w", errUtils.ErrAzureCLIMSALCacheUpdate, cachePath, err)
 		}
 		return nil
@@ -115,4 +130,13 @@ func loadMSALCache(cachePath string) (map[string]interface{}, error) {
 		msalCache = make(map[string]interface{})
 	}
 	return msalCache, nil
+}
+
+// writeSharedMSALCache writes an MSAL token cache that other tools (az) also use. A symlinked
+// cache file is written through the link, so the link is kept and its target updated, and a
+// replace the kernel refuses (a single-file mount, a read-only directory) falls back to an
+// in-place write, as older Atmos versions and msal-extensions write the file.
+func writeSharedMSALCache(cachePath string, data []byte) error {
+	target := filesystem.ResolveSymlinkTarget(cachePath)
+	return filesystem.WriteFileAtomicOrInPlace(credentialFileSystem, target, data, FilePermissions)
 }

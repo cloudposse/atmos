@@ -32,8 +32,10 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 	// Generic ambient identities return nil credentials by design — they
 	// do not manage credentials; the cloud SDK resolves them at subprocess
 	// runtime. There is nothing to populate on WhoamiInfo from creds and
-	// nothing to cache in the keystore.
+	// nothing to cache in the keystore. Ambient tells callers (`auth whoami`)
+	// that the missing credentials are expected, not expired.
 	if creds == nil {
+		info.Ambient = true
 		return info
 	}
 

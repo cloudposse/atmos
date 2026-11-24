@@ -354,10 +354,11 @@ func TestConfigManager_RemoveAuth_SaveFailureIsReturned(t *testing.T) {
 	}
 
 	manager := writeTestConfig(t, `{"auths": {"`+testECRRegistry+`": {"auth": "eDp5"}}}`, 0o600)
-	// Create the lock file first, then make the directory read-only so only the
-	// atomic rename of the new config.json fails.
+	// Create the lock file first, then make the directory and config.json read-only,
+	// so both the atomic replace and the in-place fallback of the new config.json fail.
 	require.NoError(t, manager.withConfigLock(func() error { return nil }))
 	dir := manager.GetConfigDir()
+	require.NoError(t, os.Chmod(manager.GetConfigPath(), 0o400))
 	require.NoError(t, os.Chmod(dir, 0o500))
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 

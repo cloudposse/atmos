@@ -13,9 +13,9 @@ import (
 )
 
 // TestKeyringStore_MigratesUnambiguousLegacyRealmKey reproduces the #3720 item 3.4
-// follow-up: an entry found through the previous-layout fallback is rewritten under the
-// current "atmos_<realm>__<alias>" key and the legacy key is removed, so later reads no
-// longer depend on the fallback.
+// follow-up: an entry found through the previous-layout fallback is copied under the
+// current "atmos_<realm>__<alias>" key, so later reads no longer depend on the fallback. The
+// legacy key is kept, so a downgrade to v1.234.1 (which reads only the legacy key) still finds it.
 func TestKeyringStore_MigratesUnambiguousLegacyRealmKey(t *testing.T) {
 	store := newMemoryKeyringStore()
 	writeLegacyRealmEntry(t, store, "admin", "acme", "legacy-token")
@@ -29,8 +29,9 @@ func TestKeyringStore_MigratesUnambiguousLegacyRealmKey(t *testing.T) {
 	migrated, err := store.kr.Get(buildKeyringKey("admin", "acme"))
 	require.NoError(t, err, "the legacy entry must be rewritten under the current key")
 	assert.Equal(t, legacyRaw, migrated, "the entry must be copied unchanged")
-	_, err = store.kr.Get(legacyRealmKeyringKey("admin", "acme"))
-	require.ErrorIs(t, err, keyring.ErrNotFound, "the legacy key must be removed after the rewrite")
+	kept, err := store.kr.Get(legacyRealmKeyringKey("admin", "acme"))
+	require.NoError(t, err, "the legacy key must be kept for a downgrade")
+	assert.Equal(t, legacyRaw, kept)
 
 	// A later read is served by the current key alone.
 	got, err = store.Retrieve("admin", "acme")
@@ -40,7 +41,9 @@ func TestKeyringStore_MigratesUnambiguousLegacyRealmKey(t *testing.T) {
 
 // TestKeyringStore_MigratesLegacyAWSUserLongLivedKeys covers the aws/user identity, which
 // reads the long-lived keys stored by `atmos auth user configure` through the same Retrieve
-// call: the keys survive the layout change and are moved to the current key.
+// call: the keys survive the layout change and are copied to the current key. This reproduces
+// the 1.235.0 downgrade regression: after one login with the new version, v1.234.1 must still
+// find the long-lived keys under the legacy key.
 func TestKeyringStore_MigratesLegacyAWSUserLongLivedKeys(t *testing.T) {
 	store := newMemoryKeyringStore()
 	longLived := &types.AWSCredentials{AccessKeyID: "AKIAEXAMPLE", SecretAccessKey: "secret", MfaArn: "arn:aws:iam::111111111111:mfa/me"}
@@ -54,11 +57,35 @@ func TestKeyringStore_MigratesLegacyAWSUserLongLivedKeys(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, longLived, got)
 
-	_, err = store.kr.Get(legacyRealmKeyringKey("deployer", "acme"))
-	require.ErrorIs(t, err, keyring.ErrNotFound)
+	legacyRaw, err := store.kr.Get(legacyRealmKeyringKey("deployer", "acme"))
+	require.NoError(t, err, "v1.234.1 reads only the legacy key, so it must survive the migration")
+	assert.Equal(t, raw, legacyRaw)
 	got, err = store.Retrieve("deployer", "acme")
 	require.NoError(t, err)
 	assert.Equal(t, longLived, got)
+
+	// Removing the credentials removes both copies, so nothing is left for either version.
+	require.NoError(t, store.Delete("deployer", "acme"))
+	_, err = store.kr.Get(buildKeyringKey("deployer", "acme"))
+	require.ErrorIs(t, err, keyring.ErrNotFound)
+	_, err = store.kr.Get(legacyRealmKeyringKey("deployer", "acme"))
+	require.ErrorIs(t, err, keyring.ErrNotFound)
+	_, err = store.Retrieve("deployer", "acme")
+	require.ErrorIs(t, err, ErrCredentialsNotFound)
+}
+
+// TestKeyringStore_MigratedEntryReadsOnlyTheCurrentKey verifies that once copied, the current
+// key is the only one read: newer credentials stored under it win over the kept legacy copy.
+func TestKeyringStore_MigratedEntryReadsOnlyTheCurrentKey(t *testing.T) {
+	store := newMemoryKeyringStore()
+	writeLegacyRealmEntry(t, store, "admin", "acme", "legacy-token")
+	_, err := store.Retrieve("admin", "acme")
+	require.NoError(t, err)
+
+	require.NoError(t, store.Store("admin", &types.OIDCCredentials{Token: "fresh-token"}, "acme"))
+	got, err := store.Retrieve("admin", "acme")
+	require.NoError(t, err)
+	assert.Equal(t, "fresh-token", got.(*types.OIDCCredentials).Token)
 }
 
 // TestKeyringStore_AmbiguousLegacyKeyIsNeverMigrated verifies the deliberate safety choice
@@ -114,7 +141,7 @@ func TestKeyringStore_LegacyMigrationIsBestEffort(t *testing.T) {
 		assert.Equal(t, "legacy-token", got.(*types.OIDCCredentials).Token)
 	})
 
-	t.Run("legacy delete fails", func(t *testing.T) {
+	t.Run("legacy key is never deleted", func(t *testing.T) {
 		kr := keyring.NewMockKeyring(gomock.NewController(t))
 		store := &keyringCredentialStore{kr: kr, storeType: types.CredentialStoreTypeMemory}
 		gomock.InOrder(
@@ -122,8 +149,8 @@ func TestKeyringStore_LegacyMigrationIsBestEffort(t *testing.T) {
 			kr.EXPECT().Get(legacy).Return(raw, nil),
 			kr.EXPECT().Has(current).Return(false, nil),
 			kr.EXPECT().Set(current, raw).Return(nil),
-			kr.EXPECT().Delete(legacy).Return(assert.AnError),
 		)
+		// No Delete is expected: the legacy copy is kept for a downgrade.
 
 		got, err := store.Retrieve("admin", "acme")
 		require.NoError(t, err)
@@ -179,4 +206,62 @@ func stripEnvelopeAlias(t *testing.T, raw string) string {
 	stripped, err := json.Marshal(&env)
 	require.NoError(t, err)
 	return string(stripped)
+}
+
+// TestKeyringStore_StoreKeepsRetainedLegacyKeyInSync verifies that once a legacy entry is kept
+// for a downgrade, storing new credentials (for example `atmos auth user configure` replacing the
+// long-lived keys) also updates it. Otherwise v1.234.1, which reads only the legacy key, would
+// silently use the superseded keys after a downgrade.
+func TestKeyringStore_StoreKeepsRetainedLegacyKeyInSync(t *testing.T) {
+	store := newMemoryKeyringStore()
+	writeLegacyRealmEntry(t, store, "admin", "acme", "old-token")
+	_, err := store.Retrieve("admin", "acme")
+	require.NoError(t, err)
+
+	require.NoError(t, store.Store("admin", &types.OIDCCredentials{Token: "new-token"}, "acme"))
+
+	current, err := store.kr.Get(buildKeyringKey("admin", "acme"))
+	require.NoError(t, err)
+	legacy, err := store.kr.Get(legacyRealmKeyringKey("admin", "acme"))
+	require.NoError(t, err)
+	assert.Equal(t, current, legacy, "the retained legacy key must hold the credentials just stored")
+	assert.Contains(t, legacy, "new-token")
+}
+
+// TestKeyringStore_StoreDoesNotCreateOrTouchOtherLegacyKeys is the negative path: Store never
+// creates a legacy key that does not exist, never writes an ambiguous one, and never overwrites a
+// legacy entry recorded for another alias.
+func TestKeyringStore_StoreDoesNotCreateOrTouchOtherLegacyKeys(t *testing.T) {
+	t.Run("no legacy key", func(t *testing.T) {
+		store := newMemoryKeyringStore()
+		require.NoError(t, store.Store("admin", &types.OIDCCredentials{Token: "t"}, "acme"))
+		_, err := store.kr.Get(legacyRealmKeyringKey("admin", "acme"))
+		require.ErrorIs(t, err, keyring.ErrNotFound)
+	})
+
+	t.Run("ambiguous legacy key", func(t *testing.T) {
+		store := newMemoryKeyringStore()
+		writeLegacyRealmEntry(t, store, "prod_admin", "acme", "maybe-another-realm")
+		before, err := store.kr.Get(legacyRealmKeyringKey("prod_admin", "acme"))
+		require.NoError(t, err)
+
+		require.NoError(t, store.Store("prod_admin", &types.OIDCCredentials{Token: "t"}, "acme"))
+		after, err := store.kr.Get(legacyRealmKeyringKey("prod_admin", "acme"))
+		require.NoError(t, err)
+		assert.Equal(t, before, after)
+	})
+
+	t.Run("legacy key of another alias", func(t *testing.T) {
+		store := newMemoryKeyringStore()
+		other := newMemoryKeyringStore()
+		require.NoError(t, other.Store("someone-else", &types.OIDCCredentials{Token: "theirs"}, ""))
+		raw, err := other.kr.Get(buildKeyringKey("someone-else", ""))
+		require.NoError(t, err)
+		require.NoError(t, store.kr.Set(legacyRealmKeyringKey("admin", "acme"), raw))
+
+		require.NoError(t, store.Store("admin", &types.OIDCCredentials{Token: "mine"}, "acme"))
+		kept, err := store.kr.Get(legacyRealmKeyringKey("admin", "acme"))
+		require.NoError(t, err)
+		assert.Equal(t, raw, kept)
+	})
 }

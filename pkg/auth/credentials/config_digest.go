@@ -14,7 +14,9 @@ import (
 // KeyringConfigDigestPrefix prefixes the keys of configuration digest records kept for
 // credentials an identity persists outside this store (for example AWS session credentials in
 // the identity's credentials file). It differs from KeyringRealmPrefix + KeyringSeparator, so
-// List never reports these records as credential aliases.
+// List never reports these records as credential aliases. The persistent backends (system and
+// file) keep the records in files named after this key instead of in the keyring (see
+// config_digest_file.go); only the memory backend stores them under it.
 const KeyringConfigDigestPrefix = "atmos-config-digest"
 
 // Every keyring-backed store (system, file, memory, noop) implements ConfigDigestStore;
@@ -92,6 +94,9 @@ func (s *keyringCredentialStore) RetrieveWithConfigDigest(alias, realm string) (
 func (s *keyringCredentialStore) StoreExternalConfigDigest(alias, realm string, record ExternalConfigDigest) error {
 	defer perf.Track(nil, "credentials.keyringCredentialStore.StoreExternalConfigDigest")()
 
+	if s.digestDir != "" {
+		return s.storeConfigDigestFile(alias, realm, record)
+	}
 	// A struct of two strings always marshals.
 	data, _ := json.Marshal(record)
 	if err := s.kr.Set(buildConfigDigestKey(alias, realm), string(data)); err != nil {
@@ -104,6 +109,9 @@ func (s *keyringCredentialStore) StoreExternalConfigDigest(alias, realm string, 
 func (s *keyringCredentialStore) RetrieveExternalConfigDigest(alias, realm string) (ExternalConfigDigest, error) {
 	defer perf.Track(nil, "credentials.keyringCredentialStore.RetrieveExternalConfigDigest")()
 
+	if s.digestDir != "" {
+		return s.retrieveConfigDigestFile(alias, realm)
+	}
 	var record ExternalConfigDigest
 	data, err := s.kr.Get(buildConfigDigestKey(alias, realm))
 	if err != nil {
@@ -122,6 +130,9 @@ func (s *keyringCredentialStore) RetrieveExternalConfigDigest(alias, realm strin
 func (s *keyringCredentialStore) DeleteExternalConfigDigest(alias, realm string) error {
 	defer perf.Track(nil, "credentials.keyringCredentialStore.DeleteExternalConfigDigest")()
 
+	if s.digestDir != "" {
+		return s.deleteConfigDigestFile(alias, realm)
+	}
 	if err := s.kr.Delete(buildConfigDigestKey(alias, realm)); err != nil {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete configuration digest: %w", err))
 	}
