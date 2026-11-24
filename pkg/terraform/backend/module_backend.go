@@ -56,26 +56,26 @@ func engineConfigFiles(entries []os.DirEntry, openTofu bool) []string {
 	}
 	var files []string
 	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || ignoredConfigFile(name) {
-			continue
-		}
-		if !openTofu {
-			if configSuffix(name, terraformConfigSuffixes) != "" {
-				files = append(files, name)
-			}
-			continue
-		}
-		if suffix := configSuffix(name, []string{".tofu.json", ".tofu"}); suffix != "" {
-			files = append(files, name)
-			continue
-		}
-		suffix := configSuffix(name, terraformConfigSuffixes)
-		if suffix != "" && !shadowedByTofu(name, suffix, present) {
-			files = append(files, name)
+		if !entry.IsDir() && engineReadsFile(entry.Name(), openTofu, present) {
+			files = append(files, entry.Name())
 		}
 	}
 	return files
+}
+
+// engineReadsFile reports whether the engine loads the module file name, given the other files present.
+func engineReadsFile(name string, openTofu bool, present map[string]bool) bool {
+	if ignoredConfigFile(name) {
+		return false
+	}
+	suffix := configSuffix(name, terraformConfigSuffixes)
+	if !openTofu {
+		return suffix != ""
+	}
+	if configSuffix(name, []string{".tofu.json", ".tofu"}) != "" {
+		return true
+	}
+	return suffix != "" && !shadowedByTofu(name, suffix, present)
 }
 
 // ignoredConfigFile reports whether Terraform and OpenTofu skip a file when loading a module: hidden files,
