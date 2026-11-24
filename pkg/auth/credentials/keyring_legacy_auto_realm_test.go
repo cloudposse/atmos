@@ -36,7 +36,8 @@ func seedLegacyAutoRealmKeys(t *testing.T, store *keyringCredentialStore, alias,
 // the 1.235.0 regression test: under the realm derived from the atmos.yaml path (which never
 // contains "_"), the previous-layout key of an alias with "_" could only also belong to a realm
 // "<hash>_<prefix>", which no user configures. The entry must be read and migrated like the
-// entry of an alias without "_", instead of being refused as ambiguous.
+// entry of an alias without "_", instead of being refused as ambiguous. The legacy key is kept,
+// which is the 1.235.0 downgrade case: v1.234.1 reads only `atmos_<realm>_prod_admin`.
 func TestKeyringStore_AutoRealmLegacyKeyWithUnderscoreAliasIsMigrated(t *testing.T) {
 	store := newMemoryKeyringStore()
 	keys, raw := seedLegacyAutoRealmKeys(t, store, "prod_admin", autoTestRealm)
@@ -56,8 +57,20 @@ func TestKeyringStore_AutoRealmLegacyKeyWithUnderscoreAliasIsMigrated(t *testing
 	migrated, err := store.kr.Get(buildKeyringKey("prod_admin", autoTestRealm))
 	require.NoError(t, err, "the legacy entry must be rewritten under the current key")
 	assert.Equal(t, raw, migrated)
+	kept, err := store.kr.Get(legacyRealmKeyringKey("prod_admin", autoTestRealm))
+	require.NoError(t, err, "the legacy key must be kept for a downgrade to v1.234.1")
+	assert.Equal(t, raw, kept)
+
+	aliases, err = store.List(autoTestRealm)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"prod_admin"}, aliases, "the alias is listed once with both copies present")
+
+	// A delete removes both copies.
+	require.NoError(t, store.Delete("prod_admin", autoTestRealm))
+	_, err = store.kr.Get(buildKeyringKey("prod_admin", autoTestRealm))
+	require.ErrorIs(t, err, keyring.ErrNotFound)
 	_, err = store.kr.Get(legacyRealmKeyringKey("prod_admin", autoTestRealm))
-	require.ErrorIs(t, err, keyring.ErrNotFound, "the legacy key must be removed after the rewrite")
+	require.ErrorIs(t, err, keyring.ErrNotFound)
 }
 
 // TestKeyringStore_AutoRealmLegacyKeyIsDeleted verifies Delete removes the previous-layout key

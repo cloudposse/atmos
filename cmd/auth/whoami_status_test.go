@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -45,6 +46,48 @@ func TestReportWhoami_ExitStatusReflectsCredentialValidity(t *testing.T) {
 		})
 		t.Run("format="+format+"/valid", func(t *testing.T) {
 			assert.NoError(t, reportWhoami(context.Background(), whoamiWithCredentials(t, false), format))
+		})
+	}
+}
+
+// TestReportWhoami_AmbientIdentityExitsZero reproduces the 1.235.0 upgrade regression where
+// `atmos auth whoami` (and `-o json`) exited 1 for an ambient identity. Such an identity never
+// returns credentials by design, so there is nothing to validate: whoami must succeed and say the
+// credentials are not managed by Atmos, instead of reporting them as expired or invalid.
+func TestReportWhoami_AmbientIdentityExitsZero(t *testing.T) {
+	ambient := func() *authTypes.WhoamiInfo {
+		return &authTypes.WhoamiInfo{Identity: "amb", Provider: "ambient", Ambient: true}
+	}
+
+	t.Run("human", func(t *testing.T) {
+		_, stderr := captureWhoamiStreams(t)
+		require.NoError(t, reportWhoami(context.Background(), ambient(), ""))
+		text := plainWhoamiText(stderr)
+		assert.Contains(t, text, "not managed by Atmos")
+		assert.NotContains(t, text, "expired or invalid")
+		assert.NotContains(t, text, "atmos auth login")
+	})
+
+	t.Run("json", func(t *testing.T) {
+		stdout, stderr := captureWhoamiStreams(t)
+		require.NoError(t, reportWhoami(context.Background(), ambient(), "json"))
+		assert.NotContains(t, plainWhoamiText(stderr), "expired or invalid")
+		var doc map[string]any
+		require.NoError(t, json.Unmarshal(stdout.Bytes(), &doc))
+		assert.Equal(t, true, doc["ambient"])
+		assert.Equal(t, "amb", doc["identity"])
+	})
+}
+
+// TestReportWhoami_MissingManagedCredentialsStillFail is the negative path: an identity that is
+// not ambient but has no credentials still exits 1, in both formats.
+func TestReportWhoami_MissingManagedCredentialsStillFail(t *testing.T) {
+	for _, format := range []string{"", "json"} {
+		t.Run("format="+format, func(t *testing.T) {
+			captureWhoamiStreams(t)
+			err := reportWhoami(context.Background(), &authTypes.WhoamiInfo{Identity: "dev", Provider: "sso"}, format)
+			require.ErrorIs(t, err, errUtils.ErrExpiredCredentials)
+			assert.Equal(t, 1, errUtils.GetExitCode(err))
 		})
 	}
 }

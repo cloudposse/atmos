@@ -38,3 +38,19 @@ func HelperManagedNotice(err error) (string, bool) {
 	return fmt.Sprintf("Docker uses %s%s for %s, which gets registry credentials itself, so Atmos did not write any to %s",
 		credentialHelperPrefix, managed.helper, managed.registry, configFileName), true
 }
+
+// selfResolvingHelpers are credential helpers that get registry credentials themselves instead
+// of returning stored ones. docker-credential-ecr-login answers `get` by calling ECR with the AWS
+// credentials in its own environment, and replies "not implemented" to `store`.
+var selfResolvingHelpers = map[string]struct{}{
+	"ecr-login": {},
+}
+
+// helperResolvesCredentialsItself reports whether helper gets registry credentials itself, so
+// Atmos must not run its `get`: that would mint credentials with the ambient cloud identity just
+// to take a snapshot. The `store` still runs, and its "not implemented" reply marks the registry
+// as helper-managed (see HelperManagedNotice).
+func helperResolvesCredentialsItself(helper string) bool {
+	_, ok := selfResolvingHelpers[helper]
+	return ok
+}

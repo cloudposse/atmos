@@ -45,6 +45,8 @@ type ConfigManager struct {
 	helper CredentialHelper
 	// warn emits user-facing warnings. Nil means ui.Warning (stderr).
 	warn func(string)
+	// fs writes config.json. Nil means the OS file system.
+	fs filesystem.FileSystem
 }
 
 // NewConfigManager creates a new Docker config manager using the default Docker config path.
@@ -229,13 +231,22 @@ type helperSnapshot struct {
 }
 
 // snapshotHelperCredential reads the credential the helper holds for registry
-// before it is replaced. Only a registry config.json already lists can have a
-// credential Atmos must not lose (`docker login` records the registry there), so
-// other registries are not read: that also avoids asking helpers such as
-// docker-credential-ecr-login to fetch credentials just to take a snapshot.
+// before it is replaced, so a failed store or save can restore it (some helpers,
+// such as osxkeychain, delete the old credential before adding the new one).
+// Only a registry config.json already lists can have a credential Atmos must not
+// lose (`docker login` records the registry there), so other registries are not
+// read. A helper that gets registry credentials itself, such as
+// docker-credential-ecr-login, is never read: see helperResolvesCredentialsItself.
 func (m *ConfigManager) snapshotHelperCredential(config *rawConfig, helper, registry string) helperSnapshot {
 	if !config.hasAuth(registry) {
 		return helperSnapshot{known: true}
+	}
+	if helperResolvesCredentialsItself(helper) {
+		// Its `get` would fetch registry credentials with the ambient cloud credentials
+		// (slow, possibly another account, or failing) before the store runs. Such a helper
+		// holds nothing Atmos stored, so the previous credential is left unknown and a
+		// rollback leaves the helper alone.
+		return helperSnapshot{}
 	}
 	cred, err := m.credentialHelper().Get(helper, registry)
 	if err != nil {
@@ -358,7 +369,11 @@ func (m *ConfigManager) loadConfig() (*rawConfig, error) {
 
 // saveConfig writes the Docker config to file atomically (temp file + rename).
 // A symlinked config.json is updated through the link, and an existing file
-// keeps its permission bits; a new file is created with 0600.
+// keeps its permission bits; a new file is created with 0600. When the kernel
+// refuses the rename (config.json mounted as a single file in a devcontainer or
+// a Kubernetes subPath, or a read-only Docker directory holding a writable
+// config.json), the same bytes are written in place, as `docker login` and
+// older Atmos versions do.
 func (m *ConfigManager) saveConfig(config *rawConfig) error {
 	data, err := config.marshal()
 	if err != nil {
@@ -372,9 +387,17 @@ func (m *ConfigManager) saveConfig(config *rawConfig) error {
 		perm = info.Mode().Perm()
 	}
 
-	if err := filesystem.NewOSFileSystem().WriteFileAtomic(target, data, perm); err != nil {
+	if err := filesystem.WriteFileAtomicOrInPlace(m.fileSystem(), target, data, perm); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
 	}
 
 	return nil
+}
+
+// fileSystem returns the file system config.json is written through.
+func (m *ConfigManager) fileSystem() filesystem.FileSystem {
+	if m.fs == nil {
+		return filesystem.NewOSFileSystem()
+	}
+	return m.fs
 }

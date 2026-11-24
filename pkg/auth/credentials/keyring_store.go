@@ -23,6 +23,9 @@ type keyringCredentialStore struct {
 	// explicitRealm is the realm the store's config says was configured explicitly, so it is never
 	// mistaken for the auto realm (see keyring_legacy_auto_realm.go). Empty when unknown.
 	explicitRealm string
+	// digestDir is the directory of the configuration digest records (see config_digest_file.go).
+	// Empty keeps the records in the keyring itself, which only the memory backend does.
+	digestDir string
 }
 
 // Store stores credentials for the given alias within the specified realm.
@@ -94,14 +97,16 @@ func (s *keyringCredentialStore) retrieveEnvelope(alias, realm string) (types.IC
 	return creds, env.ConfigDigest, nil
 }
 
-// migrateLegacyRealmEntry rewrites an entry read through the unambiguous previous-layout
-// fallback under the current key and then deletes the legacy key, so later reads no longer
-// depend on the fallback. It is best effort and never fails the read: on any error the legacy
-// key is kept and the fallback keeps serving it. The entry is copied unchanged, and it is not
-// copied when the current key already exists (written by another process since the first
-// read), so fresh credentials are never overwritten by older ones.
+// migrateLegacyRealmEntry copies an entry read through the unambiguous previous-layout
+// fallback to the current key, so later reads no longer depend on the fallback. The legacy key
+// is kept: v1.234.1 reads only that key, so deleting it would make a downgrade lose credentials
+// a login cannot re-create (the aws/user long-lived keys stored by `atmos auth user configure`).
+// Keeping it is safe because the current key is always read first, and Delete removes both. It
+// is best effort and never fails the read. The entry is copied unchanged, and it is not copied
+// when the current key already exists (written by another process since the first read), so
+// fresh credentials are never overwritten by older ones.
 func (s *keyringCredentialStore) migrateLegacyRealmEntry(alias, realm, data string) {
-	current, legacy := buildKeyringKey(alias, realm), legacyRealmKeyringKey(alias, realm)
+	current := buildKeyringKey(alias, realm)
 	exists, err := s.kr.Has(current)
 	if err != nil || exists {
 		log.Debug("Not migrating legacy keyring entry", logKeyAlias, alias, logKeyRealm, realm, "currentExists", exists, "error", err)
@@ -111,11 +116,7 @@ func (s *keyringCredentialStore) migrateLegacyRealmEntry(alias, realm, data stri
 		log.Debug("Failed to migrate legacy keyring entry; keeping the legacy key", logKeyAlias, alias, logKeyRealm, realm, "error", err)
 		return
 	}
-	if err := s.kr.Delete(legacy); err != nil {
-		log.Debug("Failed to delete migrated legacy keyring entry", logKeyAlias, alias, logKeyRealm, realm, "error", err)
-		return
-	}
-	log.Debug("Migrated legacy keyring entry to the current key layout", logKeyAlias, alias, logKeyRealm, realm)
+	log.Debug("Copied legacy keyring entry to the current key layout; the legacy key is kept for older versions", logKeyAlias, alias, logKeyRealm, realm)
 }
 
 // Delete deletes credentials for the given alias within the specified realm. It is idempotent.

@@ -151,7 +151,7 @@ This is useful when:
 
 ## Credentials Stored by Older Versions
 
-Older Atmos versions stored realm-scoped credentials under the keyring key `atmos_<realm>_<identity>`. Current versions use `atmos_<realm>__<identity>` and move old entries automatically when neither the realm nor the identity name contains `_`.
+Older Atmos versions stored realm-scoped credentials under the keyring key `atmos_<realm>_<identity>`. Current versions use `atmos_<realm>__<identity>` and copy old entries to the new key automatically when neither the realm nor the identity name contains `_` (or when the realm is the one Atmos derives from the `atmos.yaml` path). The old key is kept, so you can still go back to an older Atmos version without configuring the keys again. Removing the credentials (`atmos auth logout --keychain`) deletes both keys.
 
 When either name contains `_`, the old key is ambiguous: realm `acme` with identity `prod_admin` and realm `acme_prod` with identity `admin` both used `atmos_acme_prod_admin`. Atmos does not use such an entry on its own, because it could belong to the other realm. Instead, the first time an `aws/user` identity needs its keys and finds only the old entry:
 

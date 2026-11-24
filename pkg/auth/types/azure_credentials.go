@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions"
 
@@ -57,6 +58,10 @@ type AzureCredentials struct {
 	// (https://github.com/Azure/azure-cli/issues/20168). Populated by providers that
 	// receive it from MSAL.
 	HomeAccountID string `json:"home_account_id,omitempty"`
+
+	// validationClientOptions overrides the Resource Manager client options Validate uses.
+	// Runtime only (tests point it at a local server); it is never serialized.
+	validationClientOptions *arm.ClientOptions
 }
 
 // Azure credential auth methods (values of AzureCredentials.AuthMethod).
@@ -107,10 +112,21 @@ func (c *AzureCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
 
 // Validate validates Azure credentials by calling Azure Resource Manager API.
 // Returns validation info including subscription name, tenant ID, and expiration.
+//
+// Like AWSCredentials.Validate, only a definitive answer marks the credentials invalid:
+// expired credentials fail with ErrExpiredCredentials without a network call, and a token
+// Resource Manager rejects fails with ErrAuthenticationFailed. A validation that cannot be
+// performed (no subscription to query, Resource Manager unreachable, an answer about the
+// subscription rather than the token) wraps ErrCredentialValidationUnavailable, so callers
+// fall back to the cached expiration time.
 func (c *AzureCredentials) Validate(ctx context.Context) (*ValidationInfo, error) {
-	// Check if subscription ID is provided.
+	if c.IsExpired() {
+		return nil, fmt.Errorf("%w: Azure credentials expired at %s", errUtils.ErrExpiredCredentials, c.Expiration)
+	}
+
+	// Without a subscription there is nothing to ask Resource Manager about.
 	if c.SubscriptionID == "" {
-		return nil, fmt.Errorf("%w: subscription ID is required", errUtils.ErrInvalidAuthConfig)
+		return nil, fmt.Errorf("%w: no Azure subscription is set, so the credentials cannot be checked against Azure Resource Manager", errUtils.ErrCredentialValidationUnavailable)
 	}
 
 	// Create a token credential from the access token.
@@ -122,15 +138,21 @@ func (c *AzureCredentials) Validate(ctx context.Context) (*ValidationInfo, error
 	}
 
 	// Create subscriptions client with cloud configuration.
-	subscriptionsClient, err := armsubscriptions.NewClient(tokenCred, nil)
+	subscriptionsClient, err := armsubscriptions.NewClient(tokenCred, c.armValidationOptions())
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create Azure subscriptions client: %w", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: failed to create Azure subscriptions client: %w", errUtils.ErrCredentialValidationUnavailable, err)
 	}
 
+	callCtx, cancel := context.WithTimeout(ctx, azureValidationTimeout)
+	defer cancel()
+
 	// Get subscription details to validate credentials.
-	result, err := subscriptionsClient.Get(ctx, c.SubscriptionID, nil)
+	result, err := subscriptionsClient.Get(callCtx, c.SubscriptionID, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to validate Azure credentials: %w", errUtils.ErrAuthenticationFailed, err)
+		if isAzureTokenRejection(err) {
+			return nil, fmt.Errorf("%w: failed to validate Azure credentials: %w", errUtils.ErrAuthenticationFailed, err)
+		}
+		return nil, fmt.Errorf("%w: Azure Resource Manager could not confirm the credentials: %w", errUtils.ErrCredentialValidationUnavailable, err)
 	}
 
 	// Build validation info from subscription response.

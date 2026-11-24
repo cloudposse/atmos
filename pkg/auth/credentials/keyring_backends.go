@@ -50,7 +50,7 @@ func newSystemKeyringStore() (*keyringCredentialStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("system keyring not available: %w", err)
 	}
-	return &keyringCredentialStore{kr: kr, storeType: types.CredentialStoreTypeSystemKeyring}, nil
+	return &keyringCredentialStore{kr: kr, storeType: types.CredentialStoreTypeSystemKeyring, digestDir: systemConfigDigestDir()}, nil
 }
 
 // newMemoryKeyringStore creates an in-memory credential store (testing/ephemeral).
@@ -103,7 +103,7 @@ func newFileKeyringStore(authConfig *schema.AuthConfig) (*fileKeyringStore, erro
 	}
 
 	return &fileKeyringStore{
-		keyringCredentialStore: &keyringCredentialStore{kr: kr, storeType: types.CredentialStoreTypeFile},
+		keyringCredentialStore: &keyringCredentialStore{kr: kr, storeType: types.CredentialStoreTypeFile, digestDir: fileKeyringConfigDigestDir(dir)},
 		path:                   dir,
 	}, nil
 }

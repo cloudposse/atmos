@@ -31,21 +31,29 @@ func TestDeleteRealmKeyringEntries_RemovesLegacyAndDigest(t *testing.T) {
 
 	const realm = "acme"
 	seeded := map[string]string{
-		"atmos_acme__prod_admin":               allRealmsKeyringEntry("current"),
-		"atmos_acme_prod_admin":                allRealmsKeyringEntry("legacy"),
-		"atmos-config-digest_acme__prod_admin": `{"digest":"d","expiration":"2099-01-01T00:00:00Z"}`,
-		"atmos_acme__other":                    allRealmsKeyringEntry("other"),
+		"atmos_acme__prod_admin": allRealmsKeyringEntry("current"),
+		"atmos_acme_prod_admin":  allRealmsKeyringEntry("legacy"),
+		"atmos_acme__other":      allRealmsKeyringEntry("other"),
 	}
 	for key, value := range seeded {
 		require.NoError(t, raw.Set(key, value))
 	}
+	// The file keyring keeps configuration digest records outside the keyring.
+	digests, ok := store.(credentials.ConfigDigestStore)
+	require.True(t, ok)
+	require.NoError(t, digests.StoreExternalConfigDigest("prod_admin", realm, credentials.ExternalConfigDigest{Digest: "d"}))
+	require.NoError(t, digests.StoreExternalConfigDigest("other", realm, credentials.ExternalConfigDigest{Digest: "o"}))
 
 	deleteRealmKeyringEntries(store, []string{"prod_admin"}, realm)
 
-	for _, key := range []string{"atmos_acme__prod_admin", "atmos_acme_prod_admin", "atmos-config-digest_acme__prod_admin"} {
+	for _, key := range []string{"atmos_acme__prod_admin", "atmos_acme_prod_admin"} {
 		_, err := raw.Get(key)
 		assert.ErrorIs(t, err, keyring.ErrNotFound, "keyring key %q must be deleted", key)
 	}
+	_, err = digests.RetrieveExternalConfigDigest("prod_admin", realm)
+	require.ErrorIs(t, err, credentials.ErrDataNotFound, "the digest record must be deleted")
+	_, err = digests.RetrieveExternalConfigDigest("other", realm)
+	require.NoError(t, err, "an identity that is not being logged out keeps its digest record")
 	got, err := raw.Get("atmos_acme__other")
 	require.NoError(t, err, "an identity that is not being logged out keeps its entry")
 	assert.Equal(t, seeded["atmos_acme__other"], got)

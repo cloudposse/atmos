@@ -10,7 +10,6 @@ import (
 
 	atmosCredentials "github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/cloudposse/atmos/pkg/keyring"
 )
 
 // autoRealmTestRealm has the format of the realm Atmos derives from the atmos.yaml path when no
@@ -46,9 +45,10 @@ func TestUserIdentity_LegacyKeyring_AutoRealmMigratesWithoutPrompt(t *testing.T)
 	assert.Equal(t, "ASIASESSIONEXAMPLE", session.AccessKeyID)
 	assert.Equal(t, []string{legacyTestAccessID}, f.sts.signedWith(), "STS must be called with the legacy long-lived keys")
 
-	moved, err := f.raw.Get(current)
-	require.NoError(t, err, "the legacy entry must be moved to the current key")
-	assert.Equal(t, data, moved)
-	_, err = f.raw.Get(legacy)
-	require.ErrorIs(t, err, keyring.ErrNotFound, "the legacy key must be removed after the move")
+	copied, err := f.raw.Get(current)
+	require.NoError(t, err, "the legacy entry must be copied to the current key")
+	assert.Equal(t, data, copied)
+	kept, err := f.raw.Get(legacy)
+	require.NoError(t, err, "the legacy key must be kept so v1.234.1 still finds the long-lived keys after a downgrade")
+	assert.Equal(t, data, kept)
 }

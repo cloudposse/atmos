@@ -329,6 +329,7 @@ var (
 	ErrKeychainDeletionRequiresConfirmation = errors.New("keychain deletion requires interactive confirmation or --force flag")
 	ErrProviderLogout                       = errors.New("provider logout failed")
 	ErrIdentityLogout                       = errors.New("identity logout failed")
+	ErrIntegrationCleanup                   = errors.New("integration cleanup failed")
 	ErrIdentityNotInConfig                  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")

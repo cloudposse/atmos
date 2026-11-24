@@ -121,7 +121,9 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 // fails when the credentials are expired or invalid, so scripts can rely on the
 // exit status (missing credentials already fail in authManager.Whoami). When the
 // credentials cannot be validated (for example STS is unreachable), validity is
-// decided from the cached expiration time and a warning says so on stderr.
+// decided from the cached expiration time and a warning says so on stderr. An
+// ambient identity has no credentials by design; it succeeds and is reported as
+// not managed by Atmos.
 func reportWhoami(ctx context.Context, whoami *authTypes.WhoamiInfo, format string) error {
 	defer perf.Track(nil, "auth.reportWhoami")()
 
@@ -224,6 +226,12 @@ func validateCredentials(ctx context.Context, whoami *authTypes.WhoamiInfo) cred
 	defer perf.Track(nil, "auth.validateCredentials")()
 
 	if whoami.Credentials == nil {
+		if whoami.Ambient {
+			// The identity mints no credentials by design (the cloud SDK resolves them at
+			// runtime), so there is nothing to validate and nothing that can be expired.
+			log.Debug("Identity uses ambient credentials not managed by Atmos", logKeyIdentity, whoami.Identity)
+			return credentialCheck{valid: true}
+		}
 		log.Debug("Validation failed: no credentials in WhoamiInfo", "identity", whoami.Identity)
 		return credentialCheck{}
 	}
@@ -393,6 +401,10 @@ func buildWhoamiTableRows(whoami *authTypes.WhoamiInfo) [][]string {
 
 	rows = append(rows, []string{"Provider", whoami.Provider})
 	rows = append(rows, []string{"Identity", whoami.Identity})
+
+	if whoami.Ambient {
+		rows = append(rows, []string{"Credentials", "ambient, not managed by Atmos"})
+	}
 
 	if whoami.Principal != "" {
 		rows = append(rows, []string{"Principal", whoami.Principal})
