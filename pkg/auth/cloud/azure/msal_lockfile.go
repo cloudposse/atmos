@@ -36,46 +36,79 @@ var (
 // Atmos takes its turn after a live az process releases and deletes the file. A lock file that
 // exists but that nobody holds (left by a crashed process or an older Atmos build) is taken over
 // at once instead of being waited on. Claiming is best effort: on timeout, cancellation or an
-// unexpected error the caller still takes the lock itself, which is what excludes writers.
-func claimMSALLockfile(ctx context.Context, lockPath string) {
+// unexpected error the caller still takes the lock itself, which is what excludes writers. The
+// returned claim records whether this call created the lock file (see msalLockfileClaim.abandon).
+func claimMSALLockfile(ctx context.Context, lockPath string) msalLockfileClaim {
 	deadline := time.Now().Add(msalLockfileWait)
 	for {
-		created, err := createMSALLockfile(lockPath)
+		claim, err := createMSALLockfile(lockPath)
 		switch {
-		case created:
-			return
+		case claim.created():
+			return claim
 		case !errors.Is(err, fs.ErrExist):
 			// For example a read-only directory: the lock below reports what is wrong.
 			log.Debug("Could not create the MSAL cache lock file", "path", lockPath, "error", err)
-			return
+			return msalLockfileClaim{}
 		case !msalLockfileHeld(lockPath):
 			log.Debug("Taking over an MSAL cache lock file nobody holds", "path", lockPath)
-			return
+			return msalLockfileClaim{}
 		case time.Now().After(deadline):
 			log.Debug("Timed out waiting for the MSAL cache lock file; waiting on the lock instead", "path", lockPath)
-			return
+			return msalLockfileClaim{}
 		}
 		select {
 		case <-ctx.Done():
-			return
+			return msalLockfileClaim{}
 		case <-time.After(msalLockfilePollInterval):
 		}
 	}
 }
 
+// msalLockfileClaim is the outcome of claimMSALLockfile. It identifies the lock file this process
+// created, if any, so the claim can be withdrawn when the lock is not acquired afterwards.
+type msalLockfileClaim struct {
+	// file is the lock file this process created, or nil when it took over or never created one.
+	file os.FileInfo
+}
+
+// created reports whether this process created the lock file.
+func (c msalLockfileClaim) created() bool {
+	return c.file != nil
+}
+
+// abandon removes the lock file when the lock could not be acquired after this process created
+// it, so az does not wait on a claim nobody will release. The file is removed only while lockPath
+// still names the file this process created: a lock file another process created since (or one
+// this process took over) is left alone.
+func (c msalLockfileClaim) abandon(lockPath string) {
+	if !c.created() {
+		return
+	}
+	current, err := os.Stat(lockPath)
+	if err != nil || !os.SameFile(c.file, current) {
+		return
+	}
+	releaseMSALLockfile(lockPath)
+}
+
 // createMSALLockfile creates lockPath exclusively and records this process in it, as
-// msal-extensions does. It reports false with an error satisfying fs.ErrExist when the file
-// already exists.
-func createMSALLockfile(lockPath string) (bool, error) {
+// msal-extensions does. It returns an empty claim with an error satisfying fs.ErrExist when the
+// file already exists.
+func createMSALLockfile(lockPath string) (msalLockfileClaim, error) {
 	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, FilePermissions)
 	if err != nil {
-		return false, err
+		return msalLockfileClaim{}, err
 	}
 	_, writeErr := file.WriteString(msalLockfileOwner())
-	if err := errors.Join(writeErr, file.Close()); err != nil {
+	info, statErr := file.Stat()
+	if err := errors.Join(writeErr, statErr, file.Close()); err != nil {
 		log.Debug("Could not record the owner in the MSAL cache lock file", "path", lockPath, "error", err)
 	}
-	return true, nil
+	if statErr != nil {
+		// Without the file's identity it cannot be withdrawn safely later; it is still claimed.
+		info, _ = os.Stat(lockPath)
+	}
+	return msalLockfileClaim{file: info}, nil
 }
 
 // msalLockfileHeld reports whether another process holds the lock on lockPath. A lock that
