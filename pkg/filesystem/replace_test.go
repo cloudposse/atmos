@@ -24,7 +24,16 @@ func renameFailingFileSystem(t *testing.T, atomicErr error) *MockFileSystem {
 	mock.EXPECT().WriteFileAtomic(gomock.Any(), gomock.Any(), gomock.Any()).Return(atomicErr).AnyTimes()
 	mock.EXPECT().Stat(gomock.Any()).DoAndReturn(osFS.Stat).AnyTimes()
 	mock.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(osFS.WriteFile).AnyTimes()
+	mock.EXPECT().Chmod(gomock.Any(), gomock.Any()).DoAndReturn(osFS.Chmod).AnyTimes()
 	return mock
+}
+
+// writeFixture creates path with data and then sets mode explicitly, so the fixture's mode does
+// not depend on the process umask.
+func writeFixture(t *testing.T, path string, data []byte, mode os.FileMode) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(path, data, mode))
+	require.NoError(t, os.Chmod(path, mode))
 }
 
 // TestWriteFileAtomicOrInPlace_FallsBackWhenReplaceIsRefused reproduces the 1.235.0 upgrade
@@ -38,10 +47,11 @@ func TestWriteFileAtomicOrInPlace_FallsBackWhenReplaceIsRefused(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			target := filepath.Join(t.TempDir(), "config.json")
-			require.NoError(t, os.WriteFile(target, []byte("old"), 0o640))
+			writeFixture(t, target, []byte("old"), 0o640)
 			atomicErr := &os.LinkError{Op: "rename", Old: target + ".tmp", New: target, Err: errno}
 
-			require.NoError(t, WriteFileAtomicOrInPlace(renameFailingFileSystem(t, atomicErr), target, []byte("new"), 0o600))
+			fsys := renameFailingFileSystem(t, atomicErr)
+			require.NoError(t, WriteFileAtomicOrInPlace(fsys, target, []byte("new"), 0o640))
 
 			got, err := os.ReadFile(target)
 			require.NoError(t, err)
@@ -152,4 +162,49 @@ func assertSamePerm(t *testing.T, path string, want os.FileMode) {
 		return
 	}
 	assert.Equal(t, want, info.Mode().Perm(), "the in-place write keeps the existing permission bits")
+}
+
+// TestWriteFileAtomicOrInPlace_TightensBroadModeBeforeInPlaceWrite verifies the in-place write
+// never leaves the file more open than requested: an existing token cache readable by other
+// users (0644) is restricted to the requested owner-only mode before the new contents are written,
+// as the atomic write would have done by creating a new 0600 file.
+func TestWriteFileAtomicOrInPlace_TightensBroadModeBeforeInPlaceWrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not keep Unix permission bits")
+	}
+	target := filepath.Join(t.TempDir(), "msal_token_cache.json")
+	writeFixture(t, target, []byte("old"), 0o644)
+	atomicErr := &os.LinkError{Op: "rename", Err: syscall.EBUSY}
+
+	require.NoError(t, WriteFileAtomicOrInPlace(renameFailingFileSystem(t, atomicErr), target, []byte("tokens"), 0o600))
+
+	info, err := os.Stat(target)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	got, err := os.ReadFile(target)
+	require.NoError(t, err)
+	assert.Equal(t, "tokens", string(got))
+}
+
+// TestWriteFileAtomicOrInPlace_RefusesInPlaceWriteWhenModeCannotBeTightened verifies the
+// in-place write is refused, and the file left unchanged, when a too-broad mode cannot be
+// restricted first.
+func TestWriteFileAtomicOrInPlace_RefusesInPlaceWriteWhenModeCannotBeTightened(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "msal_token_cache.json")
+	writeFixture(t, target, []byte("old"), 0o644)
+	atomicErr := &os.LinkError{Op: "rename", Err: syscall.EBUSY}
+	chmodErr := &os.PathError{Op: "chmod", Path: target, Err: syscall.EPERM}
+
+	mock := NewMockFileSystem(gomock.NewController(t))
+	mock.EXPECT().WriteFileAtomic(gomock.Any(), gomock.Any(), gomock.Any()).Return(atomicErr)
+	mock.EXPECT().Stat(target).DoAndReturn(os.Stat)
+	mock.EXPECT().Chmod(target, os.FileMode(0o600)).Return(chmodErr)
+	// No WriteFile is expected: gomock fails the test on an unexpected call.
+
+	err := WriteFileAtomicOrInPlace(mock, target, []byte("tokens"), 0o600)
+	require.ErrorIs(t, err, syscall.EBUSY)
+	require.ErrorIs(t, err, syscall.EPERM)
+	got, readErr := os.ReadFile(target)
+	require.NoError(t, readErr)
+	assert.Equal(t, "old", string(got))
 }

@@ -23,8 +23,11 @@ const maxSymlinkHops = 40
 // or live in a directory the user cannot write to although the file itself is writable, where
 // the temporary file cannot be created. Older Atmos versions wrote these files in place, so they
 // worked there. The fallback applies only when the replace failed with EBUSY, EXDEV, EROFS or a
-// permission error and name is an existing regular file; an in-place write keeps the file's
-// permission bits. When the in-place write fails too, both errors are returned.
+// permission error and name is an existing regular file. An in-place write keeps the file's
+// permission bits, except that it first removes any bit perm does not grant, so a token cache
+// that other users can read is never rewritten with new secrets: the atomic write would have
+// created a new file with perm. When the mode cannot be restricted, the in-place write is refused.
+// When the in-place write fails, both errors are returned.
 func WriteFileAtomicOrInPlace(fsys FileSystem, name string, data []byte, perm os.FileMode) error {
 	defer perf.Track(nil, "filesystem.WriteFileAtomicOrInPlace")()
 
@@ -35,6 +38,11 @@ func WriteFileAtomicOrInPlace(fsys FileSystem, name string, data []byte, perm os
 	info, err := fsys.Stat(name)
 	if err != nil || !info.Mode().IsRegular() {
 		return atomicErr
+	}
+	if current := info.Mode().Perm(); current&^perm != 0 {
+		if err := fsys.Chmod(name, current&perm); err != nil {
+			return errors.Join(atomicErr, err)
+		}
 	}
 	if err := fsys.WriteFile(name, data, perm); err != nil {
 		return errors.Join(atomicErr, err)
