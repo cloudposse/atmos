@@ -142,7 +142,7 @@ func TestDiffConfiguredCapabilitiesMatchBaseline(t *testing.T) {
 		"chart": "./chart-capabilities", "name": "caps",
 		"kube_version": "1.30.0", "api_versions": []any{"monitoring.coreos.com/v1/ServiceMonitor"},
 	}}
-	spec, err := buildChartSpec(config, info, "testdata")
+	spec, err := buildChartSpec(config, info, "testdata", nil)
 	require.NoError(t, err)
 	baseline := filepath.Join(t.TempDir(), "baseline.yaml")
 	require.NoError(t, os.WriteFile(baseline, []byte(`apiVersion: v1

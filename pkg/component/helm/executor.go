@@ -275,7 +275,7 @@ func prepareChartSpec(
 	ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo, operation Operation, componentPath string,
 ) (*chartSpec, error) {
-	spec, err := buildChartSpec(atmosConfig, info, componentPath)
+	spec, err := buildChartSpec(atmosConfig, info, componentPath, ctx.Flags)
 	if err != nil {
 		return nil, err
 	}
@@ -290,9 +290,6 @@ func prepareChartSpec(
 	}
 	if dependencyUpdate, ok := ctx.Flags[cfg.HelmDependencyUpdateSectionName].(bool); ok {
 		spec.DependencyUpdate = dependencyUpdate
-	}
-	if err := applyCapabilityFlags(spec, ctx.Flags); err != nil {
-		return nil, err
 	}
 	if operation == OperationApply {
 		spec.LifecycleFlags = ctx.Flags

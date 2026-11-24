@@ -21,7 +21,10 @@ import (
 // resolveKubeVersion reads and parses the component's `kube_version`. A
 // non-string value is rejected rather than ignored: an unquoted YAML `1.30`
 // decodes as the float 1.3 and would otherwise render against the wrong version.
-func resolveKubeVersion(section map[string]any) (*common.KubeVersion, error) {
+func resolveKubeVersion(section, flags map[string]any) (*common.KubeVersion, error) {
+	if override, ok := flags[cfg.HelmKubeVersionSectionName].(string); ok && override != "" {
+		return parseKubeVersion(override)
+	}
 	value, ok := section[cfg.HelmKubeVersionSectionName]
 	if !ok || value == nil {
 		return nil, nil //nolint:nilnil // An unset kube_version keeps Helm's built-in default.
@@ -44,23 +47,6 @@ func parseKubeVersion(version string) (*common.KubeVersion, error) {
 		return nil, fmt.Errorf("%w %q: %w", errUtils.ErrHelmKubeVersionInvalid, version, err)
 	}
 	return parsed, nil
-}
-
-// applyCapabilityFlags layers `--kube-version` and `--api-versions` over the
-// component's settings. CLI flags take precedence, so `--api-versions` replaces
-// the component's list rather than appending to it.
-func applyCapabilityFlags(spec *chartSpec, flags map[string]any) error {
-	if value, ok := flags[cfg.HelmKubeVersionSectionName].(string); ok && value != "" {
-		kubeVersion, err := parseKubeVersion(value)
-		if err != nil {
-			return err
-		}
-		spec.KubeVersion = kubeVersion
-	}
-	if values, ok := flags[cfg.HelmAPIVersionsSectionName].([]string); ok {
-		spec.APIVersions = values
-	}
-	return nil
 }
 
 // applyRenderCapabilities wires the resolved capabilities onto a client-side

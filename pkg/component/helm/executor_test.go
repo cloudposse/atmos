@@ -394,7 +394,7 @@ func TestBuildChartSpecAndValueHelpers(t *testing.T) {
 		},
 	}
 
-	spec, err := buildChartSpec(&schema.AtmosConfiguration{}, info, dir)
+	spec, err := buildChartSpec(&schema.AtmosConfiguration{}, info, dir, nil)
 	require.NoError(t, err)
 	assert.Equal(t, chartDir, spec.Chart)
 	assert.Equal(t, "https://example.com/charts", spec.RepoURL)

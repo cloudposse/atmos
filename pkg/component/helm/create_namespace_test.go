@@ -68,14 +68,14 @@ func TestBuildChartSpec_CreateNamespacePropagates(t *testing.T) {
 
 	// Default (key absent) -> true.
 	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "apps/demo", ComponentSection: base}
-	spec, err := buildChartSpec(&schema.AtmosConfiguration{}, info, "testdata")
+	spec, err := buildChartSpec(&schema.AtmosConfiguration{}, info, "testdata", nil)
 	require.NoError(t, err)
 	assert.True(t, spec.CreateNamespace)
 
 	// Explicit false -> false.
 	section := map[string]any{"chart": "./chart", "namespace": "apps", "create_namespace": false}
 	info = &schema.ConfigAndStacksInfo{ComponentFromArg: "apps/demo", ComponentSection: section}
-	spec, err = buildChartSpec(&schema.AtmosConfiguration{}, info, "testdata")
+	spec, err = buildChartSpec(&schema.AtmosConfiguration{}, info, "testdata", nil)
 	require.NoError(t, err)
 	assert.False(t, spec.CreateNamespace)
 }

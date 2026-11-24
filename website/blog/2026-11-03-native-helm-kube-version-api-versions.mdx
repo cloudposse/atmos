@@ -28,8 +28,8 @@ Flux then deploys a release with no monitoring. The Helm CLI solves this with
 
 ## The Fix
 
-Native Helm components now accept `kube_version` and `api_versions`, and the rendering commands
-accept matching `--kube-version` and `--api-versions` flags:
+Native Helm components now accept [`kube_version` and `api_versions`](/stacks/components/helm#helm-specific-sections), and the rendering commands
+accept matching [`--kube-version` and `--api-versions` flags](/cli/commands/helm/template#flags):
 
 ```yaml
 components:

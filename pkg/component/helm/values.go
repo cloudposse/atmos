@@ -35,6 +35,7 @@ func buildChartSpec(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	componentPath string,
+	flags map[string]any,
 ) (*chartSpec, error) {
 	defer perf.Track(atmosConfig, "helm.buildChartSpec")()
 
@@ -53,9 +54,14 @@ func buildChartSpec(
 		return nil, err
 	}
 
-	kubeVersion, err := resolveKubeVersion(section)
+	kubeVersion, err := resolveKubeVersion(section, flags)
 	if err != nil {
 		return nil, err
+	}
+
+	apiVersions := asStringSlice(section[cfg.HelmAPIVersionsSectionName])
+	if override, ok := flags[cfg.HelmAPIVersionsSectionName].([]string); ok {
+		apiVersions = override
 	}
 
 	return &chartSpec{
@@ -66,7 +72,7 @@ func buildChartSpec(
 		Namespace:       resolveNamespace(section),
 		CreateNamespace: resolveCreateNamespace(section),
 		KubeVersion:     kubeVersion,
-		APIVersions:     asStringSlice(section[cfg.HelmAPIVersionsSectionName]),
+		APIVersions:     apiVersions,
 		Values:          values,
 		IncludeCRDs:     true,
 		Repositories:    mergeRepositories(atmosConfig, section),

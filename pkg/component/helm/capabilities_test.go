@@ -43,7 +43,7 @@ func TestResolveKubeVersion(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := resolveKubeVersion(tt.section)
+			got, err := resolveKubeVersion(tt.section, nil)
 			if tt.wantErr {
 				require.ErrorIs(t, err, errUtils.ErrHelmKubeVersionInvalid)
 				assert.Nil(t, got)
@@ -62,38 +62,6 @@ func TestResolveKubeVersion(t *testing.T) {
 	}
 }
 
-func TestApplyCapabilityFlags(t *testing.T) {
-	componentVersion, err := parseKubeVersion("1.30.0")
-	require.NoError(t, err)
-
-	t.Run("flags override the component settings", func(t *testing.T) {
-		spec := &chartSpec{KubeVersion: componentVersion, APIVersions: []string{"example.com/v1"}}
-		err := applyCapabilityFlags(spec, map[string]any{
-			cfg.HelmKubeVersionSectionName: "1.37.0",
-			cfg.HelmAPIVersionsSectionName: []string{serviceMonitorAPIVersion, "autoscaling.k8s.io/v1"},
-		})
-		require.NoError(t, err)
-		require.NotNil(t, spec.KubeVersion)
-		assert.Equal(t, "v1.37.0", spec.KubeVersion.Version)
-		assert.Equal(t, []string{serviceMonitorAPIVersion, "autoscaling.k8s.io/v1"}, spec.APIVersions,
-			"--api-versions replaces the component list (CLI precedence)")
-	})
-
-	t.Run("absent flags keep the component settings", func(t *testing.T) {
-		spec := &chartSpec{KubeVersion: componentVersion, APIVersions: []string{"example.com/v1"}}
-		require.NoError(t, applyCapabilityFlags(spec, map[string]any{}))
-		assert.Same(t, componentVersion, spec.KubeVersion)
-		assert.Equal(t, []string{"example.com/v1"}, spec.APIVersions)
-	})
-
-	t.Run("invalid --kube-version is rejected", func(t *testing.T) {
-		spec := &chartSpec{KubeVersion: componentVersion}
-		err := applyCapabilityFlags(spec, map[string]any{cfg.HelmKubeVersionSectionName: "not-a-version"})
-		require.ErrorIs(t, err, errUtils.ErrHelmKubeVersionInvalid)
-		assert.Same(t, componentVersion, spec.KubeVersion)
-	})
-}
-
 // buildChartSpec must carry the component's kube_version and api_versions
 // through to the resolved chart spec.
 func TestBuildChartSpec_CapabilitiesPropagate(t *testing.T) {
@@ -103,7 +71,7 @@ func TestBuildChartSpec_CapabilitiesPropagate(t *testing.T) {
 		cfg.HelmAPIVersionsSectionName: []any{"monitoring.coreos.com/v1", serviceMonitorAPIVersion},
 	}
 	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "apps/demo", ComponentSection: section}
-	spec, err := buildChartSpec(&schema.AtmosConfiguration{}, info, "testdata")
+	spec, err := buildChartSpec(&schema.AtmosConfiguration{}, info, "testdata", nil)
 	require.NoError(t, err)
 	require.NotNil(t, spec.KubeVersion)
 	assert.Equal(t, "v1.37.0", spec.KubeVersion.Version)
@@ -111,7 +79,7 @@ func TestBuildChartSpec_CapabilitiesPropagate(t *testing.T) {
 
 	// Unset -> Helm defaults.
 	info = &schema.ConfigAndStacksInfo{ComponentFromArg: "apps/demo", ComponentSection: map[string]any{"chart": "./chart"}}
-	spec, err = buildChartSpec(&schema.AtmosConfiguration{}, info, "testdata")
+	spec, err = buildChartSpec(&schema.AtmosConfiguration{}, info, "testdata", nil)
 	require.NoError(t, err)
 	assert.Nil(t, spec.KubeVersion)
 	assert.Empty(t, spec.APIVersions)
@@ -119,7 +87,7 @@ func TestBuildChartSpec_CapabilitiesPropagate(t *testing.T) {
 	// Invalid -> error, not a silent fallback.
 	section = map[string]any{"chart": "./chart", cfg.HelmKubeVersionSectionName: 1.3}
 	info = &schema.ConfigAndStacksInfo{ComponentFromArg: "apps/demo", ComponentSection: section}
-	_, err = buildChartSpec(&schema.AtmosConfiguration{}, info, "testdata")
+	_, err = buildChartSpec(&schema.AtmosConfiguration{}, info, "testdata", nil)
 	require.ErrorIs(t, err, errUtils.ErrHelmKubeVersionInvalid)
 }
 
@@ -220,10 +188,12 @@ func TestRunWithHooks_TemplateCapabilities(t *testing.T) {
 
 	t.Run("CLI flags override the component", func(t *testing.T) {
 		renderedSpec = nil
+		info := newInfo()
+		info.ComponentSection[cfg.HelmKubeVersionSectionName] = "latest"
 		err := runWithHooks(&component.ExecutionContext{Flags: map[string]any{
 			cfg.HelmKubeVersionSectionName: "1.37.0",
 			cfg.HelmAPIVersionsSectionName: []string{"autoscaling.k8s.io/v1"},
-		}}, &schema.AtmosConfiguration{}, newInfo(), OperationTemplate, "testdata")
+		}}, &schema.AtmosConfiguration{}, info, OperationTemplate, "testdata")
 		require.NoError(t, err)
 		require.NotNil(t, renderedSpec)
 		require.NotNil(t, renderedSpec.KubeVersion)
