@@ -80,6 +80,10 @@ are recorded in `docs/fixes/2026-11-22-auth-command-behavior.md`,
     `ExpiredAuthenticationToken`, wraps `ErrAuthenticationFailed`. Other ARM answers are about the
     subscription, not the token, and count as unavailable. Examples are `AuthorizationFailed` (403),
     `SubscriptionNotFound` (404) and server faults.
+  - A per-retry pipeline policy (`azureStatusRecorder`) records the HTTP status of the last answer. It
+    runs below the bearer token policy, which drops the response when the body cannot be read, so a
+    401 with a truncated body is still a rejection. `policy.WithCaptureResponse` does not work here:
+    the bearer token policy returns no response in that case.
   - The call is bounded to 15 seconds and 1 retry. It targets the ARM endpoint of the credentials' cloud
     (`CloudEnvironment`: public, US Government or China). A sovereign-cloud token sent to the public ARM
     endpoint is rejected although it is valid.
@@ -89,7 +93,7 @@ are recorded in `docs/fixes/2026-11-22-auth-command-behavior.md`,
   `TestAzureCredentials_ValidateExpiredSkipsNetwork`, `TestAzureCredentials_ValidateClassifiesARMAnswers`
   (401, 403 with two codes, 404, 500), `TestAzureCredentials_ValidateSucceeds`,
   `TestAzureCredentials_ValidationTargetsTheCredentialCloud`,
-  `TestAzureCredentials_ValidateClientSetupFailure`.
+  `TestAzureCredentials_ValidateClientSetupFailure`, `TestAzureCredentials_ValidateKeeps401WhenBodyIsTruncated`.
   - Two existing tests now assert the corrected contract. `TestAzureCredentials_ValidateCanceled`
     expects `ErrCredentialValidationUnavailable`, and `TestAzureCredentials_Validate_EmptySubscriptionID`
     no longer expects `ErrInvalidAuthConfig`.
@@ -110,7 +114,13 @@ are recorded in `docs/fixes/2026-11-22-auth-command-behavior.md`,
   - New `filesystem.WriteFileAtomicOrInPlace` (`pkg/filesystem/replace.go`). It tries the atomic write
     first. When the rename is refused with EBUSY, EXDEV, EROFS, EACCES or EPERM and the target is an
     existing regular file, it writes the same bytes in place, which keeps the file's permission bits.
-    When the in-place write fails too, both errors are returned.
+    Bits the requested mode does not grant are removed first, so a token cache that other users can
+    read (for example `0644`) is restricted to `0600` before new tokens go in, as the atomic write would
+    have done. If the mode cannot be restricted, the in-place write is refused. When the in-place write
+    fails too, both errors are returned.
+  - A read-only Docker directory works only when `config.json.lock` already exists and is writable:
+    Atmos cannot create the lock file there, so the first login in a directory that never held one fails
+    before the in-place write. v1.234.1 failed the same way. The ECR and ACR pages state this.
   - New `filesystem.ResolveSymlinkTarget`, moved from the Docker package so the MSAL cache can share it.
     Docker's `resolveConfigTarget` delegates to it.
   - `ConfigManager` has an injectable `fs filesystem.FileSystem`, so tests simulate the refused rename on
@@ -123,7 +133,10 @@ are recorded in `docs/fixes/2026-11-22-auth-command-behavior.md`,
 - **Tests.**
   - `pkg/filesystem`: `TestWriteFileAtomicOrInPlace_FallsBackWhenReplaceIsRefused` (all five errnos),
     `TestWriteFileAtomicOrInPlace_NoFallback` (success, unrelated error, missing target, directory),
-    `TestWriteFileAtomicOrInPlace_InPlaceFailureReportsBoth`, `TestResolveSymlinkTarget`.
+    `TestWriteFileAtomicOrInPlace_InPlaceFailureReportsBoth`, `TestResolveSymlinkTarget`,
+    `TestWriteFileAtomicOrInPlace_TightensBroadModeBeforeInPlaceWrite`,
+    `TestWriteFileAtomicOrInPlace_RefusesInPlaceWriteWhenModeCannotBeTightened`. Fixture modes are set with
+    `os.Chmod`, so they do not depend on the umask.
   - `pkg/auth/cloud/docker`: `TestConfigManager_BindMountedConfig_LoginAndLogout` (EBUSY through the mock),
     `TestConfigManager_ReadOnlyDockerDir_WritableConfig` (real file system, Unix, not root),
     `TestConfigManager_SaveFailsWhenInPlaceWriteFailsToo`.
@@ -171,6 +184,10 @@ are recorded in `docs/fixes/2026-11-22-auth-command-behavior.md`,
       process or an earlier build.
     - After 5 seconds Atmos waits on the lock itself, like msal-extensions.
     - The file is deleted when the lock is released (`releaseMSALLockfile`).
+    - When the lock cannot be acquired after this process created the lock file (a timeout or a
+      cancellation), the claim is withdrawn (`msalLockfileClaim.abandon`). It is removed only while the
+      path still names the file this process created, so a lock file another process created since, or
+      one Atmos took over, is kept.
     - The flock still provides the exclusion. The legacy `<cache>.lock` is unchanged.
   - `UpdateAzureCLIMSALCache` and `msalCache.Export` write through the new `writeSharedMSALCache`. It
     resolves symlinks first (`filesystem.ResolveSymlinkTarget`), so the target is updated and the link
@@ -181,7 +198,11 @@ are recorded in `docs/fixes/2026-11-22-auth-command-behavior.md`,
   `TestMSALLockfile_StaleLockfileIsTakenOver`, `TestMSALLockfile_TimeoutFallsBackToTheLock`,
   `TestClaimMSALLockfile_StopsWaiting` (cancellation, a lock file that cannot be probed),
   `TestUpdateAzureCLIMSALCache_KeepsSymlink`, `TestMSALCache_ExportKeepsSymlink`,
-  `TestMSALCache_ExportReadOnlyDirWritesInPlace`. `TestMSALCache_ExportWriteError` now pre-creates both
+  `TestMSALCache_ExportReadOnlyDirWritesInPlace`, `TestMSALCacheLock_LockFailureRemovesOwnClaim`,
+  `TestMSALCacheLock_LockFailureKeepsForeignLockfile`, `TestMSALLockfileClaim_AbandonOnlyRemovesTheSameFile`,
+  `TestMSALCacheLock_DoesNotHoldARemovedLockfile` (a holder deletes the path while locked and a new
+  holder locks a new file there; Atmos waits for the new one, because the lock reopens the path on
+  every attempt). `TestMSALCache_ExportWriteError` now pre-creates both
   lock files and makes the cache file read-only, because Replace no longer leaves the lock file behind and
   a writable file is now written in place.
 
@@ -192,6 +213,10 @@ are recorded in `docs/fixes/2026-11-22-auth-command-behavior.md`,
   rolled back had to enter the access keys again.
 - **Fix** (`pkg/auth/credentials/keyring_store.go`).
   - `migrateLegacyRealmEntry` copies the entry and keeps the legacy key.
+  - Every later store of the alias (`atmos auth user configure` replacing the keys, or a login) also
+    rewrites the kept legacy entry (`syncRetainedLegacyEntry`), so a downgrade never uses superseded
+    keys. Only an existing, unambiguous legacy entry that belongs to the alias is rewritten. None is
+    created.
   - New code always reads the current key first, so the legacy copy is only a fallback for older
     versions.
   - `Delete` already removes both keys, with the same ownership checks. A keychain logout and
@@ -207,7 +232,9 @@ are recorded in `docs/fixes/2026-11-22-auth-command-behavior.md`,
   - `TestKeyringStore_AutoRealmLegacyKeyWithUnderscoreAliasIsMigrated` covers the automatic realm with
     `prod_admin`, the regression-test case. It asserts the key is kept, listed once and deleted by
     `Delete`.
-  - New `TestKeyringStore_MigratedEntryReadsOnlyTheCurrentKey`.
+  - New `TestKeyringStore_MigratedEntryReadsOnlyTheCurrentKey`, `TestKeyringStore_StoreKeepsRetainedLegacyKeyInSync`
+    and `TestKeyringStore_StoreDoesNotCreateOrTouchOtherLegacyKeys` (no legacy key, an ambiguous one,
+    one recorded for another alias).
   - The best-effort subtest "legacy delete fails" became "legacy key is never deleted".
   - `TestUserIdentity_LegacyKeyring_AutoRealmMigratesWithoutPrompt` (`pkg/auth/identities/aws`) asserts the
     kept key.
@@ -239,6 +266,8 @@ are recorded in `docs/fixes/2026-11-22-auth-command-behavior.md`,
 - **Tests.** `TestExternalConfigDigest_PersistentBackendsNeverTouchTheKeyring` (system and file, with a
   mocked keyring that fails on any call), `TestExternalConfigDigest_FileRecordErrors`,
   `TestExternalConfigDigest_FileRecordWriteFailure`, `TestExternalConfigDigest_DeleteRemovesFileRecord`,
+  `TestRecordIsMissing` (a non-directory in place of the record directory is a store failure on every
+  platform; Windows reports it as "path not found"),
   `TestPersistentStoresKeepDigestRecordsOutsideTheKeyring`. `TestDeleteRealmKeyringEntries_RemovesLegacyAndDigest`
   (`cmd/auth`) now seeds and checks the record through the store.
 

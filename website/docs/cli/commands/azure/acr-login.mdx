@@ -221,7 +221,8 @@ ACR credentials are written to `~/.docker/config.json` by default, the standard 
 - Docker commands work immediately after login without additional configuration
 - Credentials are merged with existing entries in your Docker config
 - Respects `DOCKER_CONFIG` environment variable if set
-- Works when `config.json` is mounted as a single file (a devcontainer bind mount or a Kubernetes `subPath`), or when its directory is read-only but the file is writable: Atmos replaces the file atomically when it can, and otherwise writes it in place
+- Works when `config.json` is mounted as a single file (a devcontainer bind mount or a Kubernetes `subPath`): Atmos replaces the file atomically when it can, and otherwise writes it in place
+- Works when the Docker config directory is read-only but `config.json` is writable, provided its lock file `config.json.lock` already exists there and is writable too. Atmos cannot create the lock file in a read-only directory, so the first login fails until it exists. The lock file stays after any successful login, so this only affects a directory that never held one
 
 When `atmos auth logout` cannot remove an ACR credential from `config.json`, the logout reports which credentials were left behind instead of reporting a complete logout.
 
