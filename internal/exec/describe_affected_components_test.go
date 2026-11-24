@@ -1208,6 +1208,21 @@ func TestProcessStackAffected_CloudFormationSection(t *testing.T) {
 	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackStackName)
 }
 
+func TestIsComponentSectionEqual_YAMLFunctionsIgnoreCheckoutPath(t *testing.T) {
+	t.Parallel()
+
+	remote := yamlsource.Source{Tag: "!terraform.state", Argument: "vpc vpc_id", File: "/remote-checkout/stack.yaml"}.Encode()
+	local := yamlsource.Source{Tag: "!terraform.state", Argument: "vpc vpc_id", File: "/local-checkout/stack.yaml"}.Encode()
+	changed := yamlsource.Source{Tag: "!terraform.state", Argument: "vpc other_id", File: "/local-checkout/stack.yaml"}.Encode()
+
+	remoteStacks := helmRemoteStacksWith(map[string]any{
+		sectionNameValues: map[string]any{"vpcId": remote},
+	})
+
+	assert.True(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.HelmComponentType, helmTestComponent, map[string]any{"vpcId": local}, sectionNameValues))
+	assert.False(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.HelmComponentType, helmTestComponent, map[string]any{"vpcId": changed}, sectionNameValues))
+}
+
 func TestIsComponentSectionEqual(t *testing.T) {
 	t.Parallel()
 
