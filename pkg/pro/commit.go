@@ -312,20 +312,22 @@ func detectChanges() (additions []string, deletions []string, err error) {
 }
 
 // gitDiffCachedNames runs git diff --cached --name-only with the given filter.
+// A rename is reported as a deletion and an addition (--no-renames), and paths
+// are read unquoted (-z).
 func gitDiffCachedNames(filter string) ([]string, error) {
-	args := []string{"diff", "--cached", "--name-only", "--diff-filter=" + filter}
+	args := []string{"diff", "--cached", "--name-only", "--no-renames", "-z", "--diff-filter=" + filter}
 	cmd := exec.Command("git", args...)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	names := strings.Split(string(out), "\x00")
 	// Filter empty strings from split.
-	result := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if line != "" {
-			result = append(result, line)
+	result := make([]string, 0, len(names))
+	for _, name := range names {
+		if name != "" {
+			result = append(result, name)
 		}
 	}
 
