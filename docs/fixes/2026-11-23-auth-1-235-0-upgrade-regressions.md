@@ -10,18 +10,18 @@ Atmos Auth workflows that behave worse after upgrading. All seven come from the 
 fixes:
 
 1. `atmos auth whoami` exits 0 again for ambient identities, and says their credentials are not managed by
-   Atmos.
+    Atmos.
 2. `auth whoami` no longer exits 1 for valid Azure credentials when Azure Resource Manager cannot be
-   reached or no subscription is set. Azure now behaves like AWS.
+    reached or no subscription is set. Azure now behaves like AWS.
 3. ECR and ACR login and logout work again when Docker's `config.json` is mounted as a single file, or
-   lives in a read-only directory. A logout that cannot remove the credential now says so.
+    lives in a read-only directory. A logout that cannot remove the credential now says so.
 4. ECR and ACR login no longer run `docker-credential-ecr-login get` before `store`.
 5. Atmos removes `msal_token_cache.json.lockfile` when it releases the Azure CLI cache lock, and keeps a
-   symlinked MSAL cache a symlink.
+    symlinked MSAL cache a symlink.
 6. The keyring key migration copies the old entry instead of moving it, so going back to v1.234.1 still
-   finds `aws/user` long-lived keys.
+    finds `aws/user` long-lived keys.
 7. Login no longer writes a configuration digest entry to the keyring for every identity. The record now
-   lives in a file.
+    lives in a file.
 
 Every fix has a test that was written first and seen failing.
 
