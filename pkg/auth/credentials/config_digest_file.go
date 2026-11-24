@@ -74,7 +74,7 @@ func (s *keyringCredentialStore) retrieveConfigDigestFile(alias, realm string) (
 	var record ExternalConfigDigest
 	data, err := os.ReadFile(s.configDigestFile(alias, realm))
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		if s.recordIsMissing(err) {
 			return record, errors.Join(ErrCredentialStore, ErrDataNotFound)
 		}
 		return record, errors.Join(ErrCredentialStore, fmt.Errorf("failed to retrieve configuration digest: %w", err))
@@ -87,8 +87,20 @@ func (s *keyringCredentialStore) retrieveConfigDigestFile(alias, realm string) (
 
 // deleteConfigDigestFile removes the record file of alias within realm. It is idempotent.
 func (s *keyringCredentialStore) deleteConfigDigestFile(alias, realm string) error {
-	if err := os.Remove(s.configDigestFile(alias, realm)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := os.Remove(s.configDigestFile(alias, realm)); err != nil && !s.recordIsMissing(err) {
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete configuration digest: %w", err))
 	}
 	return nil
+}
+
+// recordIsMissing reports whether err from reading or removing a record file means the record
+// does not exist. A non-directory in place of the record directory is a store failure, not a
+// missing record: Linux and macOS report it as ENOTDIR, but Windows reports ERROR_PATH_NOT_FOUND,
+// which Go maps to fs.ErrNotExist, so the directory is checked as well.
+func (s *keyringCredentialStore) recordIsMissing(err error) bool {
+	if !errors.Is(err, fs.ErrNotExist) {
+		return false
+	}
+	info, statErr := os.Stat(s.digestDir)
+	return statErr != nil || info.IsDir()
 }

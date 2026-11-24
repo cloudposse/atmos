@@ -1,6 +1,7 @@
 package credentials
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -125,4 +126,25 @@ func TestExternalConfigDigest_FileRecordWriteFailure(t *testing.T) {
 
 	err := store.StoreExternalConfigDigest("mid", "acme", ExternalConfigDigest{Digest: "d"})
 	require.ErrorIs(t, err, ErrCredentialStore)
+}
+
+// TestRecordIsMissing verifies how a "not exist" answer for a record file is classified on every
+// platform: missing when the record directory is absent or is a directory, a store failure when a
+// non-directory occupies it (Windows reports that case as "path not found").
+func TestRecordIsMissing(t *testing.T) {
+	parent := t.TempDir()
+	notExist := &os.PathError{Op: "open", Path: "record.json", Err: fs.ErrNotExist}
+
+	absent := &keyringCredentialStore{digestDir: filepath.Join(parent, "absent")}
+	assert.True(t, absent.recordIsMissing(notExist))
+
+	dir := &keyringCredentialStore{digestDir: parent}
+	assert.True(t, dir.recordIsMissing(notExist))
+
+	blocker := filepath.Join(parent, "blocker")
+	require.NoError(t, os.WriteFile(blocker, nil, 0o600))
+	blocked := &keyringCredentialStore{digestDir: blocker}
+	assert.False(t, blocked.recordIsMissing(notExist), "a file in place of the record directory is a store failure")
+
+	assert.False(t, dir.recordIsMissing(fs.ErrPermission), "other errors are never a missing record")
 }
