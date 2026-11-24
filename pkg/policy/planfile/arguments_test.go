@@ -9,10 +9,12 @@ import (
 
 func TestSelectArtifact(t *testing.T) {
 	for name, args := range map[string][]string{
-		"plan joined":   {"plan", "-out=selected.plan", "-destroy"},
-		"plan separate": {"plan", "-var-file", "values.json", "-out", "selected.plan"},
-		"apply":         {"apply", "selected.plan"},
-		"apply flags":   {"apply", "-input=false", "-lock=true", "-lock-timeout", "1m", "-parallelism=5", "selected.plan"},
+		"plan joined":               {"plan", "-out=selected.plan", "-destroy"},
+		"plan separate":             {"plan", "-var-file", "values.json", "-out", "selected.plan"},
+		"plan double-dash joined":   {"plan", "--out=selected.plan", "-destroy"},
+		"plan double-dash separate": {"plan", "-var-file", "values.json", "--out", "selected.plan"},
+		"apply":                     {"apply", "selected.plan"},
+		"apply flags":               {"apply", "-input=false", "-lock=true", "-lock-timeout", "1m", "-parallelism=5", "selected.plan"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			directory := t.TempDir()
@@ -27,12 +29,30 @@ func TestSelectArtifact(t *testing.T) {
 	}
 }
 
+// The private artifact replaces the user's path in the spelling the user wrote.
+func TestSelectArtifactReplaceKeepsTheOutputFlagSpelling(t *testing.T) {
+	for args, want := range map[[2]string][]string{
+		{"plan", "--out=selected.plan"}: {"plan", "--out=private.plan"},
+		{"plan", "-out=selected.plan"}:  {"plan", "-out=private.plan"},
+	} {
+		selection, err := selectArtifact(&Invocation{Dir: t.TempDir(), Args: args[:]})
+		require.NoError(t, err)
+		require.Equal(t, want, selection.replace(args[:], "private.plan"))
+	}
+	args := []string{"plan", "--out", "selected.plan"}
+	selection, err := selectArtifact(&Invocation{Dir: t.TempDir(), Args: args})
+	require.NoError(t, err)
+	require.Equal(t, []string{"plan", "--out", "private.plan"}, selection.replace(args, "private.plan"))
+}
+
 func TestRejectUnsafeArguments(t *testing.T) {
 	for name, args := range map[string][]string{
 		"empty": {}, "missing artifact": {"plan"}, "disabled planfile": {"plan", "-no-color"},
 		"out no value": {"plan", "-out"}, "empty value": {"plan", "-out="},
 		"out duplicate": {"plan", "-out=a", "-out", "b"}, "out flag value": {"plan", "-out", "-no-color"},
-		"destroy": {"destroy", "-auto-approve"}, "apply no artifact": {"apply", "-auto-approve"},
+		"out duplicate mixed dashes": {"plan", "-out=a", "--out", "b"}, "double-dash out no value": {"plan", "--out"},
+		"double-dash empty value": {"plan", "--out="},
+		"destroy":                 {"destroy", "-auto-approve"}, "apply no artifact": {"apply", "-auto-approve"},
 		"apply extra artifact":  {"apply", "other.plan", "selected.plan"},
 		"apply planning":        {"apply", "-target=thing", "selected.plan"},
 		"apply missing timeout": {"apply", "-lock-timeout", "selected.plan"},

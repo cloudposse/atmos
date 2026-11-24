@@ -214,7 +214,7 @@ func (a *phaseAttempts) runCommand(opts []component.ExecutionOption, failed *fai
 	switch {
 	case isDetailedExitCodeChanges(a.phase.command, a.args, a.env, actionErr, opts...):
 		// Mark the completed plan here, so the recovery path reports it the same way.
-		a.changes = &successfulPlanChanges{error: actionErr}
+		a.changes = &successfulPlanChanges{Err: actionErr}
 		a.completed = true
 		return output, nil
 	case actionErr == nil:

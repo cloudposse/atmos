@@ -209,7 +209,9 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 		if err := validatePlanOutputFlags(phase.command, phase.args); err != nil {
 			return err
 		}
-		return successfulPlanResult(phase.command, phase.args, info.ComponentEnvList, action(info, phase.args, opts), opts...)
+		// The subprocess gets atmos.yaml `env` too, so -detailed-exitcode set there counts.
+		env := slices.Concat(envpkg.ConvertMapToSlice(atmosConfig.Env), info.ComponentEnvList)
+		return successfulPlanResult(phase.command, phase.args, env, action(info, phase.args, opts), opts...)
 	}
 
 	applied, err := execution.ApplyExtraArguments(config.ExtraArguments, &execution.ArgumentsRequest{
@@ -253,17 +255,14 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 }
 
 // successfulPlanChanges distinguishes a completed plan (including its hooks) from a
-// failed command or hook that happens to return the same exit status.
-type successfulPlanChanges struct{ error }
-
-func (e *successfulPlanChanges) Unwrap() error {
-	defer perf.Track(nil, "terraform.successfulPlanChanges.Unwrap")()
-	return e.error
-}
+// failed command or hook that happens to return the same exit status. It is the exported
+// marker, so the command layer and the scheduler can tell the plan's own exit 2 from any
+// other failure that carries the same status.
+type successfulPlanChanges = errUtils.DetailedPlanChangesError
 
 func successfulPlanResult(command string, args, env []string, err error, opts ...component.ExecutionOption) error {
 	if isDetailedExitCodeChanges(command, args, env, err, opts...) {
-		return &successfulPlanChanges{error: err}
+		return &successfulPlanChanges{Err: err}
 	}
 	return err
 }

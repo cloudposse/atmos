@@ -6,18 +6,21 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/terraform/planout"
 )
 
 type artifactSelection struct {
 	path   string
 	index  int
 	joined bool
+	// flag is the output flag as written, "-out" or "--out", kept when the path is replaced.
+	flag string
 }
 
 func (a artifactSelection) replace(args []string, path string) []string {
 	result := append([]string{}, args...)
 	if a.joined {
-		path = "-out=" + path
+		path = a.flag + "=" + path
 	}
 	result[a.index] = path
 	return result
@@ -66,16 +69,17 @@ func validateArgumentEnvironment(env []string) error {
 func planSelection(args []string) (artifactSelection, error) {
 	selection := artifactSelection{index: -1}
 	for index := 1; index < len(args); index++ {
-		arg := args[index]
-		if arg != "-out" && !strings.HasPrefix(arg, "-out=") {
+		// Terraform accepts -out and --out alike, so both select the artifact.
+		parsed, ok := planout.Parse(args[index])
+		if !ok {
 			continue
 		}
 		if selection.index != -1 {
 			return selection, fmt.Errorf("%w: multiple -out arguments", errUtils.ErrPolicyPlan)
 		}
-		selection.joined = arg != "-out"
+		selection.joined, selection.flag = parsed.Joined, parsed.Name
 		if selection.joined {
-			selection.path = strings.TrimPrefix(arg, "-out=")
+			selection.path = parsed.Value
 		} else {
 			index++
 			if index >= len(args) {

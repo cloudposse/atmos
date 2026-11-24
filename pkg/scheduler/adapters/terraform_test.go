@@ -2402,8 +2402,10 @@ func TestTerraformSummaryHelperBranches(t *testing.T) {
 	require.False(t, terraformPlanChangedError(nil, errUtils.ExitCodeError{Code: 2}))
 	require.False(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "apply"}, errUtils.ExitCodeError{Code: 2}))
 	require.False(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, errors.New("failed")))
-	require.True(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, errUtils.ExitCodeError{Code: 2}))
+	require.True(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, errUtils.AsDetailedPlanChanges(errUtils.ExitCodeError{Code: 2})))
+	require.False(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, errUtils.ExitCodeError{Code: 2}), "exit 2 without the plan's marker is a failure")
 	require.False(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2})))
+	require.False(t, terraformPlanChangedError(&schema.ConfigAndStacksInfo{SubCommand: "plan"}, errUtils.AsPrerequisiteError(errUtils.AsDetailedPlanChanges(errUtils.ExitCodeError{Code: 2}))))
 
 	require.Equal(t, 0, processedCount(nil))
 	require.Equal(t, 1, processedCount(&scheduler.AggregateResult{Results: []scheduler.Result{{Value: true}}}))
@@ -3068,7 +3070,7 @@ func TestExecuteTerraformTreatsPlanExitTwoAsChangedSuccess(t *testing.T) {
 			executed = append(executed, execution.Info.Component)
 			executedMu.Unlock()
 			if execution.Info.Component == "app" {
-				return TerraformExecutionResult{}, errUtils.ExitCodeError{Code: 2}
+				return TerraformExecutionResult{}, errUtils.AsDetailedPlanChanges(errUtils.ExitCodeError{Code: 2})
 			}
 			return TerraformExecutionResult{}, nil
 		},
@@ -3679,12 +3681,16 @@ func TestTerraformOutputGroupsNonPlanSubcommands(t *testing.T) {
 	}
 }
 
-// excludeStacks marks components of the dev test stack with a provider exclude block.
+// excludeStacks marks components of the dev test stack with a provider exclude block. The components
+// are owned by the Terragrunt configuration provider, as the stack processor marks a discovered unit.
 func excludeStacks(blocks map[string]map[string]any) map[string]any {
 	stacks := terraformAdapterTestStacks()
 	components := stacks["dev"].(map[string]any)[cfg.ComponentsSectionName].(map[string]any)[cfg.TerraformSectionName].(map[string]any)
 	for name, block := range blocks {
-		components[name].(map[string]any)[cfg.SettingsSectionName] = map[string]any{"terragrunt": map[string]any{"exclude": block}}
+		components[name].(map[string]any)[cfg.SettingsSectionName] = map[string]any{
+			"terragrunt":    map[string]any{"exclude": block},
+			"configuration": map[string]any{"provider": terraformExcludeProvider, schema.ConfigurationOwnedKey: true},
+		}
 	}
 	return stacks
 }
