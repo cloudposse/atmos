@@ -20,6 +20,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/retry"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -198,7 +199,7 @@ func (s *registryStore) Exists(ctx context.Context, target ocispec.Descriptor) (
 }
 
 func (s *registryStore) Push(ctx context.Context, expected ocispec.Descriptor, content io.Reader) error {
-	return wrapRegistry(s.repo.Push(ctx, expected, content))
+	return manifestPushResult(s.repo.Push(ctx, expected, content))
 }
 
 // PushReference verifies the manifest bytes against expected before anything is sent, then pushes
@@ -212,7 +213,7 @@ func (s *registryStore) PushReference(ctx context.Context, expected ocispec.Desc
 	if err != nil {
 		return err
 	}
-	return wrapRegistry(s.repo.PushReference(ctx, expected, bytes.NewReader(raw), reference))
+	return manifestPushResult(s.repo.PushReference(ctx, expected, bytes.NewReader(raw), reference))
 }
 
 func (s *registryStore) Resolve(ctx context.Context, reference string) (ocispec.Descriptor, error) {
@@ -298,6 +299,26 @@ func referrersAPIUnavailable(err error) bool {
 		return false
 	}
 	return response.StatusCode == http.StatusBadRequest || response.StatusCode == http.StatusNotAcceptable
+}
+
+// manifestPushResult wraps the outcome of a manifest push, forgiving only a refused cleanup of the replaced
+// tag-schema referrers index. On a registry without the referrers API (GHCR, for one), pushing an attachment
+// first pushes the manifest, then pushes a new referrers index that lists it and moves the sha256-<digest> tag
+// to it, and only then deletes the index it replaced. When the registry refuses that last DELETE (GHCR answers
+// 405), the attachment and the index that lists it are already in place; the replaced index is only left
+// untagged. Failing here would report a published signature as failed, and every later re-sign of the same
+// release would fail again.
+//
+// Deletes are deliberately not forgiven: ORAS updates the index before it deletes the target, so a refused
+// cleanup there returns before the target DELETE is sent, and removing the last attachment pushes no
+// replacement index at all. Success would then report an attachment as removed while it is still listed.
+func manifestPushResult(err error) error {
+	var referrers *remote.ReferrersError
+	if errors.As(err, &referrers) && referrers.IsReferrersIndexDelete() {
+		log.Debug("Registry refused to delete the replaced referrers index; leaving it untagged", "subject", referrers.Subject.Digest, "error", err)
+		return nil
+	}
+	return wrapRegistry(err)
 }
 
 // referrersProbeUnavailable reports whether err is a referrers API answer of 400 or 406 to a read of the
