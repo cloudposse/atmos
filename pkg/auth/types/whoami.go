@@ -19,6 +19,11 @@ type WhoamiInfo struct {
 	Expiration  *time.Time        `json:"expiration,omitempty"`
 	Environment map[string]string `json:"environment,omitempty"`
 
+	// Ambient reports that the identity mints no credentials of its own (the generic
+	// `ambient` kind and the emulator identities): the cloud SDK resolves credentials from
+	// the environment at runtime, so Atmos has nothing to cache or validate.
+	Ambient bool `json:"ambient,omitempty"`
+
 	// Paths contains combined paths from provider and identity chains.
 	// Later paths override earlier ones if Location matches.
 	Paths []Path `json:"paths,omitempty"`

@@ -134,13 +134,29 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 //
 //nolint:revive // deep-exit is intentional for help handling
 func handleHelpRequest(cmd *cobra.Command, args []string) {
+	if helpRequested(cmd, args) {
+		_ = cmd.Help()
+		os.Exit(0)
+	}
+}
+
+// helpRequested reports whether args ask for Atmos help. Only args before the
+// `--` separator are considered: everything after it belongs to the downstream
+// command, so `atmos auth exec -- df -h` runs `df -h` instead of showing help.
+// Cobra strips `--` from args and records its position in ArgsLenAtDash, so the
+// args are truncated there; the literal `--` check still covers callers whose
+// args were not parsed by Cobra.
+func helpRequested(cmd *cobra.Command, args []string) bool {
+	if dash := cmd.ArgsLenAtDash(); dash >= 0 && dash <= len(args) {
+		args = args[:dash]
+	}
 	for _, arg := range args {
 		if arg == "--" {
-			return // Stop scanning at separator — remaining args belong to downstream command.
+			return false // Stop scanning at separator — remaining args belong to downstream command.
 		}
 		if arg == "--help" || arg == "-h" {
-			_ = cmd.Help()
-			os.Exit(0)
+			return true
 		}
 	}
+	return false
 }

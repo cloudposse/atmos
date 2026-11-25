@@ -61,7 +61,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/secret"
 	stackcmd "github.com/cloudposse/atmos/cmd/stack"
 	_ "github.com/cloudposse/atmos/cmd/store"
-	_ "github.com/cloudposse/atmos/cmd/terraform"
+	terraformcmd "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	terraformcache "github.com/cloudposse/atmos/cmd/terraform/cache"
 	"github.com/cloudposse/atmos/cmd/terraform/workdir"
@@ -112,11 +112,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/proexec"
 	atmosprofile "github.com/cloudposse/atmos/pkg/profile"
 	"github.com/cloudposse/atmos/pkg/profiler"
+	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/startup"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
@@ -205,9 +207,11 @@ func processEarlyChdirFlag() error {
 	chdir := parseChdirFromArgs()
 
 	// If flag is not set, check environment variable.
+	fromEnv := false
 	if chdir == "" {
 		//nolint:forbidigo // Must use os.Getenv: chdir is processed before Viper configuration loads.
 		chdir = os.Getenv("ATMOS_CHDIR")
+		fromEnv = true
 	}
 
 	if chdir == "" {
@@ -227,17 +231,14 @@ func processEarlyChdirFlag() error {
 		return fmt.Errorf("%w: invalid chdir path: %s", errUtils.ErrPathResolution, chdir)
 	}
 
-	// Verify the directory exists before attempting to change to it.
-	stat, err := os.Stat(absPath)
+	// Verify the directory exists before changing to it (see checkChdirTarget for the kube exec fallback).
+	skip, err := checkChdirTarget(absPath, fromEnv)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("%w: directory does not exist: %s", errUtils.ErrWorkdirNotExist, absPath)
-		}
-		return fmt.Errorf("%w: failed to access directory: %s", errUtils.ErrStatFile, absPath)
+		return err
 	}
-
-	if !stat.IsDir() {
-		return fmt.Errorf("%w: not a directory: %s", errUtils.ErrWorkdirNotExist, absPath)
+	if skip {
+		chdirProcessed = true
+		return nil
 	}
 
 	// Change to the specified directory (updates PWD so subprocesses and
@@ -282,9 +283,11 @@ func processChdirFlag(cmd *cobra.Command) error {
 	}
 	// If flag is not set, check environment variable.
 	// Note: chdir is not supported in atmos.yaml since it must be processed before atmos.yaml is loaded.
+	fromEnv := false
 	if chdir == "" {
 		//nolint:forbidigo // Must use os.Getenv: chdir is processed before Viper configuration loads.
 		chdir = os.Getenv("ATMOS_CHDIR")
+		fromEnv = true
 	}
 
 	if chdir == "" {
@@ -304,17 +307,14 @@ func processChdirFlag(cmd *cobra.Command) error {
 		return fmt.Errorf("%w: invalid chdir path: %s", errUtils.ErrPathResolution, chdir)
 	}
 
-	// Verify the directory exists before attempting to change to it.
-	stat, err := os.Stat(absPath)
+	// Verify the directory exists before changing to it (see checkChdirTarget for the kube exec fallback).
+	skip, err := checkChdirTarget(absPath, fromEnv)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("%w: directory does not exist: %s", errUtils.ErrWorkdirNotExist, absPath)
-		}
-		return fmt.Errorf("%w: failed to access directory: %s", errUtils.ErrStatFile, absPath)
+		return err
 	}
-
-	if !stat.IsDir() {
-		return fmt.Errorf("%w: not a directory: %s", errUtils.ErrWorkdirNotExist, absPath)
+	if skip {
+		chdirProcessed = true
+		return nil
 	}
 
 	// Change to the specified directory (updates PWD so subprocesses and
@@ -1755,6 +1755,10 @@ func Execute() error {
 	atmosGit.ResetRootTagCache()
 	defer atmosGit.ResetRootTagCache()
 	defer initcmd.SetAtmosConfig(nil)
+	tfoutput.ResetWorkdirProvisionCache()
+	defer tfoutput.ResetWorkdirProvisionCache()
+	restoreSourceInvocation := source.BeginInvocation()
+	defer restoreSourceInvocation()
 	executionID, restoreInvocation := proexec.BeginInvocation()
 	defer restoreInvocation()
 	defer perf.Track(&atmosConfig, "cmd.Execute")()
@@ -1910,6 +1914,11 @@ func Execute() error {
 
 		err = processCommandAliases(atmosConfig, atmosConfig.CommandAliases, RootCmd, true)
 		if err != nil {
+			return err
+		}
+
+		// Provider options come from static package metadata and must exist before Cobra parses flags.
+		if err = terraformcmd.RegisterProviderFlags(&atmosConfig, os.Args[1:]); err != nil {
 			return err
 		}
 	}

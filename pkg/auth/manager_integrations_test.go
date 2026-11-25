@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/integrations"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -240,7 +241,19 @@ func TestIntegrationTargetKey(t *testing.T) {
 					Cluster: &schema.Cluster{Name: "prod-cluster", Region: "us-west-2"},
 				},
 			},
-			want: "aws/eks:prod-cluster:us-west-2",
+			want: "aws/eks:alias=&name=prod-cluster&region=us-west-2",
+		},
+		{
+			name:    "EKS key includes identity",
+			intName: "my-eks",
+			integration: schema.Integration{
+				Kind: "aws/eks",
+				Via:  &schema.IntegrationVia{Identity: "admin"},
+				Spec: &schema.IntegrationSpec{
+					Cluster: &schema.Cluster{Name: "prod-cluster", Region: "us-west-2"},
+				},
+			},
+			want: "aws/eks:alias=&identity=admin&name=prod-cluster&region=us-west-2",
 		},
 		{
 			name:    "EKS without spec falls back to name",
@@ -302,7 +315,7 @@ func TestIntegrationTargetKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := integrationTargetKey(tt.intName, tt.integration)
+			got := integrationTargetKey(tt.intName, tt.integration, "")
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -325,8 +338,8 @@ func TestIntegrationTargetKeyGKEOutputSettings(t *testing.T) {
 			},
 		}},
 	}
-	baseKey := integrationTargetKey("first", base)
-	assert.Equal(t, baseKey, integrationTargetKey("second", base), "integration names must not affect an identical output target")
+	baseKey := integrationTargetKey("first", base, "")
+	assert.Equal(t, baseKey, integrationTargetKey("second", base, ""), "integration names must not affect an identical output target")
 
 	mutations := map[string]func(*schema.Integration){
 		"path":     func(cfg *schema.Integration) { cfg.Spec.Cluster.Kubeconfig.Path = "other-kubeconfig" },
@@ -345,9 +358,33 @@ func TestIntegrationTargetKeyGKEOutputSettings(t *testing.T) {
 			candidate.Spec.Cluster.Kubeconfig = &settings
 			candidate.Via = &via
 			mutate(&candidate)
-			assert.NotEqual(t, baseKey, integrationTargetKey("candidate", candidate))
+			assert.NotEqual(t, baseKey, integrationTargetKey("candidate", candidate, ""))
 		})
 	}
+}
+
+// TestIntegrationTargetKey_ExplicitRealm verifies that EKS and GKE keys differ by
+// explicit realm, and that the same realm still collapses to one key.
+func TestIntegrationTargetKey_ExplicitRealm(t *testing.T) {
+	cluster := &schema.Cluster{Name: "example-cluster", Region: "us-east-2", ProjectID: "example-project", Location: "us-central1"}
+	for _, kind := range []string{integrations.KindAWSEKS, integrations.KindGCPGKE} {
+		t.Run(kind, func(t *testing.T) {
+			cfg := schema.Integration{Kind: kind, Spec: &schema.IntegrationSpec{Cluster: cluster}}
+			assert.NotEqual(t, integrationTargetKey("a", cfg, "realm-a"), integrationTargetKey("a", cfg, "realm-b"))
+			assert.NotEqual(t, integrationTargetKey("a", cfg, "realm-a"), integrationTargetKey("a", cfg, ""))
+			assert.Equal(t, integrationTargetKey("a", cfg, "realm-a"), integrationTargetKey("b", cfg, "realm-a"))
+		})
+	}
+}
+
+// TestManager_ExplicitIntegrationRealm verifies that only an explicit realm is
+// part of the key input.
+func TestManager_ExplicitIntegrationRealm(t *testing.T) {
+	derived := &manager{config: &schema.AuthConfig{RealmSource: realm.SourceConfigPath}, realm: realm.RealmInfo{Value: "abc123", Source: realm.SourceConfig}}
+	assert.Empty(t, derived.explicitIntegrationRealm())
+
+	explicit := &manager{config: &schema.AuthConfig{RealmSource: realm.SourceConfig}, realm: realm.RealmInfo{Value: "acme", Source: realm.SourceConfig}}
+	assert.Equal(t, "acme", explicit.explicitIntegrationRealm())
 }
 
 // TestIntegrationTargetKey_Deduplication verifies that two ECR integrations pointing at the
@@ -361,8 +398,8 @@ func TestIntegrationTargetKey_Deduplication(t *testing.T) {
 	}
 
 	// Two different integration names, same registry.
-	keyA := integrationTargetKey("ecr-global", schema.Integration{Kind: "aws/ecr", Spec: registrySpec})
-	keyB := integrationTargetKey("ecr-component", schema.Integration{Kind: "aws/ecr", Spec: registrySpec})
+	keyA := integrationTargetKey("ecr-global", schema.Integration{Kind: "aws/ecr", Spec: registrySpec}, "")
+	keyB := integrationTargetKey("ecr-component", schema.Integration{Kind: "aws/ecr", Spec: registrySpec}, "")
 	assert.Equal(t, keyA, keyB, "same registry must produce the same cache key")
 
 	// First store: should not already be present.
@@ -446,4 +483,35 @@ func TestManager_ExecuteIdentityIntegrations_Errors(t *testing.T) {
 			assert.ErrorIs(t, err, tt.expectedError)
 		})
 	}
+}
+
+// TestManager_TriggerIntegrations_RecordsFailures asserts that a failed auto-provisioned
+// integration stays non-fatal (triggerIntegrations returns nothing) but is reported through
+// IntegrationFailures so ambient brokers can treat the run as failed.
+func TestManager_TriggerIntegrations_RecordsFailures(t *testing.T) {
+	resetProcessIntegrationCache()
+	t.Cleanup(resetProcessIntegrationCache)
+
+	authConfig := &schema.AuthConfig{
+		Realm:      "test-realm",
+		Providers:  map[string]schema.Provider{},
+		Identities: map[string]schema.Identity{"dev": {Kind: "aws/user"}},
+		Integrations: map[string]schema.Integration{
+			// Unregistered kind makes integration creation fail.
+			"broken": {Kind: "test/unregistered-kind", Via: &schema.IntegrationVia{Identity: "dev"}},
+		},
+	}
+	am, err := NewAuthManager(authConfig, credentials.NewCredentialStoreWithConfig(authConfig), validation.NewValidator(), nil, "")
+	require.NoError(t, err)
+	m, ok := am.(*manager)
+	require.True(t, ok)
+
+	require.NoError(t, m.IntegrationFailures(), "no failures before any integration runs")
+
+	m.triggerIntegrations(context.Background(), "dev", nil)
+
+	failures := m.IntegrationFailures()
+	require.Error(t, failures)
+	assert.ErrorIs(t, failures, errUtils.ErrIntegrationFailed)
+	assert.Contains(t, failures.Error(), "broken")
 }

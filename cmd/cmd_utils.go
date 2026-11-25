@@ -1958,11 +1958,12 @@ func validateAtmosConfig(opts ...AtmosValidateOption) error {
 		return err
 	}
 
-	if vCfg.CheckStack {
+	if vCfg.CheckStack && !atmosConfig.AllowsEmptyStackInventory() {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
 			// Return an error with context instead of printing and exiting
 			return errUtils.Build(errUtils.ErrStacksDirectoryDoesNotExist).
+				WithCause(errUtils.ErrNoStackManifestsFound).
 				WithExplanationf("Stacks directory not found:  \n%s", atmosConfig.StacksBaseAbsolutePath).
 				WithContext("base_path", atmosConfig.BasePath).
 				WithContext("stacks_base_path", atmosConfig.Stacks.BasePath).
@@ -2100,12 +2101,9 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 		return
 	}
 
-	// Trim "v" prefix to compare versions
-	latestVersion := strings.TrimPrefix(latestReleaseTag, "v")
-	currentVersion := strings.TrimPrefix(version.Version, "v")
-
-	// If the versions differ, print the update message
-	if latestVersion != currentVersion {
+	// Print the update message only when the latest release is semantically newer, so a newer
+	// build or prerelease is never told to "update" to an older release.
+	if latestVersion, newer := upgrade.NewerRelease(version.Version, latestReleaseTag); newer {
 		root := atmosConfig.Toolchain.InstallPath
 		if root != "" && !filepath.IsAbs(root) {
 			root = filepath.Join(atmosConfig.BasePathAbsolute, root)
@@ -2343,6 +2341,12 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	if doubleDashIndex > 0 {
 		finalArgs = lo.Slice(args, 0, doubleDashIndex)
 		argsAfterDoubleDash = lo.Slice(args, doubleDashIndex+1, len(args))
+	} else if len(args) > 0 {
+		// Callers prepend the operation name; Cobra's separator index applies
+		// only to the remaining RunE arguments, after it consumed the literal --.
+		positional, separated := pkgFlags.SplitArgsAtDash(cmd, args[1:])
+		finalArgs = append([]string{args[0]}, positional...)
+		argsAfterDoubleDash = separated
 	}
 
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)

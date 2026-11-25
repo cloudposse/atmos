@@ -132,15 +132,38 @@ The realm becomes the **top-level directory** under the atmos base path, with cl
 
 ### Keyring Storage
 
-Keyring keys include realm prefix using underscore separators (underscores instead of colons for Windows filesystem compatibility):
+Keyring keys include realm prefix using underscore separators (underscores instead of colons for Windows filesystem compatibility). The realm and identity are separated by a double underscore: realms cannot contain `__` or end with `_`, so the first `__` always ends the realm, and realm `acme` + identity `prod_admin` never shares a key with realm `acme_prod` + identity `admin`:
 
 | Without Realm | With Realm |
 |---------------|------------|
-| `atmos_{identity}` | `atmos_{realm}_{identity}` |
+| `atmos_{identity}` | `atmos_{realm}__{identity}` |
 
 **Examples:**
 - Without realm: `atmos_core-root/terraform`
-- With realm: `atmos_customer-a_core-root/terraform`
+- With realm: `atmos_customer-a__core-root/terraform`
+
+Entries written in the previous `atmos_{realm}_{identity}` layout are still read (and deleted on logout) when neither the realm nor the identity contains `_`, the only case in which the old key cannot belong to another realm. Under the realm Atmos derives from the `atmos.yaml` path (16 lowercase hex characters, never containing `_`), they are also read and deleted when the identity contains `_`, unless the old key contains `__`: the only other owner of such a key would be a configured realm `{hash}_{prefix}`, which nobody configures (`pkg/auth/credentials/keyring_legacy_auto_realm.go`). A realm set explicitly (`auth.realm` or `ATMOS_AUTH_REALM`) keeps the strict rule even when it has the hex format. Other old entries are ignored and re-created on the next login. The pre-realm `atmos_{identity}` cleanup after a realm-scoped login likewise skips identities containing `_`, whose key another realm can share.
+
+An entry found through that fallback is migrated on read: it is copied unchanged to `atmos_{realm}__{identity}`, so later reads no longer depend on the fallback. The old key is kept, so a downgrade to v1.234.1 (which reads only the old key) still finds the credentials; the new key is always read first, and `Delete` removes both. The migration is best effort and never fails the read. It is skipped when the new key already exists (another process stored newer credentials), and on a write failure the fallback keeps serving the old key. Only entries that decode are migrated. Long-lived `aws/user` keys stored by `atmos auth user configure` are read through the same path, so they migrate on first use. Outside the automatic realm, an old key whose realm or identity contains `_` is ambiguous (realm `acme` + identity `prod_admin` and realm `acme_prod` + identity `admin` both wrote `atmos_acme_prod_admin`), so `Retrieve` never reads it and never deletes it. For most identities that only costs one login. Long-lived `aws/user` keys cannot be re-created by a login, so the `aws/user` identity handles that case itself (`pkg/auth/identities/aws/user_legacy_keyring.go`, through the optional `credentials.AmbiguousLegacyRealmStore` interface):
+
+- It applies only when no keys are stored under `atmos_{realm}__{identity}`, the old key exists, decodes to long-lived AWS keys (not session credentials), and does not also parse as a current-layout key (an old key containing `__` could be the live entry of another realm, so it is never offered).
+- In an interactive session (stdin and stderr are terminals, not CI, `--interactive` not disabled, and the caller allows prompts), the user is asked whether the entry belongs to this identity. The question names the identity, the realm, the old key, and the other realm and identity pairs that shared it. The default answer is No.
+- On Yes, the entry is copied unchanged to the new key (unless the new key appeared meanwhile, whose newer credentials win) and the old key is deleted. Deleting is safe at this point because the user claimed the entry: keeping it would leave a second copy of the secret that logout never removes, and the other realm would keep being asked about an entry that is not its own. Authentication continues with the keys.
+- On No, nothing in the keyring changes, the not-configured error is returned with a hint to run `atmos auth user configure`, and the question is not asked again for that identity during the same invocation. It is asked again in a later invocation until the identity has keys under the new key.
+- Without an interactive session, no question is asked. The not-configured error names the old key and suggests `atmos auth user configure` or re-running interactively.
+- In both No and non-interactive cases the error is the usual `aws/user` not-configured error, so when browser sign-in (`webflow_enabled`, on by default) is enabled the identity still falls back to it. If that also fails, the old-key hints are kept in the error.
+
+Other identity kinds never ask: their keyring entries are session credentials that the next login re-creates.
+
+#### Configuration digests of chain steps
+
+Keyring keys name a step (provider or identity) but not its configuration, and stack or component `auth` overrides can give the same name a different account, role, or start URL. So a cached step is reused across processes only when it was written for the same effective configuration (#3720):
+
+- Each keyring entry stores a `config_digest` next to `type` and `data`. Older versions ignore the field, and entries without a digest have exactly the old format.
+- AWS session credentials are never stored in the keyring; they live in the identity's own credential files. For these, a record `{"digest", "expiration", "credential_id"}` is written after that identity's login. The expiration and credential ID tie the record to those exact files, so files that something else rewrote no longer match. The record holds nothing secret and describes files, not keyring entries, so the persistent backends keep it in a file outside the keyring: next to a file keyring's directory (`<keyring dir>.config-digests/`), or in the Atmos XDG cache directory (`auth/config-digests/`) for the system keyring. Writing it to the keyring would add a keyring entry (a macOS Keychain prompt, or the file keyring password prompt) for identities that never otherwise use the keyring. The file name is a hash of `atmos-config-digest_{realm}__{identity}`. Only the memory backend keeps the record under that key. Logout deletes the record with the identity.
+- The digest is a plain SHA-256 of canonical JSON over the non-secret configuration of every step from the chain root through that step. For providers it covers `kind`, `start_url`, `url`, `region`, `username` and `spec`. For identities it covers `kind`, `provider`, `via`, `principal`, `spec` and `emulator`. It never includes the provider `password` or identity `credentials`. Inside `principal` and `spec`, keys that name secret material (such as `*secret*`, `*token*`, `*password*`, `*private_key*`, `*access_key*`, `external_id`) are dropped. References such as `*_path`, `*_env`, `*_url` and `*_arn` are kept.
+- A step whose digest is missing or different is a cache miss and is authenticated again. Entries written before this change have no digest, so after an upgrade each intermediate step is authenticated once more. The target step is always authenticated again, as before.
+- The noop keyring persists nothing, so no digest can be recorded. With it, steps backed by identity files keep the previous name-only reuse.
 
 ### Environment Variables
 
@@ -165,19 +188,19 @@ realm.GetRealm(config.Realm, cliConfigPath)
 manager.realm (stored in auth manager)
 │
 ├──► credentialStore.Retrieve(identity, realm)
-│         └──► keyring key: "atmos_customer-a_core-root/terraform"
+│         └──► keyring key: "atmos_customer-a__core-root/terraform"
 │
 ├──► awsFileManager (realm stored on struct at construction)
 │         └──► GetCredentialsPath(provider)
 │                   └──► ~/.config/atmos/customer-a/aws/aws-sso/credentials
 │
 └──► PostAuthenticateParams.Realm
-           │
-           ▼
-     Identity.PostAuthenticate(params)
-           │
-           └──► SetupFiles(provider, identity, creds, basePath, realm)
-                     └──► Writes to realm-scoped path
+            │
+            ▼
+      Identity.PostAuthenticate(params)
+            │
+            └──► SetupFiles(provider, identity, creds, basePath, realm)
+                      └──► Writes to realm-scoped path
 ```
 
 ---
@@ -544,3 +567,4 @@ func TestCredentialRealmIsolation(t *testing.T) {
 |------|---------|---------|
 | 2026-01-28 | 1.0 | Initial auth realm architecture PRD |
 | 2026-02-19 | 1.1 | Updated to reflect implemented opt-in design: realm is required when auth is configured (no auto-hash default), underscore keyring separator for Windows compatibility, realm stored on AWSFileManager struct. Updated status from Proposed to Implemented. |
+| 2026-11-22 | 1.2 | Realm-scoped keyring keys use `__` between realm and identity (#3720). Unambiguous previous-layout entries are migrated to the new key on read. Ambiguous previous-layout entries holding `aws/user` long-lived keys are adopted only after the user confirms interactively. Cached chain steps carry a configuration digest and are reused only when it matches. |

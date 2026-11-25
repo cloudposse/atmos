@@ -58,9 +58,11 @@ proxy binds or its eBPF block policy finishes initializing, especially while
 upstream API requests retry. The helper does not widen firewall permissions or
 change Docker DNS. Other runner types retain StepSecurity's normal behavior.
 
-Set `dns-repair: 'false'` for jobs that need no DNS, such as the echo-only autofix
-workflow, or to observe the original behavior in diagnostics. This disables only
-the resolver repair; StepSecurity still runs with the selected policy.
+Keep DNS repair enabled even for echo-only jobs: the runner still needs DNS
+for cleanup and final job reporting. The helper detects eBPF enforcement and
+retains host DNS when no proxy is required. Set `dns-repair: 'false'` only to
+observe the original behavior in diagnostics. This disables only the resolver
+repair; StepSecurity still runs with the selected policy.
 The diagnostic workflow invokes the internal helper later to measure before and
 after on the same runner. Normal workflows need only the composite above.
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -85,6 +86,82 @@ func ResolveWorkdirSubpath(metadataSubpath, workdirRoot string) (string, error) 
 	return workdirRoot, nil
 }
 
+// ResolveConfiguredSubpath selects the explicit module under a copied local
+// source root. Unlike the legacy metadata.component hint, an explicit source
+// subdirectory must exist and cannot silently fall back to the root. Use it for paths that are
+// resolved after the source is provisioned; callers that run before it use ResolvePendingSubpath.
+func ResolveConfiguredSubpath(info *schema.ConfigAndStacksInfo, workdirRoot string) (string, error) {
+	defer perf.Track(nil, "component.ResolveConfiguredSubpath")()
+
+	selected, _, err := resolveConfiguredSubpath(info, workdirRoot, false)
+	return selected, err
+}
+
+// ResolvePendingSubpath is ResolveConfiguredSubpath for callers that run before the source is
+// provisioned, when an explicit source subdirectory may not exist yet. It returns the path the module
+// will have and whether it exists now; every other failure, including an invalid subdirectory, is still
+// an error.
+func ResolvePendingSubpath(info *schema.ConfigAndStacksInfo, workdirRoot string) (string, bool, error) {
+	defer perf.Track(nil, "component.ResolvePendingSubpath")()
+
+	return resolveConfiguredSubpath(info, workdirRoot, true)
+}
+
+func resolveConfiguredSubpath(info *schema.ConfigAndStacksInfo, workdirRoot string, allowMissing bool) (string, bool, error) {
+	metadata, _ := info.ComponentSection["metadata"].(map[string]any)
+	subdir, _ := metadata["source_subdir"].(string)
+	if subdir == "" {
+		selected, err := ResolveWorkdirSubpath(info.BaseComponentPath, workdirRoot)
+		return selected, err == nil, err
+	}
+	if err := validateSourceSubdir(subdir); err != nil {
+		return "", false, err
+	}
+	selected := filepath.Join(workdirRoot, filepath.FromSlash(subdir))
+	selectedInfo, err := os.Stat(selected)
+	if allowMissing && errors.Is(err, os.ErrNotExist) {
+		return selected, false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("%w: inspect source subdirectory: %w", errUtils.ErrWorkdirProvision, err)
+	}
+	if !selectedInfo.IsDir() {
+		return "", false, fmt.Errorf("%w: source subdirectory is not a directory", errUtils.ErrWorkdirProvision)
+	}
+	if err := checkSourceSubdirBoundary(workdirRoot, selected); err != nil {
+		return "", false, err
+	}
+	return selected, true, nil
+}
+
+func validateSourceSubdir(subdir string) error {
+	if filepath.IsAbs(subdir) || filepath.VolumeName(subdir) != "" || strings.HasPrefix(subdir, "/") || strings.HasPrefix(subdir, `\`) {
+		return fmt.Errorf("%w: invalid source subdirectory", errUtils.ErrWorkdirProvision)
+	}
+	for _, part := range strings.Split(filepath.ToSlash(subdir), "/") {
+		if part == "" || part == "." || part == ".." {
+			return fmt.Errorf("%w: invalid source subdirectory", errUtils.ErrWorkdirProvision)
+		}
+	}
+	return nil
+}
+
+func checkSourceSubdirBoundary(workdirRoot, selected string) error {
+	root, err := filepath.EvalSymlinks(workdirRoot)
+	if err != nil {
+		return fmt.Errorf("%w: resolve source root: %w", errUtils.ErrWorkdirProvision, err)
+	}
+	module, err := filepath.EvalSymlinks(selected)
+	if err != nil {
+		return fmt.Errorf("%w: resolve source module: %w", errUtils.ErrWorkdirProvision, err)
+	}
+	rel, err := filepath.Rel(root, module)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("%w: source subdirectory escapes its root", errUtils.ErrWorkdirProvision)
+	}
+	return nil
+}
+
 // ApplyWorkdirSubpathToSection resolves provWorkdir.WorkdirPathKey in
 // info.ComponentSection against info.BaseComponentPath (joining the subpath
 // only when it exists on disk; see ResolveWorkdirSubpath) and returns the
@@ -110,7 +187,7 @@ func ApplyWorkdirSubpathToSection(info *schema.ConfigAndStacksInfo) (string, err
 	if _, applied := info.ComponentSection[workdirSubpathAppliedKey].(subpathAppliedMarker); applied {
 		return workdirPath, nil
 	}
-	resolved, err := ResolveWorkdirSubpath(info.BaseComponentPath, workdirPath)
+	resolved, err := ResolveConfiguredSubpath(info, workdirPath)
 	if err != nil {
 		return "", err
 	}
@@ -147,7 +224,14 @@ func BuildAndResolveWorkdirPath(
 	if err != nil {
 		return "", false, err
 	}
-	resolved, err := ResolveWorkdirSubpath(info.BaseComponentPath, workdirRoot)
+	if provSource.HasSource(info.ComponentSection) {
+		target, targetErr := provSource.ResolveTarget(atmosConfig, componentType, info.FinalComponent, info.ComponentSection)
+		if targetErr != nil {
+			return "", false, targetErr
+		}
+		workdirRoot = target.Dir
+	}
+	resolved, err := ResolveConfiguredSubpath(info, workdirRoot)
 	if err != nil {
 		return "", false, err
 	}
@@ -214,6 +298,9 @@ func ProvisionAndResolveComponentPath(
 	componentType, fallbackComponentPath string,
 ) (string, bool, error) {
 	defer perf.Track(atmosConfig, "component.ProvisionAndResolveComponentPath")()
+	if info.DryRun {
+		return resolveDryRunComponentPath(atmosConfig, info, componentType, fallbackComponentPath, provSource.HasSource(info.ComponentSection))
+	}
 
 	// Provision an isolated workdir for LOCAL Terraform components (no JIT source) up front — before
 	// any backend.tf.json / varfile generation — so those generated files land in the per-run workdir
@@ -284,6 +371,95 @@ func ProvisionAndResolveComponentPath(
 	// fallback is again a local component dir, so wrap with ErrInvalidComponent.
 	exists, err := componentDirExists(fallbackComponentPath, "re-check component path after provisioning", errUtils.ErrInvalidComponent)
 	return fallbackComponentPath, exists, err
+}
+
+// DryRunDefersMissingPath reports whether an absent component directory is expected for this run.
+// A dry run never downloads JIT source, so a source component that has not been provisioned yet has
+// no directory to find, and executors must not reject it as a missing component. Components without
+// a source keep failing when their local directory is missing.
+func DryRunDefersMissingPath(info *schema.ConfigAndStacksInfo) bool {
+	defer perf.Track(nil, "component.DryRunDefersMissingPath")()
+
+	return info != nil && info.DryRun && provSource.HasSource(info.ComponentSection)
+}
+
+// applyDryRunWorkdirSubpath resolves the workdir subpath of a dry run, which never provisions the
+// source, so an explicit source subdirectory that does not exist yet resolves to the path it will have.
+// The section is then left untouched, so a later resolution after provisioning starts from the root.
+//
+// Locating a retained workdir is not a dry run and keeps the strict resolution.
+func applyDryRunWorkdirSubpath(info *schema.ConfigAndStacksInfo) (string, error) {
+	workdirPath, _ := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
+	if !info.DryRun || workdirPath == "" {
+		return ApplyWorkdirSubpathToSection(info)
+	}
+	if _, applied := info.ComponentSection[workdirSubpathAppliedKey].(subpathAppliedMarker); applied {
+		return workdirPath, nil
+	}
+	selected, present, err := ResolvePendingSubpath(info, workdirPath)
+	if err != nil {
+		return "", err
+	}
+	if !present {
+		return selected, nil
+	}
+	info.ComponentSection[provWorkdir.WorkdirPathKey] = selected
+	info.ComponentSection[workdirSubpathAppliedKey] = subpathAppliedMarker{}
+	return selected, nil
+}
+
+// resolveDryRunComponentPath validates placement without downloading source or copying a workdir.
+// The existence result describes the current filesystem, not a simulated successful provision.
+// A sourced component's directory follows source target rules, which honor an explicit
+// working_directory for an enabled workdir.
+func resolveDryRunComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType, fallback string, sourced bool) (string, bool, error) {
+	var err error
+	isWorkdir := provWorkdir.IsWorkdirEnabled(info.ComponentSection) &&
+		(componentType == cfg.TerraformComponentType || sourced)
+	if sourced {
+		fallback, err = dryRunSourceTarget(atmosConfig, info, componentType)
+	} else if componentType == cfg.TerraformComponentType && isWorkdir {
+		fallback, err = provWorkdir.BuildPath(atmosConfig.BasePath, componentType, info.FinalComponent, info.Stack, info.ComponentSection)
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if isWorkdir {
+		// The section now holds the root again, so a subpath applied by an earlier resolution no longer
+		// describes it; clearing the marker lets this resolution select source_subdir once more.
+		delete(info.ComponentSection, workdirSubpathAppliedKey)
+		info.ComponentSection[provWorkdir.WorkdirPathKey] = fallback
+	}
+	path, err := applyDryRunWorkdirSubpath(info)
+	if err != nil {
+		return "", false, err
+	}
+	if path != "" {
+		fallback = path
+	}
+	exists, err := componentDirExists(fallback, "check dry-run component path", errUtils.ErrInvalidComponent)
+	return fallback, exists, err
+}
+
+// ResolveRetainedWorkdir records, without provisioning anything, the directory an earlier run
+// populated and returns it. Reviewed saved plans use it to find their retained workdir in a new
+// process, where only provisioning would otherwise set provWorkdir.WorkdirPathKey. The plan ran
+// with the provider's module source, so an enabled workdir follows source target rules, including
+// an explicit working_directory, even when the discovered section carries no source.
+func ResolveRetainedWorkdir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType, fallbackComponentPath string) (string, error) {
+	defer perf.Track(atmosConfig, "component.ResolveRetainedWorkdir")()
+
+	sourced := provSource.HasSource(info.ComponentSection) || provWorkdir.IsWorkdirEnabled(info.ComponentSection)
+	path, _, err := resolveDryRunComponentPath(atmosConfig, info, componentType, fallbackComponentPath, sourced)
+	return path, err
+}
+
+func dryRunSourceTarget(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType string) (string, error) {
+	target, err := provSource.ResolveTarget(config, componentType, info.FinalComponent, info.ComponentSection)
+	if err != nil {
+		return "", err
+	}
+	return target.Dir, nil
 }
 
 // wrapWorkdirProvisionError classifies a workdir provisioning failure as ErrWorkdirProvision without

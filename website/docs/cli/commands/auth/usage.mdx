@@ -68,6 +68,10 @@ atmos auth shell
       <li><code>false</code> to disable authentication (e.g., <code>--identity=false</code>)</li>
     </ul>
     When set to <code>false</code>, Atmos skips identity authentication and uses standard AWS credential resolution.
+    Among the auth subcommands, only <code>atmos auth exec</code> runs with authentication disabled: it runs the command with your
+    current environment and no Atmos credentials. Subcommands that act on an identity (<code>login</code>, <code>logout</code>,
+    <code>whoami</code>, <code>env</code>, <code>shell</code>, <code>console</code>) return an error when <code>--identity=false</code>
+    or <code>ATMOS_IDENTITY=false</code> is set, instead of looking up an identity named <code>false</code>.
 
 :::tip Flag Placement Best Practice
 When using `--identity` with a value, place it **before the `--` separator** and before any positional arguments:
@@ -113,6 +117,8 @@ Using the equals syntax (`--identity=admin`) is unambiguous and works in all con
 ### Identities
 
 **Identities** represent the user accounts or roles available from provider credentials:
+
+Identity names are case-insensitive wherever you pass one: `--identity`, `ATMOS_IDENTITY`, the positional identity of `atmos auth logout`, and a custom command's `identity:`. For example, `--identity Prod-Admin` and `--identity prod-admin` select the same identity in `atmos auth login`, `whoami`, `env`, `exec`, `shell`, and `logout`.
 
 **AWS**
 - **Permission Set**: `aws/permission-set`
@@ -256,7 +262,7 @@ The `driver` field controls how Atmos authenticates with your SAML identity prov
 
   :::info Manual Installation
   Manual Chromium installation is **not recommended** because:
-  - Version compatibility must be carefully managed between Atmos, saml2aws, and playwright-go
+  - The browser version must match the active Playwright driver: the one built into Atmos, or the external driver selected by `PLAYWRIGHT_CLI_PATH` when it is set (its required Chromium revision can differ)
   - Different installation methods use different cache directories which may not be detected
   - The automatic download option handles everything correctly
 

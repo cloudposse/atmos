@@ -192,7 +192,9 @@ type Registry struct {
 	Region string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
 
 	// Name is the Azure Container Registry name (required for azure/acr).
-	// The login server is Name + ".azurecr.io".
+	// The login server is Name + ".azurecr.io" in the public cloud, ".azurecr.us" in
+	// US Government and ".azurecr.cn" in China, following the cloud_environment of
+	// the identity's provider.
 	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 
 	// TenantID optionally overrides the Azure AD tenant used for the ACR

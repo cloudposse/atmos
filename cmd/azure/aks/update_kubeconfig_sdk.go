@@ -9,6 +9,7 @@ import (
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -69,6 +70,11 @@ type aksKubeconfigDirectParams struct {
 	kubeconfigPath string
 	alias          string
 	identityName   string
+	// realm is the explicitly configured auth realm; a non-empty realm scopes
+	// the kubeconfig user and default context names.
+	realm string
+	// legacyRealms are derived realms whose names unreleased builds wrote.
+	legacyRealms []string
 }
 
 // executeAKSUpdateKubeconfigDirect runs AKS kubeconfig update using the Go SDK with explicit parameters.
@@ -111,6 +117,10 @@ func executeAKSUpdateKubeconfigDirect(p *aksKubeconfigDirectParams) error {
 		}
 	}
 
+	// Scope the kube names to an explicitly configured auth realm, as the
+	// azure/aks integration does; a derived realm keeps the names unchanged.
+	p.realm, p.legacyRealms = kube.NameRealm(mgr.GetRealm().Value, realm.IsExplicit(mgr.GetRealm(), atmosConfig.Auth.RealmSource))
+
 	return writeAKSKubeconfigDirect(ctx, whoami.Credentials, p)
 }
 
@@ -135,14 +145,15 @@ func writeAKSKubeconfigDirect(ctx context.Context, creds types.ICredentials, p *
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
 	}
 
-	if _, err := kubeMgr.WriteClusterConfig(azureCloud.BuildKubeClusterInfo(info, p.identityName), p.alias, "merge"); err != nil {
+	clusterInfo := azureCloud.BuildKubeClusterInfo(info, p.identityName)
+	clusterInfo.Realm = p.realm
+	clusterInfo.LegacyRealms = p.legacyRealms
+	if _, err := kubeMgr.WriteClusterConfig(clusterInfo, p.alias, "merge"); err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAKSIntegrationFailed, err)
 	}
 
-	displayName := p.alias
-	if displayName == "" {
-		displayName = info.ID
-	}
+	// The display name is the context name written: the alias, else [<realm>/]<resource ID>.
+	displayName := kube.ContextName(info.ID, p.alias, p.realm)
 	ui.Success(fmt.Sprintf("AKS kubeconfig: %s → %s", displayName, kubeMgr.GetPath()))
 
 	return nil

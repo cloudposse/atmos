@@ -119,7 +119,7 @@ func renderHelmSecretValuesFixture(
 	t.Helper()
 
 	componentPath := filepath.Join(fixture, "components", "helm", "secret-values")
-	spec, err := buildChartSpec(atmosConfig, &info, componentPath)
+	spec, err := buildChartSpec(atmosConfig, &info, componentPath, nil)
 	require.NoError(t, err)
 	rendered, err := renderManifest(context.Background(), spec)
 	require.NoError(t, err)

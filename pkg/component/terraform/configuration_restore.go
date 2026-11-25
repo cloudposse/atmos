@@ -1,0 +1,631 @@
+package terraform
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"maps"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
+	"github.com/cloudposse/atmos/pkg/provisioner"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// terraformLockFile is the provider lock file. It travels with the plan because Terraform checks the
+// plan's provider selections against it, so a different lock can change which providers apply.
+const terraformLockFile = ".terraform.lock.hcl"
+
+// workdirMode is the permission of a re-created working directory.
+const workdirMode = 0o755
+
+// reviewedRebuild describes a reviewed plan that reached a runner without its working directory:
+// the plan and its record were restored (for example from the planfile store into a fresh checkout)
+// but nothing else of the original run was. The workdir is re-provisioned from the checkout and must
+// then equal what was reviewed.
+//
+// What is verified before anything is rebuilt: the record's stack and component, the plan bytes, the
+// engine binary, the provider identity with its options and watched source files, and the backend.
+// What is rebuilt, never trusted: the working directory. The module source is provisioned again from
+// the checkout and the generated files are written again from a fresh preparation, then the result
+// must match RebuildDigest (and the lock file LockDigest) from the record. Any mismatch rejects the plan.
+type reviewedRebuild struct {
+	plan      *configurationPlan
+	planPath  string
+	workdir   string
+	transient []string
+	// dataDir is the Terraform data directory of the reviewed run; empty means the default.
+	dataDir string
+	// prepared is the fresh preparation the workdir is regenerated from.
+	prepared *schema.PreparedComponentConfiguration
+	// appliedIAM is the reviewed role applied before the unit was evaluated for the rebuild.
+	appliedIAM *schema.ComponentIAM
+}
+
+// newReviewedRebuild accepts a workdir that is absent or holds only the restored artifacts, and
+// rejects anything else: files that are not part of the transport cannot be verified.
+func newReviewedRebuild(info *schema.ConfigAndStacksInfo, plan *configurationPlan, planPath, dataDir string) (*reviewedRebuild, error) {
+	rebuild := &reviewedRebuild{plan: plan, planPath: planPath, workdir: plan.WorkingDirectory, transient: transientWorkdirFiles(info), dataDir: dataDir}
+	if plan.RebuildDigest == "" {
+		return nil, fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)
+	}
+	only, err := rebuild.holdsOnlyTransport()
+	if err != nil {
+		return nil, err
+	}
+	if !only {
+		return nil, errUtils.Build(fmt.Errorf("%w: reviewed working directory changed", errUtils.ErrPlanVerificationFailed)).
+			WithExplanationf("The working directory `%s` holds files that were not part of the reviewed plan, so it cannot be verified.", plan.WorkingDirectory).
+			WithHint("Remove the directory and restore only the plan, its record, and the lock file, or apply on the runner that created the plan.").
+			Err()
+	}
+	return rebuild, nil
+}
+
+// rebuiltWorkdirMatches reports whether the workdir already equals the reviewed rebuild: the files a
+// rebuild regenerates match RebuildDigest and the lock file matches LockDigest. An absent workdir or
+// one that differs does not match; only an unreadable one is an error.
+func rebuiltWorkdirMatches(info *schema.ConfigAndStacksInfo, plan *configurationPlan, planPath, dataDir string) (bool, error) {
+	if plan.RebuildDigest == "" {
+		return false, nil
+	}
+	rebuild := &reviewedRebuild{plan: plan, planPath: planPath, workdir: plan.WorkingDirectory, transient: transientWorkdirFiles(info), dataDir: dataDir}
+	if only, err := rebuild.holdsOnlyTransport(); err != nil || only {
+		// Nothing was rebuilt yet: the normal rebuild path applies.
+		return false, err
+	}
+	err := rebuild.verify(plan.WorkingDirectory)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, errUtils.ErrPlanVerificationFailed), errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	}
+	return false, err
+}
+
+// transientWorkdirFiles names the files each execution rewrites from its inputs. They carry values
+// the plan file already embodies, so they are not part of what a rebuild must reproduce.
+func transientWorkdirFiles(info *schema.ConfigAndStacksInfo) []string {
+	var names []string
+	for _, suffix := range []string{".terraform.tfvars.json", ".terraform.test.tfvars.json"} {
+		if name, ok := configurationArtifactName(info, suffix); ok {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// configurationRebuildDigest hashes the files a rebuild regenerates: the retained directory without
+// the plan, its record, state, variable files, and the lock file (which has its own digest).
+func configurationRebuildDigest(root, planPath, dataDir string, transient []string) (string, error) {
+	return workdirDigest(root, planPath, dataDir, func(relative string) bool {
+		if relative == terraformLockFile {
+			return true
+		}
+		for _, name := range transient {
+			if relative == name {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+// lockFileDigest returns the digest of the provider lock file beside the plan, or "" when there is none.
+func lockFileDigest(dir string) (string, error) {
+	digest, err := fileDigest(filepath.Join(dir, terraformLockFile))
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil
+	}
+	return digest, err
+}
+
+// transportFiles lists the restored artifacts that may sit in the workdir, as slash-separated paths relative
+// to it: the lock file, and the plan with its record when the plan is inside the workdir, also in a
+// subdirectory such as `plans/reviewed.planfile`.
+func (r *reviewedRebuild) transportFiles() map[string]bool {
+	files := map[string]bool{terraformLockFile: true}
+	workdir, errWorkdir := resolvedPath(r.workdir)
+	planDir, errPlan := resolvedPath(filepath.Dir(r.planPath))
+	if errWorkdir != nil || errPlan != nil {
+		return files
+	}
+	if relative, err := filepath.Rel(workdir, planDir); err == nil && filepath.IsLocal(relative) {
+		plan := filepath.ToSlash(filepath.Join(relative, filepath.Base(r.planPath)))
+		files[plan] = true
+		files[plan+configurationPlanSuffix] = true
+	}
+	return files
+}
+
+func sameDirectory(first, second string) bool {
+	a, errA := resolvedPath(first)
+	b, errB := resolvedPath(second)
+	return errA == nil && errB == nil && a == b
+}
+
+// workdirRoot reports whether the workdir does not exist, and whether the path itself is a symlink.
+// A symlink counts even when its target is gone.
+func (r *reviewedRebuild) workdirRoot() (absent, symlinked bool) {
+	info, err := os.Lstat(r.workdir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return true, false
+	}
+	return false, err == nil && info.Mode()&fs.ModeSymlink != 0
+}
+
+// holdsOnlyTransport reports whether the workdir is absent, empty, or contains just the restored artifacts.
+// A subdirectory is accepted only on the way to an artifact, and then holds nothing else either.
+//
+// A symlinked workdir holds nothing that was reviewed: the walk below does not descend into the link, so the
+// files in its target would pass unchecked, and a rebuild would stage and write into that target.
+func (r *reviewedRebuild) holdsOnlyTransport() (bool, error) {
+	absent, symlinked := r.workdirRoot()
+	if absent {
+		return true, nil
+	}
+	if symlinked {
+		return false, nil
+	}
+	allowed := r.transportFiles()
+	only := true
+	err := filepath.WalkDir(r.workdir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == r.workdir {
+			return nil
+		}
+		relative, err := filepath.Rel(r.workdir, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if entry.IsDir() {
+			if !leadsToTransport(relative, allowed) {
+				only = false
+				return filepath.SkipAll
+			}
+			return nil
+		}
+		if !allowed[relative] {
+			only = false
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return only, nil
+}
+
+// leadsToTransport reports whether a directory is a parent of one of the restored artifacts.
+func leadsToTransport(directory string, allowed map[string]bool) bool {
+	for name := range allowed {
+		if strings.HasPrefix(name, directory+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// stage moves the restored artifacts aside so the workdir can be provisioned into an empty place, and
+// returns the function that puts them back. Provisioning refuses a directory it does not own.
+func (r *reviewedRebuild) stage() (func() error, error) {
+	entries, err := os.ReadDir(r.workdir)
+	if errors.Is(err, fs.ErrNotExist) || len(entries) == 0 {
+		return func() error { return nil }, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	holding, err := os.MkdirTemp(filepath.Dir(r.workdir), ".atmos-restore-*")
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if err := os.Rename(filepath.Join(r.workdir, entry.Name()), filepath.Join(holding, entry.Name())); err != nil {
+			return nil, errors.Join(err, putBack(holding, r.workdir, names))
+		}
+		names = append(names, entry.Name())
+	}
+	if err := os.Remove(r.workdir); err != nil {
+		return nil, errors.Join(err, putBack(holding, r.workdir, names))
+	}
+	return func() error { return putBack(holding, r.workdir, names) }, nil
+}
+
+// putBack returns staged artifacts to the workdir, replacing what provisioning wrote under the same
+// name, and removes the holding directory.
+func putBack(holding, workdir string, names []string) error {
+	if err := os.MkdirAll(workdir, workdirMode); err != nil {
+		return err
+	}
+	for _, name := range names {
+		destination := filepath.Join(workdir, name)
+		staged := filepath.Join(holding, name)
+		if _, err := os.Lstat(staged); errors.Is(err, fs.ErrNotExist) {
+			// An earlier restore attempt may already have moved this artifact.
+			if _, destinationErr := os.Lstat(destination); destinationErr == nil {
+				continue
+			} else {
+				return errors.Join(err, destinationErr)
+			}
+		} else if err != nil {
+			return err
+		}
+		if err := restoreArtifact(staged, destination); err != nil {
+			return err
+		}
+	}
+	return os.Remove(holding)
+}
+
+// restoreArtifact moves one staged artifact into place. A staged directory merges into a directory that
+// provisioning recreated, so files provisioning wrote there (for example a plans/.gitkeep the module
+// ships) stay while the staged files return exactly as they were. Anything else replaces the destination.
+func restoreArtifact(staged, destination string) error {
+	stagedInfo, err := os.Lstat(staged)
+	if err != nil {
+		return err
+	}
+	if destinationInfo, err := os.Lstat(destination); err == nil && stagedInfo.IsDir() && destinationInfo.IsDir() {
+		entries, err := os.ReadDir(staged)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if err := restoreArtifact(filepath.Join(staged, entry.Name()), filepath.Join(destination, entry.Name())); err != nil {
+				return err
+			}
+		}
+		return os.Remove(staged)
+	}
+	if err := os.Remove(destination); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return os.Rename(staged, destination)
+}
+
+// verify compares the re-provisioned directory to the reviewed one.
+func (r *reviewedRebuild) verify(workdir string) error {
+	digest, err := configurationRebuildDigest(workdir, r.planPath, r.dataDir, r.transient)
+	if err != nil {
+		return err
+	}
+	if digest != r.plan.RebuildDigest {
+		return errUtils.Build(fmt.Errorf("%w: the re-provisioned working directory differs from the reviewed one", errUtils.ErrPlanVerificationFailed)).
+			WithExplanation("The module source or generated files in this checkout do not reproduce what was reviewed (a different module revision, a floating source reference, or a different checkout path).").
+			WithHint("Create a new plan from this revision with `atmos terraform plan`.").
+			Err()
+	}
+	lock, err := lockFileDigest(workdir)
+	if err != nil {
+		return err
+	}
+	if lock != r.plan.LockDigest {
+		return errUtils.Build(fmt.Errorf("%w: the provider lock file differs from the reviewed one", errUtils.ErrPlanVerificationFailed)).
+			WithHint("Restore `.terraform.lock.hcl` together with the plan (`atmos terraform planfile download` does), or create a new plan.").
+			Err()
+	}
+	if err := r.verifySensitiveFiles(workdir); err != nil {
+		return err
+	}
+	return verifyPublicRecords(workdir, r.plan.PublicFiles)
+}
+
+// verifySensitiveFiles checks the sensitive generated files, which the rebuild digest may exclude (for
+// example files below a Terragrunt cache), against the digest recorded with the reviewed plan.
+func (r *reviewedRebuild) verifySensitiveFiles(workdir string) error {
+	sensitive, err := sensitiveDigest(workdir, r.plan.Prepared.Files)
+	if err != nil {
+		return err
+	}
+	if sensitive != r.plan.SensitiveDigest {
+		return fmt.Errorf("%w: reviewed generated file changed", errUtils.ErrPlanVerificationFailed)
+	}
+	return nil
+}
+
+// downloadedModulesDir is where `init` and `get` install child modules.
+var downloadedModulesDir = filepath.Join(defaultDataDir, modulesDirName)
+
+// hasDownloadedModules reports whether a workdir holds downloaded child modules below the Terraform
+// data directory the subprocesses use (empty means the default `.terraform`).
+func hasDownloadedModules(workdir, dataDir string) bool {
+	info, err := os.Stat(filepath.Join(resolveDataDir(workdir, dataDir), modulesDirName))
+	return err == nil && info.IsDir()
+}
+
+// installReviewedModules downloads the child modules of a reviewed plan into the rebuilt workdir before it
+// is verified, as `init` did before the plan was made. The modules stay covered by RebuildDigest, so a
+// source that now resolves to different code fails verification instead of being applied; nothing is
+// restored from the plan artifacts.
+func (e *Executor) installReviewedModules(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rebuild *reviewedRebuild, workdir string) error {
+	if rebuild == nil || !rebuild.plan.Modules || info.DryRun {
+		return nil
+	}
+	if err := e.services.ExecuteShellCommand(*atmosConfig, info.Command, []string{"get"}, workdir, info.ComponentEnvList, false, info.RedirectStdErr, component.WithEnvironment(info.SanitizedEnv)); err != nil {
+		return errUtils.Build(fmt.Errorf("%w: downloading the reviewed child modules: %w", errUtils.ErrPlanVerificationFailed, err)).
+			WithExplanation("The reviewed plan uses downloaded child modules, which must be downloaded again and match before the plan is applied.").
+			WithHint("Check that the module sources are reachable from this runner, or apply on the runner that created the plan.").
+			Err()
+	}
+	return nil
+}
+
+// rebuildReviewedWorkdir re-provisions the working directory of a reviewed plan on a runner that only
+// holds the restored artifacts. The caller verifies the result once execution has written its own
+// files (generated backend configuration), before anything runs.
+func (e *Executor) rebuildReviewedWorkdir(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rebuild *reviewedRebuild) (path string, err error) {
+	restore, err := rebuild.stage()
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		// The restored artifacts return in every case so the user can inspect or retry.
+		if restoreErr := restore(); restoreErr != nil {
+			err = errors.Join(err, restoreErr)
+		}
+	}()
+	path, err = e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
+	if err != nil {
+		return "", err
+	}
+	if !sameDirectory(path, rebuild.workdir) {
+		return "", fmt.Errorf("%w: the working directory resolved to %s instead of the reviewed %s", errUtils.ErrPlanVerificationFailed, path, rebuild.workdir)
+	}
+	if err = configuration.WriteFiles(path, rebuild.prepared.Files); err != nil {
+		return "", err
+	}
+	// The artifacts go back before verification: a restored lock file replaces any copied from beside the unit.
+	if err = restore(); err != nil {
+		return "", err
+	}
+	restore = func() error { return nil }
+	return path, nil
+}
+
+// verifyRebuild checks the reviewed bytes after any initialization that could upgrade modules.
+func (c *componentExecContext) verifyRebuild(workdir string) error {
+	if c.rebuild == nil {
+		return nil
+	}
+	return c.rebuild.verify(workdir)
+}
+
+// isolateFailedRebuild keeps unverified output for inspection and restores only transport files.
+// A retry can rebuild the workdir again without treating partial downloads as reviewed content.
+func (r *reviewedRebuild) isolateFailedRebuild(cause error) error {
+	transport := r.transportFiles()
+	holding, err := os.MkdirTemp(filepath.Dir(r.workdir), ".atmos-failed-rebuild-*")
+	if err != nil {
+		return errors.Join(cause, err)
+	}
+	failed := filepath.Join(holding, "workdir")
+	if err := os.Rename(r.workdir, failed); err != nil {
+		return errors.Join(cause, err)
+	}
+	for name := range transport {
+		source := filepath.Join(failed, filepath.FromSlash(name))
+		if _, err := os.Lstat(source); errors.Is(err, fs.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return errors.Join(cause, err)
+		}
+		destination := filepath.Join(r.workdir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(destination), workdirMode); err != nil {
+			return errors.Join(cause, err)
+		}
+		if err := os.Rename(source, destination); err != nil {
+			return errors.Join(cause, err)
+		}
+	}
+	return errUtils.Build(cause).WithHintf("The failed rebuild is preserved at `%s`; the restored plan artifacts are ready for a retry.", failed).Err()
+}
+
+// varFlagNames are the Terraform options that carry a variable assignment, whose value may be secret.
+var varFlagNames = []string{"-var", "--var"}
+
+// persistablePlanArguments returns the plan arguments that may be stored with the reviewed plan.
+// A variable assignment keeps its name and loses its value, so a saved record never holds a secret;
+// a rebuild that needs the value fails its digest check instead of using a different one.
+func persistablePlanArguments(arguments []string) []string {
+	if len(arguments) == 0 {
+		return nil
+	}
+	kept := make([]string, 0, len(arguments))
+	for i := 0; i < len(arguments); i++ {
+		argument := arguments[i]
+		switch {
+		case isVarFlag(argument) && i+1 < len(arguments):
+			kept = append(kept, argument+"="+assignmentName(arguments[i+1])+"=")
+			i++
+		case isVarAssignment(argument):
+			flag, assignment, _ := strings.Cut(argument, "=")
+			kept = append(kept, flag+"="+assignmentName(assignment)+"=")
+		default:
+			kept = append(kept, argument)
+		}
+	}
+	return kept
+}
+
+func isVarFlag(argument string) bool {
+	for _, name := range varFlagNames {
+		if argument == name {
+			return true
+		}
+	}
+	return false
+}
+
+func isVarAssignment(argument string) bool {
+	for _, name := range varFlagNames {
+		if strings.HasPrefix(argument, name+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+// assignmentName returns the variable name of a NAME=VALUE assignment.
+func assignmentName(assignment string) string {
+	name, _, _ := strings.Cut(assignment, "=")
+	return name
+}
+
+// recordExternalModules adds the downloaded modules of a data directory outside the workdir (a parent of the
+// workdir included, whose modules lie beside it) to the
+// digest files. They are executed during apply like the ones below the workdir, so a change to them
+// must not look retained. An absent modules directory adds nothing. The plan and its record are not
+// configuration, so they stay out of the digest even when -out points inside this directory.
+func (s workdirScope) recordExternalModules(planPath string, files map[string]string) error {
+	modules := filepath.Join(s.dataDir, modulesDirName)
+	if !s.hasExternalModules(modules) {
+		return nil
+	}
+	return filepath.WalkDir(modules, s.externalModuleVisitor(modules, planPath, files))
+}
+
+// hasExternalModules reports whether the modules directory lies outside the workdir and may exist.
+func (s workdirScope) hasExternalModules(modules string) bool {
+	if s.placement == dataDirBelowWorkdir {
+		return false
+	}
+	if _, inside := relativeInside(s.root, modules); inside {
+		// The data directory is the workdir itself: its modules are part of the workdir walk.
+		return false
+	}
+	_, err := os.Stat(modules)
+	return !errors.Is(err, fs.ErrNotExist)
+}
+
+// externalModuleVisitor digests each file below the external modules directory.
+func (s workdirScope) externalModuleVisitor(modules, planPath string, files map[string]string) fs.WalkDirFunc {
+	return func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() && path == s.root {
+			// A workdir inside the modules tree is already digested by the workdir walk, under its own keys.
+			return filepath.SkipDir
+		}
+		if entry.IsDir() || path == planPath || path == planPath+configurationPlanSuffix {
+			return nil
+		}
+		relative, err := filepath.Rel(modules, path)
+		if err != nil {
+			return err
+		}
+		if filepath.ToSlash(relative) == moduleManifestName {
+			return s.recordModuleManifest(path, entry, files)
+		}
+		return recordWorkdirFileAs(externalModulesKeyPrefix+filepath.ToSlash(relative), path, entry, files)
+	}
+}
+
+// moduleManifestName is the file Terraform keeps in the modules directory of its data directory.
+const moduleManifestName = "modules.json"
+
+// recordModuleManifest digests the module manifest of an external data directory with its runner-local
+// paths made relative to that directory. Terraform records each module's Dir as a path below the data
+// directory, which is absolute when TF_DATA_DIR is, so the raw bytes differ between runners that mount an
+// otherwise identical layout at different roots and would fail verification of a reviewed plan.
+// Design choice: normalize the manifest before hashing (rather than require one absolute data directory on
+// every runner), because the module content is still hashed file by file and the only runner-specific
+// information is the prefix. A manifest that cannot be parsed, or a Dir outside the data directory, is
+// hashed as it is, so nothing is ever dropped from the digest.
+func (s workdirScope) recordModuleManifest(path string, entry fs.DirEntry, files map[string]string) error {
+	if entry.Type()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%w: saved-plan workdir contains symlink", errUtils.ErrPluginUnsupportedExtension)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return planIOError(err)
+	}
+	sum := sha256.Sum256(s.normalizeModuleManifest(raw))
+	files[externalModulesKeyPrefix+moduleManifestName] = hex.EncodeToString(sum[:])
+	return nil
+}
+
+// normalizeModuleManifest rewrites every module Dir below the data directory to a slash-separated path
+// relative to it, and returns the original bytes when the manifest is not the expected JSON shape.
+func (s workdirScope) normalizeModuleManifest(raw []byte) []byte {
+	var manifest map[string]any
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return raw
+	}
+	entries, ok := manifest["Modules"].([]any)
+	if !ok {
+		return raw
+	}
+	for _, entry := range entries {
+		module, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if dir, ok := module["Dir"].(string); ok {
+			module["Dir"] = s.relativeModuleDir(dir)
+		}
+	}
+	normalized, err := json.Marshal(manifest)
+	if err != nil {
+		return raw
+	}
+	return normalized
+}
+
+// normalizedModuleDirPrefix marks a manifest Dir that was rewritten relative to the data directory. A NUL
+// byte cannot occur in a path, so a Dir that was already relative and lies outside the data directory
+// never collides with a rewritten one, and changing the selected module directory changes the digest.
+const normalizedModuleDirPrefix = "\x00data-dir/"
+
+// relativeModuleDir returns dir as a marked path relative to the data directory, or dir unchanged when it
+// lies elsewhere.
+func (s workdirScope) relativeModuleDir(dir string) string {
+	native := filepath.FromSlash(dir)
+	if !filepath.IsAbs(native) {
+		native = filepath.Join(s.root, native)
+	}
+	resolved, err := resolvedPath(native)
+	if err != nil {
+		return dir
+	}
+	if relative, ok := relativeInside(s.dataDir, resolved); ok {
+		return normalizedModuleDirPrefix + filepath.ToSlash(relative)
+	}
+	return dir
+}
+
+// verifyPublicRecords checks every recorded public file in workdir against its record. A rebuilt workdir
+// digest can exclude generated files (for example below a Terragrunt cache), so each record is verified
+// directly. Files with a removal policy have no record and therefore stay absent without error.
+func verifyPublicRecords(workdir string, records map[string]publicFileRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+	root, err := os.OpenRoot(workdir)
+	if err != nil {
+		return planIOError(err)
+	}
+	defer root.Close()
+	for _, path := range slices.Sorted(maps.Keys(records)) {
+		if _, err := verifyPublicFile(root, path, records[path]); err != nil {
+			return err
+		}
+	}
+	return nil
+}

@@ -3,8 +3,9 @@
 // and contribute environment variables for remote git and subprocess operations.
 //
 // A broker is registered once at startup (typically from an implementer package's init())
-// and is consulted the first time Atmos performs a remote read (go-getter fetch) or spawns
-// a credential-bearing subprocess (terraform/helmfile/packer). Atmos Pro's github/sts
+// and is consulted when Atmos performs a remote read (go-getter fetch) or spawns a
+// credential-bearing subprocess (terraform/helmfile/packer): the first time, again after a
+// failed or cancelled attempt, and periodically so a long-lived process refreshes tokens. Atmos Pro's github/sts
 // integration is the first broker; future brokers (e.g., a Vault git-token broker) plug in
 // here without touching the downloader or the command layer.
 //
@@ -16,7 +17,9 @@ package broker
 import (
 	"context"
 	"os"
+	"sort"
 	"sync"
+	"time"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -44,9 +47,22 @@ var (
 	registryMu sync.Mutex
 	registry   []Provider
 
-	// The ensureOnce guard makes EnsureCredentials run the brokers at most once per process,
-	// so repeated remote reads within a single command do not re-provision.
-	ensureOnce sync.Once
+	// The ensureMu mutex serializes EnsureCredentials and guards ensureState, so concurrent
+	// callers provision once and every caller observes the exported env after it returns.
+	ensureMu sync.Mutex
+	// The ensureState value records the last completed broker run.
+	ensureState brokerRun
+
+	// The refreshInterval duration is how long a fully successful run is reused before the
+	// brokers run again. Brokers reuse fresh persisted tokens, so a refresh is cheap, and it
+	// keeps short-lived tokens (GitHub installation tokens last one hour) valid in a
+	// long-lived process such as the MCP server or a long --all run.
+	refreshInterval = 30 * time.Minute
+	// The retryBackoff duration is how long a failed run is reused before retrying, so a
+	// failing broker is not re-run (and re-warned) on every remote read.
+	retryBackoff = 30 * time.Second
+	// The now function is the clock, replaceable in tests.
+	now = time.Now
 
 	// The brokeredMu mutex guards brokeredCredentials.
 	brokeredMu sync.Mutex
@@ -56,6 +72,14 @@ var (
 	// token's brief post-creation auth window (see HasBrokeredCredentials).
 	brokeredCredentials bool
 )
+
+// RefreshInterval returns how long a fully successful broker run is reused before the brokers
+// run again. A broker that reuses persisted short-lived tokens must only reuse tokens that stay
+// valid for at least this long, otherwise a token can expire between two scheduled runs and
+// the expired value stays exported until the next run.
+func RefreshInterval() time.Duration {
+	return refreshInterval
+}
 
 // Register adds a credential broker to the registry. It is safe to call from init().
 func Register(p Provider) {
@@ -68,25 +92,58 @@ func Register(p Provider) {
 	registry = append(registry, p)
 }
 
-// EnsureCredentials runs every enabled broker exactly once per process and exports each
-// broker's contributed environment variables into the current process via os.Setenv, so
-// that Atmos's own go-getter git subprocesses and any downstream terraform/helmfile/packer
-// subprocesses (whose environments start from os.Environ()) transparently pick them up.
+// brokerRun records when the brokers last ran and whether every enabled broker succeeded.
+type brokerRun struct {
+	at time.Time
+	ok bool
+}
+
+// due reports whether the brokers should run again: never run, a successful run older
+// than refreshInterval, or a failed run older than retryBackoff.
+func (r brokerRun) due() bool {
+	if r.at.IsZero() {
+		return true
+	}
+	wait := refreshInterval
+	if !r.ok {
+		wait = retryBackoff
+	}
+	return now().Sub(r.at) >= wait
+}
+
+// EnsureCredentials runs every enabled broker and exports each broker's contributed
+// environment variables into the current process via os.Setenv, so that Atmos's own
+// go-getter git subprocesses and any downstream terraform/helmfile/packer subprocesses
+// (whose environments start from os.Environ()) transparently pick them up.
+//
+// Repeated calls within refreshInterval of a successful run do not re-provision. A failed
+// run is retried after retryBackoff, and a run interrupted by the caller's cancellation is
+// not recorded, so one cancelled caller never disables brokering for the whole process.
 //
 // It is best-effort: a broker that is not enabled is skipped, and a broker that errors is
-// logged at debug and skipped — the in-progress remote read then proceeds and fails
-// naturally if the credentials were truly required.
+// logged and skipped — the in-progress remote read then proceeds and fails naturally if
+// the credentials were truly required.
 func EnsureCredentials(ctx context.Context, atmosConfig *schema.AtmosConfiguration) {
 	defer perf.Track(atmosConfig, "auth.broker.EnsureCredentials")()
 
-	ensureOnce.Do(func() {
-		runEnabledBrokers(ctx, atmosConfig)
-	})
+	ensureMu.Lock()
+	defer ensureMu.Unlock()
+	if ctx.Err() != nil || !ensureState.due() {
+		return
+	}
+	ok := runEnabledBrokers(ctx, atmosConfig)
+	if !ok && ctx.Err() != nil {
+		// Cancelled mid-run: leave the state untouched so the next caller retries.
+		return
+	}
+	ensureState = brokerRun{at: now(), ok: ok}
 }
 
-// runEnabledBrokers runs every enabled broker once and exports its env via os.Setenv.
-// Split out from EnsureCredentials (which guards it with sync.Once) so it can be tested directly.
-func runEnabledBrokers(ctx context.Context, atmosConfig *schema.AtmosConfiguration) {
+// runEnabledBrokers runs every enabled broker once and exports its env via os.Setenv. It
+// reports whether every enabled broker succeeded. Split out from EnsureCredentials (which
+// serializes and schedules it) so it can be tested directly.
+func runEnabledBrokers(ctx context.Context, atmosConfig *schema.AtmosConfiguration) bool {
+	ok := true
 	for _, p := range snapshot() {
 		if !p.Enabled(atmosConfig) {
 			continue
@@ -100,24 +157,58 @@ func runEnabledBrokers(ctx context.Context, atmosConfig *schema.AtmosConfigurati
 			// `git Authentication failed`, and at the default Warning log level a Debug line
 			// here would be invisible — leaving the user no causal link to the real cause.
 			log.Warn("Credential broker failed; private reads may fail without these credentials", "broker", p.Name(), "error", err)
+			ok = false
+			// A broker may return a usable partial environment (for example cached tokens) alongside
+			// the error; export it, but keep the run recorded as failed.
+			if exportEnv(p.Name(), env) {
+				markBrokered()
+			}
 			continue
 		}
 
 		// Mark brokered only after at least one variable is actually exported: if every
 		// os.Setenv failed there are no usable credentials in the process env, and enabling
 		// downstream auth-retry would be wrong.
-		exported := false
-		for key, value := range env {
-			if err := os.Setenv(key, value); err != nil {
-				log.Warn("Failed to export credential broker variable", "broker", p.Name(), "key", key, "error", err)
-				continue
-			}
-			exported = true
-		}
-		if exported {
+		if exportEnv(p.Name(), env) {
 			markBrokered()
 		}
 	}
+	return ok
+}
+
+// gitConfigCountKey is the variable that tells git how many GIT_CONFIG_KEY_n/VALUE_n pairs to read.
+const gitConfigCountKey = "GIT_CONFIG_COUNT"
+
+// exportOrder returns the keys of env in export order: every variable first and
+// GIT_CONFIG_COUNT last. Git treats a missing KEY_n/VALUE_n below the count as an error, so a
+// subprocess that starts mid-export must never see a count larger than the number of complete
+// pairs already set.
+func exportOrder(env map[string]string) []string {
+	keys := make([]string, 0, len(env))
+	for key := range env {
+		if key != gitConfigCountKey {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	if _, found := env[gitConfigCountKey]; found {
+		keys = append(keys, gitConfigCountKey)
+	}
+	return keys
+}
+
+// exportEnv exports env via os.Setenv in exportOrder and reports whether at least one variable
+// was exported.
+func exportEnv(name string, env map[string]string) bool {
+	exported := false
+	for _, key := range exportOrder(env) {
+		if err := os.Setenv(key, env[key]); err != nil {
+			log.Warn("Failed to export credential broker variable", "broker", name, "key", key, "error", err)
+			continue
+		}
+		exported = true
+	}
+	return exported
 }
 
 // markBrokered records that a broker provisioned credentials this process.
@@ -139,27 +230,34 @@ func HasBrokeredCredentials() bool {
 	return brokeredCredentials
 }
 
-// SwapRegistryForTest clears the broker registry and the once guard, returning a restore function
+// SwapRegistryForTest clears the broker registry and the run state, returning a restore function
 // that puts the previous state back when invoked. Intended for use in tests (including tests in
 // other packages, such as pkg/stack/imports) that exercise broker-triggering code paths and need to
-// register a fake provider in isolation. Because EnsureCredentials runs brokers at most once per
-// process, resetting the once is required for a test to observe a freshly registered broker.
-// Production code must never call this.
+// register a fake provider in isolation. Because EnsureCredentials reuses a successful run for
+// refreshInterval, resetting the run state is required for a test to observe a freshly registered
+// broker. Production code must never call this.
 func SwapRegistryForTest() func() {
 	registryMu.Lock()
 	prev := registry
 	registry = nil
-	ensureOnce = sync.Once{}
 	registryMu.Unlock()
+	resetEnsureStateForTest()
 	resetBrokeredForTest()
 
 	return func() {
 		registryMu.Lock()
 		registry = prev
-		ensureOnce = sync.Once{}
 		registryMu.Unlock()
+		resetEnsureStateForTest()
 		resetBrokeredForTest()
 	}
+}
+
+// resetEnsureStateForTest forgets the last broker run so the next EnsureCredentials runs.
+func resetEnsureStateForTest() {
+	ensureMu.Lock()
+	ensureState = brokerRun{}
+	ensureMu.Unlock()
 }
 
 // resetBrokeredForTest clears the brokered-credentials flag so a test observes only what

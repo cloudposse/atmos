@@ -1,0 +1,89 @@
+commands:
+  - name: casts generate demo fixtures terragrunt-native plan
+    description: Record native Terragrunt discovery and an OpenTofu plan
+    env:
+      PATH: '{{ env "PWD" }}/../../build:{{ env "PATH" }}'
+      ATMOS_TELEMETRY_ENABLED: 'false'
+    steps:
+      # Build the host and package together so their protocol stays in sync.
+      - type: shell
+        name: build-host
+        working_directory: ../..
+        command: go build -o build/atmos .
+        output: none
+      - type: shell
+        name: build-plugin
+        working_directory: ../..
+        command: build/atmos plugin build plugins/terragrunt
+        output: none
+      - type: workdir
+        name: fixture
+        source: fixtures/terragrunt-native
+        path: ../../.context/cast-fixtures/terragrunt-native
+        reset: true
+      # Resolve the development package outside the recording; no machine paths
+      # belong in the published demo. The blog explains this prerequisite.
+      - type: shell
+        name: package
+        working_directory: ../../.context/cast-fixtures/terragrunt-native
+        command: atmos config set plugins.packages.terragrunt.path "../../../plugins/terragrunt"
+        output: none
+      - type: cast
+        name: plan
+        working_directory: ../../.context/cast-fixtures/terragrunt-native
+        title: Native Terragrunt discovery and planning
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: ../../website/static/casts/demo/fixtures/terragrunt-native/plan.cast
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: '# The native plugin is built; enable it for the existing live/ tree.'
+          - type: simulate
+            text: &enable atmos config set components.terraform.terragrunt.enabled true
+          - type: shell
+            command: *enable
+          - type: simulate
+            text: &mode atmos config set components.terraform.terragrunt.mode native
+          - type: shell
+            command: *mode
+          - type: simulate
+            text: &scope atmos config set --type=yaml components.terraform.terragrunt.discovery.included_paths '["live/**"]'
+          - type: shell
+            command: *scope
+          - type: simulate
+            text: &discover atmos config set components.terraform.terragrunt.discovery.enabled true
+          - type: shell
+            command: *discover
+          - type: simulate
+            text: &stacks atmos list stacks
+          - type: shell
+            command: *stacks
+          - type: simulate
+            text: &instances atmos list instances
+          - type: shell
+            command: *instances
+          - type: simulate
+            text: '# HCL evaluates the greeting; Atmos runs OpenTofu. No cloud credentials needed.'
+          - type: simulate
+            text: &plan atmos terraform plan demo -s live
+          - type: shell
+            command: *plan
+            interval: 2s
+      - type: script
+        name: validate
+        interpreter: starlark
+        script: !include scripts/validate-terragrunt-native.star
+  - name: casts validate demo fixtures terragrunt-native plan
+    description: Validate native Terragrunt discovery and plan evidence
+    steps:
+      - type: script
+        name: validate
+        interpreter: starlark
+        script: !include scripts/validate-terragrunt-native.star

@@ -1,0 +1,92 @@
+package gcp
+
+// Tests for the GKE kubeconfig exec-user names shared by the writer
+// (BuildKubeClusterInfo) and GKE integration cleanup.
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/auth/cloud/kube"
+)
+
+// TestGKEKubeUserName_MatchesWrittenUser verifies that cleanup computes exactly
+// the user name the kubeconfig writer used, with and without an identity.
+func TestGKEKubeUserName_MatchesWrittenUser(t *testing.T) {
+	tests := []struct {
+		name     string
+		identity string
+		want     string
+	}{
+		{name: "identity", identity: "gcp-admin", want: "atmos-gke-example-cluster-example-project-us-central1-gcp-admin-3768a76d"},
+		{name: "no identity", want: "atmos-gke-example-cluster-example-project-us-central1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			written := BuildKubeClusterInfo(&GKEClusterInfo{Name: "example-cluster", ProjectID: "example-project", Location: "us-central1"}, tt.identity)
+
+			assert.Equal(t, tt.identity, written.Identity)
+			assert.Equal(t, tt.want, kube.UserName(written))
+			assert.Equal(t, kube.UserName(written), GKEKubeUserName("example-project", "us-central1", "example-cluster", tt.identity, ""))
+		})
+	}
+}
+
+// TestLegacyGKEKubeUserName verifies the name versions before the identity was added wrote.
+func TestLegacyGKEKubeUserName(t *testing.T) {
+	assert.Equal(t, "atmos-gke-example-cluster-example-project-us-central1", LegacyGKEKubeUserName("example-project", "us-central1", "example-cluster"))
+}
+
+// TestGKEKubeUserNames verifies the cleanup candidates: the current name first,
+// then the pre-realm name (only with a realm) and the legacy name.
+func TestGKEKubeUserNames(t *testing.T) {
+	assert.Equal(t, []string{
+		"atmos-acme-gke-example-cluster-example-project-us-central1-gcp-admin-0073a8c3",
+		"atmos-acme-gke-example-cluster-example-project-us-central1-gcp-admin",
+		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin-3768a76d",
+		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin",
+		"atmos-gke-example-cluster-example-project-us-central1",
+	}, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", kube.RealmScope{Realm: "acme"}))
+	assert.Equal(t, []string{
+		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin-3768a76d",
+		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin",
+		"atmos-gke-example-cluster-example-project-us-central1",
+	}, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", kube.RealmScope{Realm: ""}))
+}
+
+// TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup verifies that the users
+// the writer treats as its own when migrating an unprefixed context are the
+// same names cleanup removes, with and without a realm.
+func TestBuildKubeClusterInfo_OwnedUserNamesMatchCleanup(t *testing.T) {
+	for _, realm := range []string{"", "acme"} {
+		t.Run("realm="+realm, func(t *testing.T) {
+			written := BuildKubeClusterInfo(&GKEClusterInfo{Name: "example-cluster", ProjectID: "example-project", Location: "us-central1"}, "gcp-admin")
+			written.Realm = realm
+
+			assert.Equal(t, []string{LegacyGKEKubeUserName("example-project", "us-central1", "example-cluster")}, written.LegacyUserNames)
+			assert.Equal(t, GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", kube.RealmScope{Realm: realm}), kube.OwnedUserNames(written))
+		})
+	}
+}
+
+// TestGKEKubeUserNames_LegacyRealms verifies that names an unreleased build
+// wrote under a derived realm are cleanup candidates, in the same order as
+// kube.OwnedUserNames.
+func TestGKEKubeUserNames_LegacyRealms(t *testing.T) {
+	const derived = "462813558259d41c"
+
+	written := BuildKubeClusterInfo(&GKEClusterInfo{Name: "example-cluster", ProjectID: "example-project", Location: "us-central1"}, "gcp-admin")
+	written.Realm, written.LegacyRealms = kube.NameRealm(derived, false)
+	names := GKEKubeUserNames("example-project", "us-central1", "example-cluster", "gcp-admin", kube.RealmScope{Realm: written.Realm, LegacyRealms: written.LegacyRealms})
+
+	assert.Equal(t, []string{
+		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin-3768a76d",
+		"atmos-gke-example-cluster-example-project-us-central1-gcp-admin",
+		"atmos-" + derived + "-gke-example-cluster-example-project-us-central1-gcp-admin-97b37070",
+		"atmos-" + derived + "-gke-example-cluster-example-project-us-central1-gcp-admin",
+		"atmos-gke-example-cluster-example-project-us-central1",
+	}, names)
+	assert.Equal(t, names, kube.OwnedUserNames(written))
+}

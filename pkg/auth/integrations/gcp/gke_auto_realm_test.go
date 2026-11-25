@@ -1,0 +1,64 @@
+package gcp
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/tools/clientcmd"
+
+	"github.com/cloudposse/atmos/pkg/auth/integrations"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// newSourcedGKEIntegration builds the example GKE integration with a realm and its source.
+func newSourcedGKEIntegration(t *testing.T, path, realmValue, realmSource string) integrations.Integration {
+	t.Helper()
+
+	integration, err := NewGKEIntegration(&integrations.IntegrationConfig{
+		Name: "example-gke", Realm: realmValue, RealmSource: realmSource,
+		Config: &schema.Integration{
+			Kind: integrations.KindGCPGKE,
+			Via:  &schema.IntegrationVia{Identity: "gcp-admin"},
+			Spec: &schema.IntegrationSpec{Cluster: &schema.Cluster{
+				Name: "example-cluster", ProjectID: "example-project", Location: "us-central1",
+				Kubeconfig: &schema.KubeconfigSettings{Path: path},
+			}},
+		},
+	})
+	require.NoError(t, err)
+	return integration
+}
+
+// TestGKEIntegration_AutoRealmKeepsNamesAndMigrates verifies that a realm
+// derived from the atmos.yaml path keeps the bare resource name context and the
+// realm-less user, that a login replaces the prefixed entries an unreleased
+// build wrote, and that logout then removes everything this integration owns.
+func TestGKEIntegration_AutoRealmKeepsNamesAndMigrates(t *testing.T) {
+	const autoRealm = "462813558259d41c"
+	stubExampleGKECluster(t)
+	path := filepath.Join(t.TempDir(), "kubeconfig")
+	require.NoError(t, newSourcedGKEIntegration(t, path, autoRealm, realm.SourceConfig).Execute(t.Context(), exampleGCPCredentials()))
+
+	integration := newSourcedGKEIntegration(t, path, autoRealm, realm.SourceAuto)
+	require.NoError(t, integration.Execute(t.Context(), exampleGCPCredentials()))
+
+	config, err := clientcmd.LoadFromFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, exampleClusterID, config.CurrentContext)
+	require.Len(t, config.Contexts, 1)
+	require.Contains(t, config.Contexts, exampleClusterID)
+	user := "atmos-gke-example-cluster-example-project-us-central1-gcp-admin-3768a76d"
+	assert.Equal(t, user, config.Contexts[exampleClusterID].AuthInfo)
+	assert.Len(t, config.AuthInfos, 1, "the prefixed user is removed")
+	assert.Empty(t, execEnvValue(t, config.AuthInfos[user], "ATMOS_AUTH_REALM"))
+
+	// Logout after an unreleased build wrote the prefixed entries again.
+	require.NoError(t, newSourcedGKEIntegration(t, path, autoRealm, realm.SourceConfig).Execute(t.Context(), exampleGCPCredentials()))
+	require.NoError(t, integration.Cleanup(t.Context()))
+	_, err = os.Stat(path)
+	assert.True(t, os.IsNotExist(err), "every entry is owned by the integration, so the file is removed")
+}

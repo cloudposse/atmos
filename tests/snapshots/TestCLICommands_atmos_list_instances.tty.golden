@@ -1,8 +1,8 @@
 ]11;?\[6n
- [1;38;5;72mComponent    [0m  [1;38;5;72mStack[0m
-[38;5;59m───────────────[0m[38;5;59m─────────[0m
- mock/disabled  nonprod
- mock/drift     nonprod
- mock/drift     prod
- mock/nodrift   nonprod
- mock/nodrift   prod
+ [1;38;5;72mComponent    [0m  [1;38;5;72mStack  [0m  [1;38;5;72mType     [0m  [1;38;5;72mEngine[0m
+[38;5;59m───────────────[0m[38;5;59m─────────[0m[38;5;59m───────────[0m[38;5;59m──────────[0m
+ mock/disabled  nonprod  terraform  opentofu
+ mock/drift     nonprod  terraform  opentofu
+ mock/drift     prod     terraform  opentofu
+ mock/nodrift   nonprod  terraform  opentofu
+ mock/nodrift   prod     terraform  opentofu

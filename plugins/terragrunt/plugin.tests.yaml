@@ -1,0 +1,282 @@
+version: 1
+steps:
+  - name: native-unit-tests
+    type: script
+    interpreter: starlark
+    script: |
+      exec.run(["go", "test", "-p=2", "./..."])
+      exec.run(["go", "test", "-p=2", "./..."], working_directory=fs.resolve("bridge"))
+  - name: affected-revisions
+    type: script
+    interpreter: starlark
+    script: |
+      affected = module.load("scripts/affected.star")
+      affected.main()
+  - name: installed-release
+    type: script
+    interpreter: starlark
+    script: |
+      release = module.load("scripts/release.star")
+      release.main()
+integration:
+  - name: native-lifecycle
+    type: script
+    source: scripts/native.star
+  - name: hooks-and-extra-arguments
+    type: script
+    interpreter: starlark
+    script: |
+      lifecycle = module.load("scripts/lifecycle_extended.star")
+      lifecycle.hooks()
+  - name: saved-plan
+    type: script
+    interpreter: starlark
+    script: |
+      lifecycle = module.load("scripts/lifecycle_extended.star")
+      lifecycle.saved_plan()
+  - name: state-and-output-integration
+    type: script
+    interpreter: starlark
+    script: |
+      lifecycle = module.load("scripts/lifecycle_extended.star")
+      lifecycle.state_and_outputs()
+  - name: git-source-refresh
+    type: script
+    interpreter: starlark
+    script: |
+      lifecycle = module.load("scripts/lifecycle_extended.star")
+      lifecycle.git_source_refresh()
+  - name: local-source-refresh
+    type: script
+    interpreter: starlark
+    script: |
+      lifecycle = module.load("scripts/lifecycle_extended.star")
+      lifecycle.local_source_refresh()
+  - name: imports-and-discovery
+    type: script
+    interpreter: starlark
+    script: |
+      imports = module.load("scripts/imports.star")
+      imports.imports_and_discovery()
+  - name: stack-overrides
+    type: script
+    interpreter: starlark
+    script: |
+      imports = module.load("scripts/imports.star")
+      imports.stack_overrides()
+  - name: stack-pinned-tools
+    type: script
+    interpreter: starlark
+    script: |
+      imports = module.load("scripts/imports.star")
+      imports.stack_pinned_tools()
+  - name: diagnostics
+    type: script
+    interpreter: starlark
+    script: |
+      diagnostics = module.load("scripts/diagnostics.star")
+      diagnostics.diagnostics()
+  - name: settings-repair
+    type: script
+    interpreter: starlark
+    script: |
+      diagnostics = module.load("scripts/diagnostics.star")
+      diagnostics.settings_repair()
+  - name: saved-plan-lifecycle
+    type: script
+    interpreter: starlark
+    script: |
+      hardening = module.load("scripts/hardening.star")
+      hardening.saved_plan_lifecycle()
+  - name: local-source-stability
+    type: script
+    interpreter: starlark
+    script: |
+      hardening = module.load("scripts/hardening.star")
+      hardening.local_source_stability()
+  - name: generation-lifecycle
+    type: script
+    interpreter: starlark
+    script: |
+      hardening = module.load("scripts/hardening.star")
+      hardening.generation_lifecycle()
+  - name: state-identity-warning
+    type: script
+    interpreter: starlark
+    script: |
+      hardening = module.load("scripts/hardening.star")
+      hardening.cache_state_warning()
+  - name: hook-semantics
+    type: script
+    interpreter: starlark
+    script: |
+      hardening = module.load("scripts/hardening.star")
+      hardening.hook_semantics()
+  - name: pinned-tools
+    type: script
+    interpreter: starlark
+    script: |
+      hardening = module.load("scripts/hardening.star")
+      hardening.pinned_tools()
+  - name: state-encryption
+    type: script
+    interpreter: starlark
+    script: |
+      identity = module.load("scripts/identity_sources.star")
+      identity.state_encryption()
+  - name: disable-init
+    type: script
+    interpreter: starlark
+    script: |
+      identity = module.load("scripts/identity_sources.star")
+      identity.disable_init()
+  - name: registry-sources
+    type: script
+    interpreter: starlark
+    script: |
+      identity = module.load("scripts/identity_sources.star")
+      identity.registry_sources()
+  - name: iam-role
+    type: script
+    interpreter: starlark
+    script: |
+      identity = module.load("scripts/identity_sources.star")
+      identity.iam_role()
+  - name: semantics-features
+    type: script
+    interpreter: starlark
+    script: |
+      semantics = module.load("scripts/semantics.star")
+      semantics.features()
+  - name: semantics-terraform-binary
+    type: script
+    interpreter: starlark
+    script: |
+      semantics = module.load("scripts/semantics.star")
+      semantics.terraform_binary()
+  - name: semantics-errors-block
+    type: script
+    interpreter: starlark
+    script: |
+      semantics = module.load("scripts/semantics.star")
+      semantics.errors_block()
+  - name: semantics-exclude-block
+    type: script
+    interpreter: starlark
+    script: |
+      semantics = module.load("scripts/semantics.star")
+      semantics.exclude_block()
+  - name: semantics-lifecycle-hooks
+    type: script
+    interpreter: starlark
+    script: |
+      semantics = module.load("scripts/semantics.star")
+      semantics.lifecycle_hooks()
+  - name: semantics-tflint-hook
+    type: script
+    interpreter: starlark
+    script: |
+      semantics = module.load("scripts/semantics.star")
+      semantics.tflint_hook()
+  - name: values-exact-and-sensitive
+    type: script
+    interpreter: starlark
+    script: |
+      values = module.load("scripts/values_logging.star")
+      values.values()
+  - name: logging-through-atmos
+    type: script
+    interpreter: starlark
+    script: |
+      values = module.load("scripts/values_logging.star")
+      values.logging()
+  - name: warnings-once
+    type: script
+    interpreter: starlark
+    script: |
+      values = module.load("scripts/values_logging.star")
+      values.warnings_once()
+  - name: aws-identity-in-plugin
+    type: script
+    interpreter: starlark
+    script: |
+      values = module.load("scripts/values_logging.star")
+      values.aws_identity()
+  - name: provider-flags-help
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.help_lists_provider_flags()
+  - name: provider-flags-features
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.feature_flags()
+  - name: provider-flags-saved-plan
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.saved_plan_identity()
+  - name: executable-invocation
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.executable_invocation()
+  - name: executable-flags-and-config
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.executable_flags_and_config()
+  - name: executable-ordering
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.executable_ordering()
+  - name: executable-consumers
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.executable_consumers()
+  - name: executable-failures
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.executable_failures()
+  - name: executable-requirements
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.executable_requirements()
+  - name: executable-real-terragrunt
+    type: script
+    interpreter: starlark
+    script: |
+      modes = module.load("scripts/modes.star")
+      modes.real_terragrunt()
+  - name: pro-cross-runner-saved-plan
+    type: script
+    interpreter: starlark
+    script: |
+      pro = module.load("scripts/pro.star")
+      pro.restored_plan_is_applied_on_another_runner()
+  - name: pro-relocated-checkout-saved-plan
+    type: script
+    interpreter: starlark
+    script: |
+      pro = module.load("scripts/pro.star")
+      pro.relocated_checkout_restores_relative_workdir_plan()
+  - name: pro-deploy-verifies-stored-plan
+    type: script
+    interpreter: starlark
+    script: |
+      pro = module.load("scripts/pro.star")
+      pro.deploy_applies_after_verifying_the_stored_plan()

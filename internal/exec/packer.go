@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -81,6 +82,10 @@ func ExecutePacker(
 		if err != nil {
 			return err
 		}
+		if info.DryRun {
+			printHelmfilePreview(tenv.Resolve(info.Command), []string{info.SubCommand})
+			return nil
+		}
 		return ExecuteShellCommand(
 			atmosConfig,
 			tenv.Resolve(info.Command),
@@ -96,7 +101,7 @@ func ExecutePacker(
 	// AuthManager, inject the store auth resolver). Mirrors terraform (setupTerraformAuth)
 	// and helmfile (SetupComponentAuthForCLI). Without this, packer ran unauthenticated and
 	// its datasources failed with "No valid credential sources found".
-	authManager, err := SetupComponentAuthForCLI(&atmosConfig, info)
+	authManager, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, info)
 	if err != nil {
 		return err
 	}
@@ -149,7 +154,7 @@ func ExecutePacker(
 	if err != nil {
 		return err
 	}
-	if !componentPathExists {
+	if !componentPathExists && !component.DryRunDefersMissingPath(info) {
 		basePath, _ := u.GetComponentBasePath(&atmosConfig, componentTypePacker)
 		return fmt.Errorf(
 			"%w: '%s' points to the Packer component '%s', but it does not exist in '%s'",
@@ -301,6 +306,12 @@ func ExecutePacker(
 
 	log.Debug("Using ENV", "variables", envVars)
 
+	// With --dry-run, print the masked command that would run instead of running Packer.
+	if info.DryRun {
+		printHelmfilePreview(tenv.Resolve(info.Command), allArgsAndFlags)
+		return nil
+	}
+
 	// Resolve info.Command to the toolchain-installed binary (if any), mirroring
 	// the "version" subcommand branch above and the terraform/helmfile executors.
 	// Without this, a component-level `dependencies.tools.packer` constraint
@@ -308,10 +319,10 @@ func ExecutePacker(
 	// "executable file not found in $PATH", because exec.Command resolves the
 	// binary via the process's real PATH at call time, not via the PATH=...
 	// entry later added to envVars.
-	return executePackerCommandWithRetry(&atmosConfig, info, tenv, retryExecParams{
-		allArgsAndFlags: allArgsAndFlags,
-		componentPath:   componentPath,
-		envVars:         envVars,
+	return executePackerCommandWithRetry(&atmosConfig, info, tenv, terraformcomponent.RetryExecParams{
+		AllArgsAndFlags: allArgsAndFlags,
+		ComponentPath:   componentPath,
+		EnvVars:         envVars,
 	})
 }
 
@@ -326,9 +337,9 @@ func executePackerCommandWithRetry(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	tenv *dependencies.ToolchainEnvironment,
-	params retryExecParams,
+	params terraformcomponent.RetryExecParams,
 ) error {
-	return ExecuteShellCommandWithRetry(
+	return terraformcomponent.ExecuteShellCommandWithRetry(
 		atmosConfig,
 		info,
 		info.SubCommand,
@@ -336,9 +347,9 @@ func executePackerCommandWithRetry(
 			return executePackerShellCommand(
 				*atmosConfig,
 				tenv.Resolve(info.Command),
-				params.allArgsAndFlags,
-				params.componentPath,
-				params.envVars,
+				params.AllArgsAndFlags,
+				params.ComponentPath,
+				params.EnvVars,
 				info.DryRun,
 				info.RedirectStdErr,
 				o...,

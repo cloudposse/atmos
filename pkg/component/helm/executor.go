@@ -275,7 +275,7 @@ func prepareChartSpec(
 	ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo, operation Operation, componentPath string,
 ) (*chartSpec, error) {
-	spec, err := buildChartSpec(atmosConfig, info, componentPath)
+	spec, err := buildChartSpec(atmosConfig, info, componentPath, ctx.Flags)
 	if err != nil {
 		return nil, err
 	}

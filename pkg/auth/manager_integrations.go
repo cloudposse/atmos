@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -32,9 +33,11 @@ func resetProcessIntegrationCache() {
 // integrationTargetKey returns a canonical cache key for an integration.
 // For ECR integrations: "aws/ecr:<account_id>:<region>" — two configs pointing at the same
 // registry (e.g. a global + component-level duplicate) collapse to a single login.
-// For EKS integrations: "aws/eks:<cluster_name>:<region>" — same dedup logic for kubeconfig.
+// For EKS and GKE integrations: the cluster plus everything that shapes the kubeconfig entries
+// written (identity, alias, kubeconfig settings, explicit realm), so two identities for one cluster each write
+// their own kubeconfig user and only exact duplicates collapse.
 // All other integration types fall back to the config name to preserve existing behaviour.
-func integrationTargetKey(name string, cfg schema.Integration) string {
+func integrationTargetKey(name string, cfg schema.Integration, explicitRealm string) string {
 	switch cfg.Kind {
 	case integrations.KindAWSECR:
 		if cfg.Spec != nil && cfg.Spec.Registry != nil {
@@ -43,26 +46,63 @@ func integrationTargetKey(name string, cfg schema.Integration) string {
 	case integrations.KindAWSECRPublic:
 		// ECR Public is a single global registry — no account or region discriminator needed.
 		return integrations.KindAWSECRPublic
-	case integrations.KindAWSEKS:
-		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
-			return "aws/eks:" + cfg.Spec.Cluster.Name + ":" + cfg.Spec.Cluster.Region
-		}
-	case integrations.KindGCPGKE:
-		if cfg.Spec != nil && cfg.Spec.Cluster != nil {
-			return gkeIntegrationTargetKey(cfg)
+	case integrations.KindAWSEKS, integrations.KindGCPGKE:
+		if key, ok := clusterIntegrationTargetKey(cfg, explicitRealm); ok {
+			return key
 		}
 	}
 	return name
 }
 
-// gkeIntegrationTargetKey builds a cache key that includes GKE output behavior.
-func gkeIntegrationTargetKey(cfg schema.Integration) string {
+// clusterIntegrationTargetKey returns the dedupe key for an EKS or GKE integration that has a
+// cluster spec. The second result is false when the integration has no cluster spec.
+func clusterIntegrationTargetKey(cfg schema.Integration, explicitRealm string) (string, bool) {
+	if cfg.Spec == nil || cfg.Spec.Cluster == nil {
+		return "", false
+	}
+	if cfg.Kind == integrations.KindGCPGKE {
+		return gkeIntegrationTargetKey(cfg, explicitRealm), true
+	}
+	return eksIntegrationTargetKey(cfg, explicitRealm), true
+}
+
+// eksIntegrationTargetKey builds a cache key that includes the identity and
+// kubeconfig output behavior, because the EKS kubeconfig user name depends on
+// the identity and an explicitly configured realm. A derived realm does not
+// change the names, so it is not part of the key.
+func eksIntegrationTargetKey(cfg schema.Integration, explicitRealm string) string {
+	cluster := cfg.Spec.Cluster
+	values := url.Values{
+		"alias":  {cluster.Alias},
+		"name":   {cluster.Name},
+		"region": {cluster.Region},
+	}
+	if explicitRealm != "" {
+		values.Set("realm", explicitRealm)
+	}
+	if cfg.Via != nil {
+		values.Set("identity", cfg.Via.Identity)
+	}
+	if cluster.Kubeconfig != nil {
+		values.Set("mode", cluster.Kubeconfig.Mode)
+		values.Set("path", cluster.Kubeconfig.Path)
+		values.Set("update", cluster.Kubeconfig.Update)
+	}
+	return integrations.KindAWSEKS + ":" + values.Encode()
+}
+
+// gkeIntegrationTargetKey builds a cache key that includes GKE output behavior
+// and an explicitly configured realm.
+func gkeIntegrationTargetKey(cfg schema.Integration, explicitRealm string) string {
 	cluster := cfg.Spec.Cluster
 	values := url.Values{
 		"alias":    {cluster.Alias},
 		"location": {cluster.Location},
 		"name":     {cluster.Name},
 		"project":  {cluster.ProjectID},
+	}
+	if explicitRealm != "" {
+		values.Set("realm", explicitRealm)
 	}
 	if cfg.Via != nil {
 		values.Set("identity", cfg.Via.Identity)
@@ -101,7 +141,7 @@ func (m *manager) triggerIntegrations(ctx context.Context, identityName string, 
 	// than its config name so that duplicate entries from merged global+component configs that
 	// point to the same endpoint are collapsed to a single execution.
 	for _, integrationName := range linkedIntegrations {
-		cacheKey := integrationTargetKey(integrationName, m.config.Integrations[integrationName])
+		cacheKey := integrationTargetKey(integrationName, m.config.Integrations[integrationName], m.explicitIntegrationRealm())
 		if _, alreadyRan := processIntegrationCache.LoadOrStore(cacheKey, struct{}{}); alreadyRan {
 			log.Debug("Skipping already-executed integration", "integration", integrationName, "target", cacheKey)
 			continue
@@ -110,8 +150,28 @@ func (m *manager) triggerIntegrations(ctx context.Context, identityName string, 
 			// Non-fatal: evict the cache entry so a retry on the next command is possible.
 			processIntegrationCache.Delete(cacheKey)
 			log.Warn("Integration failed", "integration", integrationName, "error", err)
+			m.recordIntegrationFailure(fmt.Errorf(errUtils.ErrWrapWithNameFormat, err, integrationName))
 		}
 	}
+}
+
+// recordIntegrationFailure remembers a non-fatal integration failure for IntegrationFailures.
+func (m *manager) recordIntegrationFailure(err error) {
+	m.integrationFailuresMu.Lock()
+	defer m.integrationFailuresMu.Unlock()
+	m.integrationFailures = append(m.integrationFailures, err)
+}
+
+// IntegrationFailures returns the joined non-fatal integration failures recorded by this manager
+// (nil when none). Integration failures never fail authentication or EnsureIdentityEnvironment;
+// ambient credential brokers read them here so a failed mint is reported as a failed run and
+// retried on the short backoff instead of being treated as a success.
+func (m *manager) IntegrationFailures() error {
+	defer perf.Track(nil, "auth.Manager.IntegrationFailures")()
+
+	m.integrationFailuresMu.Lock()
+	defer m.integrationFailuresMu.Unlock()
+	return errors.Join(m.integrationFailures...)
 }
 
 // findIntegrationsForIdentity returns integration names that reference the given identity.
@@ -123,6 +183,10 @@ func (m *manager) findIntegrationsForIdentity(identityName string, autoProvision
 
 	// Resolve the identity's root provider once so integrations can bind via.provider.
 	rootProvider := m.resolveProviderForIdentity(identityName)
+	// Identity keys are built with strings.ToLower (see IdentityCaseMap), so match via.identity
+	// the same way. strings.EqualFold is deliberately not used: its Unicode case folding treats
+	// distinct identity keys such as "ops-σ" and "ops-ς" as equal.
+	identityKey := strings.ToLower(identityName)
 
 	var result []string
 	for name, integration := range m.config.Integrations {
@@ -132,7 +196,7 @@ func (m *manager) findIntegrationsForIdentity(identityName string, autoProvision
 
 		// An integration applies to this identity if it references the identity directly
 		// (via.identity) or binds to the identity's root provider (via.provider).
-		matchesIdentity := integration.Via.Identity != "" && integration.Via.Identity == identityName
+		matchesIdentity := integration.Via.Identity != "" && strings.ToLower(integration.Via.Identity) == identityKey
 		matchesProvider := integration.Via.Provider != "" && rootProvider != "" && integration.Via.Provider == rootProvider
 		if !matchesIdentity && !matchesProvider {
 			continue
@@ -214,9 +278,10 @@ func (m *manager) executeIntegration(ctx context.Context, integrationName string
 
 	// Create integration instance.
 	integration, err := integrations.Create(&integrations.IntegrationConfig{
-		Name:   integrationName,
-		Config: &integrationConfig,
-		Realm:  m.realm.Value,
+		Name:        integrationName,
+		Config:      &integrationConfig,
+		Realm:       m.realm.Value,
+		RealmSource: m.integrationRealmSource(),
 	})
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrIntegrationFailed, err)
@@ -278,9 +343,10 @@ func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string
 	// Create and execute the integration. CLI overrides are applied to a copy of
 	// the config so the shared integration config in m.config is never mutated.
 	integration, err := integrations.Create(&integrations.IntegrationConfig{
-		Name:   integrationName,
-		Config: applyIntegrationOverrides(integrationConfig, overrides),
-		Realm:  m.realm.Value,
+		Name:        integrationName,
+		Config:      applyIntegrationOverrides(integrationConfig, overrides),
+		Realm:       m.realm.Value,
+		RealmSource: m.integrationRealmSource(),
 	})
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrIntegrationFailed, err)
@@ -335,6 +401,10 @@ func applyIntegrationOverrides(config schema.Integration, overrides types.Integr
 func (m *manager) ExecuteIdentityIntegrations(ctx context.Context, identityName string) error {
 	defer perf.Track(nil, "auth.Manager.ExecuteIdentityIntegrations")()
 
+	// Resolve the name case-insensitively like Authenticate does, so --identity Pro-ID finds the
+	// configured pro-id. An unknown name is returned unchanged and reported as not found.
+	identityName = m.canonicalIdentityName(identityName)
+
 	// Verify the identity exists.
 	_, exists := m.config.Identities[identityName]
 	if !exists {
@@ -385,6 +455,8 @@ func (m *manager) ExecuteIdentityIntegrations(ctx context.Context, identityName 
 func (m *manager) RevokeEphemeralIntegrations(ctx context.Context, identityName string, globalDefault *bool) error {
 	defer perf.Track(nil, "auth.Manager.RevokeEphemeralIntegrations")()
 
+	// Resolve the name case-insensitively so integrations bound to the identity match.
+	identityName = m.canonicalIdentityName(identityName)
 	linkedIntegrations := m.findIntegrationsForIdentity(identityName, false)
 	if len(linkedIntegrations) == 0 {
 		return nil
@@ -409,9 +481,10 @@ func (m *manager) RevokeEphemeralIntegrations(ctx context.Context, identityName 
 		}
 
 		integration, err := integrations.Create(&integrations.IntegrationConfig{
-			Name:   integrationName,
-			Config: &integrationConfig,
-			Realm:  m.realm.Value,
+			Name:        integrationName,
+			Config:      &integrationConfig,
+			Realm:       m.realm.Value,
+			RealmSource: m.integrationRealmSource(),
 		})
 		if err != nil {
 			log.Warn("Failed to create integration for revoke", logKeyIntegration, integrationName, "error", err)

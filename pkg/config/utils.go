@@ -189,11 +189,11 @@ func FindAllStackConfigsInPaths(
 }
 
 func checkConfig(atmosConfig *schema.AtmosConfiguration, isProcessStack bool) error {
-	if isProcessStack && len(atmosConfig.Stacks.BasePath) < 1 {
+	if isProcessStack && len(atmosConfig.Stacks.BasePath) < 1 && !atmosConfig.HasComponentDiscovery() {
 		return errUtils.ErrStackBasePathMissing
 	}
 
-	if isProcessStack && len(atmosConfig.Stacks.IncludedPaths) < 1 {
+	if isProcessStack && len(atmosConfig.Stacks.IncludedPaths) < 1 && !atmosConfig.HasComponentDiscovery() {
 		return errUtils.ErrStackIncludedPathsMissing
 	}
 

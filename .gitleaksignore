@@ -5,5 +5,16 @@
 pkg/io/masker_test.go:private-key:272
 pkg/component/helm/secret_values_integration_test.go:private-key:25
 website/docs/cli/commands/azure/azure-aks-token.mdx:generic-api-key:84
+# Vendored saml2aws tests: a fake password used to prove secrets never reach the logs, and
+# assignments of the u2fPollInterval test timing variable (a variable name, not a key).
+pkg/auth/providers/aws/saml2aws/provider/http_test.go:generic-api-key:322
+pkg/auth/providers/aws/saml2aws/provider/okta/okta_webauthn_test.go:generic-api-key:170
+pkg/auth/providers/aws/saml2aws/provider/okta/okta_webauthn_test.go:generic-api-key:171
+pkg/auth/providers/aws/saml2aws/provider/okta/okta_webauthn_test.go:generic-api-key:172
 pkg/component/helm/secret_values_integration_test.go:private-key:25
 pkg/io/masker_test.go:private-key:272
+# A fake GitHub token in the auth env JSON test (commit 09d5b5a963); the test now builds it by
+# concatenation, but the earlier commit's diff still contains the literal.
+pkg/env/output_test.go:github-oauth:209
+# A fake Docker auth value (base64 of user:token) in the bind-mount config test.
+pkg/auth/cloud/docker/config_inplace_test.go:generic-api-key:40

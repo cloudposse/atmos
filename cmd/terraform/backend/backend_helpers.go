@@ -5,6 +5,7 @@ package backend
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -12,6 +13,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // ConfigInitializer abstracts configuration and auth initialization for testability.
@@ -149,6 +151,7 @@ func InitConfigAndAuth(component, stack, identity string, componentPrompted, sta
 		ProcessYamlFunctions: false,
 		Skip:                 nil,
 		AuthManager:          nil, // Don't need auth to describe component
+		AuthDisabled:         true,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load component config: %w", err)
@@ -190,16 +193,56 @@ func InitConfigAndAuth(component, stack, identity string, componentPrompted, sta
 
 // CreateDescribeComponentFunc creates a describe component function with the given authManager.
 func CreateDescribeComponentFunc(authManager auth.AuthManager) func(string, string) (map[string]any, error) {
+	return createDescribeComponentFunc(nil, authManager)
+}
+
+// createDescribeComponentFunc resolves only backend environment references after authentication.
+// Other functions remain deferred: provisioning a backend must not require its own state.
+func createDescribeComponentFunc(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) func(string, string) (map[string]any, error) {
 	return func(component, stack string) (map[string]any, error) {
-		return e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		effectiveConfig := atmosConfig
+		config, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
 			Component:            component,
 			Stack:                stack,
 			ProcessTemplates:     false,
 			ProcessYamlFunctions: false,
 			Skip:                 nil,
 			AuthManager:          authManager,
+			AuthDisabled:         authManager == nil,
 		})
+		if err != nil {
+			return nil, err
+		}
+		if effectiveConfig == nil {
+			loaded, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{ComponentFromArg: component, Stack: stack}, false)
+			if err != nil {
+				return nil, err
+			}
+			effectiveConfig = &loaded
+		}
+		return resolveBackendEnvironment(effectiveConfig, config, component, stack)
 	}
+}
+
+func resolveBackendEnvironment(atmosConfig *schema.AtmosConfiguration, config map[string]any, component, stack string) (map[string]any, error) {
+	// Use the normal evaluator so explicit-tag provenance, edition policy, defaults,
+	// and component-env precedence remain the same as other stack consumers.
+	skip := make([]string, 0, len(u.AtmosYamlTags))
+	for _, tag := range u.AtmosYamlTags {
+		if tag != u.AtmosYamlFuncEnv {
+			skip = append(skip, strings.TrimPrefix(tag, "!"))
+		}
+	}
+	env, _ := config[cfg.EnvSectionName].(map[string]any)
+	info := &schema.ConfigAndStacksInfo{ComponentFromArg: component, Stack: stack, ComponentEnvSection: env}
+	backend, err := e.ProcessCustomYamlTags(atmosConfig, schema.AtmosSectionMapType{
+		"backend": config["backend"], "backend_type": config["backend_type"],
+	}, stack, skip, info)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve backend environment: %w", err)
+	}
+	config["backend"], config["backend_type"] = backend["backend"], backend["backend_type"]
+	return config, nil
 }
 
 // executeProvisionCommandWithValues is the internal implementation that accepts already-parsed values.
@@ -220,19 +263,9 @@ func executeProvisionCommandWithValues(component, stack, identity string, prompt
 		return err
 	}
 
-	// Create describe component callback.
-	// Note: We don't need to pass authContext to the describe function for backend provisioning
-	// since we already loaded the component config in InitConfigAndAuth.
-	describeFunc := func(component, stack string) (map[string]any, error) {
-		return e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
-			Component:            component,
-			Stack:                stack,
-			ProcessTemplates:     false,
-			ProcessYamlFunctions: false,
-			Skip:                 nil,
-			AuthManager:          nil, // Auth already handled.
-		})
-	}
+	// Authentication is already complete. Only environment references are evaluated;
+	// the selected auth context is passed directly to the backend provisioner below.
+	describeFunc := createDescribeComponentFunc(atmosConfig, nil)
 
 	// Execute provision command using injected provisioner.
 	return prov.CreateBackend(&CreateBackendParams{
@@ -263,7 +296,7 @@ func executeDeleteCommandWithValues(component, stack, identity string, force boo
 	}
 
 	// Create describe component callback.
-	describeFunc := CreateDescribeComponentFunc(nil) // Auth already handled in InitConfigAndAuth.
+	describeFunc := createDescribeComponentFunc(atmosConfig, nil)
 
 	// Execute delete command using injected provisioner.
 	return prov.DeleteBackend(&DeleteBackendParams{

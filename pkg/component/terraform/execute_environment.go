@@ -1,0 +1,660 @@
+package terraform
+
+import (
+	"bytes"
+	"encoding/json"
+	errors "errors"
+	fmt "fmt"
+	os "os"
+	filepath "path/filepath"
+	runtime "runtime"
+	slices "slices"
+	sort "sort"
+	strconv "strconv"
+	strings "strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	auth "github.com/cloudposse/atmos/pkg/auth"
+	component "github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	dependencies "github.com/cloudposse/atmos/pkg/dependencies"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	perf "github.com/cloudposse/atmos/pkg/perf"
+	schema "github.com/cloudposse/atmos/pkg/schema"
+	store "github.com/cloudposse/atmos/pkg/store"
+	authbridge "github.com/cloudposse/atmos/pkg/store/authbridge"
+	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
+	rc "github.com/cloudposse/atmos/pkg/terraform/rc"
+	tfvars "github.com/cloudposse/atmos/pkg/terraform/tfvars"
+)
+
+const (
+	// Process executable search path variable.
+	envPath = "PATH"
+	// Separator between the name and the value in a KEY=value environment entry.
+	envAssign = "="
+)
+
+// warnOnConflictingEnvVars inspects the current process environment for variables
+// that are known to interfere with Atmos's management of Terraform, and emits a
+// warning when any are detected.
+func warnOnConflictingEnvVars() {
+	warnOnExactVars := []string{"TF_CLI_ARGS", "TF_WORKSPACE"}
+	warnOnPrefixVars := []string{"TF_VAR_", "TF_CLI_ARGS_"}
+
+	var problematicVars []string
+	for _, envVar := range os.Environ() {
+		parts := strings.SplitN(envVar, envAssign, 2)
+		if len(parts) != 2 {
+			continue
+		}
+		if slices.Contains(warnOnExactVars, parts[0]) {
+			problematicVars = append(problematicVars, parts[0])
+			continue
+		}
+		for _, prefix := range warnOnPrefixVars {
+			if strings.HasPrefix(parts[0], prefix) {
+				problematicVars = append(problematicVars, parts[0])
+				break
+			}
+		}
+	}
+
+	if len(problematicVars) > 0 {
+		log.Warn("Detected environment variables that may interfere with Atmos's control of Terraform",
+			"variables", problematicVars)
+	}
+}
+
+// assembleComponentEnvVars builds the complete list of environment variables for
+// the terraform subprocess.  It combines the component env section, standard Atmos
+// variables (ATMOS_CLI_CONFIG_PATH, ATMOS_BASE_PATH, TF_IN_AUTOMATION), the
+// TF_APPEND_USER_AGENT value, the plugin-cache env, and any toolchain PATH overrides.
+func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, tenv *dependencies.ToolchainEnvironment) error {
+	// Convert ComponentEnvSection (set by auth hooks and stack config) to a list.
+	for k, v := range info.ComponentEnvSection {
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("%s=%v", k, v))
+	}
+
+	info.ComponentEnvList = append(info.ComponentEnvList,
+		fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
+
+	basePath, err := filepath.Abs(atmosConfig.BasePath)
+	if err != nil {
+		return err
+	}
+	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
+
+	// Suppress verbose Terraform instructions in automated environments.
+	// https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_in_automation
+	info.ComponentEnvList = append(info.ComponentEnvList, "TF_IN_AUTOMATION=true")
+
+	// Precedence: OS env > atmos.yaml > default (empty/omitted).
+	appendUserAgent := atmosConfig.Components.Terraform.AppendUserAgent
+	if envUA, exists := os.LookupEnv("TF_APPEND_USER_AGENT"); exists && envUA != "" {
+		appendUserAgent = envUA
+	}
+	if appendUserAgent != "" {
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_APPEND_USER_AGENT=%s", appendUserAgent))
+	}
+
+	// Plugin cache directory.
+	info.ComponentEnvList = append(info.ComponentEnvList, configurePluginCache(atmosConfig)...)
+
+	// Terraform CLI configuration (.terraformrc) rendered by Atmos and exposed via
+	// TF_CLI_CONFIG_FILE / TOFU_CLI_CONFIG_FILE. Also the injection point for the
+	// registry cache's network_mirror/host directives. The cleanup closer is stashed
+	// on info and run (deferred) after the whole terraform pipeline so the temp file
+	// survives every subprocess (init, workspace, plan/apply).
+	if err := configureTerraformRC(atmosConfig, info); err != nil {
+		return err
+	}
+
+	// Toolchain PATH must come last so it takes precedence over all other PATH entries.
+	if tenv != nil {
+		info.ComponentEnvList = append(info.ComponentEnvList, toolchainPathEnv(info, tenv)...)
+	}
+
+	if len(info.ComponentEnvList) > 0 {
+		log.Debug("Using ENV vars:")
+		for _, v := range info.ComponentEnvList {
+			log.Debug(v)
+		}
+	}
+
+	return appendTerraformSecretEnv(info)
+}
+
+// toolchainPathEnv returns the PATH entry that puts the toolchain directories first.
+//
+// The toolchain PATH is built from the host process PATH. A PATH selected for this component
+// (the stack or component env section, or the identity's sanitized environment) must not be
+// discarded by it, so the toolchain directories are prepended to that PATH instead. Without a
+// component-specific PATH this is exactly the toolchain PATH.
+func toolchainPathEnv(info *schema.ConfigAndStacksInfo, tenv *dependencies.ToolchainEnvironment) []string {
+	return toolchainPathEnvForGOOS(info, tenv, runtime.GOOS)
+}
+
+// toolchainPathEnvForGOOS is toolchainPathEnv parameterized by GOOS so the Windows
+// case-insensitive PATH name (Path, PATH) can be unit-tested from any host platform.
+func toolchainPathEnvForGOOS(info *schema.ConfigAndStacksInfo, tenv *dependencies.ToolchainEnvironment, goos string) []string {
+	if tenv.PATH() == "" {
+		return tenv.EnvVars()
+	}
+	selected, ok := lastEnvListValue(info.ComponentEnvList, envPath, goos)
+	if !ok {
+		selected, ok = lastEnvListValue(info.SanitizedEnv, envPath, goos)
+	}
+	if !ok {
+		return tenv.EnvVars()
+	}
+	return []string{envPath + envAssign + tenv.PrependToPath(selected)}
+}
+
+// envNamesEqual reports whether two environment variable names are the same variable on goos.
+// Windows names are case-insensitive; every other platform compares them exactly.
+func envNamesEqual(a, b, goos string) bool {
+	if goos == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
+// lastEnvListValue returns the value of the last KEY=value entry for key; later entries win.
+// Names compare case-insensitively on Windows only.
+func lastEnvListValue(list []string, key, goos string) (string, bool) {
+	value, found := "", false
+	for _, entry := range list {
+		if k, v, ok := strings.Cut(entry, envAssign); ok && envNamesEqual(k, key, goos) {
+			value, found = v, true
+		}
+	}
+	return value, found
+}
+
+// configureTerraformRC builds the effective Terraform CLI-config map from the
+// user's components.terraform.rc plus any registry-cache contribution (network
+// mirror + module host overrides), renders it to a temp file, and appends
+// TF_CLI_CONFIG_FILE / TOFU_CLI_CONFIG_FILE. The cleanup closer is stashed on info
+// and deferred at the ExecuteTerraform level so the file outlives every subprocess.
+func configureTerraformRC(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	rcMap := map[string]any{}
+	var semanticMap map[string]any
+	var cacheIdentity string
+
+	if rcCfg := atmosConfig.Components.Terraform.RC; rcCfg != nil && rcCfg.Enabled {
+		for k, v := range rcCfg.Config {
+			// Deep-copy nested values: mergeCacheContribution mutates the "host" map in
+			// place, and a shallow copy would leak cache loopback overrides back into
+			// atmosConfig.Components.Terraform.RC.Config for later components/commands in
+			// the same process.
+			rcMap[k] = cloneRCValue(v)
+		}
+	}
+
+	if setup, ok := info.TerraformCache.(*tfcache.Setup); ok && setup != nil {
+		semanticMap = cloneRCValue(rcMap).(map[string]any)
+		contribution, identity := setup.FingerprintContribution()
+		mergeCacheContribution(semanticMap, contribution)
+		cacheIdentity = identity
+		mergeCacheContribution(rcMap, setup.Contribute())
+
+		// Make the terraform/tofu subprocess trust the proxy's self-signed cert.
+		trustEnv, err := setup.TrustEnv()
+		if err != nil {
+			return err
+		}
+		info.ComponentEnvList = append(info.ComponentEnvList, trustEnv...)
+	}
+
+	if len(rcMap) == 0 {
+		return nil
+	}
+
+	rcEnv, rcCleanup, err := rc.GenerateManaged(rcMap, semanticMap, cacheIdentity, atmosConfig, info)
+	if err != nil {
+		return err
+	}
+	info.ComponentEnvList = append(info.ComponentEnvList, rcEnv...)
+	info.RCCleanup = rcCleanup
+	return nil
+}
+
+// cleanupTerraformRC removes the temporary Terraform CLI config, if one was generated.
+// It reads info.RCCleanup when it runs, so callers can defer it before preparation.
+func cleanupTerraformRC(info *schema.ConfigAndStacksInfo) {
+	if info == nil || info.RCCleanup == nil {
+		return
+	}
+	if cleanupErr := info.RCCleanup(); cleanupErr != nil {
+		log.Debug("Failed to remove temporary Terraform CLI config", "error", cleanupErr)
+	}
+}
+
+// mergeCacheContribution merges the registry cache's CLI-config directives into
+// rcMap. The cache owns provider_installation (it must be the single network-mirror
+// egress); host overrides are merged per-host so user-declared hosts are preserved.
+func mergeCacheContribution(rcMap, contribution map[string]any) {
+	const hostKey = "host"
+	for key, value := range contribution {
+		if key != hostKey {
+			rcMap[key] = value
+			continue
+		}
+		add, _ := value.(map[string]any)
+		existing, _ := rcMap[hostKey].(map[string]any)
+		if existing == nil {
+			rcMap[hostKey] = add
+			continue
+		}
+		for host, services := range add {
+			existing[host] = services
+		}
+		rcMap[hostKey] = existing
+	}
+}
+
+// cloneRCValue deep-copies a CLI-config value so callers can mutate the result without
+// affecting the source. Maps and slices are cloned recursively; scalars are returned
+// as-is. This protects atmosConfig.Components.Terraform.RC.Config from in-place mutation
+// when the registry cache contribution is merged.
+func cloneRCValue(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, item := range val {
+			out[k] = cloneRCValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, item := range val {
+			out[i] = cloneRCValue(item)
+		}
+		return out
+	default:
+		return val
+	}
+}
+
+// appendTerraformSecretEnv adds secrets after environment logging to keep them out of logs.
+func appendTerraformSecretEnv(info *schema.ConfigAndStacksInfo) error {
+	// Inject secret-bearing variables as TF_VAR_<name> so they reach Terraform via the
+	// (transient) process environment instead of the on-disk varfile. Appended AFTER the
+	// debug dump above so secret values are never written to logs.
+	secretEnv, err := SecretVarEnv(info)
+	if err != nil {
+		return err
+	}
+	if len(secretEnv) > 0 {
+		info.ComponentEnvList = append(info.ComponentEnvList, secretEnv...)
+		log.Debug("Injecting secret variables as TF_VAR_* environment variables", "count", len(secretEnv))
+	}
+
+	testSecretEnv, err := terraformTestSecretVarEnv(info)
+	if err != nil {
+		return err
+	}
+	if len(testSecretEnv) > 0 {
+		info.ComponentEnvList = append(info.ComponentEnvList, testSecretEnv...)
+		log.Debug("Injecting secret Terraform test variables as TF_VAR_* environment variables", "count", len(testSecretEnv))
+	}
+
+	return nil
+}
+
+// resolveTerraformCommand sets info.Command from atmosConfig if not already set.
+// Falls back to the cfg.TerraformComponentType default when neither is configured.
+func resolveTerraformCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	if info.ComponentCommand != "" {
+		info.Command = info.ComponentCommand
+		return
+	}
+	if info.Command != "" {
+		return
+	}
+	if atmosConfig.Components.Terraform.Command != "" {
+		info.Command = atmosConfig.Components.Terraform.Command
+	} else {
+		info.Command = cfg.TerraformComponentType
+	}
+}
+
+// handleVersionSubcommand executes the `terraform version` command and returns the result.
+// It resolves the toolchain binary and delegates directly to the shell, bypassing
+// full stack processing.
+func (e *Executor) handleVersionSubcommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, baseOpts ...component.ExecutionOption) error {
+	tenv, err := dependencies.ForComponent(atmosConfig, "terraform", nil, nil)
+	if err != nil {
+		return err
+	}
+	return ExecuteShellCommandWithRetry(atmosConfig, info, "version", func(opts ...component.ExecutionOption) error {
+		return e.services.ExecuteShellCommand(
+			*atmosConfig,
+			tenv.Resolve(info.Command),
+			[]string{info.SubCommand},
+			"",
+			tenv.EnvVars(),
+			false,
+			info.RedirectStdErr,
+			opts...,
+		)
+	}, baseOpts...)
+}
+
+// admitBeforeAuth evaluates component admission policy. Policy admission must not
+// depend on valid credentials: a command that policy denies (for example, an agent
+// running destroy on production) fails here, before any identity is resolved or
+// logged in to.
+func (e *Executor) admitBeforeAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	if e.services.AdmitComponent == nil {
+		return nil
+	}
+	return e.services.AdmitComponent(atmosConfig, info, nil)
+}
+
+func (e *Executor) setupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+	// Log the identity-selection decision point for easy debugging.
+	log.Debug("Resolving auth config for component command",
+		"stack", info.Stack, "component", info.ComponentFromArg, "subcommand", info.SubCommand)
+
+	if err := e.admitBeforeAuth(atmosConfig, info); err != nil {
+		return nil, err
+	}
+
+	// Get merged auth config (global + component-specific if stack/component are set).
+	// getMergedAuthConfig logs on debug when falling back to global config after an error.
+	mergedAuthConfig, err := e.services.DefaultMergedAuthConfigGetter(atmosConfig, info)
+	if err != nil {
+		// Propagate ErrInvalidComponent directly — prevents an auth prompt for a nonexistent component.
+		if errors.Is(err, errUtils.ErrInvalidComponent) {
+			return nil, err
+		}
+		// Wrap unexpected errors (e.g. MergeComponentAuthFromConfig failures) with the sentinel
+		// to match the behaviour of createAndAuthenticateAuthManagerWithDeps. When the error names
+		// a missing identity, offer the same profile-selection prompt `atmos auth login` has.
+		return nil, e.services.ResolveIdentityConfigError(atmosConfig, info, err, errUtils.ErrInvalidAuthConfig)
+	}
+
+	// Create and authenticate the AuthManager using the same injectable creator as
+	// createAndAuthenticateAuthManagerWithDeps to keep injection points unified. Carry
+	// forward prompted component/stack so a later identity-not-found fallback inside
+	// Authenticate can re-inject them into a profile-fallback re-exec.
+	authManager, err := e.services.DefaultAuthManagerCreator(
+		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig, auth.ReExecContext{
+			Component:         info.ComponentFromArg,
+			ComponentPrompted: info.ComponentPrompted,
+			Stack:             info.Stack,
+			StackPrompted:     info.StackPrompted,
+		},
+	)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrUserAborted) {
+			errUtils.Exit(errUtils.ExitCodeSIGINT)
+		}
+		// Wrap auth creation failures with the sentinel to match createAndAuthenticateAuthManagerWithDeps.
+		// When the error names a missing identity, offer the same profile-selection prompt
+		// `atmos auth login` has.
+		return nil, e.services.ResolveIdentityConfigError(atmosConfig, info, err, errUtils.ErrFailedToInitializeAuthManager)
+	}
+
+	// Store manager for nested YAML functions (e.g. !terraform.state).
+	info.AuthManager = authManager
+
+	// The manager is created with its own empty stackInfo; thread the target stack
+	// through so emulator identities can resolve the running emulator's endpoint
+	// when stores (`!store`, `!secret`, hooks) build their in-process auth context.
+	// authManager may be nil when no identity/auth is configured.
+	if authManager != nil {
+		if si := authManager.GetStackInfo(); si != nil && si.Stack == "" {
+			si.Stack = info.Stack
+		}
+	}
+
+	e.injectTerraformStoreAuthResolver(atmosConfig, info, authManager)
+
+	return authManager, nil
+}
+
+func (e *Executor) injectTerraformStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, authManager auth.AuthManager) {
+	if authManager == nil {
+		return
+	}
+
+	// Persist the auto-detected identity so downstream hooks, nested operations,
+	// and stores without their own identity use the same authenticated principal.
+	e.services.StoreAutoDetectedIdentity(authManager, info)
+
+	resolver := authbridge.NewResolver(authManager, info)
+	defaultIdentity := resolveStoreDefaultIdentity(info.Identity, authManager)
+	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, defaultIdentity)
+
+	// Also expose the resolver to cloud-KMS SOPS providers so `!secret` resolution during terraform
+	// authenticates KMS decrypt as the component's effective identity (issue #2637).
+	atmosConfig.SecretsAuth = &store.SecretsAuthContext{
+		Resolver:        resolver,
+		DefaultIdentity: defaultIdentity,
+	}
+}
+
+func storeDefaultIdentity(identity string) string {
+	switch identity {
+	case "", cfg.IdentityFlagSelectValue, cfg.IdentityFlagDisabledValue:
+		return ""
+	default:
+		return identity
+	}
+}
+
+// resolveStoreDefaultIdentity returns the identity that stores without their own
+// `identity:` should authenticate as. An explicit `--identity`/`ATMOS_IDENTITY`
+// wins; otherwise we fall back to the stack's `default: true` identity so
+// in-process store/secret reads use the same principal (and emulator endpoint) as
+// the Terraform subprocess. When there is no default identity (or auth is
+// disabled), this returns "" — stores then use the AWS/GCP/Azure default
+// credential chain exactly as before (back-compat for ambient real-cloud creds).
+func resolveStoreDefaultIdentity(identity string, authManager auth.AuthManager) string {
+	if identity == cfg.IdentityFlagDisabledValue {
+		return ""
+	}
+	if explicit := storeDefaultIdentity(identity); explicit != "" {
+		return explicit
+	}
+	if authManager == nil {
+		return ""
+	}
+	defaultIdentity, err := authManager.GetDefaultIdentity(false)
+	if err != nil {
+		return ""
+	}
+	return defaultIdentity
+}
+
+// HookStoreDefaultIdentity resolves the identity that identity-less stores invoked by terraform
+// lifecycle hooks (e.g. the after-apply `store-outputs` hook) should inherit. It mirrors the main
+// terraform path (injectTerraformStoreAuthResolver): it auto-detects the active identity from the
+// auth manager's chain when info carries no explicit identity, then normalizes empty/select/disabled
+// to "" (meaning "no inheritance — keep ambient/default SDK credentials"). It returns "" when no auth
+// manager is present, preserving the prior behavior for runs without Atmos auth.
+//
+// The hook executes in a freshly loaded config (prepareHookContext), so it must re-derive this from
+// the persisted auth manager rather than relying on the apply-phase config.
+func (e *Executor) HookStoreDefaultIdentity(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo) string {
+	defer perf.Track(nil, "exec.HookStoreDefaultIdentity")()
+
+	if authManager == nil || info == nil {
+		return ""
+	}
+	e.services.StoreAutoDetectedIdentity(authManager, info)
+	return storeDefaultIdentity(info.Identity)
+}
+
+// SetupTerraformAuthForCLI exposes terraform auth setup to command-layer callers
+// that need the same merged-auth and explicit-identity behavior as ExecuteTerraform.
+func (e *Executor) SetupTerraformAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (any, error) {
+	defer perf.Track(atmosConfig, "exec.SetupTerraformAuthForCLI")()
+
+	return e.setupTerraformAuth(atmosConfig, info)
+}
+
+// SetupComponentAuthForCLI exposes the shared component auth setup to non-Terraform
+// command layers that still need authenticated YAML functions such as !terraform.state.
+func (e *Executor) SetupComponentAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+	defer perf.Track(atmosConfig, "exec.SetupComponentAuthForCLI")()
+
+	return e.setupTerraformAuth(atmosConfig, info)
+}
+
+// terraformVarEnvPrefix is the prefix Terraform and OpenTofu read variable values from the environment with.
+const terraformVarEnvPrefix = "TF_VAR_"
+
+// secretEnvForDeclaredTypes renders secret variables as TF_VAR_ entries, encoding each value for the way
+// Terraform reads it. Terraform parses a TF_VAR_ value as HCL when the variable is declared `any` or with a
+// complex type, and uses it as a literal when the variable is declared string, number, or bool, or has no
+// type. A value for an HCL-parsed variable is therefore written as an HCL literal whose strings use only HCL
+// escapes, with template sequences escaped so that the value is never interpreted as an interpolation, and
+// whose numbers keep their exact digits. Every other value is encoded by tfvars.SecretEnv.
+func secretEnvForDeclaredTypes(componentSection map[string]any, secret map[string]any) ([]string, error) {
+	plain := make(map[string]any, len(secret))
+	var literals []string
+	for name, value := range secret {
+		typeText, declared := TerraformDeclaredVarType(componentSection, name)
+		if declared && terraformParsesAsHCL(typeText) {
+			literal, err := encodeHCLLiteral(value)
+			if err != nil {
+				return nil, fmt.Errorf("%w: encoding secret variable %q for TF_VAR_ injection: %w", errUtils.ErrInvalidComponentVars, name, err)
+			}
+			literals = append(literals, terraformVarEnvPrefix+name+"="+literal)
+			continue
+		}
+		plain[name] = value
+	}
+	env, err := tfvars.SecretEnv(plain)
+	if err != nil {
+		return nil, err
+	}
+	return append(env, literals...), nil
+}
+
+// terraformParsesAsHCL reports whether Terraform parses a TF_VAR_ value for a variable declared with this type
+// as HCL rather than as a literal: every type except the primitives string, number, and bool.
+func terraformParsesAsHCL(typeText string) bool {
+	switch strings.TrimSpace(typeText) {
+	case "string", "number", "bool":
+		return false
+	default:
+		return true
+	}
+}
+
+const (
+	// The value of asciiControlLimit is the first printable ASCII code point; lower code points are control characters.
+	asciiControlLimit = 0x20
+	// The value of asciiDelete is the ASCII DEL control character.
+	asciiDelete = 0x7f
+)
+
+// quoteHCLString renders text as a quoted HCL string literal. Only the escapes HCL defines are used (JSON
+// also allows \b and \f, which HCL string literals do not), and `${` and `%{` are doubled so that the value
+// cannot start a template interpolation or directive.
+func quoteHCLString(text string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range escapeHCLTemplateText(text) {
+		switch {
+		case r == '"':
+			b.WriteString(`\"`)
+		case r == '\\':
+			b.WriteString(`\\`)
+		case r == '\n':
+			b.WriteString(`\n`)
+		case r == '\r':
+			b.WriteString(`\r`)
+		case r == '\t':
+			b.WriteString(`\t`)
+		case r < asciiControlLimit || r == asciiDelete:
+			fmt.Fprintf(&b, `\u%04X`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+// encodeHCLLiteral renders any secret value as an HCL expression that Terraform can parse from a TF_VAR_
+// environment value. Typed maps and slices are first normalized to generic JSON values, keeping numbers as
+// their exact text so that integers beyond 2^53 are not rounded through float64. Strings and object keys are
+// quoted with quoteHCLString.
+func encodeHCLLiteral(value any) (string, error) {
+	if text, isString := value.(string); isString {
+		return quoteHCLString(text), nil
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	var generic any
+	if err := decoder.Decode(&generic); err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	writeHCLLiteral(&b, generic)
+	return b.String(), nil
+}
+
+// writeHCLLiteral writes an already generic JSON value as an HCL expression with sorted object keys.
+func writeHCLLiteral(b *strings.Builder, value any) {
+	switch typed := value.(type) {
+	case nil:
+		b.WriteString("null")
+	case bool:
+		b.WriteString(strconv.FormatBool(typed))
+	case json.Number:
+		b.WriteString(typed.String())
+	case string:
+		b.WriteString(quoteHCLString(typed))
+	case map[string]any:
+		writeHCLObject(b, typed)
+	case []any:
+		writeHCLTuple(b, typed)
+	}
+}
+
+// writeHCLObject writes a generic JSON object as an HCL object with sorted keys.
+func writeHCLObject(b *strings.Builder, object map[string]any) {
+	keys := make([]string, 0, len(object))
+	for key := range object {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	b.WriteByte('{')
+	for i, key := range keys {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(quoteHCLString(key))
+		b.WriteByte(':')
+		writeHCLLiteral(b, object[key])
+	}
+	b.WriteByte('}')
+}
+
+// writeHCLTuple writes a generic JSON array as an HCL tuple.
+func writeHCLTuple(b *strings.Builder, items []any) {
+	b.WriteByte('[')
+	for i, child := range items {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		writeHCLLiteral(b, child)
+	}
+	b.WriteByte(']')
+}
+
+// escapeHCLTemplateText doubles `${` and `%{` so HCL does not start a template interpolation or directive.
+func escapeHCLTemplateText(text string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(text, "${", "$${"), "%{", "%%{")
+}

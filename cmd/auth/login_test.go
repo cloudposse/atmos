@@ -104,7 +104,7 @@ func TestAuthenticateIdentity_TagsDispatch(t *testing.T) {
 	defer ctrl.Finish()
 
 	viper.Set(authTagsViperKey, "admin")
-	t.Cleanup(func() { viper.Set(authTagsViperKey, "") })
+	t.Cleanup(func() { viper.Reset() })
 
 	mockAuthManager := authTypes.NewMockAuthManager(ctrl)
 	mockAuthManager.EXPECT().GetIdentities().Return(map[string]schema.Identity{

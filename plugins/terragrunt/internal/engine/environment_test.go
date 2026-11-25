@@ -1,0 +1,177 @@
+package engine
+
+import (
+	"context"
+	"encoding/json"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
+)
+
+func TestMain(m *testing.M) {
+	if runToolchainChild() {
+		os.Exit(0)
+	}
+	if os.Getenv("ATMOS_TERRAGRUNT_VERSION_TREE") != "" {
+		versionTreeHelper()
+		os.Exit(0)
+	}
+	if os.Getenv("ATMOS_TERRAGRUNT_VERSION_CHILD") != "" {
+		_, _ = os.Stdout.WriteString(os.Getenv("ATMOS_TERRAGRUNT_VERSION_CHILD"))
+		os.Exit(0)
+	}
+	// The effect child records its argument in ./effects and prints it, so tests can observe when
+	// run_cmd executes without depending on a platform shell.
+	if os.Getenv(effectChildEnv) == "1" && len(os.Args) > 1 {
+		text := os.Args[len(os.Args)-1]
+		file, err := os.OpenFile("effects", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if err != nil {
+			os.Exit(1)
+		}
+		_, _ = file.WriteString(text + "\n")
+		_ = file.Close()
+		_, _ = os.Stdout.WriteString(text)
+		os.Exit(0)
+	}
+	if os.Getenv("ATMOS_TERRAGRUNT_ENV_CHILD") == "1" {
+		cwd, _ := os.Getwd()
+		_ = json.NewEncoder(os.Stdout).Encode(map[string]string{"cwd": cwd, "profile": os.Getenv("AWS_PROFILE"), "token": os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE"), "custom": os.Getenv("CUSTOM_VALUE"), "path": os.Getenv("PATH")})
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+func TestEvaluatorUsesScopedEnvironmentForFunctionsAndCommands(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	module := filepath.Join(root, "module")
+	require.NoError(t, os.MkdirAll(bin, 0o755))
+	require.NoError(t, os.MkdirAll(module, 0o755))
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	content, err := os.ReadFile(executable)
+	require.NoError(t, err)
+	name := "fixture-environment-helper"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(bin, name), content, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, name), content, 0o755))
+	sourceJSON, err := json.Marshal(filepath.ToSlash(module))
+	require.NoError(t, err)
+	config := `terraform { source = ` + string(sourceJSON) + ` }
+inputs = {
+  direct = get_env("CUSTOM_VALUE")
+  child = jsondecode(run_cmd("` + name + `"))
+ relative = jsondecode(run_cmd("./` + name + `"))
+ directory = get_terragrunt_dir()
+}
+`
+	path := filepath.Join(root, "terragrunt.hcl")
+	require.NoError(t, os.WriteFile(path, []byte(config), 0o644))
+	t.Setenv("AWS_WEB_IDENTITY_TOKEN_FILE", "ambient-token-must-not-return")
+	t.Setenv("CUSTOM_VALUE", "ambient")
+	physical, err := filepath.EvalSymlinks(root)
+	require.NoError(t, err)
+	type outcome struct {
+		profile string
+		result  *model.Resolution
+		err     error
+	}
+	outcomes := make(chan outcome, 2)
+	var workers sync.WaitGroup
+	for _, profile := range []string{"development", "production"} {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			env := map[string]string{"PATH": bin, "AWS_PROFILE": profile, "CUSTOM_VALUE": profile, "ATMOS_TERRAGRUNT_ENV_CHILD": "1"}
+			result, err := Resolve(t.Context(), model.Request{Path: path, BasePath: root, Command: "plan", Tofu: executable, Environment: env})
+			outcomes <- outcome{profile: profile, result: result, err: err}
+		}()
+	}
+	workers.Wait()
+	close(outcomes)
+	for outcome := range outcomes {
+		require.NoError(t, outcome.err)
+		result, profile := outcome.result, outcome.profile
+		// get_terragrunt_dir() returns native separators, which are backslashes on Windows.
+		directory, isString := result.Inputs["directory"].(string)
+		require.True(t, isString)
+		require.Equal(t, filepath.Clean(physical), filepath.Clean(filepath.FromSlash(directory)))
+		require.Equal(t, profile, result.Inputs["direct"])
+		child := result.Inputs["child"].(map[string]any)
+		require.Equal(t, filepath.Clean(physical), filepath.Clean(child["cwd"].(string)))
+		require.Equal(t, child, result.Inputs["relative"])
+		require.Equal(t, profile, child["profile"])
+		require.Equal(t, profile, child["custom"])
+		require.Equal(t, "", child["token"])
+		require.Equal(t, bin, child["path"])
+		require.Equal(t, "ambient", os.Getenv("CUSTOM_VALUE"))
+		require.Equal(t, "ambient-token-must-not-return", os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE"))
+	}
+}
+
+// versionTreeHelper keeps stdout open in a descendant of the version wrapper.
+func versionTreeHelper() {
+	if os.Getenv("ATMOS_TERRAGRUNT_VERSION_TREE") == "wrapper" {
+		executable, _ := os.Executable()
+		child := exec.CommandContext(context.Background(), executable)
+		child.Env = append(os.Environ(), "ATMOS_TERRAGRUNT_VERSION_TREE=child")
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		_ = child.Run()
+		return
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		os.Exit(2)
+	}
+	defer listener.Close()
+	_ = os.WriteFile(os.Getenv("ATMOS_TERRAGRUNT_VERSION_READY"), []byte(listener.Addr().String()), 0o600)
+	// Bound the fixture itself so a broken cancellation implementation cannot leak forever.
+	time.Sleep(10 * time.Second)
+}
+
+func TestVersionProbeCancellationClosesDescendant(t *testing.T) {
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	ready := filepath.Join(t.TempDir(), "ready")
+	request := model.Request{Tofu: executable, Environment: map[string]string{
+		"ATMOS_TERRAGRUNT_VERSION_TREE": "wrapper", "ATMOS_TERRAGRUNT_VERSION_READY": ready,
+	}}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { result <- checkVersions(ctx, &request, ">= 1.0.0", "") }()
+	var address string
+	require.Eventually(t, func() bool {
+		data, err := os.ReadFile(ready)
+		address = string(data)
+		return err == nil && address != ""
+	}, 5*time.Second, 10*time.Millisecond)
+	connection, err := net.DialTimeout("tcp", address, time.Second)
+	require.NoError(t, err, "the descendant must be live before cancellation")
+	require.NoError(t, connection.Close())
+	cancel()
+	select {
+	case err := <-result:
+		require.Error(t, err)
+	case <-time.After(4 * time.Second):
+		t.Fatal("version probe did not return promptly after cancellation")
+	}
+	require.Eventually(t, func() bool {
+		connection, err := net.DialTimeout("tcp", address, 50*time.Millisecond)
+		if err == nil {
+			_ = connection.Close()
+		}
+		return err != nil
+	}, time.Second, 10*time.Millisecond, "version child survived cancellation")
+}

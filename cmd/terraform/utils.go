@@ -31,6 +31,7 @@ import (
 	citerraform "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/provideroptions"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -40,6 +41,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/proexec"
 	"github.com/cloudposse/atmos/pkg/provisioner"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -180,6 +182,11 @@ func preResolveInteractiveSelection(cmd_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	// The prompt discovers components, so it must see the same provider options RunE uses: a feature
+	// override can decide which dependencies an imported unit has.
+	if info.ComponentProviderOptions, err = provideroptions.Resolve(cmd_, viper.GetViper()); err != nil {
+		return err
+	}
 
 	// resolveAndPromptForArgs is a no-op when not interactive or when both values are
 	// already provided; otherwise it shows the component/stack pickers.
@@ -288,16 +295,17 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 	// failed"). Cobra skips PostRunE on error, so the success-path runHooks
 	// never runs — this is the only place user hooks see a failed operation.
 	// Errors here are advisory: never mask the original command error.
-	outcome := h.Outcome{Status: h.RunFailure, Err: cmdErr, ExitCode: errUtils.GetExitCode(cmdErr)}
+	outcome := terraformHookOutcome(event, cmdErr)
 	if err := runUserHooks(&hctx, event, cmd_, args, outcome); err != nil {
 		log.Warn("hook failed on error path", "error", err)
 	}
 
 	forceCIMode := resolveCIMode(cmd_.Flags())
 
-	// Extract the exit code from the command error. errUtils.GetExitCode unwraps
+	// The outcome's exit code comes from errUtils.GetExitCode, which unwraps
 	// the error chain (exec.ExitError, ExecError, exitCoder, etc.) and returns 1
 	// by default for non-nil errors with no attached code (e.g., auth failures).
+	// Normalize failed plan exit 2 for CI without changing the command error.
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
 		Event:        event,
 		AtmosConfig:  &hctx.atmosConfig,
@@ -305,10 +313,48 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 		Output:       output,
 		ForceCIMode:  forceCIMode,
 		CommandError: cmdErr,
-		ExitCode:     errUtils.GetExitCode(cmdErr),
+		ExitCode:     terraformCIExitCode(event, outcome),
 	}); err != nil {
 		log.Warn(ciHookFailedMsg, "error", err)
 	}
+}
+
+// terraformHookOutcome treats a detailed plan with changes as a successful operation.
+// The caller still returns the original exit status, and policy failures stay failures.
+func terraformHookOutcome(event h.HookEvent, commandErr error) h.Outcome {
+	if commandErr == nil {
+		return h.Outcome{Status: h.RunSuccess}
+	}
+	outcome := h.Outcome{Status: h.RunFailure, Err: commandErr, ExitCode: errUtils.GetExitCode(commandErr)}
+	if event.Normalize() != h.AfterTerraformPlan || outcome.ExitCode != 2 {
+		return outcome
+	}
+	// Exit 2 is the plan's own "changes present" status only when the plan subcommand produced it
+	// with -detailed-exitcode in effect, which the executor records with the DetailedPlanChangesError
+	// marker. An exit 2 from anything else (an authentication failure before Terraform ran, init,
+	// workspace selection, or a hook) is an ordinary failure.
+	if !errUtils.IsDetailedPlanChanges(commandErr) {
+		return outcome
+	}
+	var prerequisiteErr *errUtils.PrerequisiteError
+	if errors.As(commandErr, &prerequisiteErr) {
+		return outcome
+	}
+	for _, policyErr := range []error{errUtils.ErrPolicyInvalid, errUtils.ErrPolicyPlan, errUtils.ErrPolicyDenied, errUtils.ErrPolicyEvaluation, errUtils.ErrPolicyRequirements} {
+		if errors.Is(commandErr, policyErr) {
+			return outcome
+		}
+	}
+	return h.Outcome{Status: h.RunSuccess, ExitCode: outcome.ExitCode}
+}
+
+// terraformCIExitCode reserves plan exit 2 for changes, not prerequisite or policy failures.
+// Normalize only the CI status; callers retain the original error and scheduler exit code.
+func terraformCIExitCode(event h.HookEvent, outcome h.Outcome) int {
+	if event.Normalize() == h.AfterTerraformPlan && outcome.ExitCode == 2 && outcome.Status == h.RunFailure {
+		return 1
+	}
+	return outcome.ExitCode
 }
 
 // hookContext bundles the fully-resolved component info and Atmos config shared
@@ -335,6 +381,10 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 	// Honor a component chosen interactively in PreRunE so before-hooks resolve
 	// against the selected component (the stack comes from the persisted --stack flag).
 	applyPreResolvedComponent(&info)
+	// Hooks describe the component through discovery, which must see the provider options RunE uses.
+	if info.ComponentProviderOptions, err = provideroptions.Resolve(cmd_, viper.GetViper()); err != nil {
+		return hookContext{info: info}, err
+	}
 
 	if authCtx, authMgr := e.GetLastAuthContext(); authCtx != nil {
 		info.AuthContext = authCtx
@@ -464,15 +514,23 @@ func runUserHooks(hctx *hookContext, event h.HookEvent, cmd_ *cobra.Command, arg
 }
 
 func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, output string) error {
+	return runHooksWithResult(event, cmd_, args, output, nil)
+}
+
+// runHooksWithResult preserves detailed plan status while enforcing successful-operation hooks.
+func runHooksWithResult(event h.HookEvent, cmd_ *cobra.Command, args []string, output string, commandErr error) error {
 	hctx, err := prepareHookContext(cmd_, args)
 	if err != nil {
 		return err
 	}
 
 	// Success path: user hooks see a successful outcome (when: success / always).
-	if err := runUserHooks(&hctx, event, cmd_, args, h.Outcome{Status: h.RunSuccess}); err != nil {
-		return err
+	userErr := runUserHooks(&hctx, event, cmd_, args, terraformHookOutcome(event, commandErr))
+	if userErr != nil && commandErr == nil {
+		return userErr
 	}
+	// A detailed plan (exit 2) reaches here with a command error. A failing required user hook must
+	// still be returned, but only after the CI hooks publish the plan result.
 
 	// Check for --ci flag or CI environment variable. resolveCIMode reads
 	// directly from the Cobra flag first (not Viper) because pflags are only
@@ -490,23 +548,25 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 
 	// Run CI hooks based on component provider bindings.
 	// This is separate from user-defined hooks and runs automatically when CI is enabled.
-	// Success path: cmdErr is nil and exit code is 0.
+	// Preserve exit 2 for CI change detection, even though user hooks see success.
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
-		Event:       event,
-		AtmosConfig: &hctx.atmosConfig,
-		Info:        &hctx.info,
-		Output:      output,
-		ForceCIMode: forceCIMode,
+		Event:        event,
+		AtmosConfig:  &hctx.atmosConfig,
+		Info:         &hctx.info,
+		Output:       output,
+		ForceCIMode:  forceCIMode,
+		CommandError: commandErr,
+		ExitCode:     errUtils.GetExitCode(commandErr),
 	}); err != nil {
 		// A misconfigured provider (invalid API URL) fails the command; every other
 		// CI hook error is reported and the command result stands.
 		if errors.Is(err, errUtils.ErrInvalidURL) {
-			return err
+			return errors.Join(userErr, err)
 		}
 		log.Warn(ciHookFailedMsg, "error", err)
 	}
 
-	return nil
+	return userErr
 }
 
 // resolveVerifyPlanMode resolves the explicit planfile-verify override from the
@@ -1182,10 +1242,7 @@ func (n *terraformNodeHooks) AfterWithWriters(_ context.Context, info *schema.Co
 	// scheduler node, so its resolver must be restored before after-hooks use it.
 	injectHookStoreAuthResolver(&atmosConfig, info)
 
-	outcome := h.Outcome{Status: h.RunSuccess}
-	if execErr != nil {
-		outcome = h.Outcome{Status: h.RunFailure, Err: execErr, ExitCode: errUtils.GetExitCode(execErr)}
-	}
+	outcome := terraformHookOutcome(n.afterEvent, execErr)
 	hookErr := n.runUserHooksForNodeWithWriters(&atmosConfig, info, n.afterEvent, outcome, writers)
 
 	if !n.skipPerNodeCI {
@@ -1286,6 +1343,7 @@ func (n *terraformNodeHooks) runUserHooksForNodeWithWriters(atmosConfig *schema.
 // only logged, matching existing CI-hook behavior.
 func (n *terraformNodeHooks) runCIHooksForNode(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, rawOutput string, execErr error) {
 	forceCIMode := resolveCIMode(n.cmd.Flags())
+	outcome := terraformHookOutcome(n.afterEvent, execErr)
 
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
 		Event:        n.afterEvent,
@@ -1294,7 +1352,7 @@ func (n *terraformNodeHooks) runCIHooksForNode(atmosConfig *schema.AtmosConfigur
 		Output:       ansi.Strip(rawOutput),
 		ForceCIMode:  forceCIMode,
 		CommandError: execErr,
-		ExitCode:     errUtils.GetExitCode(execErr),
+		ExitCode:     terraformCIExitCode(n.afterEvent, outcome),
 	}); err != nil {
 		log.Warn(ciHookFailedMsg, logKeyComponent, info.Component, "error", err)
 	}
@@ -1792,6 +1850,10 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
 	// This fixes issue #1945: --all flag must be set before resolveAndPromptForArgs checks it.
 	applyOptionsToInfo(&info, opts)
+	// Provider options are validated here, before any discovery or preparation can start a plugin.
+	if info.ComponentProviderOptions, err = provideroptions.Resolve(actualCmd, viper.GetViper()); err != nil {
+		return err
+	}
 	applyFromPlanSelection(&info, actualCmd)
 
 	// Honor a component already chosen interactively in PreRunE (runBeforeHooks) so the
@@ -1968,6 +2030,9 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 	}
 
 	canonicalPlanPath := e.ConstructTerraformComponentPlanfilePath(&verifyAtmosConfig, info)
+	if workdirPath, ok := retainedWorkdirPlanfilePath(&verifyAtmosConfig, info); ok {
+		canonicalPlanPath = workdirPath
+	}
 	storedPlanPath := filepath.Join(filepath.Dir(canonicalPlanPath), planfile.StoredPlanPrefix+planfile.PlanFilename)
 	if _, statErr := os.Stat(storedPlanPath); statErr != nil {
 		// No stored planfile was downloaded. Whether that blocks the deploy is
@@ -1984,6 +2049,21 @@ func verifyStoredPlanForDeploy(subCommand string, info *schema.ConfigAndStacksIn
 	}
 
 	return verifyPlanfile(info, storedPlanPath, mode)
+}
+
+// retainedWorkdirPlanfilePath returns the plan file path inside the workdir of a workdir-enabled
+// component (every Terragrunt unit), where `plan` keeps its plan and the CI hooks store the
+// downloaded one. It derives the directory from configuration, so it works before anything is
+// provisioned on a fresh runner. It reports false for components without a workdir.
+func retainedWorkdirPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, bool) {
+	if !provWorkdir.IsWorkdirEnabled(info.ComponentSection) {
+		return "", false
+	}
+	workdir, _, err := component.BuildAndResolveWorkdirPath(atmosConfig, info, cfg.TerraformComponentType)
+	if err != nil {
+		return "", false
+	}
+	return filepath.Join(workdir, filepath.Base(e.ConstructTerraformComponentPlanfilePath(atmosConfig, info))), true
 }
 
 // handleUnconfiguredPlanfileStorage resolves a verification request that cannot be
@@ -2114,11 +2194,15 @@ func handlePromptError(err error, name string) error {
 // promptForComponent delegates to shared.PromptForComponent.
 // If stack is provided, filters components to only those in that stack.
 // Declared as a var so tests can stub the interactive prompt.
-var promptForComponent = shared.PromptForComponent
+var promptForComponent = func(cmd *cobra.Command, stack string) (string, error) {
+	return shared.PromptForComponent(cmd, stack)
+}
 
 // promptForStack delegates to shared.PromptForStack.
 // Declared as a var so tests can stub the interactive prompt.
-var promptForStack = shared.PromptForStack
+var promptForStack = func(cmd *cobra.Command, component string) (string, error) {
+	return shared.PromptForStack(cmd, component)
+}
 
 // enableHeatmapIfRequested checks os.Args for --heatmap flag and enables performance tracking.
 // This is needed because --heatmap must be detected before flag parsing occurs.

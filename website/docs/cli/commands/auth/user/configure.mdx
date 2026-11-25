@@ -149,6 +149,21 @@ This is useful when:
 - MFA device ARN is organization-standard
 - You want version-controlled authentication configuration
 
+## Credentials Stored by Older Versions
+
+Older Atmos versions stored realm-scoped credentials under the keyring key `atmos_<realm>_<identity>`. Current versions use `atmos_<realm>__<identity>` and copy old entries to the new key automatically when neither the realm nor the identity name contains `_` (or when the realm is the one Atmos derives from the `atmos.yaml` path). The old key is kept, so you can still go back to an older Atmos version without configuring the keys again. Removing the credentials (`atmos auth logout --keychain`) deletes both keys.
+
+When either name contains `_`, the old key is ambiguous: realm `acme` with identity `prod_admin` and realm `acme_prod` with identity `admin` both used `atmos_acme_prod_admin`. Atmos does not use such an entry on its own, because it could belong to the other realm. Instead, the first time an `aws/user` identity needs its keys and finds only the old entry:
+
+- **In an interactive terminal**, Atmos asks whether to use the entry for this identity. The question names the identity, the realm, the old keyring key, and the other realm and identity that could own it. The default answer is No.
+  - **Yes** moves the entry to the new key, removes the old key, and continues signing in. Choose Yes only if these are your keys for this identity in this realm.
+  - **No** leaves the keyring unchanged and fails with a hint to run `atmos auth user configure`. Atmos does not ask again during the same command.
+- **Without an interactive terminal** (CI, piped input or output, or `--interactive=false`), Atmos never asks. It fails with a hint that names the old key and tells you to run `atmos auth user configure`, or to re-run the command in a terminal to use the old entry.
+
+When browser sign-in is enabled for the identity (`webflow_enabled`, the default), Atmos still offers browser sign-in after a No or in a non-interactive session, as it does for any identity without stored keys.
+
+Running `atmos auth user configure` stores new keys under the new key, after which the question is not asked again.
+
 ## Session Duration Configuration
 
 The interactive command prompts for session duration, or you can configure it in YAML:

@@ -68,10 +68,25 @@ jobs:
           Path(os.environ["RUNNER_TEMP"], "lychee-ci.toml").write_text(config.replace(marker, marker + "\n" + pattern, 1))
           PYTHON
 
+      - name: Restore Lychee cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: .lycheecache
+          key: lychee-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: lychee-${{ runner.os }}-
+
       - name: Check links with lychee
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
         with:
-          args: --config ${{ runner.temp }}/lychee-ci.toml --root-dir ${{ github.workspace }} '**/*.md'
+          args: --config ${{ runner.temp }}/lychee-ci.toml --root-dir ${{ github.workspace }} --cache --max-cache-age 1d --cache-exclude-status '429,500..' '**/*.md'
           fail: true
           jobSummary: true
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Save successful responses even when another link fails, so reruns can reuse them.
+      - name: Save Lychee cache
+        if: always() && !cancelled()
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: .lycheecache
+          key: lychee-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"syscall"
 
 	"github.com/spf13/viper"
 
@@ -103,13 +104,16 @@ func StartInteractive(shellCommand string, shellArgs []string, env []string) err
 		return err
 	}
 
-	// Wait until the user exits the shell.
+	// Wait until the user exits the shell, keeping it in step with signals sent to
+	// Atmos (see superviseChild).
+	stopSupervision := superviseChild(proc, shellTerminationSignals)
 	state, err := proc.Wait()
+	stopSupervision()
 	if err != nil {
 		return err
 	}
 
-	exitCode := state.ExitCode()
+	exitCode := processExitCode(state)
 	log.Debug("Exited shell", "state", state.String(), "exitCode", exitCode)
 
 	// Propagate the shell's exit code.
@@ -118,4 +122,15 @@ func StartInteractive(shellCommand string, shellArgs []string, env []string) err
 	}
 
 	return nil
+}
+
+// processExitCode returns the exit status to propagate for a finished shell.
+// ProcessState.ExitCode() is -1 for a shell terminated by a signal, which the
+// process would report as 255, so the wait status is mapped with childExitCode
+// (128+N for a signal), the same mapping RunCommand uses for `auth exec`.
+func processExitCode(state *os.ProcessState) int {
+	if status, ok := state.Sys().(syscall.WaitStatus); ok {
+		return childExitCode(status)
+	}
+	return state.ExitCode()
 }

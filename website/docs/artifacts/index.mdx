@@ -1,0 +1,51 @@
+---
+title: Artifacts
+sidebar_label: Artifacts
+description: Publish and share versioned infrastructure artifacts with Atmos.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Publish, discover, and restore versioned files, Terraform components, and scaffolds across your infrastructure workflows. Atmos provides a common interface to local, S3, and OCI repositories.
+</Intro>
+
+<Experimental />
+
+## Get started
+
+Add a local repository to `atmos.yaml`:
+
+```yaml
+artifacts:
+  repositories:
+    local:
+      kind: local/dir
+      options:
+        path: ./.artifacts
+```
+
+Publish a directory, list its releases, and restore one:
+
+```shell
+atmos artifacts publish ./dist --repository=local --name=builds/app --version=build-123
+atmos artifacts list --repository=local
+atmos artifacts pull builds/app:build-123 --repository=local --output=./restore
+```
+
+Artifact references use an explicit `name:version` or an immutable digest. Repository aliases are defined in your configuration. See the [command guide](/cli/commands/artifacts/usage) for references, repository operations, and examples.
+
+## Share infrastructure artifacts
+
+Choose an [artifact kind](/cli/commands/artifacts/kinds) for the content: `files` for a file tree, `scaffold` for a scaffold template, or `component/terraform` for a Terraform root module. Use [`atmos scaffold publish`](/cli/commands/scaffold/publish) to publish a scaffold directly.
+
+Configure shared S3 or OCI repositories and Atmos authentication in the [artifacts configuration reference](/cli/configuration/artifacts). You can copy artifacts between repositories, inspect their metadata, and use signing and verification to check trust. Artifact operations also integrate with [workflows and CI reporting](/cli/commands/artifacts/usage#ci-summaries-and-outputs).
+
+## Explore further
+
+- [Artifacts command reference](/cli/commands/artifacts/usage)
+- [Repository configuration](/cli/configuration/artifacts)
+- [Artifact kinds](/cli/commands/artifacts/kinds)
+- [Publish artifacts](/cli/commands/artifacts/publish)
+- [Sign](/cli/commands/artifacts/sign) and [verify](/cli/commands/artifacts/verify) artifacts

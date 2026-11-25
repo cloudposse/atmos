@@ -637,6 +637,40 @@ func TestPromptMissingComponentAndStack_SetsPromptedFlags(t *testing.T) {
 	assert.False(t, preSupplied.StackPrompted, "command-line-supplied stack must not be flagged as prompted")
 }
 
+func TestInteractiveSelectionPassesProviderOptionsToDiscovery(t *testing.T) {
+	origInteractive, origSelect := isInteractiveFn, selectFromOptions
+	origDescribe, origInit := executeDescribeStacks, initCliConfig
+	t.Cleanup(func() {
+		isInteractiveFn, selectFromOptions = origInteractive, origSelect
+		executeDescribeStacks, initCliConfig = origDescribe, origInit
+	})
+
+	options := map[string]map[string]schema.ComponentProviderOption{
+		"terragrunt": {"feature": {}},
+	}
+	var seen int
+	initCliConfig = func(info schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+		assert.Equal(t, options, info.ComponentProviderOptions)
+		seen++
+		return schema.AtmosConfiguration{}, nil
+	}
+	isInteractiveFn = func() bool { return true }
+	executeDescribeStacks = func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+		return map[string]any{"dev": map[string]any{
+			"components": map[string]any{"terraform": map[string]any{"vpc": map[string]any{}}},
+		}}, nil
+	}
+	selectFromOptions = func(_ string, _ string, values []string) (string, error) { return values[0], nil }
+
+	cmd := &cobra.Command{Use: "plan"}
+	cmd.Flags().String("stack", "", "Stack")
+	info := &schema.ConfigAndStacksInfo{ComponentProviderOptions: options}
+	require.NoError(t, HandleInteractiveComponentStackSelection(info, cmd))
+	assert.Equal(t, "vpc", info.ComponentFromArg)
+	assert.Equal(t, "dev", info.Stack)
+	assert.Equal(t, 2, seen, "component and stack discovery must both receive the options")
+}
+
 func TestHandleInteractiveComponentStackSelectionPropagatesComponentPromptError(t *testing.T) {
 	// Force interactive mode and make the component picker's underlying stack
 	// enumeration fail, so PromptForComponent surfaces ErrLoadSelectionOptions

@@ -144,7 +144,7 @@ func TestExecuteLogoutOption_InvalidType(t *testing.T) {
 	defer ctrl.Finish()
 	m := authTypes.NewMockAuthManager(ctrl)
 
-	err := executeLogoutOption(context.Background(), m, logoutOption{typ: "bogus"}, false, false, false)
+	err := executeLogoutOption(context.Background(), m, logoutOption{typ: "bogus"}, logoutFlags{})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidLogoutOption)
 }
@@ -334,7 +334,7 @@ func TestExecuteLogoutOption_DispatchAll(t *testing.T) {
 	m.EXPECT().GetProviders().Return(map[string]schema.Provider{})
 	m.EXPECT().LogoutAll(gomock.Any(), gomock.Any()).Times(0)
 
-	err := executeLogoutOption(context.Background(), m, logoutOption{typ: "all"}, true, false, false)
+	err := executeLogoutOption(context.Background(), m, logoutOption{typ: "all"}, logoutFlags{dryRun: true})
 	require.NoError(t, err)
 }
 
@@ -353,7 +353,7 @@ func TestExecuteLogoutOption_DispatchIdentity(t *testing.T) {
 	m.EXPECT().GetFilesDisplayPath("aws-sso").Return("/atmos/creds")
 	m.EXPECT().Logout(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
-	err := executeLogoutOption(context.Background(), m, logoutOption{typ: "identity", target: "prod-admin"}, true, false, false)
+	err := executeLogoutOption(context.Background(), m, logoutOption{typ: "identity", target: "prod-admin"}, logoutFlags{dryRun: true})
 	require.NoError(t, err)
 }
 
@@ -370,7 +370,7 @@ func TestExecuteLogoutOption_DispatchProvider(t *testing.T) {
 	m.EXPECT().GetFilesDisplayPath("aws-sso").Return("/atmos/creds")
 	m.EXPECT().LogoutProvider(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
-	err := executeLogoutOption(context.Background(), m, logoutOption{typ: "provider", target: "aws-sso"}, true, false, false)
+	err := executeLogoutOption(context.Background(), m, logoutOption{typ: "provider", target: "aws-sso"}, logoutFlags{dryRun: true})
 	require.NoError(t, err)
 }
 

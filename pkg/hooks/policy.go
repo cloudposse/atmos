@@ -116,9 +116,15 @@ func operationPolicyRequest(run *hookRunContext, snapshot *policy.CISnapshot) (*
 }
 
 // Detailed-exitcode 2 is a successful Terraform plan with changes, even when the
-// CLI preserves it as a nonzero exit. Never reinterpret a policy gate error.
+// CLI preserves it as a nonzero exit. Never reinterpret a policy gate error, and
+// never an exit 2 the plan subprocess did not return (for example an
+// authentication failure before Terraform ran): only the executor's
+// DetailedPlanChangesError marker identifies the plan's own status.
 func policyOperationStatus(run *hookRunContext) RunStatus {
 	if run.event.Normalize() != AfterTerraformPlan || run.outcome.ExitCode != 2 {
+		return run.outcome.Status
+	}
+	if !errUtils.IsDetailedPlanChanges(run.outcome.Err) {
 		return run.outcome.Status
 	}
 	for _, sentinel := range []error{errUtils.ErrPolicyInvalid, errUtils.ErrPolicyPlan, errUtils.ErrPolicyDenied, errUtils.ErrPolicyEvaluation, errUtils.ErrPolicyRequirements} {

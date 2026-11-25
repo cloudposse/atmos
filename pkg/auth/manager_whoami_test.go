@@ -114,3 +114,34 @@ func TestManager_Authenticate_Ambient_Standalone(t *testing.T) {
 		assert.Nil(t, info.Credentials, "generic ambient identity does not manage credentials")
 	})
 }
+
+// TestManager_Whoami_AmbientIdentityIsMarkedAmbient reproduces the 1.235.0 upgrade
+// regression where `atmos auth whoami` exited 1 for a generic ambient identity: the
+// identity mints no credentials by design, so WhoamiInfo must say so instead of looking
+// like an identity whose credentials are missing.
+func TestManager_Whoami_AmbientIdentityIsMarkedAmbient(t *testing.T) {
+	cfg := &schema.AuthConfig{
+		Realm:      "test-realm",
+		Identities: map[string]schema.Identity{"passthrough": {Kind: "ambient"}},
+	}
+	authManager, err := NewAuthManager(cfg, &testStore{data: map[string]any{}}, dummyValidator{}, nil, "")
+	require.NoError(t, err)
+
+	info, err := authManager.Whoami(context.Background(), "passthrough")
+	require.NoError(t, err)
+	require.NotNil(t, info)
+	assert.Nil(t, info.Credentials)
+	assert.True(t, info.Ambient, "an identity that mints no credentials is reported as ambient")
+}
+
+// TestManager_buildWhoamiInfo_CredentialsAreNotAmbient is the negative path: an identity that
+// returned credentials is never reported as ambient.
+func TestManager_buildWhoamiInfo_CredentialsAreNotAmbient(t *testing.T) {
+	m := &manager{
+		credentialStore: &testStore{data: map[string]any{}},
+		identities:      map[string]types.Identity{"passthrough": ambientStubIdentity{}},
+	}
+	info := m.buildWhoamiInfo("passthrough", &types.OIDCCredentials{Token: "synthetic"})
+	assert.False(t, info.Ambient)
+	assert.NotNil(t, info.Credentials)
+}

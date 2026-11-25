@@ -138,6 +138,57 @@ func TestExecuteAuthExecCommand_NoCommand(t *testing.T) {
 		"no command args must surface ErrNoCommandSpecified")
 }
 
+// TestExecuteAuthExecCommand_RejectsArgsBeforeSeparator verifies that positional
+// args outside `--` are rejected before authenticating, instead of being silently
+// dropped (`atmos auth exec aws -- s3 ls` used to run `s3 ls`).
+// The no-separator shape is covered by TestValidateAuthExecArgs with a fresh
+// command: pflag never resets ArgsLenAtDash between ParseFlags calls on the
+// shared authExecCmd, so it cannot be modeled reliably here.
+func TestExecuteAuthExecCommand_RejectsArgsBeforeSeparator(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authExecCmd
+	resetAuthCmdFlags(t, cmd)
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags([]string{"aws", "--", "s3", "ls"}))
+
+	err := executeAuthExecCommand(cmd, cmd.Flags().Args())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidArguments,
+		"args outside `--` must be rejected, not dropped")
+	assert.Contains(t, err.Error(), "--")
+}
+
+// TestValidateAuthExecArgs covers the accepted and rejected arg shapes.
+func TestValidateAuthExecArgs(t *testing.T) {
+	tests := []struct {
+		name      string
+		cliArgs   []string
+		expectErr bool
+	}{
+		{name: "command after the separator", cliArgs: []string{"--", "aws", "s3", "ls"}},
+		{name: "flags before the separator", cliArgs: []string{"--identity=prod", "--", "env"}},
+		{name: "no args", cliArgs: nil},
+		{name: "separator only", cliArgs: []string{"--"}},
+		{name: "positional before the separator", cliArgs: []string{"aws", "--", "s3", "ls"}, expectErr: true},
+		{name: "positional without a separator", cliArgs: []string{"env"}, expectErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "exec"}
+			cmd.Flags().String("identity", "", "identity")
+			require.NoError(t, cmd.ParseFlags(tt.cliArgs))
+
+			err := validateAuthExecArgs(cmd, cmd.Flags().Args())
+			if tt.expectErr {
+				assert.ErrorIs(t, err, errUtils.ErrInvalidArguments)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
 // TestPrepareAuthenticatedEnv_SmokeNoConfig exercises the exec helper from a
 // directory without an atmos.yaml.
 func TestPrepareAuthenticatedEnv_SmokeNoConfig(t *testing.T) {

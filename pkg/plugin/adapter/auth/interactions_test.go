@@ -93,7 +93,7 @@ func TestCredentialStreamPresentsDeviceCodeBeforeReturningCredentials(t *testing
 		stream.EXPECT().Recv().Return(nil, io.EOF),
 	)
 	presented := false
-	actual, err := receiveCredentials(stream, interactionHandler(t.Context(), true, func(string, string) { presented = true }))
+	actual, err := receiveCredentials(stream, interactionHandler(t.Context(), true, func(string, string) { presented = true }), nil)
 	require.NoError(t, err)
 	assert.True(t, presented)
 	assert.Equal(t, credentials, actual)
@@ -132,7 +132,7 @@ func TestCredentialStreamPresentsDeviceCodeOnStderrBeforeResult(t *testing.T) {
 		}),
 		stream.EXPECT().Recv().Return(nil, io.EOF),
 	)
-	actual, err := receiveCredentials(stream, interactionHandler(t.Context(), true, presentDeviceCode))
+	actual, err := receiveCredentials(stream, interactionHandler(t.Context(), true, presentDeviceCode), nil)
 	require.NoError(t, err)
 	require.Equal(t, credentials, actual)
 	require.Empty(t, stdout.String())
@@ -144,8 +144,43 @@ func TestCredentialStreamRejectsUnrenderableOrRepeatedInteractions(t *testing.T)
 		stream := NewMockcredentialStream(gomock.NewController(t))
 		prompt := &pluginv1.AuthenticateEvent{Event: &pluginv1.AuthenticateEvent_Interaction{Interaction: deviceInteraction()}}
 		stream.EXPECT().Recv().Return(prompt, nil).Times(map[bool]int{false: 1, true: 2}[interactive])
-		actual, err := receiveCredentials(stream, interactionHandler(t.Context(), interactive, func(string, string) {}))
+		actual, err := receiveCredentials(stream, interactionHandler(t.Context(), interactive, func(string, string) {}), nil)
 		require.ErrorIs(t, err, errUtils.ErrPluginInteractionRequired)
 		assert.Nil(t, actual)
 	}
+}
+
+// TestPresentDeviceCodePrintsVerificationURIVerbatim guards against the URI being
+// rendered as Markdown, which would turn `a*b*c` into emphasis and show the user a
+// different URL than the one the plugin sent.
+func TestPresentDeviceCodePrintsVerificationURIVerbatim(t *testing.T) {
+	t.Setenv("ATMOS_FORCE_TTY", "false")
+	t.Setenv("ATMOS_FORCE_COLOR", "false")
+	t.Setenv("NO_COLOR", "1")
+	var stdout, stderr bytes.Buffer
+	previous := iolib.GetContext()
+	streams := NewMockStreams(gomock.NewController(t))
+	streams.EXPECT().RawOutput().Return(&stdout).AnyTimes()
+	streams.EXPECT().RawError().Return(&stderr).AnyTimes()
+	ctx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	data.InitWriter(ctx)
+	ui.InitFormatter(ctx)
+	t.Cleanup(func() {
+		data.InitWriter(previous)
+		ui.InitFormatter(previous)
+	})
+
+	for _, uri := range []string{
+		"https://issuer.example/a*b*c/device",
+		"https://issuer.example/a_b_c_/device",
+		"https://issuer.example/`x`/[y](z)/device",
+	} {
+		stderr.Reset()
+		require.True(t, publicVerificationURI(uri), "fixture must pass URI validation: %s", uri)
+		presentDeviceCode(uri, "ABCD-EFGH")
+		assert.Contains(t, stderr.String(), uri, "the verification URI must be shown exactly as the plugin sent it")
+		assert.Contains(t, stderr.String(), "ABCD-EFGH")
+	}
+	assert.Empty(t, stdout.String(), "the device prompt must leave the data channel empty")
 }

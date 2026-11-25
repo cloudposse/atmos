@@ -36,39 +36,57 @@ Initial implementation had several issues:
 - Only recommended for specialized environments with driver pre-provisioning
 
 **LoginDetails as Source of Truth**
-- saml2aws checks `LoginDetails.DownloadBrowser`, not `IDPAccount.DownloadBrowser`
-- Atmos must set both fields to ensure configuration works
-- Provider's `shouldDownloadBrowser()` determines value from config
+- The browser driver checks `LoginDetails.DownloadBrowser` only
+- Atmos's vendored saml2aws fork removed the unused `IDPAccount.DownloadBrowser` field
+- Provider's `shouldDownloadBrowser()` determines the value from config and the installed browsers
 
 ### Implementation Details
 
 #### Configuration Propagation
 
 ```go
-func (p *samlProvider) createLoginDetails() *creds.LoginDetails {
+// samlDriver is the driver selected once at the start of the login attempt.
+func (p *samlProvider) createLoginDetails(samlDriver string) *creds.LoginDetails {
     return &creds.LoginDetails{
         URL:             p.url,
         Username:        p.config.Username,
         Password:        p.config.Password,
-        DownloadBrowser: p.shouldDownloadBrowser(), // Critical: Must set this.
+        DownloadBrowser: p.shouldDownloadBrowser(samlDriver), // Critical: Must set this.
     }
 }
 
-func (p *samlProvider) shouldDownloadBrowser() bool {
-    // First check explicit config setting.
-    if p.config.DownloadBrowserDriver != nil {
-        return *p.config.DownloadBrowserDriver
+// DownloadBrowserDriver is a bool: true requests the download, false (or unset) leaves the
+// automatic checks in control.
+func (p *samlProvider) shouldDownloadBrowser(samlDriver string) bool {
+    // An explicit true always requests the download.
+    if p.config.DownloadBrowserDriver {
+        return true
     }
 
-    // If not configured, check if drivers already installed.
-    return !p.hasPlaywrightDrivers()
+    // Otherwise only the Browser driver downloads, and only when the exact browser revision
+    // it will launch is missing (see "Which browser is checked?").
+    return samlDriver == "Browser" && !p.requiredBrowserInstalled(browserName)
 }
 ```
 
-**Why both IDPAccount and LoginDetails?**
-- `IDPAccount.DownloadBrowser`: Used for environment variable (`SAML2AWS_AUTO_BROWSER_DOWNLOAD`)
-- `LoginDetails.DownloadBrowser`: Used by saml2aws authentication logic
-- Both must be set to ensure downloads work
+**Why only LoginDetails?**
+- `LoginDetails.DownloadBrowser` is the only field the browser driver reads before running `playwright install`
+- Upstream's `IDPAccount.DownloadBrowser` was never read by the library and was removed from the vendored fork
+- `SAML2AWS_AUTO_BROWSER_DOWNLOAD` was only read by the saml2aws CLI flag parser, which Atmos does not use,
+  so Atmos neither sets it in its own process nor exports it to subprocesses
+
+**Which browser is checked?**
+- Auto-detection checks the exact revision of the browser that will be launched, read from the driver's
+  `browsers.json` (`chromium-<rev>`, `firefox-<rev>` or `webkit-<rev>`, or
+  `<name>_<platform>_special-<rev>` when `revisionOverrides` has an entry for the host platform)
+- `browser_type: chromium`, `firefox` and `webkit` are installed by Playwright, so auto-download still applies to them
+- System channels (`chrome*`, `msedge*`) and `browser_executable_path` use the user's own browser, so the
+  automatic check never downloads one. This applies to the automatic check only: an explicit
+  `download_browser_driver: true` with `driver: Browser` still runs the Playwright installer before the
+  launch, and for a system channel the installer fetches the default Playwright-managed browsers (not the
+  system Chrome or Edge). On an offline host that uses a system browser, leave `download_browser_driver` unset
+- Downloads are behavior of the `Browser` driver only: an explicit `GoogleApps`, `Okta` or `ADFS` driver skips
+  Playwright setup even when `download_browser_driver: true`
 
 #### Cache Directory Management
 
@@ -141,21 +159,15 @@ auth:
       download_browser_driver: true  # Automatic download on first use
 ```
 
-**Explicit Disable**:
-```yaml
-auth:
-  providers:
-    my-saml:
-      kind: aws/saml
-      url: https://sso.example.com/saml
-      download_browser_driver: false  # Assumes drivers pre-installed
-```
+**There is no explicit disable**: `download_browser_driver` is a bool, so `false` is the same as unset and
+leaves the automatic checks in control. With `driver: Browser` and a missing required Chromium revision (an
+older preinstalled revision does not count), Atmos still downloads it. To avoid downloads, preinstall the exact
+revision the driver requires, set `browser_executable_path`, or use a system channel (`browser_type: chrome`
+or `msedge`) and leave `download_browser_driver` unset.
 
-**Environment Variable Override**:
-```bash
-export SAML2AWS_AUTO_BROWSER_DOWNLOAD=true
-atmos auth login --identity my-identity
-```
+**No Environment Variable Override**:
+
+`SAML2AWS_AUTO_BROWSER_DOWNLOAD` has no effect on Atmos. Use `download_browser_driver: true` to force a download.
 
 ### Testing Strategy
 
@@ -166,31 +178,25 @@ atmos auth login --identity my-identity
 func TestSAMLProvider_createLoginDetails_DownloadBrowser(t *testing.T) {
     tests := []struct {
         name           string
-        configValue    *bool
+        configValue    bool
         driversExist   bool
         expectedResult bool
     }{
         {
             name:           "explicit true overrides detection",
-            configValue:    ptr.To(true),
+            configValue:    true,
             driversExist:   true,
             expectedResult: true,
         },
         {
-            name:           "explicit false overrides detection",
-            configValue:    ptr.To(false),
-            driversExist:   false,
-            expectedResult: false,
-        },
-        {
             name:           "auto-detect: download when missing",
-            configValue:    nil,
+            configValue:    false, // false leaves the automatic checks in control.
             driversExist:   false,
             expectedResult: true,
         },
         {
             name:           "auto-detect: skip when present",
-            configValue:    nil,
+            configValue:    false,
             driversExist:   true,
             expectedResult: false,
         },

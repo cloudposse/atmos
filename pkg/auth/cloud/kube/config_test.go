@@ -149,6 +149,21 @@ func TestUserName(t *testing.T) {
 			info: &ClusterInfo{UserPrefix: "aks", Name: "example-cluster", Region: "example-group", AccountID: "example-subscription"},
 			want: "atmos-aks-example-cluster-example-group-example-subscription",
 		},
+		{
+			name: "account and identity scoped",
+			info: &ClusterInfo{UserPrefix: "eks", Name: "prod", Region: "us-east-2", AccountID: "111111111111", Identity: "prod-admin"},
+			want: "atmos-eks-prod-us-east-2-111111111111-prod-admin-038e7eb8",
+		},
+		{
+			name: "identity without account",
+			info: &ClusterInfo{UserPrefix: "eks", Name: "prod", Region: "us-east-2", Identity: "prod-admin"},
+			want: "atmos-eks-prod-us-east-2-prod-admin-366c0570",
+		},
+		{
+			name: "realm and identity scoped",
+			info: &ClusterInfo{Realm: "acme", UserPrefix: "eks", Name: "prod", Region: "us-east-2", AccountID: "111111111111", Identity: "prod-admin"},
+			want: "atmos-acme-eks-prod-us-east-2-111111111111-prod-admin-2ab6ce55",
+		},
 	}
 
 	for _, tt := range tests {
@@ -367,7 +382,9 @@ func TestWriteClusterConfig_ErrorMode(t *testing.T) {
 	_, err = mgr.WriteClusterConfig(info, "dev-eks", "error")
 	require.NoError(t, err)
 
-	// Second write with same cluster should fail.
+	// A second write of the same cluster with a different endpoint should fail.
+	// (An identical re-run is a no-op; see config_error_mode_test.go.)
+	info.Endpoint = "https://changed.eks.amazonaws.com"
 	_, err = mgr.WriteClusterConfig(info, "dev-eks", "error")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrKubeconfigMerge)

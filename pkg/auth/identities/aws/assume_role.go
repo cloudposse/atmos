@@ -374,7 +374,7 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	}
 
 	// Get AWS file environment variables.
-	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
+	awsFileManager, err := awsCloud.NewAWSFileManager(filesBasePath(i.manager, i.name), i.realm)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -418,7 +418,7 @@ func (i *assumeRoleIdentity) PrepareEnvironment(ctx context.Context, environ map
 		return environ, fmt.Errorf("failed to get provider name: %w", err)
 	}
 
-	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
+	awsFileManager, err := awsCloud.NewAWSFileManager(filesBasePath(i.manager, i.name), i.realm)
 	if err != nil {
 		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
 	}
@@ -533,7 +533,7 @@ func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, params *types
 
 	// Setup AWS files using shared AWS cloud package.
 	// Use realm from params for credential isolation.
-	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, "", params.Realm); err != nil {
+	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, filesBasePath(params.Manager, params.IdentityName), params.Realm); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 
@@ -544,7 +544,7 @@ func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, params *types
 		ProviderName: params.ProviderName,
 		IdentityName: params.IdentityName,
 		Credentials:  params.Credentials,
-		BasePath:     "",
+		BasePath:     filesBasePath(params.Manager, params.IdentityName),
 		Manager:      params.Manager,
 		Realm:        params.Realm,
 	}); err != nil {
@@ -623,7 +623,7 @@ func (i *assumeRoleIdentity) CredentialsExist() (bool, error) {
 		return false, err
 	}
 
-	mgr, err := awsCloud.NewAWSFileManager("", i.realm)
+	mgr, err := awsCloud.NewAWSFileManager(filesBasePath(i.manager, i.name), i.realm)
 	if err != nil {
 		return false, err
 	}
@@ -680,10 +680,9 @@ func (i *assumeRoleIdentity) Logout(ctx context.Context) error {
 
 	log.Debug("Logout assume-role identity", "identity", i.name, "provider", i.rootProviderName)
 
-	// Get base_path from provider spec if configured (requires manager to lookup provider config).
-	// For now, use empty string (default XDG path) since SetupFiles uses empty string too.
+	// Use the root provider's spec.files.base_path, where PostAuthenticate wrote the files.
 	// Uses realm for credential isolation between different repositories.
-	basePath := ""
+	basePath := filesBasePath(i.manager, i.name)
 
 	fileManager, err := awsCloud.NewAWSFileManager(basePath, i.realm)
 	if err != nil {

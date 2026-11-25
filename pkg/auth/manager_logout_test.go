@@ -1322,3 +1322,45 @@ func TestManager_LogoutAll_RemovesProvisionedIdentitiesCache(t *testing.T) {
 	// Verify the cache file was removed.
 	assert.NoFileExists(t, filePath)
 }
+
+// managerAwareIdentity records the manager and root provider bound before Logout runs.
+type managerAwareIdentity struct {
+	*types.MockIdentity
+	boundManager  types.AuthManager
+	boundProvider string
+	boundAtLogout bool
+}
+
+func (i *managerAwareIdentity) SetManagerAndProvider(manager types.AuthManager, rootProviderName string) {
+	i.boundManager = manager
+	i.boundProvider = rootProviderName
+}
+
+func TestManager_Logout_BindsManagerBeforeIdentityLogout(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	identity := &managerAwareIdentity{MockIdentity: types.NewMockIdentity(ctrl)}
+
+	m := &manager{
+		config: &schema.AuthConfig{
+			Providers:  map[string]schema.Provider{},
+			Identities: map[string]schema.Identity{"aws-id": {Kind: "aws/user"}},
+		},
+		credentialStore: mockStore,
+		providers:       map[string]types.Provider{},
+		identities:      map[string]types.Identity{"aws-id": identity},
+		chain:           []string{"root-provider", "aws-id"},
+	}
+
+	mockStore.EXPECT().Delete("aws-id", gomock.Any()).Return(nil)
+	identity.MockIdentity.EXPECT().Logout(gomock.Any()).DoAndReturn(func(context.Context) error {
+		identity.boundAtLogout = identity.boundManager != nil
+		return nil
+	})
+
+	require.NoError(t, m.Logout(context.Background(), "aws-id", true))
+	assert.True(t, identity.boundAtLogout, "manager must be bound before identity.Logout runs")
+	assert.Equal(t, "root-provider", identity.boundProvider)
+}

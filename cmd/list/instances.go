@@ -190,7 +190,7 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 	configAndStacksInfo.SubCommand = "instances"
 
 	// Initialize config to create auth manager.
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := cfg.InitCliConfigWithContext(cmd.Context(), configAndStacksInfo, true)
 	if err != nil {
 		return err
 	}

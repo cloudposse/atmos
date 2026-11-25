@@ -1,0 +1,271 @@
+package provider
+
+import (
+	"context"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
+	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
+	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
+)
+
+func fixture(t *testing.T, name string) string {
+	t.Helper()
+	source, err := filepath.Abs(filepath.Join("..", "..", "fixtures", name))
+	require.NoError(t, err)
+	root := t.TempDir()
+	require.NoError(t, os.CopyFS(root, os.DirFS(source)))
+	root, err = filepath.EvalSymlinks(root)
+	require.NoError(t, err)
+	return root
+}
+
+func TestDiscoveryFixtures(t *testing.T) {
+	for _, test := range []struct {
+		name, scope string
+		names       []string
+	}{{"advanced", "live/dev/**", []string{"app", "cache", "database", "network"}}, {"explicit-stack", "live/**", []string{"dev/app", "dev/network", "prod/app", "prod/network"}}, {"explicit-stack", "**", []string{"dev/app", "dev/network", "prod/app", "prod/network"}}} {
+		t.Run(test.name, func(t *testing.T) {
+			root := fixture(t, test.name)
+			opts, err := encode(map[string]any{"enabled": true, "mode": "native", "discovery": map[string]any{"enabled": true, "included_paths": []string{test.scope}}})
+			require.NoError(t, err)
+			// Exercise the real evaluator; include its diagnostics only inside local tests.
+			p := New(func(ctx context.Context, req model.Request) (*model.Resolution, error) {
+				result, err := engine.Resolve(ctx, req)
+				require.NoError(t, err)
+				return result, err
+			})
+			request := &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts, IncludePaths: []string{test.scope}, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "list"}, Invocation: &pluginv1.Invocation{Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "must-not-execute"}}}
+			response, err := p.Discover(t.Context(), request)
+			require.NoError(t, err)
+			var expected map[string]map[string]pluginv1.ComponentDependency_Kind
+			if test.name == "advanced" {
+				expected = map[string]map[string]pluginv1.ComponentDependency_Kind{
+					"app":      {"network": pluginv1.ComponentDependency_ORDER, "database": pluginv1.ComponentDependency_OUTPUT, "cache": pluginv1.ComponentDependency_OUTPUT},
+					"cache":    {"network": pluginv1.ComponentDependency_OUTPUT},
+					"database": {"network": pluginv1.ComponentDependency_OUTPUT},
+				}
+			} else {
+				expected = map[string]map[string]pluginv1.ComponentDependency_Kind{
+					"dev/app":  {"dev/network": pluginv1.ComponentDependency_OUTPUT},
+					"prod/app": {"prod/network": pluginv1.ComponentDependency_OUTPUT},
+				}
+			}
+			names := []string{}
+			for _, instance := range response.Components {
+				names = append(names, instance.Address.Component)
+				require.Equal(t, "terraform", instance.Address.ComponentType)
+				require.NotEmpty(t, instance.Sources)
+				dependencies := make(map[string]pluginv1.ComponentDependency_Kind)
+				for _, dependency := range instance.Dependencies {
+					require.NotNil(t, dependency.Target)
+					require.Equal(t, instance.Address.Stack, dependency.Target.Stack)
+					require.Equal(t, "terraform", dependency.Target.ComponentType)
+					require.NotContains(t, dependencies, dependency.Target.Component)
+					dependencies[dependency.Target.Component] = dependency.Kind
+				}
+				require.Len(t, dependencies, len(expected[instance.Address.Component]))
+				for target, kind := range expected[instance.Address.Component] {
+					require.Contains(t, dependencies, target)
+					require.Equal(t, kind, dependencies[target])
+				}
+			}
+			require.Equal(t, test.names, names)
+			require.NoError(t, filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+				require.NoError(t, err)
+				require.NotEqual(t, ".terragrunt-stack", entry.Name())
+				require.NotEqual(t, ".terragrunt-cache", entry.Name())
+				return nil
+			}))
+		})
+	}
+}
+
+func TestExplicitStackStateAndPreparation(t *testing.T) {
+	root := fixture(t, "explicit-stack")
+	opts, err := encode(map[string]any{"enabled": true, "mode": "native", "discovery": map[string]any{"enabled": true, "included_paths": []string{"live/**"}}})
+	require.NoError(t, err)
+	provider := New(nil)
+	inventory, err := provider.Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts, IncludePaths: []string{"live/**"}, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "plan"}, Invocation: &pluginv1.Invocation{Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "must-not-execute"}}})
+	require.NoError(t, err)
+	network := inventory.Components[1]
+	require.Equal(t, "dev/network", network.Address.Component)
+	request := &pluginv1.ComponentRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts, Address: network.Address, Source: network.Source, Configuration: network.Configuration, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "plan"}, Invocation: &pluginv1.Invocation{Environment: map[string]string{"ATMOS_TERRAFORM_BINARY": "must-not-execute"}}}
+	state, err := provider.Resolve(t.Context(), request)
+	require.NoError(t, err)
+	require.NoDirExists(t, filepath.Join(root, "live", ".terragrunt-stack"))
+	request.Effects = &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true}
+	prepared, err := provider.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.DirExists(t, filepath.Join(root, "live", ".terragrunt-stack"))
+	require.Equal(t, state.State.WorkingDirectory, prepared.State.WorkingDirectory)
+	var before, after map[string]any
+	require.NoError(t, decode(state.State.Backend, &before))
+	require.NoError(t, decode(prepared.State.Backend, &after))
+	require.Equal(t, before, after)
+	require.Equal(t, filepath.Join(root, "state", "dev", "network.tfstate"), after["path"])
+	require.True(t, prepared.BackendGenerated)
+	require.Len(t, prepared.Files, 3)
+	require.Equal(t, "backend.tf", prepared.Files[0].Path)
+	require.Contains(t, string(prepared.Files[0].Content), `backend "local"`)
+	require.True(t, prepared.Files[0].Sensitive, "the host keeps generated backend bytes out of saved-plan records")
+	require.Equal(t, "terragrunt.hcl", prepared.Files[1].Path)
+	require.Equal(t, "terragrunt.values.hcl", prepared.Files[2].Path)
+	require.NotNil(t, prepared.Inputs)
+}
+
+func TestImportsSelectExplicitFilesAndDirectories(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "live"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "live", "terragrunt.stack.hcl"), nil, 0o600))
+	settings, err := encode(map[string]any{"enabled": true})
+	require.NoError(t, err)
+	request := &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: settings, Operation: &pluginv1.ComponentOperation{Mode: "native"}, Imports: []string{"terragrunt://live", "terragrunt://live/terragrunt.stack.hcl"}}
+	paths, err := importPaths(request)
+	require.NoError(t, err)
+	require.Equal(t, []string{"live/**", "live/terragrunt.stack.hcl"}, paths)
+	p := New(func(_ context.Context, req model.Request) (*model.Resolution, error) {
+		require.Equal(t, paths, req.IncludedPaths)
+		return &model.Resolution{}, nil
+	})
+	_, err = p.Discover(t.Context(), request)
+	require.NoError(t, err)
+	for uri, want := range map[string]string{"terragrunt://.": "**", "terragrunt://./": "**", "terragrunt://live/": "live/**", "terragrunt://./live": "live/**", "terragrunt://./live/terragrunt.stack.hcl": "live/terragrunt.stack.hcl", "terragrunt://live//terragrunt.stack.hcl": "live/terragrunt.stack.hcl"} {
+		request.Imports = []string{uri}
+		got, err := importPaths(request)
+		require.NoError(t, err, uri)
+		require.Equal(t, []string{want}, got, uri)
+	}
+	for _, uri := range []string{"wrong://live", "terragrunt://../outside", "terragrunt://live?ref=main", "terragrunt://absent", "terragrunt://live/*", `terragrunt://live\child`} {
+		request.Imports = []string{uri}
+		_, err := importPaths(request)
+		require.Error(t, err)
+		_, err = p.Discover(t.Context(), request)
+		require.Error(t, err)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "live", "other.txt"), nil, 0o600))
+	request.Imports = []string{"terragrunt://live/other.txt"}
+	_, err = importPaths(request)
+	require.Error(t, err)
+	request.Imports = nil
+	_, err = importPaths(request)
+	require.Error(t, err)
+}
+
+func TestRemoteModuleSourceIsNotAFileWatch(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	path := filepath.Join(root, "live", "app", "terragrunt.hcl")
+	remote := "git::https://example.com/modules.git//app?ref=v1.0.0"
+	unit := model.DiscoveredUnit{Config: model.Resolution{Path: path, Source: remote, Files: []string{path}}}
+	addresses := map[string]*pluginv1.ComponentAddress{path: {Stack: "live", Component: "app", ComponentType: "terraform"}}
+	instance, err := discoveredUnit(&model.Request{BasePath: root}, &unit, addresses)
+	require.NoError(t, err)
+	var configuration map[string]any
+	require.NoError(t, decode(instance.Configuration, &configuration))
+	require.Equal(t, remote, configuration["source"])
+	require.Len(t, instance.Sources, 1)
+	require.Equal(t, "live/app/terragrunt.hcl", instance.Sources[0].Path)
+}
+
+func TestDiscoveredLocalModuleSubdirKeepsDelimiter(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	unitPath := filepath.Join(root, "live", "app", "terragrunt.hcl")
+	repository := filepath.Join(root, "repository")
+	unit := model.DiscoveredUnit{Config: model.Resolution{Path: unitPath, Source: repository + "//modules/app", Folders: []string{repository}, Files: []string{unitPath}}}
+	addresses := map[string]*pluginv1.ComponentAddress{unitPath: {Stack: "live", Component: "app", ComponentType: "terraform"}}
+	instance, err := discoveredUnit(&model.Request{BasePath: root}, &unit, addresses)
+	require.NoError(t, err)
+	var configuration map[string]any
+	require.NoError(t, decode(instance.Configuration, &configuration))
+	require.Equal(t, "./repository//modules/app", configuration["source"])
+	metadata := configuration["metadata"].(map[string]any)
+	require.Equal(t, "modules/app", metadata["source_subdir"])
+}
+
+func TestDerivedAddressNamesAnUnscopedUnit(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	for path, want := range map[string]*pluginv1.ComponentAddress{
+		filepath.Join(root, "live", "dev", "vpc", "terragrunt.hcl"): {Stack: "live/dev", Component: "vpc", ComponentType: "terraform"},
+		filepath.Join(root, "vpc", "terragrunt.hcl"):                {Stack: "default", Component: "vpc", ComponentType: "terraform"},
+		filepath.Join(root, "terragrunt.hcl"):                       {Stack: "default", Component: "root", ComponentType: "terraform"},
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(""), 0o600))
+		got, err := derivedAddress(root, path)
+		require.NoError(t, err)
+		require.Equal(t, want.Stack, got.Stack)
+		require.Equal(t, want.Component, got.Component)
+		require.Equal(t, want.ComponentType, got.ComponentType)
+	}
+	_, err = derivedAddress(root, filepath.Join(filepath.Dir(root), "elsewhere", "terragrunt.hcl"))
+	require.ErrorIs(t, err, ErrUnsupported)
+}
+
+func TestWarningDiagnosticsNeverFailTheCommand(t *testing.T) {
+	diagnostics := warningDiagnostics([]model.Warning{{Code: model.WarningSymlinkedDirectory, Path: "live/linked", Message: "symlinked directory live/linked was not followed"}})
+	require.Len(t, diagnostics, 1)
+	require.Equal(t, pluginv1.Severity_SEVERITY_WARNING, diagnostics[0].Detail.Severity)
+	require.Equal(t, model.WarningSymlinkedDirectory, diagnostics[0].Detail.Code)
+	require.True(t, diagnostics[0].Detail.UserSafe)
+	require.Equal(t, "live/linked", diagnostics[0].Detail.Location.File)
+	require.Empty(t, warningDiagnostics(nil))
+}
+
+func TestDiscoveredDependencyDoesNotAliasAnotherConfig(t *testing.T) {
+	root := t.TempDir()
+	unit := filepath.Join(root, "db", "terragrunt.hcl")
+	settings := filepath.Join(root, "db", "settings.hcl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(unit), 0o700))
+	require.NoError(t, os.WriteFile(unit, []byte(""), 0o600))
+	require.NoError(t, os.WriteFile(settings, []byte(""), 0o600))
+	addresses := map[string]*pluginv1.ComponentAddress{unit: {Stack: "default", Component: "db", ComponentType: "terraform"}}
+	_, err := discoveredDependencies(root, &model.Resolution{Dependencies: []string{settings}}, addresses)
+	require.ErrorIs(t, err, ErrUnsupported)
+	// An explicit inventory identity always wins, including a named configuration.
+	addresses[settings] = &pluginv1.ComponentAddress{Stack: "custom", Component: "settings", ComponentType: "terraform"}
+	deps, err := discoveredDependencies(root, &model.Resolution{Dependencies: []string{settings}}, addresses)
+	require.NoError(t, err)
+	require.Equal(t, addresses[settings], deps[0].Target)
+}
+
+func TestGeneratedPoliciesUseUnitOverlay(t *testing.T) {
+	for _, policy := range []string{"skip", "error", "overwrite", "overwrite_terragrunt", "remove", "remove_terragrunt"} {
+		for _, owned := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/owned=%t", policy, owned), func(t *testing.T) {
+				prior := "unit bytes"
+				if owned {
+					prior = "# Generated by Terragrunt. Sig: nIlQXj57tbuaRZEa\n" + prior
+				}
+				result := &model.Resolution{Overlay: map[string][]byte{"settings.tf": []byte(prior)}, OverlayModes: map[string]uint32{"settings.tf": 0o640}, Generated: map[string]string{"settings.tf": "generated bytes"}, GeneratedPolicies: map[string]string{"settings.tf": policy}}
+				files, err := preparedFiles(result)
+				if policy == "error" || (!owned && strings.HasSuffix(policy, "_terragrunt")) {
+					require.Error(t, err)
+					require.Empty(t, files)
+					return
+				}
+				require.NoError(t, err)
+				require.Len(t, files, 1)
+				if policy == "skip" {
+					require.Equal(t, prior, string(files[0].Content))
+					require.Equal(t, "overwrite", files[0].IfExists)
+					require.EqualValues(t, 0o640, files[0].Mode)
+				} else {
+					require.Equal(t, "generated bytes", string(files[0].Content))
+					require.Equal(t, strings.TrimSuffix(policy, "_terragrunt"), files[0].IfExists)
+					require.EqualValues(t, 0o600, files[0].Mode)
+				}
+			})
+		}
+	}
+}

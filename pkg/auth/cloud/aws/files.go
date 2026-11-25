@@ -108,7 +108,7 @@ func withFileLock(ctx context.Context, path string, fn func() error) error {
 	// intentionally best-effort on Windows. Keep the stable sibling lock path.
 	if err := filelock.New(path+".lock").WithExclusive(lockCtx, fn); err != nil {
 		if errors.Is(err, filelock.ErrAcquire) {
-			return fmt.Errorf("%w: %w", ErrFileLockTimeout, err)
+			return errors.Join(ErrFileLockTimeout, errUtils.ErrCacheLocked, err)
 		}
 		return err
 	}

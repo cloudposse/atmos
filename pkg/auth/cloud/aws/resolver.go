@@ -31,6 +31,15 @@ func GetBaseEndpointConfigOption(identity *schema.Identity, provider *schema.Pro
 	return createBaseEndpointOption(url)
 }
 
+// GetBaseEndpointURL returns the AWS base endpoint URL configured on the identity or
+// provider (spec.endpoint_url first, then the legacy aws.resolver.url), or an empty
+// string when none is configured.
+func GetBaseEndpointURL(identity *schema.Identity, provider *schema.Provider) string {
+	defer perf.Track(nil, "aws.GetBaseEndpointURL")()
+
+	return baseEndpointURL(identity, provider)
+}
+
 // GetResolverConfigOption is kept for compatibility with existing callers.
 // Use GetBaseEndpointConfigOption for new code.
 func GetResolverConfigOption(identity *schema.Identity, provider *schema.Provider) config.LoadOptionsFunc {

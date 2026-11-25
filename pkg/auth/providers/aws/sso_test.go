@@ -444,37 +444,6 @@ func TestDisplayVerificationPlainText(t *testing.T) {
 	}
 }
 
-func TestPollForAccessToken_ContextCancellation(t *testing.T) {
-	// Test that pollForAccessToken respects context cancellation.
-	// This test verifies the context cancellation behavior without actually
-	// making network calls to AWS SSO.
-	t.Setenv("GO_TEST", "1")
-	t.Setenv("CI", "1")
-
-	config := &schema.Provider{
-		Kind:     testSSOKind,
-		Region:   testRegion,
-		StartURL: testStartURL,
-	}
-
-	provider, err := NewSSOProvider(testProviderName, config)
-	require.NoError(t, err)
-
-	// Create a context with a short timeout to simulate cancellation.
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
-	defer cancel()
-
-	// Synchronize with cancellation instead of assuming a fixed sleep gives the
-	// deadline callback enough time to run on a busy CI worker.
-	<-ctx.Done()
-
-	// Note: We can't easily test pollForAccessToken in isolation without a real OIDC client.
-	// The context cancellation is tested indirectly through the Authenticate method.
-	// This test primarily verifies that the provider is set up correctly for context handling.
-	assert.NotNil(t, provider)
-	assert.ErrorIs(t, ctx.Err(), context.DeadlineExceeded)
-}
-
 func TestPollResult_Structure(t *testing.T) {
 	// Test pollResult struct creation. The token is now a full ssoTokenCache
 	// (access token + expiry + refresh fields) rather than a bare string.

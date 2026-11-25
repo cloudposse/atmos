@@ -32,8 +32,10 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 	// Generic ambient identities return nil credentials by design — they
 	// do not manage credentials; the cloud SDK resolves them at subprocess
 	// runtime. There is nothing to populate on WhoamiInfo from creds and
-	// nothing to cache in the keystore.
+	// nothing to cache in the keystore. Ambient tells callers (`auth whoami`)
+	// that the missing credentials are expected, not expired.
 	if creds == nil {
+		info.Ambient = true
 		return info
 	}
 
@@ -75,7 +77,7 @@ func (m *manager) cacheWhoamiCredentials(identityName string, creds types.ICrede
 		// Still set the reference so callers can look up the in-memory credentials.
 		info.CredentialsRef = identityName
 	case !isSessionToken(creds):
-		if err := m.credentialStore.Store(identityName, creds, m.realm.Value); err == nil {
+		if err := m.storeNamedCredentials(identityName, creds); err == nil {
 			info.CredentialsRef = identityName
 			// Note: We keep info.Credentials populated for validation purposes.
 			// The Credentials field is marked with json:"-" yaml:"-" tags to prevent

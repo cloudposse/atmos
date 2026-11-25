@@ -1,0 +1,296 @@
+package provider
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/gruntwork-io/terragrunt/pkg/log"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/cloudposse/atmos/sdk/api"
+	"github.com/cloudposse/atmos/sdk/component"
+	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
+)
+
+// logReceiver stands in for Atmos: it records what the plugin delivers while a call runs.
+type logReceiver struct {
+	pluginv1.UnimplementedLogServer
+	mu         sync.Mutex
+	entries    []*pluginv1.LogEntry
+	invocation string
+	calls      int
+}
+
+func (r *logReceiver) Write(ctx context.Context, request *pluginv1.LogRequest) (*emptypb.Empty, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls++
+	if values := metadata.ValueFromIncomingContext(ctx, api.InvocationMetadata); len(values) == 1 {
+		r.invocation = values[0]
+	}
+	r.entries = append(r.entries, request.GetEntries()...)
+	return &emptypb.Empty{}, nil
+}
+
+func (r *logReceiver) snapshot() ([]*pluginv1.LogEntry, int, string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]*pluginv1.LogEntry(nil), r.entries...), r.calls, r.invocation
+}
+
+// apiClient binds an API client to a real in-process connection. A nil receiver serves no log service,
+// like an Atmos that predates live delivery.
+func apiClient(t *testing.T, receiver *logReceiver, options ...grpc.ServerOption) *api.Client {
+	t.Helper()
+	listener := bufconn.Listen(1 << 20)
+	server := grpc.NewServer(options...)
+	if receiver != nil {
+		pluginv1.RegisterLogServer(server, receiver)
+	}
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(server.Stop)
+	connection, err := grpc.NewClient("passthrough:///log-test", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = connection.Close() })
+	client := &api.Client{}
+	require.NoError(t, client.Bind(connection))
+	return client
+}
+
+func messagesOf(entries []*pluginv1.LogEntry) []string {
+	messages := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		messages = append(messages, entry.GetMessage())
+	}
+	return messages
+}
+
+func discoverAt(t *testing.T, provider *Provider, root, level, id string) *pluginv1.DiscoverComponentsResponse {
+	t.Helper()
+	opts, err := encode(map[string]any{"enabled": true, "mode": "native", "discovery": map[string]any{"enabled": true, "included_paths": []string{"live/**"}}})
+	require.NoError(t, err)
+	response, err := provider.Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{RootDirectory: root, Provider: "terragrunt", ProviderConfiguration: opts, IncludePaths: []string{"live/**"}, Operation: &pluginv1.ComponentOperation{Mode: "native", Command: "plan"}, Invocation: &pluginv1.Invocation{Id: id, LogLevel: level}})
+	require.NoError(t, err)
+	return response
+}
+
+func TestEngineLogsAreDeliveredLiveAndNotRepeatedInTheResponse(t *testing.T) {
+	receiver := &logReceiver{}
+	response := discoverAt(t, New(nil, WithAPI(apiClient(t, receiver))), fixture(t, "explicit-stack"), "debug", "call-42")
+
+	delivered, calls, invocation := receiver.snapshot()
+	assert.Equal(t, "call-42", invocation, "the entries belong to the invocation that made the call")
+	require.NotEmpty(t, delivered)
+	assert.Positive(t, calls)
+	// Everything was delivered before the result, so the response repeats nothing.
+	assert.Empty(t, response.Logs)
+	// The phase event names the unit being evaluated, relative to the project, at info level.
+	var phases []string
+	for _, entry := range delivered {
+		assert.NotEqual(t, pluginv1.LogLevel_LOG_LEVEL_TRACE, entry.GetLevel(), "trace is below the requested level")
+		if entry.GetMessage() == "Evaluating unit" {
+			phases = append(phases, entry.GetUnit())
+			assert.Equal(t, pluginv1.LogLevel_LOG_LEVEL_INFO, entry.GetLevel())
+		}
+	}
+	assert.NotEmpty(t, phases)
+	for _, unit := range phases {
+		assert.False(t, filepath.IsAbs(unit), "unit %q is relative to the project root", unit)
+	}
+}
+
+func TestEngineLogsFallBackToTheResponseWhenAtmosCannotTakeThem(t *testing.T) {
+	root := fixture(t, "explicit-stack")
+	baseline := discoverAt(t, New(nil), root, "debug", "call-1")
+	require.NotEmpty(t, baseline.Logs)
+
+	for name, client := range map[string]*api.Client{
+		"log service not served": apiClient(t, nil),
+		"no connection":          {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			response := discoverAt(t, New(nil, WithAPI(client)), root, "debug", "call-1")
+			assert.ElementsMatch(t, messagesOf(baseline.Logs), messagesOf(response.Logs), "the same events return with the response")
+		})
+	}
+
+	t.Run("without an invocation to attribute them to", func(t *testing.T) {
+		receiver := &logReceiver{}
+		response := discoverAt(t, New(nil, WithAPI(apiClient(t, receiver))), root, "debug", "")
+		_, calls, _ := receiver.snapshot()
+		assert.Zero(t, calls)
+		assert.ElementsMatch(t, messagesOf(baseline.Logs), messagesOf(response.Logs))
+	})
+}
+
+func TestNothingIsDeliveredBelowTheInvocationLevel(t *testing.T) {
+	for _, level := range []string{"", "warn", "error", "off", "info"} {
+		receiver := &logReceiver{}
+		response := discoverAt(t, New(nil, WithAPI(apiClient(t, receiver))), fixture(t, "explicit-stack"), level, "call-1")
+		_, calls, _ := receiver.snapshot()
+		assert.Zero(t, calls, "level %q", level)
+		assert.Empty(t, response.Logs, "level %q", level)
+	}
+}
+
+func brokenUnit(t *testing.T) *pluginv1.ComponentRequest {
+	t.Helper()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "module"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "terragrunt.hcl"), []byte("terraform { source = \"./module\" }\ninputs = { broken = local.absent }\n"), 0o644))
+	request := componentRequest(t)
+	request.RootDirectory, request.Source = root, "terragrunt.hcl"
+	request.Configuration, err = encode(map[string]any{})
+	require.NoError(t, err)
+	request.Invocation.LogLevel, request.Invocation.Id = "trace", "call-9"
+	return request
+}
+
+func TestAFailedCallStillShowsItsLogsAndNothingTwice(t *testing.T) {
+	receiver := &logReceiver{}
+	_, err := New(nil, WithAPI(apiClient(t, receiver))).Prepare(t.Context(), brokenUnit(t))
+	require.Error(t, err)
+	detail, ok := component.FailureDetail(err)
+	require.True(t, ok)
+	delivered, _, _ := receiver.snapshot()
+	assert.NotEmpty(t, delivered, "the events before the failure were shown while the call ran")
+	assert.Empty(t, detail.Logs, "the failure does not repeat them")
+
+	_, err = New(nil, WithAPI(apiClient(t, nil))).Prepare(t.Context(), brokenUnit(t))
+	detail, ok = component.FailureDetail(err)
+	require.True(t, ok)
+	assert.NotEmpty(t, detail.Logs, "without live delivery the failure carries the events that explain it")
+}
+
+func TestLiveDeliveryWithholdsUnknownSensitiveValues(t *testing.T) {
+	request := brokenUnit(t)
+	require.NoError(t, os.WriteFile(filepath.Join(request.RootDirectory, "terragrunt.hcl"), []byte("terraform { source = \"./module\" }\nlocals { token = sensitive(\"secret-live-2718\") }\ninputs = { token = local.token, broken = local.absent }\n"), 0o644))
+	receiver := &logReceiver{}
+	_, err := New(nil, WithAPI(apiClient(t, receiver))).Prepare(t.Context(), request)
+	require.Error(t, err)
+	delivered, _, _ := receiver.snapshot()
+	for _, entry := range delivered {
+		assert.NotContains(t, entry.GetMessage(), "secret-live-2718")
+		for _, value := range entry.GetFields() {
+			assert.NotContains(t, value, "secret-live-2718")
+		}
+	}
+	assert.NotContains(t, messagesOf(delivered), "Evaluating unit", "the unit path is withheld when sensitivity is unknown")
+	assert.NotEmpty(t, delivered)
+}
+
+func TestLiveDeliveryProtectsSensitiveUnitPaths(t *testing.T) {
+	for _, broken := range []bool{false, true} {
+		t.Run(fmt.Sprint("broken=", broken), func(t *testing.T) {
+			request := brokenUnit(t)
+			const secret = "private-unit-2718"
+			unit := filepath.Join(request.RootDirectory, "live", secret, "app")
+			require.NoError(t, os.MkdirAll(filepath.Join(unit, "module"), 0o755))
+			configuration := "terraform { source = \"./module\" }\nlocals { token = sensitive(\"" + secret + "\") }\ninputs = { token = local.token }\n"
+			if broken {
+				configuration = strings.Replace(configuration, "token = local.token }", "token = local.token, broken = local.absent }", 1)
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(unit, "terragrunt.hcl"), []byte(configuration), 0o644))
+			request.Source = filepath.Join("live", secret, "app", "terragrunt.hcl")
+			receiver := &logReceiver{}
+			_, err := New(nil, WithAPI(apiClient(t, receiver))).Prepare(t.Context(), request)
+			if broken {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			delivered, _, _ := receiver.snapshot()
+			require.NotEmpty(t, delivered)
+			var units []string
+			for _, entry := range delivered {
+				assert.NotContains(t, entry.String(), secret)
+				if entry.GetMessage() == "Evaluating unit" {
+					units = append(units, entry.GetUnit())
+				}
+			}
+			if broken {
+				assert.Empty(t, units)
+			} else {
+				assert.Contains(t, units, "live/<MASKED>/app")
+			}
+		})
+	}
+}
+
+func TestEarlyEvaluationFailureWithholdsUnitPaths(t *testing.T) {
+	for _, live := range []bool{false, true} {
+		t.Run(fmt.Sprint("live=", live), func(t *testing.T) {
+			request := brokenUnit(t)
+			const secret = "private-missing-unit-2718"
+			unit := filepath.Join(request.RootDirectory, secret, "app")
+			require.NoError(t, os.MkdirAll(unit, 0o755))
+			request.Source = filepath.Join(secret, "app", "terragrunt.hcl")
+			// The directory exists, but stat of its config fails before sensitivity scanning.
+			require.NoFileExists(t, filepath.Join(unit, "terragrunt.hcl"))
+			receiver := &logReceiver{}
+			provider := New(nil)
+			if live {
+				provider = New(nil, WithAPI(apiClient(t, receiver)))
+			}
+
+			_, err := provider.Prepare(t.Context(), request)
+			require.Error(t, err)
+			detail, ok := component.FailureDetail(err)
+			require.True(t, ok)
+			delivered, _, _ := receiver.snapshot()
+			entries := slices.Concat(delivered, detail.Logs)
+			require.NotEmpty(t, entries)
+			var withheld bool
+			for _, entry := range entries {
+				assert.NotContains(t, entry.String(), secret)
+				assert.NotEqual(t, "Evaluating unit", entry.GetMessage())
+				withheld = withheld || strings.Contains(entry.GetMessage(), "withheld")
+			}
+			assert.True(t, withheld, "failed sensitivity setup must withhold buffered events")
+			if live {
+				assert.Contains(t, messagesOf(delivered), "Starting unit evaluation")
+				assert.Empty(t, detail.Logs, "live events must not be repeated in the failure")
+			}
+		})
+	}
+}
+
+// Finalizing the events does not hold the call when Atmos stops taking them: the wait is bounded and the
+// events that could not be shown are reported as omitted.
+func TestEntriesDoNotWaitForeverForAStalledAtmos(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	stall := grpc.UnaryInterceptor(func(context.Context, any, *grpc.UnaryServerInfo, grpc.UnaryHandler) (any, error) {
+		<-release
+		return &emptypb.Empty{}, nil
+	})
+	callCtx, logs := New(nil, WithAPI(apiClient(t, &logReceiver{}, stall))).withLogs(t.Context(), &pluginv1.Invocation{Id: "call-stalled", LogLevel: "debug"}, t.TempDir())
+	logs.flush = 100 * time.Millisecond
+	logs.sink.Event(log.InfoLevel, "first", "")
+
+	finished := make(chan []*pluginv1.LogEntry, 1)
+	go func() { finished <- logs.entries() }()
+	select {
+	case entries := <-finished:
+		require.NotEmpty(t, entries)
+		assert.Contains(t, entries[len(entries)-1].GetMessage(), "not shown")
+		assert.NoError(t, callCtx.Err(), "finalizing the events does not cancel the call")
+	case <-time.After(10 * time.Second):
+		t.Fatal("entries did not return while Atmos stopped taking events")
+	}
+}

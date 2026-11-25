@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"strings"
 	"time"
 
 	armcontainerservice "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/containerservice/armcontainerservice/v6"
@@ -16,6 +17,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// aksUserPrefix distinguishes AKS exec-plugin usernames in a kubeconfig.
+const aksUserPrefix = "aks"
 
 // AKSClusterInfo contains cluster data needed for kubeconfig generation.
 type AKSClusterInfo struct {
@@ -250,6 +254,7 @@ func BuildKubeClusterInfo(info *AKSClusterInfo, identityName string) *kube.Clust
 			Value: identityName,
 		})
 	}
+	execEnv = appendWorkingDirExecEnv(execEnv)
 
 	return &kube.ClusterInfo{
 		Name:                     info.Name,
@@ -257,11 +262,86 @@ func BuildKubeClusterInfo(info *AKSClusterInfo, identityName string) *kube.Clust
 		CertificateAuthorityData: info.CertificateAuthorityData,
 		ID:                       info.ID,
 		Region:                   info.ResourceGroup,
-		UserPrefix:               "aks",
-		AccountID:                info.SubscriptionID,
+		UserPrefix:               aksUserPrefix,
+		AccountID:                strings.ToLower(info.SubscriptionID), // Matches AKSKubeUserName.
+		Identity:                 identityName,
+		LegacyUserNames:          legacyAKSUserNames(info.Name, info.ResourceGroup, info.SubscriptionID),
 		ExecArgs:                 execArgs,
 		ExecEnv:                  execEnv,
 	}
+}
+
+// legacyAKSUserNames returns the pre-identity user names for the cluster: the
+// lowercased-subscription form and, when the configured subscription ID has
+// uppercase letters, the form with the ID as written, because earlier builds
+// did not lowercase it, so those entries must still count as owned.
+func legacyAKSUserNames(clusterName, resourceGroup, subscriptionID string) []string {
+	names := []string{LegacyAKSKubeUserName(clusterName, resourceGroup, subscriptionID)}
+	if strings.ToLower(subscriptionID) == subscriptionID {
+		return names
+	}
+	asWritten := &kube.ClusterInfo{
+		Name:       clusterName,
+		Region:     resourceGroup,
+		UserPrefix: aksUserPrefix,
+		AccountID:  subscriptionID,
+	}
+	return append(names, kube.UserName(asWritten))
+}
+
+// AKSKubeUserName returns the kubeconfig exec-plugin username that
+// BuildKubeClusterInfo produces for a cluster when authenticating as
+// identityName from realm:
+// atmos-[<realm>-]aks-<name>-<resource-group>[-<subscription>][-<identity>].
+// The realm and identity keep contexts for different repositories or
+// identities from sharing one user.
+func AKSKubeUserName(clusterName, resourceGroup, subscriptionID, identityName, realm string) string {
+	defer perf.Track(nil, "azure.AKSKubeUserName")()
+
+	// Subscription IDs are case-insensitive GUIDs, and the writer's value (the
+	// configured or credential subscription) can differ in case from the one
+	// in the ARM resource ID that cleanup parses, so both are lowercased here.
+	return kube.UserName(aksUserInfo(clusterName, resourceGroup, subscriptionID, identityName, realm))
+}
+
+// aksUserInfo returns the ClusterInfo fields that make up an AKS user name.
+func aksUserInfo(clusterName, resourceGroup, subscriptionID, identityName, realm string) *kube.ClusterInfo {
+	return &kube.ClusterInfo{
+		Name:       clusterName,
+		Region:     resourceGroup,
+		UserPrefix: aksUserPrefix,
+		AccountID:  strings.ToLower(subscriptionID),
+		Identity:   identityName,
+		Realm:      realm,
+	}
+}
+
+// AKSKubeUserNames returns AKSKubeUserName followed by the names older
+// versions wrote for the same entry, so cleanup can remove any of them: the
+// name without the realm (when realm is set), the names under each of
+// legacyRealms (see kube.ClusterInfo.LegacyRealms) and the legacy name
+// without the identity.
+func AKSKubeUserNames(clusterName, resourceGroup, subscriptionID, identityName string, scope kube.RealmScope) []string {
+	defer perf.Track(nil, "azure.AKSKubeUserNames")()
+
+	// Each realm variant also lists its unhashed form, which earlier builds wrote.
+	names := kube.UserNameForms(aksUserInfo(clusterName, resourceGroup, subscriptionID, identityName, scope.Realm))
+	if scope.Realm != "" {
+		names = append(names, kube.UserNameForms(aksUserInfo(clusterName, resourceGroup, subscriptionID, identityName, ""))...)
+	}
+	for _, legacyRealm := range scope.LegacyRealms {
+		names = append(names, kube.UserNameForms(aksUserInfo(clusterName, resourceGroup, subscriptionID, identityName, legacyRealm))...)
+	}
+	return append(names, LegacyAKSKubeUserName(clusterName, resourceGroup, subscriptionID))
+}
+
+// LegacyAKSKubeUserName returns the atmos-aks-<name>-<resource-group>[-<subscription>]
+// username that versions before the identity was added wrote, so cleanup can
+// still remove entries those versions left in a kubeconfig.
+func LegacyAKSKubeUserName(clusterName, resourceGroup, subscriptionID string) string {
+	defer perf.Track(nil, "azure.LegacyAKSKubeUserName")()
+
+	return AKSKubeUserName(clusterName, resourceGroup, subscriptionID, "", "")
 }
 
 // GetToken returns the AKS-scoped bearer token for kubectl. The token itself

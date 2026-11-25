@@ -87,7 +87,10 @@ func renderWebflowDialog(authURL string) (string, bool) {
 	content.WriteString("\n\n")
 	content.WriteString(instructionStyle.Render("Opening browser for authentication..."))
 
-	containsURL := link.FitsInline(authURL)
+	// The border and horizontal padding of the box take columns too, so they are
+	// subtracted from the URL budget; otherwise a URL at the inline limit makes
+	// the dialog wrap in an 80-column terminal.
+	containsURL := authURL != "" && lipgloss.Width(authURL) <= link.MaxInlineWidth-boxStyle.GetHorizontalFrameSize()
 	if containsURL {
 		urlStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).

@@ -135,3 +135,35 @@ func TestResolveDiffBaseline_FromManifestHonorsCanceledContext(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 	assert.NotErrorIs(t, err, errUtils.ErrHelmBaselineRead)
 }
+
+func TestDiffConfiguredCapabilitiesMatchBaseline(t *testing.T) {
+	config := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "caps", ComponentSection: map[string]any{
+		"chart": "./chart-capabilities", "name": "caps",
+		"kube_version": "1.30.0", "api_versions": []any{"monitoring.coreos.com/v1/ServiceMonitor"},
+	}}
+	spec, err := buildChartSpec(config, info, "testdata", nil)
+	require.NoError(t, err)
+	baseline := filepath.Join(t.TempDir(), "baseline.yaml")
+	require.NoError(t, os.WriteFile(baseline, []byte(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caps-capabilities
+data:
+  kubeVersion: "v1.30.0"
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: caps
+spec:
+  selector:
+    matchLabels:
+      app: caps
+  endpoints:
+    - port: http
+`), 0o600))
+	diff, err := runDiff(context.Background(), config, info, map[string]any{flagFromManifest: baseline}, spec)
+	require.NoError(t, err)
+	assert.Empty(t, diff)
+}

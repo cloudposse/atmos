@@ -67,7 +67,7 @@ atmos azure aks token --cluster-name dev-cluster --resource-group dev-rg | jq .
 
 ## How It Works
 
-This command outputs an already-acquired AAD access token as a Kubernetes `ExecCredential` JSON object — no external tool (`kubelogin`, `az`) is required:
+This command outputs an already-acquired AAD access token as a Kubernetes `ExecCredential` JSON object - no external tool (`kubelogin`, `az`) is required:
 
 1. Atmos authenticates the specified identity.
 2. Azure AD access tokens are scope-bound at issuance (unlike AWS SigV4 signing), so the identity's provider (device-code, OIDC, or Azure CLI) acquires an additional token scoped to the AKS-managed AAD server application at authentication time, alongside the identity's primary ARM token.
@@ -92,7 +92,7 @@ When you run `atmos azure aks update-kubeconfig`, Atmos automatically generates 
 
 ```yaml
 users:
-  - name: atmos-aks-dev-cluster-dev-rg
+  - name: atmos-aks-dev-cluster-dev-rg-00000000-0000-0000-0000-000000000000-azure-dev-d8319e00
     user:
       exec:
         apiVersion: client.authentication.k8s.io/v1beta1
@@ -105,10 +105,24 @@ users:
           - dev-cluster
           - --resource-group
           - dev-rg
+          - --server-id
+          - 6dae42f8-4368-4678-94ff-3960e28e3630
+          - --subscription-id
+          - 00000000-0000-0000-0000-000000000000
           - --identity=azure-dev
+        env:
+          - name: ATMOS_IDENTITY
+            value: azure-dev
+          - name: ATMOS_CHDIR
+            value: /path/to/your/repo
+        interactiveMode: Never
 ```
 
 This means kubectl automatically calls `atmos azure aks token` whenever it needs a fresh token, providing seamless authentication without manual token management.
+
+The user is named `atmos-aks-<cluster>-<resource-group>-<subscription>-<identity>-<hash>`, so contexts for different subscriptions or identities never share a user. When `auth.realm` (or `ATMOS_AUTH_REALM`) is set, the realm follows `atmos-` (for example, `atmos-acme-aks-dev-cluster-dev-rg-...`) and is passed to the command as `ATMOS_AUTH_REALM`, so repositories with different realms keep separate users in the shared kubeconfig. The name ends with an 8-character hash of the realm, cluster, location, account and identity, because those parts can contain hyphens and different combinations would otherwise produce the same name and overwrite each other's user. Names without a realm or identity have no hash. With a realm and no alias, the context is named `<realm>/<resource ID>` instead of the bare ARM resource ID, so realms keep separate contexts too.
+
+`ATMOS_CHDIR` is the directory the entry was written from. If it no longer exists, the token command warns and runs from the current directory. Re-run `atmos azure aks update-kubeconfig` (or `atmos auth login`) from the repository to update the entry.
 
 ## Notes
 
@@ -118,6 +132,6 @@ This means kubectl automatically calls `atmos azure aks token` whenever it needs
 
 ## See Also
 
-- [Auth Login Command](/cli/commands/auth/login) — Authenticate with identities and auto-provision kubeconfig
-- [Azure AKS Update Kubeconfig](/cli/commands/azure/aks/update-kubeconfig) — Download kubeconfig from AKS clusters
-- [Auth Configuration](/cli/configuration/auth) — Configure providers, identities, and integrations
+- [Auth Login Command](/cli/commands/auth/login) - Authenticate with identities and auto-provision kubeconfig
+- [Azure AKS Update Kubeconfig](/cli/commands/azure/aks/update-kubeconfig) - Download kubeconfig from AKS clusters
+- [Auth Configuration](/cli/configuration/auth) - Configure providers, identities, and integrations

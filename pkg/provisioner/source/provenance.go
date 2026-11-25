@@ -35,7 +35,9 @@ type Provenance struct {
 	// Source is the credential-free form of the source URI.
 	Source string `json:"source"`
 	// Version is the source version, when one was declared separately.
-	Version string `json:"version,omitempty"`
+	Version        string `json:"version,omitempty"`
+	SourceIdentity string `json:"source_identity,omitempty"`
+	SourceKind     string `json:"source_kind,omitempty"`
 	// ProvisionedAt is the provisioning time.
 	ProvisionedAt time.Time `json:"provisioned_at"`
 }
@@ -104,15 +106,64 @@ func HasProvenance(dir string) bool {
 
 // recordProvenance marks a freshly provisioned target. Workdir targets get the full workdir
 // metadata (which also drives re-provisioning decisions); shared directories get the minimal marker.
-func recordProvenance(target *Target, stack string, spec *schema.VendorComponentSource) error {
+func recordProvenance(target *Target, stack string, spec *schema.VendorComponentSource, receipts ...*downloader.ResolvedArtifact) error {
 	if target.IsWorkdir {
-		return writeWorkdirMetadata(target.Dir, target.Component, stack, spec)
+		instance := target.Instance
+		if instance == "" {
+			instance = target.Component
+		}
+		return writeWorkdirMetadata(target.Dir, instance, stack, spec, receipts...)
 	}
-	return WriteProvenance(target.Dir, &Provenance{
+	p := &Provenance{
 		Component:     target.Component,
 		Stack:         stack,
 		Source:        downloader.RedactSource(spec.Uri),
 		Version:       spec.Version,
 		ProvisionedAt: time.Now().UTC(),
-	})
+	}
+	if len(receipts) > 0 && receipts[0] != nil {
+		p.SourceIdentity, p.SourceKind = receipts[0].Identity, receipts[0].Kind
+	}
+	return WriteProvenance(target.Dir, p)
+}
+
+// withProvenance prepares receipts in staging so source files and provenance share
+// the same rollback journal. Existing creation time is carried forward explicitly.
+func withProvenance(target *Target, stack string, spec *schema.VendorComponentSource, receipt *downloader.ResolvedArtifact) VendorSourceOption {
+	return func(opts *vendorSourceOptions) {
+		opts.metadata = func(stage string) error {
+			if err := validateTargetOwner(target, stack); err != nil {
+				return err
+			}
+			if target.IsWorkdir {
+				if previous, err := workdir.ReadMetadata(target.Dir); err == nil && previous != nil {
+					if err := workdir.WriteMetadata(stage, previous); err != nil {
+						return err
+					}
+				}
+			}
+			stagedTarget := *target
+			stagedTarget.Dir = stage
+			return recordProvenance(&stagedTarget, stack, spec, receipt)
+		}
+	}
+}
+
+// validateTargetOwner also runs under the publication lock before a new receipt is
+// staged, so two instances cannot race to claim one explicit working directory.
+func validateTargetOwner(target *Target, stack string) error {
+	if !target.EnforceOwner {
+		return nil
+	}
+	metadata, err := workdir.ReadMetadata(target.Dir)
+	if err != nil || metadata == nil {
+		if !isNonEmptyDir(target.Dir) {
+			return nil
+		}
+		return errUtils.Build(errUtils.ErrWorkdirProvision).WithExplanation("Explicit source working directory has files but no verifiable instance owner").WithContext("path", target.Dir).Err()
+	}
+	if metadata.Component != target.Instance || metadata.Stack != stack {
+		return errUtils.Build(errUtils.ErrWorkdirProvision).WithExplanation("Explicit source working directory belongs to another component instance").WithContext("path", target.Dir).WithContext("owner_component", metadata.Component).WithContext("owner_stack", metadata.Stack).Err()
+	}
+	return nil
 }

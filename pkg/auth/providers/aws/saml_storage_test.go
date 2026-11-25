@@ -1,6 +1,7 @@
 package aws
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -222,8 +224,13 @@ func TestSAMLProvider_migrateLegacySymlink_NotASymlink(t *testing.T) {
 func TestSAMLProvider_migrateLegacySymlink_NonexistentPath(t *testing.T) {
 	// When the path does not exist at all, migration is a no-op.
 	p := &samlProvider{config: &schema.Provider{}}
-	// Must not panic.
-	p.migrateLegacySymlink(filepath.Join(t.TempDir(), "nonexistent"))
+	path := filepath.Join(t.TempDir(), "nonexistent")
+
+	require.NotPanics(t, func() { p.migrateLegacySymlink(path) })
+
+	// A no-op must not create anything at the path.
+	_, err := os.Lstat(path)
+	assert.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestSAMLProvider_migrateLegacySymlink_DanglingSymlink(t *testing.T) {
@@ -318,12 +325,21 @@ func TestSAMLProvider_setupBrowserAutomation_HandlesStorageSetupFailureGracefull
 
 	sp := p.(*samlProvider)
 
+	// Capture the logger so the test can see that the failure reached the non-fatal handler.
+	var logs bytes.Buffer
+	previous := log.Default()
+	captured := log.New()
+	captured.SetOutput(&logs)
+	log.SetDefault(captured)
+	t.Cleanup(func() { log.SetDefault(previous) })
+
 	// Storage dir failure is non-fatal — setupBrowserAutomation returns nil.
 	err = sp.setupBrowserAutomation()
 	assert.NoError(t, err, "storage dir failure is non-fatal — should return nil")
+	assert.Contains(t, logs.String(), "Failed to setup browser storage directory", "the storage failure must reach the non-fatal handler")
 
-	// Verify the environment variable was still set (proves function continued).
-	assert.Equal(t, "true", os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"))
+	// Verify the function continued past the storage failure: auto-download is still enabled.
+	assert.True(t, sp.createLoginDetails(sp.getDriver()).DownloadBrowser)
 }
 
 func TestSAMLProvider_setupBrowserAutomation_FailsOnInvalidExecutable(t *testing.T) {
@@ -343,13 +359,13 @@ func TestSAMLProvider_setupBrowserAutomation_FailsOnInvalidExecutable(t *testing
 	assert.Error(t, err, "should fail fast when browser executable does not exist")
 }
 
-func TestSAMLProvider_setupBrowserAutomation_UnsetsEnvWhenDownloadDisabled(t *testing.T) {
+func TestSAMLProvider_setupBrowserAutomation_KeepsEnvWhenDownloadDisabled(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
 	homedir.Reset()
 
-	// Pre-set the env var to simulate a previous auth flow.
+	// Pre-set the env var to simulate a value the user exported.
 	t.Setenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD", "true")
 
 	p := &samlProvider{
@@ -363,8 +379,10 @@ func TestSAMLProvider_setupBrowserAutomation_UnsetsEnvWhenDownloadDisabled(t *te
 	err := p.setupBrowserAutomation()
 	assert.NoError(t, err)
 
-	assert.Empty(t, os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"),
-		"SAML2AWS_AUTO_BROWSER_DOWNLOAD should be unset for non-Browser drivers")
+	// Atmos no longer sets or unsets SAML2AWS_AUTO_BROWSER_DOWNLOAD: nothing reads it.
+	assert.Equal(t, "true", os.Getenv("SAML2AWS_AUTO_BROWSER_DOWNLOAD"),
+		"a value the user exported must be left alone")
+	assert.False(t, p.createLoginDetails(p.getDriver()).DownloadBrowser, "non-Browser drivers never download")
 }
 
 func TestSAMLProvider_setupBrowserAutomation_LogsBrowserType(t *testing.T) {

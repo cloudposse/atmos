@@ -85,7 +85,8 @@ func TestAzureCredentials_BuildWhoamiInfo(t *testing.T) {
 	}
 }
 
-// Cancellation must reach the public entrypoint without sending a token to live ARM.
+// Cancellation must reach the public entrypoint without sending a token to live ARM. A canceled
+// validation was not performed, so it is reported as unavailable, not as rejected credentials.
 func TestAzureCredentials_ValidateCanceled(t *testing.T) {
 	for _, tt := range []struct{ name, expiration string }{
 		{name: "without expiration"},
@@ -97,7 +98,8 @@ func TestAzureCredentials_ValidateCanceled(t *testing.T) {
 			cancel()
 			info, err := credentials.Validate(ctx)
 			require.Nil(t, info)
-			require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+			require.ErrorIs(t, err, errUtils.ErrCredentialValidationUnavailable)
+			require.NotErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 			require.ErrorIs(t, err, context.Canceled)
 		})
 	}
@@ -115,10 +117,11 @@ func TestAzureCredentials_Validate_EmptySubscriptionID(t *testing.T) {
 	ctx := context.Background()
 	_, err := c.Validate(ctx)
 
-	// Should return configuration error without making Azure API call.
+	// Without a subscription the credentials cannot be checked, which is an unavailable
+	// validation (exit 0 in whoami), not invalid credentials; no Azure API call is made.
 	assert.Error(t, err, "Validate should fail with empty subscription ID")
-	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig), "Should return ErrInvalidAuthConfig")
-	assert.Contains(t, err.Error(), "subscription ID is required", "Error message should mention subscription ID")
+	assert.True(t, errors.Is(err, errUtils.ErrCredentialValidationUnavailable), "Should return ErrCredentialValidationUnavailable")
+	assert.Contains(t, err.Error(), "no Azure subscription is set", "Error message should mention the subscription")
 }
 
 func TestAzureCredentials_MultipleTokens(t *testing.T) {

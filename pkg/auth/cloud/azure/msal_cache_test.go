@@ -158,10 +158,10 @@ func TestMSALCache_Export(t *testing.T) {
 	err = cache.Export(ctx, mockMarshaler, msalcache.ExportHints{})
 	require.NoError(t, err)
 
-	// Verify file was written.
+	// Verify file was written (re-encoded by the read-modify-write, so compare as JSON).
 	writtenData, err := os.ReadFile(cachePath)
 	require.NoError(t, err)
-	assert.Equal(t, testData, writtenData)
+	assert.JSONEq(t, string(testData), string(writtenData))
 
 	// Verify file permissions (Unix only - Windows uses different permission model).
 	if runtime.GOOS != "windows" {
@@ -341,10 +341,10 @@ func TestMSALCache_ReplaceReadErrorNotNotExist(t *testing.T) {
 	assert.False(t, mockUnmarshaler.called)
 }
 
-func TestMSALCache_ReplaceUnmarshalErrorStartsFresh(t *testing.T) {
+func TestMSALCache_ReplaceUnmarshalErrorKeepsAuthWorking(t *testing.T) {
 	tempDir := t.TempDir()
 	cachePath := filepath.Join(tempDir, "msal_cache.json")
-	require.NoError(t, os.WriteFile(cachePath, []byte("some cached bytes"), 0o600))
+	require.NoError(t, os.WriteFile(cachePath, []byte(`{"Account":{"a":{"username":"me"}}}`), 0o600))
 
 	cache, err := NewMSALCache(cachePath, "")
 	require.NoError(t, err)
@@ -352,8 +352,9 @@ func TestMSALCache_ReplaceUnmarshalErrorStartsFresh(t *testing.T) {
 	failingUnmarshaler := &errorUnmarshaler{err: assert.AnError}
 	err = cache.Replace(context.Background(), failingUnmarshaler, msalcache.ReplaceHints{})
 
-	// A corrupted on-disk cache must not fail auth: Replace should log and
-	// start fresh rather than propagate the unmarshal error.
+	// A cache MSAL cannot load must not fail auth: Replace should log and continue
+	// without cached tokens rather than propagate the unmarshal error. (Export then
+	// keeps the entries on disk; see TestMSALCache_ExportAfterFailedMSALLoadKeepsDiskEntries.)
 	require.NoError(t, err)
 	assert.True(t, failingUnmarshaler.called, "Unmarshal should have been attempted")
 }
@@ -375,11 +376,11 @@ func TestMSALCache_ExportMarshalError(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "cache file should not be written when marshaling fails")
 }
 
-func TestMSALCache_ExportWriteErrorIsADirectory(t *testing.T) {
+func TestMSALCache_ExportReadErrorIsADirectory(t *testing.T) {
 	tempDir := t.TempDir()
-	// Point the cache path at a directory instead of a file: os.WriteFile
-	// fails, exercising the "failed to write MSAL cache" branch. The lock
-	// (a sibling ".lock" file) is still acquired successfully since only
+	// Point the cache path at a directory instead of a file: the read in the
+	// read-modify-write fails, so nothing is written. The locks (sibling
+	// ".lockfile" and ".lock" files) are still acquired successfully since only
 	// cachePath itself, not its parent, is a directory.
 	cachePath := filepath.Join(tempDir, "cache-is-a-dir")
 	require.NoError(t, os.Mkdir(cachePath, 0o755))
@@ -391,7 +392,40 @@ func TestMSALCache_ExportWriteErrorIsADirectory(t *testing.T) {
 	err = cache.Export(context.Background(), mockMarshaler, msalcache.ExportHints{})
 
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to read MSAL cache")
+}
+
+func TestMSALCache_ExportWriteError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping on Windows: directory permissions do not block file creation the same way")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("Skipping test when running as root: root bypasses directory permission checks")
+	}
+	tempDir := t.TempDir()
+	cachePath := filepath.Join(tempDir, "msal_cache.json")
+	original := []byte(`{"Account":{"a":{"username":"me"}}}`)
+	require.NoError(t, os.WriteFile(cachePath, original, 0o600))
+
+	cache, err := NewMSALCache(cachePath, "")
+	require.NoError(t, err)
+	// Pre-create both lock files, then make the directory and the cache file read-only,
+	// so the locks can still be taken but neither the atomic write (no temp file) nor the
+	// in-place fallback (read-only file) can write the cache.
+	require.NoError(t, os.WriteFile(AzureCLIMSALCacheLockPath(cachePath), nil, 0o600))
+	require.NoError(t, os.WriteFile(cachePath+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(cachePath, 0o400))
+	require.NoError(t, os.Chmod(tempDir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(tempDir, 0o755) })
+
+	mockMarshaler := &mockMarshaler{data: []byte(`{"AccessToken":{"t":{"secret":"s"}}}`)}
+	err = cache.Export(context.Background(), mockMarshaler, msalcache.ExportHints{})
+
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to write MSAL cache")
+	data, readErr := os.ReadFile(cachePath)
+	require.NoError(t, readErr)
+	assert.Equal(t, string(original), string(data), "a failed write must leave the cache unchanged")
 }
 
 // Mock types for testing.

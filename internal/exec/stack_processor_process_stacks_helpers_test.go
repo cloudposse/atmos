@@ -1779,3 +1779,39 @@ func TestProcessInheritedComponent(t *testing.T) {
 		})
 	}
 }
+
+// TestExtractHelmComponentSectionCapabilities guards the native-Helm
+// `kube_version` and `api_versions` render settings against being dropped by the
+// stack processor's Helm field whitelist before they reach pkg/component/helm.
+func TestExtractHelmComponentSectionCapabilities(t *testing.T) {
+	// Compile-time guard: a rename of the constants fails the build.
+	_ = cfg.HelmKubeVersionSectionName
+	_ = cfg.HelmAPIVersionsSectionName
+
+	apiVersions := []any{"monitoring.coreos.com/v1", "monitoring.coreos.com/v1/ServiceMonitor"}
+
+	t.Run("survives-full-component-extraction", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.HelmComponentType,
+			Component:     "loki",
+			StackName:     "dev",
+			ComponentMap: map[string]any{
+				cfg.ChartSectionName:           "grafana/loki",
+				cfg.HelmKubeVersionSectionName: "1.37.0",
+				cfg.HelmAPIVersionsSectionName: apiVersions,
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+
+		assert.Equal(t, "1.37.0", result.ComponentHelm[cfg.HelmKubeVersionSectionName])
+		assert.Equal(t, apiVersions, result.ComponentHelm[cfg.HelmAPIVersionsSectionName])
+	})
+
+	t.Run("absent-keys-left-unset", func(t *testing.T) {
+		component := extractHelmComponentSection(map[string]any{cfg.ChartSectionName: "."})
+		assert.NotContains(t, component, cfg.HelmKubeVersionSectionName)
+		assert.NotContains(t, component, cfg.HelmAPIVersionsSectionName)
+	})
+}

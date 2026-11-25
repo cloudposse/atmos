@@ -39,6 +39,8 @@ var signatures = []signature{
 	{`Backend initialization required, please run "terraform init"`, Diagnosis{InitRequired: true}},
 	{`Backend initialization required, please run "tofu init"`, Diagnosis{InitRequired: true}},
 	{"Required plugins are not installed", Diagnosis{InitRequired: true}},
+	{"run tofu init to ensure all providers are correctly", Diagnosis{InitRequired: true}},
+	{"run terraform init to ensure all providers are correctly", Diagnosis{InitRequired: true}},
 	{"Inconsistent dependency lock file", Diagnosis{InitRequired: true}},
 	{"Module not installed", Diagnosis{InitRequired: true}},
 	{"Module source has changed", Diagnosis{InitRequired: true}},

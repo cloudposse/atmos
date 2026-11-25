@@ -118,7 +118,7 @@ func TestLoadDefaultAzureCredentials_RetrieveFailureHasIdentityHint(t *testing.T
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := LoadDefaultAzureCredentials(ctx)
+	_, err := LoadDefaultAzureCredentials(ctx, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrACRAuthFailed)
 	// azidentity's DefaultAzureCredential returns an aggregate error over each attempted

@@ -58,7 +58,10 @@ func (s *Server) Listen(request *apiv1.ListenRequest, stream grpc.ServerStreamin
 	if err := stream.Send(&apiv1.CallbackEvent{Event: &apiv1.CallbackEvent_Ready{Ready: &apiv1.CallbackReady{RedirectUri: listener.RedirectURI()}}}); err != nil {
 		return err
 	}
+	// The callback arrives when the user finishes signing in, so the wait is not plugin work.
+	resume := invocation.awaitUser()
 	callback, err := listener.Receive(invocation.Context)
+	resume()
 	if err != nil {
 		return apiError(err)
 	}

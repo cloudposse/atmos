@@ -3,8 +3,9 @@ package aws
 import (
 	"context"
 	"fmt"
+	"slices"
+	"sort"
 	"strconv"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -16,6 +17,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// logKeyCluster is the structured log key for the EKS cluster name.
+const logKeyCluster = "cluster"
 
 func init() {
 	integrations.Register(integrations.KindAWSEKS, NewEKSIntegration)
@@ -33,7 +37,13 @@ var eksDescribeCluster = awsCloud.DescribeCluster
 type EKSIntegration struct {
 	name     string
 	identity string
-	cluster  *schema.Cluster
+	// realm is the explicitly configured auth realm (see kube.NameRealm); a
+	// non-empty realm scopes the kubeconfig user and default context names.
+	realm string
+	// legacyRealms are derived realms whose names unreleased builds wrote;
+	// they count as this integration's own (see kube.ClusterInfo.LegacyRealms).
+	legacyRealms []string
+	cluster      *schema.Cluster
 }
 
 // NewEKSIntegration creates an EKS integration from config.
@@ -86,10 +96,13 @@ func NewEKSIntegration(config *integrations.IntegrationConfig) (integrations.Int
 		}
 	}
 
+	nameRealm, legacyRealms := kube.NameRealm(config.Realm, config.RealmExplicit())
 	return &EKSIntegration{
-		name:     config.Name,
-		identity: identity,
-		cluster:  cluster,
+		name:         config.Name,
+		identity:     identity,
+		realm:        nameRealm,
+		legacyRealms: legacyRealms,
+		cluster:      cluster,
 	}, nil
 }
 
@@ -102,7 +115,7 @@ func (e *EKSIntegration) Kind() string {
 func (e *EKSIntegration) Execute(ctx context.Context, creds types.ICredentials) error {
 	defer perf.Track(nil, "aws.EKSIntegration.Execute")()
 
-	log.Debug("Configuring kubeconfig for EKS cluster", "cluster", e.cluster.Name, "region", e.cluster.Region)
+	log.Debug("Configuring kubeconfig for EKS cluster", logKeyCluster, e.cluster.Name, "region", e.cluster.Region)
 
 	// Create EKS client.
 	client, err := eksClientFactory(ctx, creds, e.cluster.Region)
@@ -130,17 +143,16 @@ func (e *EKSIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEKSIntegrationFailed, err)
 	}
+	clusterInfo.Realm = e.realm
+	clusterInfo.LegacyRealms = e.legacyRealms
 
 	changed, err := mgr.WriteClusterConfig(clusterInfo, e.cluster.Alias, updateMode)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 
-	// Determine display name for success/debug message.
-	displayName := e.cluster.Alias
-	if displayName == "" {
-		displayName = info.ARN
-	}
+	// The display name for success/debug messages is the context name written.
+	displayName := kube.ContextName(info.ARN, e.cluster.Alias, e.realm)
 
 	// Only surface the success line when something actually changed.
 	// Auto-provisioned integrations re-run on every identity resolution, so
@@ -148,9 +160,9 @@ func (e *EKSIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	// commands (workflows, templates, !terraform.output lookups, ...).
 	if changed {
 		ui.Success(fmt.Sprintf("EKS kubeconfig: %s → %s", displayName, mgr.GetPath()))
-		log.Debug("EKS kubeconfig written", "cluster", e.cluster.Name, "context", displayName, "path", mgr.GetPath())
+		log.Debug("EKS kubeconfig written", logKeyCluster, e.cluster.Name, "context", displayName, "path", mgr.GetPath())
 	} else {
-		log.Debug("EKS kubeconfig already up to date", "cluster", e.cluster.Name, "context", displayName, "path", mgr.GetPath())
+		log.Debug("EKS kubeconfig already up to date", logKeyCluster, e.cluster.Name, "context", displayName, "path", mgr.GetPath())
 	}
 
 	return nil
@@ -176,20 +188,24 @@ func (e *EKSIntegration) Cleanup(_ context.Context) error {
 		return nil
 	}
 
-	// Compute context name and user name to match BuildClusterConfig output.
-	contextName := e.cluster.Alias
-	if contextName == "" {
-		// Use the ARN as context name (same default as BuildClusterConfig).
-		contextName = clusterARN
-	}
+	// Compute context names and user names to match BuildClusterConfig output.
+	// The default context name is [<realm>/]<ARN>; with a realm, the
+	// unprefixed ARN that older versions wrote is checked too, and without one,
+	// the <derived-realm>/<ARN> name unreleased builds wrote.
+	contextNames := kube.ContextNames(clusterARN, e.cluster.Alias, e.realm, e.legacyRealms...)
 
-	userName := "atmos-eks-" + e.cluster.Name + "-" + e.cluster.Region
+	// The user name includes the realm, account ID and identity (see
+	// awsCloud.BuildKubeClusterInfo). Also remove the names older versions
+	// wrote: without the realm, and the atmos-eks-<name>-<region> legacy name.
+	// A context is removed only when it points at one of these users, and a
+	// user is kept while another context still references it.
+	userNames := e.kubeUserNames(clusterARN)
 
-	if err := mgr.RemoveClusterConfig(clusterARN, contextName, userName); err != nil {
+	if err := mgr.RemoveOwnedClusterConfig(clusterARN, contextNames, userNames, kube.WithIdentity(e.identity)); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrEKSIntegrationFailed, err)
 	}
 
-	log.Debug("EKS cleanup: removed kubeconfig entries", "cluster", e.cluster.Name, "context", contextName)
+	log.Debug("EKS cleanup: removed kubeconfig entries", logKeyCluster, e.cluster.Name, "context", contextNames[0])
 
 	return nil
 }
@@ -231,7 +247,12 @@ func (e *EKSIntegration) resolveKubeconfigSettings() (path, mode, update string)
 	return "", "", ""
 }
 
-// findClusterARN searches the kubeconfig for a cluster ARN matching this integration's cluster name.
+// findClusterARN searches the kubeconfig for the EKS cluster ARN of this
+// integration's cluster. Each key is parsed as an ARN and must name the EKS
+// service, the integration's region and the "cluster/<name>" resource, so a
+// same-named cluster in another region (or a non-EKS entry) is never matched.
+// When same-named clusters of several accounts match, the one whose context
+// uses this integration's exec user is chosen.
 func (e *EKSIntegration) findClusterARN(mgr *kube.KubeconfigManager) (string, error) {
 	defer perf.Track(nil, "aws.EKSIntegration.findClusterARN")()
 
@@ -240,13 +261,71 @@ func (e *EKSIntegration) findClusterARN(mgr *kube.KubeconfigManager) (string, er
 		return "", err
 	}
 
-	// Look for an ARN ending with "cluster/<name>".
-	suffix := "cluster/" + e.cluster.Name
-	for _, arn := range clusters {
-		if strings.HasSuffix(arn, suffix) {
-			return arn, nil
+	// Sort so the result does not depend on map iteration order.
+	sort.Strings(clusters)
+	var candidates []string
+	for _, id := range clusters {
+		if e.matchesClusterARN(id) {
+			candidates = append(candidates, id)
 		}
 	}
 
-	return "", fmt.Errorf("no cluster ARN found matching %s", e.cluster.Name)
+	switch len(candidates) {
+	case 0:
+		return "", fmt.Errorf("%w: no cluster ARN found matching %s in %s", errUtils.ErrEKSClusterNotFound, e.cluster.Name, e.cluster.Region)
+	case 1:
+		return candidates[0], nil
+	default:
+		return e.selectOwnedClusterARN(mgr, candidates)
+	}
+}
+
+// selectOwnedClusterARN picks, from same-named cluster ARNs of different
+// accounts, the one whose context uses this integration's exec user. It fails
+// rather than guessing when none or more than one qualifies.
+func (e *EKSIntegration) selectOwnedClusterARN(mgr *kube.KubeconfigManager, candidates []string) (string, error) {
+	var owned []string
+	for _, clusterARN := range candidates {
+		isOwned, err := e.ownsClusterContext(mgr, clusterARN)
+		if err != nil {
+			return "", err
+		}
+		if isOwned {
+			owned = append(owned, clusterARN)
+		}
+	}
+
+	if len(owned) == 1 {
+		return owned[0], nil
+	}
+	return "", fmt.Errorf("%w: %d clusters named %s in %s match and none can be attributed to identity %q",
+		errUtils.ErrEKSClusterAmbiguous, len(candidates), e.cluster.Name, e.cluster.Region, e.identity)
+}
+
+// ownsClusterContext reports whether one of the context names this integration
+// writes for clusterARN (see kube.ContextNames) exists, uses that cluster and
+// points at one of this integration's exec users.
+func (e *EKSIntegration) ownsClusterContext(mgr *kube.KubeconfigManager, clusterARN string) (bool, error) {
+	for _, contextName := range kube.ContextNames(clusterARN, e.cluster.Alias, e.realm, e.legacyRealms...) {
+		kubeContext, err := mgr.LookupContext(contextName)
+		if err != nil {
+			return false, err
+		}
+		if kubeContext != nil && kubeContext.Cluster == clusterARN &&
+			slices.Contains(e.kubeUserNames(clusterARN), kubeContext.AuthInfo) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// kubeUserNames returns the exec user name this integration writes for
+// clusterARN, followed by the names older versions wrote for it.
+func (e *EKSIntegration) kubeUserNames(clusterARN string) []string {
+	return awsCloud.EKSKubeUserNames(clusterARN, e.cluster.Name, e.cluster.Region, e.identity, kube.RealmScope{Realm: e.realm, LegacyRealms: e.legacyRealms})
+}
+
+// matchesClusterARN reports whether id is the ARN of this integration's EKS cluster.
+func (e *EKSIntegration) matchesClusterARN(id string) bool {
+	return awsCloud.IsEKSClusterARN(id, e.cluster.Name, e.cluster.Region)
 }

@@ -21,9 +21,13 @@ import (
 // testShortVerificationURL is the legacy device-code URL, which fits in the dialog.
 const testShortVerificationURL = "https://device.sso.us-east-1.amazonaws.com/?user_code=ABCD-1234"
 
-// maxVerificationDialogWidth is the widest the dialog may render: the inline URL
-// limit plus the box border and horizontal padding.
-const maxVerificationDialogWidth = link.MaxInlineWidth + 6
+// maxVerificationDialogWidth is the widest the dialog may render, border and
+// padding included, so it never wraps in an 80-column terminal.
+const maxVerificationDialogWidth = link.MaxInlineWidth
+
+// verificationDialogURLLimit is the widest URL the dialog holds: the dialog
+// width minus the two border columns and four columns of horizontal padding.
+const verificationDialogURLLimit = maxVerificationDialogWidth - 6
 
 type ssoDialogTestStreams struct {
 	output *bytes.Buffer
@@ -128,8 +132,9 @@ func TestRenderVerificationDialog_URLPlacement(t *testing.T) {
 		url         string
 		containsURL bool
 	}{
-		{name: "URL at the inline limit stays in the dialog", url: urlWithWidth(link.MaxInlineWidth), containsURL: true},
-		{name: "URL one column over the limit leaves the dialog", url: urlWithWidth(link.MaxInlineWidth + 1), containsURL: false},
+		{name: "URL at the inline limit stays in the dialog", url: urlWithWidth(verificationDialogURLLimit), containsURL: true},
+		{name: "URL one column over the limit leaves the dialog", url: urlWithWidth(verificationDialogURLLimit + 1), containsURL: false},
+		{name: "URL at the terminal width leaves the dialog", url: urlWithWidth(link.MaxInlineWidth), containsURL: false},
 		{name: "empty URL is never reported as contained", url: "", containsURL: false},
 	}
 

@@ -163,15 +163,29 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 	if err != nil {
 		return err
 	}
-	graph, err = buildScopedTerraformGraph(opts.Stacks, leftDelim, terraformGraphNodeIDs(filtered))
+	selected := terraformGraphNodeIDs(filtered)
+	// Discovery retains direct edges, unlike the filtered graph's contracted ordering edges.
+	direct := graph.Clone()
+	for id := range direct.Nodes {
+		if !selected[id] {
+			delete(direct.Nodes, id)
+		}
+	}
+	excluded := terraformExclusions(direct, opts.Info)
+	graph, err = buildTerraformGraphMode(opts.Stacks, leftDelim, terraformGraphMode{
+		selectedNodeIDs: selected, validationSources: selected, ignoredSources: excluded, warn: log.Warn,
+	})
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrBuildDepGraph, err)
 	}
-	addContractedTerraformEdges(graph, filtered)
+	addContractedTerraformEdges(graph, filtered, excluded)
 
 	if graph.Size() == 0 {
 		ui.Success("No components matched")
 		return nil
+	}
+	if err := preflightTerraformGraph(ctx, opts.AtmosConfig, graph, excluded); err != nil {
+		return err
 	}
 
 	maxConcurrency := effectiveTerraformMaxConcurrency(opts.Info)
@@ -217,6 +231,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		disablePluginCache:      disableTerraformPluginCacheForConcurrentRun(opts.Info),
 		lockDeploySourceDir:     deployVerificationUsesSourceDir(opts.AtmosConfig, opts.Info),
 		queryAppliedAtSelection: terraformClosureRequested(opts.Info, opts.Selection),
+		excluded:                excluded,
 	}
 	startTerraformCIBefore(opts.Info, graph)
 
@@ -238,13 +253,13 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return err
 	}
 	if result.Err != nil {
-		if skipped := skippedResultCount(result); skipped > 0 {
-			ui.Warningf("%d component(s) skipped after an earlier failure", skipped)
+		if names := skippedResultNames(result, graph); len(names) > 0 {
+			ui.Warningf("%d component(s) skipped after an earlier failure: %s", len(names), strings.Join(names, ", "))
 		}
 		return result.Err
 	}
 
-	if processedCount(result) == 0 {
+	if processedCount(result) == 0 && !hasExcludedResult(result, excluded) {
 		ui.Success("No components matched")
 	}
 	if opts.Info.SubCommand == terraformSubCommandPlan && terraformPlanChanged(result) {
@@ -408,6 +423,7 @@ func buildTerraformGraphWithWarnings(stacks map[string]any, leftDelim string, se
 type terraformGraphMode struct {
 	selectedNodeIDs   map[string]bool
 	validationSources map[string]bool
+	ignoredSources    map[string]string
 	warn              func(any, ...any)
 	// collect keeps going after a dependency error and reports every one of them.
 	collect bool
@@ -466,6 +482,9 @@ func addTerraformEdges(builder *dependency.GraphBuilder, stacks map[string]any, 
 	var dependencyErrors []error
 	err := walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
 		if shouldSkipComponent(componentSection) || !mode.selects(terraformNodeID(componentName, stackName)) {
+			return nil
+		}
+		if _, excluded := mode.ignoredSources[terraformNodeID(componentName, stackName)]; excluded {
 			return nil
 		}
 		edges := &terraformEdges{builder, targets, mode.validationSources, mode.selectedNodeIDs, leftDelim, stackName, componentName, mode.warn}
@@ -661,11 +680,14 @@ func terraformSelectionSeedNodeIDs(graph *dependency.Graph, info *schema.ConfigA
 // only re-creates edges that are declared directly between selected nodes.
 // Every edge in filtered whose endpoints both exist in scoped but is missing
 // there is copied over with the same optional flag.
-func addContractedTerraformEdges(scoped, filtered *dependency.Graph) {
+func addContractedTerraformEdges(scoped, filtered *dependency.Graph, excluded map[string]string) {
 	if scoped == nil || filtered == nil {
 		return
 	}
 	for _, fromID := range sortedGraphNodeIDs(filtered) {
+		if _, skip := excluded[fromID]; skip {
+			continue
+		}
 		fromFiltered := filtered.Nodes[fromID]
 		if fromFiltered == nil || scoped.Nodes[fromID] == nil {
 			continue
@@ -956,6 +978,8 @@ type TerraformDispatcher struct {
 	// FilterTerraformGraph, and re-applying it per node would silently drop
 	// closure-added prerequisites the query never selected.
 	queryAppliedAtSelection bool
+	// excluded maps the nodes a provider's exclude block removes from this run to the reason.
+	excluded map[string]string
 }
 
 // Dispatch executes one Terraform scheduler node.
@@ -966,6 +990,10 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 	}
 	if err := ctx.Err(); err != nil {
 		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusFailed}, err
+	}
+	if reason, excluded := d.excluded[node.ID]; excluded {
+		ui.Info(describeExclusion(node, reason))
+		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: false}, nil
 	}
 	if d.shouldSkipByQuery(node) {
 		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: false}, nil
@@ -1074,7 +1102,8 @@ func (d *TerraformDispatcher) runBeforeNodeHooks(ctx context.Context, nodeInfo *
 	return wrapBeforeHookError(d.info.NodeHooks.Before(ctx, nodeInfo))
 }
 
-// wrapBeforeHookError labels a before-hook failure with ErrPerComponentHookFailed.
+// wrapBeforeHookError labels a before-hook failure with ErrPerComponentHookFailed
+// and marks its exit status as belonging to a prerequisite, not Terraform itself.
 // A policy admission error is returned unchanged: it is not a hook failure, and
 // the multi-%w wrap would hide the rule id and reason explanation the denial
 // carries from the error formatter.
@@ -1082,7 +1111,7 @@ func wrapBeforeHookError(err error) error {
 	if err == nil || policy.IsAdmissionError(err) {
 		return err
 	}
-	return fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, err)
+	return fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, errUtils.AsPrerequisiteError(err))
 }
 
 // runAfterNodeHooks runs this node's after-event hooks, if wired, and returns
@@ -1580,6 +1609,20 @@ func containsString(values []string, value string) bool {
 	return false
 }
 
+// hasExcludedResult reports an exclusion that was actually dispatched.
+func hasExcludedResult(result *scheduler.AggregateResult, excluded map[string]string) bool {
+	if result == nil {
+		return false
+	}
+	for i := range result.Results {
+		nodeResult := &result.Results[i]
+		if _, ok := excluded[nodeResult.NodeID]; ok && nodeResult.Status == scheduler.StatusSucceeded {
+			return true
+		}
+	}
+	return false
+}
+
 // processedCount counts nodes that actually reached Terraform execution.
 func processedCount(result *scheduler.AggregateResult) int {
 	count := 0
@@ -1953,9 +1996,15 @@ func terraformPlanHasNoChanges(result TerraformExecutionResult, execErr error) b
 		strings.Contains(output, "No changes. Infrastructure is up-to-date.")
 }
 
-// terraformPlanChangedError treats Terraform plan exit code 2 as a changed result.
+// terraformPlanChangedError treats Terraform plan exit code 2 as a changed result, but only when the
+// plan subprocess itself returned it with -detailed-exitcode (the executor's DetailedPlanChangesError
+// marker). Any other exit 2, such as an authentication failure before Terraform ran, fails the node.
 func terraformPlanChangedError(info *schema.ConfigAndStacksInfo, err error) bool {
-	if info == nil || info.SubCommand != terraformSubCommandPlan {
+	if info == nil || info.SubCommand != terraformSubCommandPlan || !errUtils.IsDetailedPlanChanges(err) {
+		return false
+	}
+	var prerequisiteErr *errUtils.PrerequisiteError
+	if errors.As(err, &prerequisiteErr) {
 		return false
 	}
 	var exitCodeErr errUtils.ExitCodeError

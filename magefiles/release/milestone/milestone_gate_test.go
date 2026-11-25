@@ -86,6 +86,10 @@ func TestMilestoneGateMergedQueueEntry(t *testing.T) {
 					githubtest.JSON(t, w, map[string]string{"default_branch": "main"})
 				case "/repos/cloudposse/atmos/pulls":
 					githubtest.JSON(t, w, []ReleasePR{})
+				case "/repos/cloudposse/atmos/pulls/1":
+					// An unmerged entry is looked up directly; a closed PR stays missing.
+					require.Equal(t, "unmerged", mode, "merged entries must not be looked up")
+					githubtest.JSON(t, w, ReleasePR{Number: 1, State: "closed"})
 				case "/graphql":
 					githubtest.JSON(t, w, queueResponse([]queueEntry{entry}, false, ""))
 				case "/repos/cloudposse/atmos/milestones":

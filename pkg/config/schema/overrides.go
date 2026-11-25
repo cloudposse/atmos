@@ -129,6 +129,7 @@ func applyOverrides(r *jsonschema.Reflector, root *jsonschema.Schema) {
 		root.Definitions = jsonschema.Definitions{}
 	}
 	overrideSchemasSection(r, root)
+	overrideComponentConfigurations(r, root)
 	applyPolymorphicOverrides(root)
 	allowYamlFunctions(root)
 	// Artifact trusted keys are decoded strictly and do not use the generic
@@ -486,5 +487,32 @@ func rejectsYamlFunctionString(s *jsonschema.Schema) bool {
 		return len(s.Enum) > 0 || s.Pattern != "" || s.Format != "" || s.Const != nil
 	default:
 		return false
+	}
+}
+
+// Dynamic configuration-provider names are map keys beside built-in Terraform
+// fields. Reflection skips inline maps, so describe their value schema explicitly.
+func overrideComponentConfigurations(r *jsonschema.Reflector, root *jsonschema.Schema) {
+	terraform := root.Definitions["Terraform"]
+	if terraform == nil {
+		return
+	}
+	reflected := r.Reflect(&schema.ComponentConfiguration{})
+	for name, definition := range reflected.Definitions {
+		root.Definitions[name] = definition
+	}
+	reflected.Definitions = nil
+	reflected.Version = ""
+	reflected.ID = ""
+	root.Definitions["ComponentConfiguration"] = reflected
+	// A mapping opts in when either marker is present. Express presence as the
+	// negation of both markers being absent, without requiring fields in partial
+	// configuration fragments.
+	unclaimed := jsonschema.NewProperties()
+	unclaimed.Set("enabled", jsonschema.FalseSchema)
+	unclaimed.Set("provider", jsonschema.FalseSchema)
+	terraform.AdditionalProperties = &jsonschema.Schema{
+		If:   &jsonschema.Schema{Type: typeObject, Not: &jsonschema.Schema{Properties: unclaimed}},
+		Then: &jsonschema.Schema{Ref: "#/$defs/ComponentConfiguration"},
 	}
 }

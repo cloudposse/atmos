@@ -21,11 +21,13 @@ import (
 )
 
 const (
-	flagOutput   = "output"
-	flagAll      = "all"
-	flagAffected = "affected"
-	flagWait     = "wait"
-	flagLabels   = "labels"
+	flagOutput      = "output"
+	flagAll         = "all"
+	flagAffected    = "affected"
+	flagWait        = "wait"
+	flagLabels      = "labels"
+	flagKubeVersion = "kube-version"
+	flagAPIVersions = "api-versions"
 	// The valueTrue const is the string representation of a set boolean flag.
 	valueTrue      = "true"
 	helmValuesName = "values"
@@ -212,7 +214,12 @@ func operationFlagOptions(name string) []flags.Option {
 		)
 	}
 	if name != "delete" && name != helmValuesName {
-		options = append(options, flags.WithBoolFlag("dependency-update", "", false, "Update missing chart dependencies before rendering or applying."))
+		options = append(
+			options,
+			flags.WithBoolFlag("dependency-update", "", false, "Update missing chart dependencies before rendering or applying."),
+			flags.WithStringFlag(flagKubeVersion, "", "", "Kubernetes version for .Capabilities.KubeVersion in client-side renders (template, diff, external targets)."),
+			flags.WithStringSliceFlag(flagAPIVersions, "", nil, "Kubernetes API versions for .Capabilities.APIVersions in client-side renders (comma-separated or repeated)."),
+		)
 	}
 
 	if name == "apply" || name == "deploy" {
@@ -389,7 +396,20 @@ func getOperationFlags(cmd *cobra.Command) map[string]any {
 		}
 	}
 	addLifecycleOperationFlags(cmd, result)
+	addCapabilityFlags(cmd, result)
 	return result
+}
+
+// addCapabilityFlags forwards explicitly set --kube-version and --api-versions.
+func addCapabilityFlags(cmd *cobra.Command, result map[string]any) {
+	if flag := cmd.Flag(flagKubeVersion); flag != nil && flag.Changed {
+		result[cfg.HelmKubeVersionSectionName] = flag.Value.String()
+	}
+	if flag := cmd.Flag(flagAPIVersions); flag != nil && flag.Changed {
+		if values, err := cmd.Flags().GetStringSlice(flagAPIVersions); err == nil {
+			result[cfg.HelmAPIVersionsSectionName] = values
+		}
+	}
 }
 
 func addLifecycleOperationFlags(cmd *cobra.Command, result map[string]any) {

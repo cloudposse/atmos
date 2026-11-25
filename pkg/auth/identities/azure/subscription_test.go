@@ -292,11 +292,15 @@ func TestSubscriptionIdentity_Authenticate_PreservesAllProviderFields(t *testing
 	// silently dropping newly added fields (AuthMethod, HomeAccountID) — which
 	// disabled the Azure CLI write-back gating and re-broke az for guest users.
 	// Populate every field via reflection so any future field is covered
-	// automatically without updating this test.
+	// automatically without updating this test. Unexported fields are runtime-only
+	// (never persisted or minted by a provider), so they are not part of the contract.
 	base := &types.AzureCredentials{}
 	bv := reflect.ValueOf(base).Elem()
 	for idx := 0; idx < bv.NumField(); idx++ {
 		f := bv.Field(idx)
+		if !bv.Type().Field(idx).IsExported() {
+			continue
+		}
 		switch f.Kind() {
 		case reflect.String:
 			f.SetString(bv.Type().Field(idx).Name + "-sentinel")
@@ -321,6 +325,9 @@ func TestSubscriptionIdentity_Authenticate_PreservesAllProviderFields(t *testing
 	rv := reflect.ValueOf(creds).Elem()
 	for idx := 0; idx < rv.NumField(); idx++ {
 		field := rv.Type().Field(idx)
+		if !field.IsExported() {
+			continue
+		}
 		switch field.Name {
 		case "SubscriptionID":
 			assert.Equal(t, "identity-sub", creds.SubscriptionID, "identity subscription must override the provider's")

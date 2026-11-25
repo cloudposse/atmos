@@ -261,6 +261,11 @@ func resolveIdentityNameForEnv(cmd *cobra.Command, v *viper.Viper, authManager a
 		identityName = v.GetString(IdentityFlagName)
 	}
 
+	// `--identity=false` disables authentication, which leaves no credentials to print.
+	if err := checkIdentityNotDisabled("env", identityName); err != nil {
+		return "", err
+	}
+
 	forceSelect := identityName == IdentityFlagSelectValue
 	if identityName != "" && !forceSelect {
 		return identityName, nil

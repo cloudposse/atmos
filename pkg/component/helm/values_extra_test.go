@@ -107,7 +107,7 @@ func TestBuildChartSpec_ValuesFileErrorPropagates(t *testing.T) {
 			"values_files": []any{filepath.Join(t.TempDir(), "missing.yaml")},
 		},
 	}
-	_, err := buildChartSpec(&schema.AtmosConfiguration{}, info, "testdata")
+	_, err := buildChartSpec(&schema.AtmosConfiguration{}, info, "testdata", nil)
 	require.Error(t, err)
 }
 

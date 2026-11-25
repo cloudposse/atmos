@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -101,6 +102,11 @@ type manager struct {
 	chain []string
 	// realm provides credential isolation between different repositories.
 	realm realm.RealmInfo
+	// integrationFailures records non-fatal auto_provision integration failures so ambient
+	// credential brokers can report them (see IntegrationFailures) without making interactive
+	// authentication fail.
+	integrationFailures   []error
+	integrationFailuresMu sync.Mutex
 }
 
 // resolveIdentityName performs case-insensitive identity name lookup.
@@ -114,7 +120,7 @@ func (m *manager) resolveIdentityName(inputName string) (string, bool) {
 	}
 
 	// Try case-insensitive lookup using the case map
-	if m.config.IdentityCaseMap != nil {
+	if m.config != nil && m.config.IdentityCaseMap != nil {
 		lowercaseName := strings.ToLower(inputName)
 		if _, exists := m.config.IdentityCaseMap[lowercaseName]; exists {
 			// Verify the identity actually exists with the lowercase key
@@ -125,6 +131,16 @@ func (m *manager) resolveIdentityName(inputName string) (string, bool) {
 	}
 
 	return "", false
+}
+
+// canonicalIdentityName returns the configured key for identityName, resolved
+// case-insensitively like Authenticate does, or identityName unchanged when no
+// identity matches (so callers report it as not found).
+func (m *manager) canonicalIdentityName(identityName string) string {
+	if resolved, found := m.resolveIdentityName(identityName); found {
+		return resolved
+	}
+	return identityName
 }
 
 // NewAuthManager creates a new AuthManager instance.
@@ -357,6 +373,7 @@ func (m *manager) authenticateResolvedIdentity(ctx context.Context, identityName
 				Err()
 			return nil, wrappedErr
 		}
+		m.recordExternalStepDigest(identityName, finalCreds)
 
 		// Trigger linked integrations (non-fatal).
 		m.triggerIntegrations(ctx, identityName, finalCreds)
@@ -804,6 +821,7 @@ func (m *manager) getProviderForIdentity(identityName string) string {
 func (m *manager) GetProviderForIdentity(identityName string) string {
 	defer perf.Track(nil, "auth.Manager.GetProviderForIdentity")()
 
+	identityName = m.canonicalIdentityName(identityName)
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil || len(chain) == 0 {
 		return ""

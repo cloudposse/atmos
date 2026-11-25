@@ -1,0 +1,266 @@
+package component
+
+import (
+	"encoding/json"
+	"fmt"
+	"math/big"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/zclconf/go-cty/cty"
+	ctyjson "github.com/zclconf/go-cty/cty/json"
+	"github.com/zclconf/go-cty/cty/msgpack"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
+	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
+)
+
+func objectWireValue(t *testing.T, value cty.Value) *pluginv1.ComponentValue {
+	t.Helper()
+	typ, err := ctyjson.MarshalType(value.Type())
+	require.NoError(t, err)
+	payload, err := msgpack.Marshal(value, value.Type())
+	require.NoError(t, err)
+	return &pluginv1.ComponentValue{TypeJson: typ, Msgpack: payload}
+}
+
+func TestObjectRoundTrip(t *testing.T) {
+	value := map[string]any{"large": json.Number("9007199254740993"), "ratio": json.Number("0.5"), "precise": json.Number("0.1000000000000000000001"), "nested": []any{nil, true, "literal", json.Number("3")}}
+	encoded, err := EncodeObject(value)
+	require.NoError(t, err)
+	decoded, err := DecodeObject(encoded)
+	require.NoError(t, err)
+	// Exact numbers become native so YAML renders them unquoted; others keep full precision.
+	want := map[string]any{"large": int64(9007199254740993), "ratio": 0.5, "precise": json.Number("0.1000000000000000000001"), "nested": []any{nil, true, "literal", int64(3)}}
+	require.Equal(t, want, decoded)
+	decoded, err = DecodeObject(nil)
+	require.NoError(t, err)
+	require.Empty(t, decoded)
+	_, err = EncodeObject(make(chan int))
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+}
+
+func TestObjectRejectsMalformedAndUnknown(t *testing.T) {
+	for _, encoded := range []*pluginv1.ComponentValue{{}, {TypeJson: []byte(`"string"`), Msgpack: []byte{0xc1}}, objectWireValue(t, cty.NullVal(cty.EmptyObject)), objectWireValue(t, cty.StringVal("scalar"))} {
+		_, err := DecodeObject(encoded)
+		require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	}
+	_, err := DecodeObject(objectWireValue(t, cty.ObjectVal(map[string]cty.Value{"pending": cty.UnknownVal(cty.String)})))
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+}
+
+func TestObjectSensitivePaths(t *testing.T) {
+	atmosio.Reset()
+	t.Cleanup(atmosio.Reset)
+	require.NoError(t, atmosio.Initialize())
+	attr := &pluginv1.ComponentValueStep{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: "items"}}
+	index := &pluginv1.ComponentValueStep{Selector: &pluginv1.ComponentValueStep_Index{Index: objectWireValue(t, cty.NumberIntVal(0))}}
+	paths := []*pluginv1.ComponentValuePath{{}, {Steps: []*pluginv1.ComponentValueStep{attr}}, {Steps: []*pluginv1.ComponentValueStep{attr, index}}}
+	for i, path := range paths {
+		secret := fmt.Sprintf("unique-masked-value-%d", i)
+		value := cty.ObjectVal(map[string]cty.Value{"items": cty.TupleVal([]cty.Value{cty.StringVal(secret), cty.NumberIntVal(int64(12345 + i))})})
+		encoded := objectWireValue(t, value)
+		encoded.SensitivePaths = []*pluginv1.ComponentValuePath{path}
+		require.Equal(t, secret, atmosio.MaskString(secret))
+		decoded, err := DecodeObject(encoded)
+		require.NoError(t, err)
+		require.Equal(t, []any{secret, int64(12345 + i)}, decoded["items"])
+		require.Equal(t, "<MASKED>", atmosio.MaskString(secret))
+	}
+	numeric := "987654321"
+	require.Equal(t, numeric, atmosio.MaskString(numeric))
+	numericValue := objectWireValue(t, cty.ObjectVal(map[string]cty.Value{"items": cty.TupleVal([]cty.Value{cty.StringVal("other"), cty.NumberIntVal(987654321)})}))
+	numericIndex := &pluginv1.ComponentValueStep{Selector: &pluginv1.ComponentValueStep_Index{Index: objectWireValue(t, cty.NumberIntVal(1))}}
+	numericValue.SensitivePaths = []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{attr, numericIndex}}}
+	_, err := DecodeObject(numericValue)
+	require.NoError(t, err)
+	require.Equal(t, "<MASKED>", atmosio.MaskString(numeric))
+	encoded := objectWireValue(t, cty.ObjectVal(map[string]cty.Value{"items": cty.TupleVal([]cty.Value{cty.StringVal("x"), cty.NumberIntVal(1)})}))
+
+	for _, path := range []*pluginv1.ComponentValuePath{nil, {Steps: []*pluginv1.ComponentValueStep{nil}}, {Steps: []*pluginv1.ComponentValueStep{index}}, {Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Index{Index: objectWireValue(t, cty.True)}}}}, {Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Index{}}}}} {
+		encoded.SensitivePaths = []*pluginv1.ComponentValuePath{path}
+		_, err := DecodeObject(encoded)
+		require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	}
+}
+
+func TestDecodeValueHandlesAnyKnownValue(t *testing.T) {
+	text, err := DecodeValue(objectWireValue(t, cty.StringVal("plain")))
+	require.NoError(t, err)
+	require.Equal(t, "plain", text)
+
+	object, err := DecodeValue(objectWireValue(t, cty.ObjectVal(map[string]cty.Value{"a": cty.True})))
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"a": true}, object)
+
+	null, err := DecodeValue(objectWireValue(t, cty.NullVal(cty.String)))
+	require.NoError(t, err)
+	require.Nil(t, null)
+
+	_, err = DecodeValue(objectWireValue(t, cty.UnknownVal(cty.String)))
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+	_, err = DecodeValue(nil)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+}
+
+func TestDecodeStringReadsStringsAndRejectsEverythingElse(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
+	text, err := DecodeString(nil)
+	require.NoError(t, err)
+	require.Empty(t, text)
+
+	secret := objectWireValue(t, cty.StringVal("token-value"))
+	secret.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	text, err = DecodeString(secret)
+	require.NoError(t, err)
+	require.Equal(t, "token-value", text)
+	require.NotContains(t, atmosio.GetContext().Masker().Mask("token-value"), "token-value")
+
+	_, err = DecodeString(objectWireValue(t, cty.NumberIntVal(1)))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	_, err = DecodeString(objectWireValue(t, cty.NullVal(cty.String)))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	_, err = DecodeString(objectWireValue(t, cty.UnknownVal(cty.String)))
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+	_, err = DecodeString(&pluginv1.ComponentValue{TypeJson: []byte("{")})
+	require.Error(t, err)
+}
+
+func TestDecodeInputsKeepsExactNumbersNullsAndShapes(t *testing.T) {
+	exact, _, err := big.ParseFloat("9007199254740993", 10, 512, big.ToNearestEven)
+	require.NoError(t, err)
+	value := cty.ObjectVal(map[string]cty.Value{
+		"large":  cty.NumberVal(exact),
+		"empty":  cty.EmptyTupleVal,
+		"absent": cty.NullVal(cty.DynamicPseudoType),
+		"tuple":  cty.TupleVal([]cty.Value{cty.StringVal("a"), cty.NumberIntVal(2)}),
+		"map":    cty.MapVal(map[string]cty.Value{"k": cty.StringVal("v")}),
+		"object": cty.ObjectVal(map[string]cty.Value{"n": cty.NumberFloatVal(0.1)}),
+	})
+
+	decoded, err := DecodeInputs(objectWireValue(t, value))
+
+	require.NoError(t, err)
+	assert.Equal(t, json.Number("9007199254740993"), decoded["large"])
+	assert.Equal(t, []any{}, decoded["empty"])
+	assert.Contains(t, decoded, "absent")
+	assert.Nil(t, decoded["absent"])
+	assert.Equal(t, []any{"a", json.Number("2")}, decoded["tuple"])
+	assert.Equal(t, map[string]any{"k": "v"}, decoded["map"])
+	assert.Equal(t, map[string]any{"n": json.Number("0.1")}, decoded["object"])
+	empty, err := DecodeInputs(nil)
+	require.NoError(t, err)
+	assert.Empty(t, empty)
+}
+
+func TestDecodeInputsRegistersSensitivePathsForMasking(t *testing.T) {
+	// The masker is process-global: start clean so secrets registered by other tests cannot mask the visible value.
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
+	value := cty.ObjectVal(map[string]cty.Value{"password": cty.StringVal("inputs-secret-value-1f3a"), "public": cty.StringVal("visible-value")})
+	encoded := objectWireValue(t, value)
+	encoded.SensitivePaths = []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: "password"}}}}}
+
+	_, err := DecodeInputs(encoded)
+
+	require.NoError(t, err)
+	assert.NotContains(t, atmosio.MaskString("token=inputs-secret-value-1f3a"), "inputs-secret-value-1f3a", "a sensitive input is masked in all output")
+	assert.Equal(t, "visible-value", atmosio.MaskString("visible-value"), "an input that is not sensitive is left alone")
+}
+
+// A whole sensitive object registers its distinctive values only. Its keys and trivial values, such as
+// "app" or 3, would otherwise mask "known after apply" and digits in timings.
+func TestDecodeInputsSensitiveObjectDoesNotMaskKeysOrTrivialValues(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
+	value := cty.ObjectVal(map[string]cty.Value{
+		"object":   cty.ObjectVal(map[string]cty.Value{"name": cty.StringVal("app"), "count": cty.NumberIntVal(3)}),
+		"password": cty.StringVal("object-secret-value-77c2"),
+	})
+	encoded := objectWireValue(t, value)
+	encoded.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+
+	_, err := DecodeInputs(encoded)
+
+	require.NoError(t, err)
+	assert.Equal(t, "known after apply in 3s: object name count password", atmosio.MaskString("known after apply in 3s: object name count password"))
+	assert.Equal(t, "<MASKED>", atmosio.MaskString("object-secret-value-77c2"))
+}
+
+func TestDecodeInputsNamesTheUnknownInput(t *testing.T) {
+	value := cty.ObjectVal(map[string]cty.Value{
+		"fine": cty.StringVal("ok"),
+		"zone": cty.ObjectVal(map[string]cty.Value{"ids": cty.TupleVal([]cty.Value{cty.StringVal("a"), cty.UnknownVal(cty.String)})}),
+	})
+
+	_, err := DecodeInputs(objectWireValue(t, value))
+
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	text := err.Error() + strings.Join(errUtils.AllDetails(err), "\n")
+	assert.Contains(t, text, "zone.ids[1]")
+	assert.NotContains(t, text, "fine")
+	assert.NotEmpty(t, errUtils.AllHints(err))
+
+	_, err = DecodeInputs(objectWireValue(t, cty.UnknownVal(cty.EmptyObject)))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	_, err = DecodeInputs(objectWireValue(t, cty.StringVal("not an object")))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+}
+
+func TestDecodeInputsRejectsUnknownSetElementWithoutExposingKey(t *testing.T) {
+	value := cty.ObjectVal(map[string]cty.Value{
+		"items": cty.SetVal([]cty.Value{cty.ObjectVal(map[string]cty.Value{
+			"secret":  cty.StringVal("private-set-key"),
+			"pending": cty.UnknownVal(cty.String),
+		})}),
+	})
+	_, err := DecodeInputs(objectWireValue(t, value))
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	require.NotContains(t, err.Error(), "private-set-key")
+	path := cty.Path{cty.IndexStep{Key: cty.ObjectVal(map[string]cty.Value{
+		"secret": cty.StringVal("private-set-key"),
+	})}}
+	require.Empty(t, formatPath(path))
+}
+
+func TestUnknownInputErrorsRespectSensitivePaths(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		paths     []*pluginv1.ComponentValuePath
+		protected bool
+	}{
+		{"unmarked", nil, false},
+		{"whole inputs", []*pluginv1.ComponentValuePath{{}}, true},
+		{"map", []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: "zone"}}}}}, true},
+		{"other input", []*pluginv1.ComponentValuePath{{Steps: []*pluginv1.ComponentValueStep{{Selector: &pluginv1.ComponentValueStep_Attribute{Attribute: "public"}}}}}, false},
+		{"invalid path", []*pluginv1.ComponentValuePath{nil}, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			value := objectWireValue(t, cty.ObjectVal(map[string]cty.Value{
+				"zone": cty.MapVal(map[string]cty.Value{"private-map-key-4ed1": cty.UnknownVal(cty.String)}), "public": cty.StringVal("visible"),
+			}))
+			value.SensitivePaths = test.paths
+			_, err := DecodeInputs(value)
+			require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+			text := err.Error() + strings.Join(errUtils.AllDetails(err), "\n")
+			if test.protected {
+				require.NotContains(t, text, "private-map-key-4ed1")
+			} else {
+				require.Contains(t, text, "private-map-key-4ed1")
+			}
+		})
+	}
+	root := objectWireValue(t, cty.MapVal(map[string]cty.Value{"private-input-name": cty.UnknownVal(cty.String)}))
+	root.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+	_, err := DecodeInputs(root)
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	require.NotContains(t, err.Error()+strings.Join(errUtils.AllDetails(err), "\n"), "private-input-name")
+	require.True(t, errUtils.HasContext(err, "input", "sensitive"))
+}

@@ -17,6 +17,14 @@ func TestMain(m *testing.M) {
 	if os.Getenv("_ATMOS_SHELL_TEST_EXIT_ONE") == "1" {
 		os.Exit(1)
 	}
+	// Terminate by a signal where the platform has them (see testmain_signal_*_test.go).
+	if os.Getenv(killSelfEnv) != "" {
+		killSelf(os.Getenv(killSelfEnv))
+	}
+	// Wait for a forwarded signal (see testmain_signal_*_test.go).
+	if os.Getenv(awaitSignalEnv) != "" {
+		awaitSignal(os.Getenv(awaitSignalEnv))
+	}
 
 	os.Exit(m.Run())
 }

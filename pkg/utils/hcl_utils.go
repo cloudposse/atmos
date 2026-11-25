@@ -13,6 +13,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// backendFileMode is the permission for a generated Terraform backend file.
+const backendFileMode os.FileMode = 0o644
+
 // WriteToFileAsHcl converts the provided value to HCL (HashiCorp Language) and writes it to the specified file.
 func WriteToFileAsHcl(
 	filePath string,
@@ -26,7 +29,8 @@ func WriteToFileAsHcl(
 		return err
 	}
 
-	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, fileMode)
+	// O_TRUNC replaces an existing file; without it, shorter content left the old tail behind (invalid HCL).
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMode)
 	if err != nil {
 		return err
 	}
@@ -98,7 +102,8 @@ func WriteTerraformBackendConfigToFileAsHcl(
 		backendBlockBody.SetAttributeValue(name, ctyVal)
 	}
 
-	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0o644)
+	// O_TRUNC replaces an existing file; without it, shorter content left the old tail behind (invalid HCL).
+	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, backendFileMode)
 	if err != nil {
 		return err
 	}
