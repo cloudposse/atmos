@@ -1,6 +1,6 @@
 ---
 title: Terragrunt
-tags: [Components, Stacks]
+tags: [Terraform, Components, Stacks]
 related_docs:
   - label: Terragrunt migration
     url: /migration/terragrunt
