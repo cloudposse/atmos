@@ -17,6 +17,8 @@ import (
 
 	"github.com/gruntwork-io/terragrunt/internal/cas"
 	"github.com/gruntwork-io/terragrunt/internal/getter"
+	"github.com/gruntwork-io/terragrunt/internal/git"
+	"github.com/gruntwork-io/terragrunt/internal/venv"
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclwrite"
@@ -71,7 +73,8 @@ func FetchCatalog(ctx context.Context, logger log.Logger, environment map[string
 	}
 	key := fmt.Sprintf("%x", sha256.Sum256([]byte(uri+"\x00"+commit)))
 	parent := filepath.Join(cache, "atmos", "terragrunt", "catalogs")
-	root := filepath.Join(parent, key)
+	// Earlier cache entries lack a verified checkout identity.
+	root := filepath.Join(parent, "verified-v1", key)
 	if subdir == "" {
 		return nil, errors.New("catalog source requires an explicit //subdirectory selector (use //. for the repository root)")
 	}
@@ -96,6 +99,21 @@ func FetchCatalog(ctx context.Context, logger log.Logger, environment map[string
 	return &Catalog{Root: root, Directory: dir, URI: uri, Commit: commit}, nil
 }
 
+func verifyCatalogCommit(ctx context.Context, v *venv.Venv, checkout, pin string) error {
+	runner, err := git.NewGitRunner(v)
+	if err != nil {
+		return err
+	}
+	head, err := runner.WithWorkDir(checkout).RevParseCommit(ctx, "HEAD")
+	if err != nil {
+		return fmt.Errorf("resolve catalog HEAD: %w", err)
+	}
+	if !strings.EqualFold(head, pin) {
+		return fmt.Errorf("catalog checkout at %s differs from pinned commit %s", head, pin)
+	}
+	return nil
+}
+
 // fetchSnapshot stages a Git checkout beside its final path so publication is atomic
 // even when separate plugin processes discover the same pinned catalog concurrently.
 func fetchSnapshot(ctx context.Context, logger log.Logger, environment map[string]string, uri, commit, root string) error {
@@ -118,6 +136,9 @@ func fetchSnapshot(ctx context.Context, logger log.Logger, environment map[strin
 	env["GIT_ALLOW_PROTOCOL"] = "https:http:ssh"
 	v := Environment(env, io.Discard, io.Discard)
 	if _, err = getter.Get(ctx, logger, v, checkout, uri+"?ref="+commit); err != nil {
+		return err
+	}
+	if err := verifyCatalogCommit(ctx, v, checkout, commit); err != nil {
 		return err
 	}
 	if err = os.RemoveAll(filepath.Join(checkout, ".git")); err != nil {
