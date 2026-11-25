@@ -5,33 +5,15 @@ commands:
       PATH: '{{ env "PWD" }}/../../build:{{ env "PATH" }}'
       ATMOS_TELEMETRY_ENABLED: 'false'
     steps:
-      # Build the host and package together so their protocol stays in sync.
-      - type: shell
-        name: build-host
-        working_directory: ../..
-        command: go build -o build/atmos .
-        output: none
-      - type: shell
-        name: build-plugin
-        working_directory: ../..
-        command: build/atmos plugin build plugins/terragrunt
-        output: none
       - type: workdir
         name: fixture
-        source: fixtures/terragrunt-native
+        source: ../../examples/terragrunt
         path: ../../.context/cast-fixtures/terragrunt-native
         reset: true
-      # Resolve the development package outside the recording; no machine paths
-      # belong in the published demo. The blog explains this prerequisite.
-      - type: shell
-        name: package
-        working_directory: ../../.context/cast-fixtures/terragrunt-native
-        command: atmos config set plugins.packages.terragrunt.path "../../../plugins/terragrunt"
-        output: none
       - type: cast
         name: plan
         working_directory: ../../.context/cast-fixtures/terragrunt-native
-        title: Native Terragrunt discovery and planning
+        title: Discover and plan a Terragrunt unit with Atmos
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast
@@ -44,27 +26,7 @@ commands:
         env: !include cast-defaults.yaml .env.recording
         steps:
           - type: simulate
-            text: '# The native plugin is built; enable it for the existing live/ tree.'
-          - type: simulate
-            text: &enable atmos config set components.terraform.terragrunt.enabled true
-          - type: shell
-            command: *enable
-          - type: simulate
-            text: &mode atmos config set components.terraform.terragrunt.mode native
-          - type: shell
-            command: *mode
-          - type: simulate
-            text: &scope atmos config set --type=yaml components.terraform.terragrunt.discovery.included_paths '["live/**"]'
-          - type: shell
-            command: *scope
-          - type: simulate
-            text: &discover atmos config set components.terraform.terragrunt.discovery.enabled true
-          - type: shell
-            command: *discover
-          - type: simulate
-            text: &stacks atmos list stacks
-          - type: shell
-            command: *stacks
+            text: '# From the terragrunt example directory, discover the unit and install its declared plugin.'
           - type: simulate
             text: &instances atmos list instances
           - type: shell
