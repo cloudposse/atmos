@@ -1,0 +1,6 @@
+artifacts:
+  repositories:
+    local:
+      kind: local/dir
+      options:
+        path: ./.artifacts

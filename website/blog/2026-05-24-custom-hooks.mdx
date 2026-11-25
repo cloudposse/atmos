@@ -4,6 +4,8 @@ title: "Custom hooks: zero-config security & cost scanners"
 date: 2026-05-24T12:00:00.000Z
 authors: [osterman]
 tags: [feature, dx, experimental]
+cast: "/casts/examples/hooks-trivy/security-scan.cast"
+castTitle: "Run a Trivy hook after a Terraform plan"
 ---
 
 import ActionCard from '@site/src/components/ActionCard'
@@ -37,7 +39,11 @@ run page.
 
 <!--truncate-->
 
+import CastEmbed from '@site/src/components/CastEmbed'
+
 import TryExample, { TryExamples } from '@site/src/components/TryExample';
+
+<CastEmbed src="/casts/examples/hooks-trivy/security-scan.cast" title="Run a Trivy hook after a Terraform plan" chrome controls scrubber />
 
 ## What's new
 
