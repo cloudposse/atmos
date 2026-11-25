@@ -2,10 +2,8 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"os/signal"
-	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -35,7 +33,7 @@ func main() {
 			// Terraform saves state and releases its lock when it stops on its own. The first
 			// signal is forwarded to it once and Atmos waits; a second signal forces the exit.
 			if names, waiting := signals.BeginGracefulStop(sig); waiting {
-				ui.Warning(gracefulStopNotice(sig, names))
+				ui.Warning(signals.GracefulStopNotice(sig, names))
 				continue
 			}
 			signals.RequestExit(sig)
@@ -193,21 +191,6 @@ func silentExitCode(err error) (int, bool) {
 		return exitCodeErr.Code, true
 	}
 	return 0, false
-}
-
-// gracefulStopNotice tells the user that Atmos is waiting for the named commands to stop
-// after the first signal, and how to force the exit.
-func gracefulStopNotice(sig os.Signal, names []string) string {
-	commands := "the running command"
-	if len(names) > 0 {
-		commands = strings.Join(slices.Compact(slices.Sorted(slices.Values(names))), ", ")
-	}
-	if sig == syscall.SIGTERM {
-		return fmt.Sprintf("Termination requested; waiting for %s to stop gracefully. "+
-			"Send the signal again to force exit.", commands)
-	}
-	return fmt.Sprintf("Interrupt received; waiting for %s to stop gracefully. "+
-		"Press Ctrl-C again to force exit.", commands)
 }
 
 // shouldExitOnSignal reports whether the process should exit in response to sig.

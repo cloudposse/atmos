@@ -64,7 +64,22 @@ second signal forces the exit as before.
   Atmos prints one warning (`Interrupt received; waiting for terraform to stop gracefully. Press Ctrl-C again to
   force exit.`, or the SIGTERM variant) and keeps waiting. Interactive TTY steps (`SuspendInterruptExit`) and
   credential cleanup (`DeferExitForCleanup`) are unchanged.
-- `errors/errors.go`: `ErrProcessInterrupted`, `ErrSignalReceived`.
+- Streaming TUI (`--ui`, `pkg/terraform/ui`): it ran Terraform through its own `exec.CommandContext`. The first
+  Ctrl-C/`q` keypress (the TUI reads the terminal in raw mode, so the terminal sends no SIGINT) and any signal
+  cancellation SIGKILLed Terraform. On origin/main this also left a 0-byte state and a lock file. It now runs
+  Terraform as a `process.GracefulChild` (`pkg/process/graceful_child.go`, new), which joins the same registry and
+  exit cleanup as `Run`. Because no terminal SIGINT exists in raw mode, a terminal-sharing child is signalled
+  directly (`terminalInterruptTarget`), and a grouped child gets SIGINT on its group. A `gracefulModel` wrapper
+  (`executor_interrupt.go`, new) intercepts the first quit key, interrupts Terraform, and keeps streaming with the
+  waiting notice. A signal forwarded by `main.go` reaches the TUI as an `interruptMsg`. The second keypress reaches
+  the wrapped model, which cancels as before, and Terraform is killed. Execute/ExecuteInit return exit code 130
+  after a graceful stop. On Windows, `Interrupt` returns `ErrInterruptUnsupported` and the keypress kills Terraform
+  as before. The notice text moved to `signals.GracefulStopNotice` so `main.go` and the TUI share it.
+  `runningCommand.wait` reaps Terraform once: before, a TUI that failed during `init` called `cmd.Wait` while the
+  init goroutine was already waiting, and two concurrent `exec.Cmd.Wait` calls could block forever. A new test
+  exposed this hang under coverage instrumentation. `Execute`/`ExecuteInit` now check their streaming preconditions
+  through `streamingUIPreconditions`, a package variable, so tests can run them without a terminal.
+- `errors/errors.go`: `ErrProcessInterrupted`, `ErrSignalReceived`, `ErrInterruptUnsupported`.
 - Docs: "Interrupting Terraform" in `website/docs/cli/commands/terraform/usage.mdx` and "Interrupting an Apply" in
   `terraform-apply.mdx`.
 
@@ -81,12 +96,23 @@ second signal forces the exit as before.
   a terminal-foreground child gets no duplicate SIGINT, a foreground child gets a forwarded SIGTERM, a second signal
   forces termination, non-signal cancellation kills, signal-caused cancellation does not, non-opted-in runs never
   join, `interruptTarget` table.
+- `pkg/process/graceful_child_unix_test.go`: a terminal child receives exactly one SIGINT from `Interrupt`; the
+  first SIGINT/SIGTERM is forwarded once and notifies the caller, for terminal and grouped children; signal-caused
+  cancellation does not kill, other cancellation does; `Kill` terminates a stuck child and leaves the registries;
+  refusal while stopping or with a canceled context; a failed start leaves nothing registered;
+  `terminalInterruptTarget` table. `graceful_child_windows_test.go`: `Interrupt` is unsupported on Windows.
+- `pkg/terraform/ui/executor_interrupt_test.go` and `executor_interrupt_unix_test.go`: the first Ctrl-C delivers an
+  interrupt to a real child (the test binary) for both the streaming and init commands; the notice is shown and
+  cleared at the final view, with SIGTERM wording for SIGTERM; the second quit key cancels; unsupported interrupts
+  fall back to cancel; notifications before attach, while running, and after detach; `unwrapFinalModel` table;
+  `runTUIProgram` does not kill after a graceful stop.
 - `main_graceful_interrupt_test.go`: runs the test binary as Atmos with a fake Terraform; SIGINT and SIGTERM make
   Atmos wait for the fake Terraform to save and exit 130/143 with the warning; a second SIGINT forces exit 130.
-- `go test -race -shuffle=on ./pkg/signals/ ./pkg/process/ ./pkg/component/ ./cmd/terraform/` passed;
-  `go test ./pkg/component/terraform/ ./cmd/terraform/ ./internal/exec/ .` passed.
+- `go test -race -shuffle=on ./pkg/signals/ ./pkg/process/ ./pkg/component/ ./cmd/terraform/` and, after the TUI
+  change, `./pkg/signals/ ./pkg/terraform/ui/ ./pkg/process/` passed; `go test ./pkg/component/... ./cmd/terraform/
+  ./internal/exec/ ./pkg/scheduler/... .` passed.
 - Patch coverage on added non-test Go lines, measured with `-coverpkg` over the changed packages against
-  `git diff -U0 origin/main`: 175/175 statements (100%).
+  `git diff -U0 origin/main`: 341/341 statements (100%).
 - `go build ./...` passed; `go vet` on the changed packages passed for darwin, linux, and windows; gofumpt clean.
   golangci-lint could not run in this environment; its rules were checked by hand.
 - `pnpm run build` in `website/` passed. Its broken-anchor warnings are pre-existing and none involve the
@@ -104,12 +130,14 @@ second signal forces the exit as before.
     with the fix the first component's state was saved, no lock remained, and the second component was skipped.
   - A second SIGINT/SIGTERM 5 ms after the first forced the exit; Terraform reported
     "Two interrupts received. Exiting immediately" and no lock file remained.
+  - Streaming UI (`--ui`), Ctrl-C typed into a pseudo-terminal: origin/main left a 0-byte state and a lock file with
+    both Terraform and OpenTofu. With the fix the notice was shown, the state was valid, no lock file remained, and
+    the exit code was 130. SIGINT/SIGTERM to the Atmos pid under `--ui`: origin/main left a 0-byte state and a lock;
+    with the fix the state was valid, no lock remained, exit 130/143. With a fake Terraform that ignores the first
+    interrupt, a second Ctrl-C killed it (exit 130) after it had recorded exactly one SIGINT.
 
 ## Follow-ups
 
-- Pre-existing, not changed here: the streaming TUI path (`--ui`, `pkg/terraform/ui`) runs Terraform through its own
-  `exec.CommandContext` and kills it when the TUI is cancelled. It needs a separate decision on whether to route it
-  through the graceful path.
 - Intended behavior, documented: a SIGINT sent with `kill -INT` to the Atmos pid while Terraform shares the
   terminal's foreground group is not forwarded, because it cannot be told apart from a terminal Ctrl-C that already
   reached Terraform. Atmos then waits for Terraform to finish; a second signal forces the exit.

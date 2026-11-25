@@ -39,3 +39,33 @@ func interruptTarget(pid int, grouped bool, sig os.Signal) (int, syscall.Signal,
 	}
 	return -pid, syscall.SIGINT, true
 }
+
+// forwardTerminalInterrupt delivers the first signal to a child started as a GracefulChild.
+func forwardTerminalInterrupt(pid int, grouped bool, sig os.Signal) {
+	target, value := terminalInterruptTarget(pid, grouped, sig)
+	_ = syscall.Kill(target, value)
+}
+
+// interruptTerminalChild sends the interrupt a Ctrl-C keypress stands for to a GracefulChild.
+func interruptTerminalChild(child *os.Process, grouped bool) error {
+	target, value := terminalInterruptTarget(child.Pid, grouped, syscall.SIGINT)
+	return syscall.Kill(target, value)
+}
+
+// terminalInterruptTarget decides where an interrupt for a GracefulChild goes.
+//
+// The terminal UI reads the terminal in raw mode, where Ctrl-C is a keypress and the
+// terminal sends no SIGINT, so a child that shares the terminal is signalled directly.
+// A grouped child (stdin is not a terminal) is signalled as a group for SIGINT, as Ctrl-C
+// would signal it. SIGTERM goes to the child process only, for the same reason as in
+// interruptTarget: provider plugins ignore SIGINT but not SIGTERM.
+func terminalInterruptTarget(pid int, grouped bool, sig os.Signal) (int, syscall.Signal) {
+	value, ok := sig.(syscall.Signal)
+	if !ok {
+		value = syscall.SIGINT
+	}
+	if value == syscall.SIGINT && grouped {
+		return -pid, value
+	}
+	return pid, value
+}

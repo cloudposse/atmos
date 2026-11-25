@@ -124,6 +124,7 @@ var (
 	ErrProcessWaitFailed                     = errors.New("process wait failed")
 	ErrProcessInterrupted                    = errors.New("process not started: Atmos is stopping after an interrupt")
 	ErrSignalReceived                        = errors.New("signal received")
+	ErrInterruptUnsupported                  = errors.New("this platform cannot interrupt a child process")
 	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
 	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
 	ErrInvalidOffset                         = errors.New("offset must be >= 0")

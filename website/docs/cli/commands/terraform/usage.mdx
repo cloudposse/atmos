@@ -167,12 +167,16 @@ in-flight resource, write state, and release the state lock. Atmos then exits wi
   immediately, so state can be lost, exactly as with a second Ctrl-C on plain Terraform.
 - **Multi-component runs** (`--all`, `--affected`, `--components`, `--query`): after the first signal, no new
   components start. Components that are already running get the same graceful treatment.
+- **Streaming UI** (`--ui`): the progress view reads the keyboard itself, so the first Ctrl-C (or `q`) is delivered
+  to Terraform by Atmos. The view keeps showing progress with the waiting notice until Terraform exits, and a second
+  Ctrl-C terminates it.
 
 This applies to every Terraform, OpenTofu, and Terragrunt process that Atmos starts for a component, including the
 `init` and `workspace` commands it runs automatically. Timeouts and other cancellations that are not caused by a
 signal still terminate Terraform immediately. Lifecycle hook commands and other subprocesses keep the default
 behavior and are terminated when Atmos is interrupted. On Windows, the console already delivers Ctrl-C to Terraform,
-so Atmos only waits for it to exit.
+so Atmos only waits for it to exit. Under the streaming UI on Windows, where Atmos cannot deliver an interrupt to
+Terraform, Ctrl-C terminates Terraform as before.
 
 ## Examples
 

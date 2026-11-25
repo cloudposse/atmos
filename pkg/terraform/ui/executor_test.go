@@ -497,7 +497,7 @@ func TestKillIfCancelled_KillsRealProcess(t *testing.T) {
 	cmd.Env = append(os.Environ(), "_ATMOS_TEST_SLEEP_SECONDS=30")
 	require.NoError(t, cmd.Start())
 
-	killIfCancelled(true, cmd)
+	killIfCancelled(true, &runningCommand{cmd: cmd})
 
 	waitDone := make(chan error, 1)
 	go func() { waitDone <- cmd.Wait() }()
@@ -520,7 +520,7 @@ func TestKillIfCancelled_LeavesProcessRunningWhenNotCancelled(t *testing.T) {
 	cmd.Env = append(os.Environ(), "_ATMOS_TEST_SLEEP_SECONDS=2")
 	require.NoError(t, cmd.Start())
 
-	killIfCancelled(false, cmd)
+	killIfCancelled(false, &runningCommand{cmd: cmd})
 
 	require.NoError(t, cmd.Wait(), "process should exit on its own after its 2s sleep, undisturbed")
 }
@@ -590,16 +590,16 @@ func TestNewStreamingCommand_StartsRealProcess(t *testing.T) {
 		Env:        append(os.Environ(), "_ATMOS_TEST_SLEEP_SECONDS=0"),
 	}
 
-	cmd, stdout, err := newStreamingCommand(context.Background(), opts, []string{"-test.run=^$"})
+	run, stdout, err := newStreamingCommand(context.Background(), opts, []string{"-test.run=^$"})
 	require.NoError(t, err)
-	require.NotNil(t, cmd)
+	require.NotNil(t, run)
 	require.NotNil(t, stdout)
 
 	data, readErr := io.ReadAll(stdout)
 	require.NoError(t, readErr)
 	assert.Empty(t, data, "fake subprocess writes nothing to stdout")
 
-	require.NoError(t, cmd.Wait(), "fake subprocess should exit 0")
+	require.NoError(t, run.wait(), "fake subprocess should exit 0")
 }
 
 // TestNewStreamingCommand_StartError verifies a nonexistent binary surfaces ErrCommandStart
@@ -610,11 +610,11 @@ func TestNewStreamingCommand_StartError(t *testing.T) {
 		WorkingDir: t.TempDir(),
 	}
 
-	cmd, stdout, err := newStreamingCommand(context.Background(), opts, nil)
+	run, stdout, err := newStreamingCommand(context.Background(), opts, nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrCommandStart)
-	assert.Nil(t, cmd)
+	assert.Nil(t, run)
 	assert.Nil(t, stdout)
 }
 
@@ -631,11 +631,11 @@ func TestNewStreamingCommand_StdoutPipeError(t *testing.T) {
 	}
 
 	opts := &ExecuteOptions{Command: "unused-because-of-seam", WorkingDir: t.TempDir()}
-	cmd, stdout, err := newStreamingCommand(context.Background(), opts, nil)
+	run, stdout, err := newStreamingCommand(context.Background(), opts, nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrStdoutPipe)
-	assert.Nil(t, cmd)
+	assert.Nil(t, run)
 	assert.Nil(t, stdout)
 }
 
@@ -651,11 +651,11 @@ func TestNewStreamingCommand_StderrPipeError(t *testing.T) {
 	}
 
 	opts := &ExecuteOptions{Command: "unused-because-of-seam", WorkingDir: t.TempDir()}
-	cmd, stdout, err := newStreamingCommand(context.Background(), opts, nil)
+	run, stdout, err := newStreamingCommand(context.Background(), opts, nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrStderrPipe)
-	assert.Nil(t, cmd)
+	assert.Nil(t, run)
 	assert.Nil(t, stdout)
 }
 
@@ -716,13 +716,13 @@ func TestRunTUIProgram_TUIErrorKillsProcess(t *testing.T) {
 	cmd.Env = append(os.Environ(), "_ATMOS_TEST_SLEEP_SECONDS=30")
 	require.NoError(t, cmd.Start())
 
-	finalModel, cancelled, runErr := runTUIProgram(noCancelModel{}, cmd)
+	finalModel, outcome, runErr := runTUIProgram(noCancelModel{}, &runningCommand{cmd: cmd})
 
 	require.Error(t, runErr)
 	assert.ErrorIs(t, runErr, errUtils.ErrTUIRun)
 	assert.ErrorIs(t, runErr, sentinelErr)
 	assert.Nil(t, finalModel)
-	assert.False(t, cancelled)
+	assert.False(t, outcome.cancelled)
 
 	// runTUIProgram must reap the killed process itself (cmd.Wait()) rather than leaving it a
 	// zombie with the stderr pipe still open for the caller to notice - ProcessState is only
@@ -758,10 +758,11 @@ func TestRunTUIProgram_CancelledKillsProcess(t *testing.T) {
 	cmd.Env = append(os.Environ(), "_ATMOS_TEST_SLEEP_SECONDS=30")
 	require.NoError(t, cmd.Start())
 
-	finalModel, cancelled, runErr := runTUIProgram(NewModel("comp", "stack", "plan", strings.NewReader("")), cmd)
+	model := NewModel("comp", "stack", "plan", strings.NewReader(""))
+	finalModel, outcome, runErr := runTUIProgram(model, &runningCommand{cmd: cmd})
 
 	require.NoError(t, runErr)
-	assert.True(t, cancelled)
+	assert.True(t, outcome.cancelled)
 	m, ok := finalModel.(Model)
 	require.True(t, ok)
 	assert.True(t, m.Cancelled())
@@ -791,10 +792,11 @@ func TestRunTUIProgram_SuccessLeavesProcessRunning(t *testing.T) {
 	cmd.Env = append(os.Environ(), "_ATMOS_TEST_SLEEP_SECONDS=1")
 	require.NoError(t, cmd.Start())
 
-	finalModel, cancelled, runErr := runTUIProgram(NewModel("comp", "stack", "plan", strings.NewReader("")), cmd)
+	model := NewModel("comp", "stack", "plan", strings.NewReader(""))
+	finalModel, outcome, runErr := runTUIProgram(model, &runningCommand{cmd: cmd})
 
 	require.NoError(t, runErr)
-	assert.False(t, cancelled)
+	assert.False(t, outcome.cancelled)
 	_, ok := finalModel.(Model)
 	require.True(t, ok)
 

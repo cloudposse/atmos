@@ -162,12 +162,3 @@ func TestSecondSignalForcesExit(t *testing.T) {
 	}
 	assert.NoFileExists(t, filepath.Join(dir, "saved"))
 }
-
-func TestGracefulStopNotice(t *testing.T) {
-	assert.Equal(t, "Interrupt received; waiting for terraform to stop gracefully. Press Ctrl-C again to force exit.",
-		gracefulStopNotice(os.Interrupt, []string{"terraform"}))
-	assert.Equal(t, "Termination requested; waiting for terraform, tofu to stop gracefully. "+
-		"Send the signal again to force exit.",
-		gracefulStopNotice(syscall.SIGTERM, []string{"tofu", "terraform", "tofu"}))
-	assert.Contains(t, gracefulStopNotice(os.Interrupt, nil), "waiting for the running command to stop")
-}

@@ -131,6 +131,10 @@ func extractExitCode(err error) (int, error) {
 	return exitErr.ExitCode(), nil
 }
 
+// streamingUIPreconditions checks that Execute and ExecuteInit can render the streaming UI. It
+// is a package-level var so tests can run them without a real terminal.
+var streamingUIPreconditions = checkStreamingUIPreconditions
+
 // execCommandContext creates the exec.Cmd used to run terraform subprocesses. It is a
 // package-level var (mirroring exec.CommandContext's signature) so tests can substitute a
 // fake subprocess - e.g. the test binary itself, per this package's self-re-exec pattern in
@@ -152,9 +156,11 @@ type cancellableModel interface {
 
 // runTUIProgram runs a bubbletea program to completion, killing the given command's process
 // if the TUI itself fails to run, or if the user explicitly cancelled (Ctrl-C/q) - otherwise
-// the command would keep running invisibly after control returns to the caller. The second
-// return value reports whether the run was cancelled.
-func runTUIProgram(model tea.Model, cmd *exec.Cmd) (tea.Model, bool, error) {
+// the command would keep running invisibly after control returns to the caller. The first
+// Ctrl-C/q (or SIGINT/SIGTERM) only interrupts the command so terraform can stop gracefully;
+// the TUI keeps running until it exits, and a second one cancels. The returned model is the
+// wrapped TUI model, and the outcome reports whether the run was cancelled or interrupted.
+func runTUIProgram(model tea.Model, run *runningCommand) (tea.Model, tuiOutcome, error) {
 	opts := []tea.ProgramOption{
 		// iolib.MaskWriter(os.Stderr), not the bare global iolib.UI: with secret masking
 		// enabled (the default), io.UI's concrete type is *dynamicMaskedWriter, which has
@@ -178,22 +184,24 @@ func runTUIProgram(model tea.Model, cmd *exec.Cmd) (tea.Model, bool, error) {
 		// Mirrors the same guard in pkg/ui/spinner's tea.NewProgram construction.
 		opts = append(opts, tea.WithInput(nil))
 	}
-	p := tea.NewProgram(model, opts...)
+	p := tea.NewProgram(gracefulModel{inner: model, run: run}, opts...)
 
+	run.attach(p)
 	finalModel, err := runTeaProgram(p)
+	run.detach()
 	if err != nil {
 		// Kill the process if TUI failed.
-		_ = cmd.Process.Kill()
+		run.kill()
 		// Reap the killed process so it isn't left as a zombie, and so Wait closes
 		// the stdout/stderr pipes that the reader goroutines are blocked on.
-		_ = cmd.Wait()
-		return nil, false, fmt.Errorf(fmtWrapErr, errUtils.ErrTUIRun, err)
+		_ = run.wait()
+		return nil, tuiOutcome{}, fmt.Errorf(fmtWrapErr, errUtils.ErrTUIRun, err)
 	}
 
-	cancelled := modelWasCancelled(finalModel)
-	killIfCancelled(cancelled, cmd)
+	inner, outcome := unwrapFinalModel(finalModel)
+	killIfCancelled(outcome.cancelled, run)
 
-	return finalModel, cancelled, nil
+	return inner, outcome, nil
 }
 
 // modelWasCancelled reports whether the given final TUI model indicates the user explicitly
@@ -203,11 +211,11 @@ func modelWasCancelled(finalModel tea.Model) bool {
 	return ok && cm.Cancelled()
 }
 
-// killIfCancelled kills cmd's process when cancelled is true, so a subprocess left running
-// after the user quits the TUI doesn't keep running invisibly in the background.
-func killIfCancelled(cancelled bool, cmd *exec.Cmd) {
+// killIfCancelled kills the command's process when cancelled is true, so a subprocess left
+// running after the user quits the TUI doesn't keep running invisibly in the background.
+func killIfCancelled(cancelled bool, run *runningCommand) {
 	if cancelled {
-		_ = cmd.Process.Kill()
+		run.kill()
 	}
 }
 
@@ -225,16 +233,32 @@ func streamStderrToLog(r io.Reader) {
 // newStreamingCommand creates and starts a terraform command with separate stdout/stderr
 // pipes: stdout is returned for JSON message streaming, stderr is streamed to the logger. When
 // opts.StdoutCapture / opts.StderrCapture are set, both streams are additionally teed into them.
-func newStreamingCommand(ctx context.Context, opts *ExecuteOptions, args []string) (*exec.Cmd, io.Reader, error) {
-	cmd := execCommandContext(ctx, opts.Command, args...)
-	cmd.Dir = opts.WorkingDir
-	cmd.Env = opts.Env
-	cmd.Stdin = os.Stdin // Allow interactive terraform commands.
+// The command stops gracefully when interrupted; see runningCommand.
+func newStreamingCommand(ctx context.Context, opts *ExecuteOptions, args []string) (*runningCommand, io.Reader, error) {
+	run, err := newGracefulCommand(ctx, opts, args)
+	if err != nil {
+		return nil, nil, err
+	}
+	stdout, err := attachStreamingPipes(run, opts)
+	if err != nil {
+		run.finish()
+		return nil, nil, err
+	}
+	if err := run.start(); err != nil {
+		return nil, nil, err
+	}
+
+	return run, teeReader(stdout, opts.StdoutCapture), nil
+}
+
+// attachStreamingPipes connects stdout for JSON message streaming and streams stderr to the logger.
+func attachStreamingPipes(run *runningCommand, opts *ExecuteOptions) (io.Reader, error) {
+	cmd := run.cmd
 
 	// Get stdout pipe for streaming.
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, nil, fmt.Errorf(fmtWrapErr, errUtils.ErrStdoutPipe, err)
+		return nil, fmt.Errorf(fmtWrapErr, errUtils.ErrStdoutPipe, err)
 	}
 
 	// Capture stderr for non-JSON diagnostics (backend errors, plugin failures, etc.).
@@ -242,17 +266,13 @@ func newStreamingCommand(ctx context.Context, opts *ExecuteOptions, args []strin
 	// and some critical errors (Go runtime panics, plugin crashes) only appear on stderr.
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
-		return nil, nil, fmt.Errorf(fmtWrapErr, errUtils.ErrStderrPipe, err)
+		return nil, fmt.Errorf(fmtWrapErr, errUtils.ErrStderrPipe, err)
 	}
 
 	// Stream stderr to logger in background.
 	go streamStderrToLog(teeReader(stderrPipe, opts.StderrCapture))
 
-	if err := cmd.Start(); err != nil {
-		return nil, nil, fmt.Errorf(fmtWrapErr, errUtils.ErrCommandStart, err)
-	}
-
-	return cmd, teeReader(stdout, opts.StdoutCapture), nil
+	return stdout, nil
 }
 
 // Execute runs a terraform command with streaming UI output.
@@ -260,7 +280,7 @@ func newStreamingCommand(ctx context.Context, opts *ExecuteOptions, args []strin
 func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	defer perf.Track(nil, "terraform.ui.Execute")()
 
-	if err := checkStreamingUIPreconditions(); err != nil {
+	if err := streamingUIPreconditions(); err != nil {
 		return err
 	}
 	if opts.DryRun {
@@ -268,21 +288,21 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	}
 
 	args := buildArgsWithJSON(opts.Args)
-	cmd, stdout, err := newStreamingCommand(ctx, opts, args)
+	run, stdout, err := newStreamingCommand(ctx, opts, args)
 	if err != nil {
 		return err
 	}
 
 	// Create and run TUI model.
 	model := NewModel(opts.Component, opts.Stack, opts.SubCommand, stdout)
-	finalModel, cancelled, err := runTUIProgram(model, cmd)
+	finalModel, outcome, err := runTUIProgram(model, run)
 	if err != nil {
 		return err
 	}
 
 	// Wait for command to finish (reaps the process; if cancelled, it was just killed above).
-	waitErr := cmd.Wait()
-	if cancelled {
+	waitErr := run.wait()
+	if outcome.stopped() {
 		return errUtils.ExitCodeError{Code: cancelledExitCode}
 	}
 
@@ -399,7 +419,7 @@ func ExecutePlan(ctx context.Context, opts *ExecuteOptions) error {
 // initCommandResult holds the running init/workspace command along with the merged
 // output reader and a channel that closes once the command has finished.
 type initCommandResult struct {
-	cmd    *exec.Cmd
+	run    *runningCommand
 	reader io.Reader
 	done   <-chan struct{}
 	err    *error
@@ -412,10 +432,11 @@ type initCommandResult struct {
 // merged stream when set — there is no separate stdout-only / stderr-only view available for
 // init.
 func newInitCommand(ctx context.Context, opts *ExecuteOptions) (*initCommandResult, error) {
-	cmd := execCommandContext(ctx, opts.Command, opts.Args...)
-	cmd.Dir = opts.WorkingDir
-	cmd.Env = opts.Env
-	cmd.Stdin = os.Stdin // Allow interactive terraform commands.
+	run, err := newGracefulCommand(ctx, opts, opts.Args)
+	if err != nil {
+		return nil, err
+	}
+	cmd := run.cmd
 
 	// Use a pipe to merge stdout and stderr into a single stream.
 	// This ensures all terraform output is captured by the TUI.
@@ -423,20 +444,20 @@ func newInitCommand(ctx context.Context, opts *ExecuteOptions) (*initCommandResu
 	cmd.Stdout = teeWriter(pw, opts.StdoutCapture)
 	cmd.Stderr = teeWriter(pw, opts.StderrCapture)
 
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf(fmtWrapErr, errUtils.ErrCommandStart, err)
+	if err := run.start(); err != nil {
+		return nil, err
 	}
 
 	// Capture exit code from the goroutine.
 	var cmdErr error
 	cmdDone := make(chan struct{})
 	go func() {
-		cmdErr = cmd.Wait()
+		cmdErr = run.wait()
 		pw.Close()
 		close(cmdDone)
 	}()
 
-	return &initCommandResult{cmd: cmd, reader: pr, done: cmdDone, err: &cmdErr}, nil
+	return &initCommandResult{run: run, reader: pr, done: cmdDone, err: &cmdErr}, nil
 }
 
 // ExecuteInit runs terraform init with a spinner TUI that captures output.
@@ -444,7 +465,7 @@ func newInitCommand(ctx context.Context, opts *ExecuteOptions) (*initCommandResu
 func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
 	defer perf.Track(nil, "terraform.ui.ExecuteInit")()
 
-	if err := checkStreamingUIPreconditions(); err != nil {
+	if err := streamingUIPreconditions(); err != nil {
 		return err
 	}
 	if opts.DryRun {
@@ -458,7 +479,7 @@ func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
 
 	// Create and run TUI model.
 	model := NewInitModel(opts.Component, opts.Stack, opts.SubCommand, res.reader, WithWorkspace(opts.Workspace))
-	finalModel, cancelled, err := runTUIProgram(model, res.cmd)
+	finalModel, outcome, err := runTUIProgram(model, res.run)
 	if err != nil {
 		return err
 	}
@@ -466,7 +487,7 @@ func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
 	// Wait for command to finish (should already be done since pipe closed; if cancelled, the
 	// process was just killed above, which unblocks the background cmd.Wait() goroutine).
 	<-res.done
-	if cancelled {
+	if outcome.stopped() {
 		return errUtils.ExitCodeError{Code: cancelledExitCode}
 	}
 
