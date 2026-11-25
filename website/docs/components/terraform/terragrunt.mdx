@@ -49,7 +49,7 @@ atmos plugin install oci://ghcr.io/cloudposse/atmos/plugins/terragrunt \
   --as=terragrunt --version='^0.1.0'
 ```
 
-If the package is already declared, run `atmos plugin install`. Commit the resulting `.atmos.plugins.lock.yaml` so CI can restore the same version with `atmos plugin install --frozen`.
+With the package declared and discovery enabled, `atmos list instances` installs the plugin automatically on first use. You can also run `atmos plugin install` to install it up front. Commit the resulting `.atmos.plugins.lock.yaml` so CI can restore the same version with `atmos plugin install --frozen`.
 
 <details>
 <summary>Use a local plugin build</summary>
@@ -80,7 +80,7 @@ To place the unit in an existing YAML stack, add `terragrunt://live/dev/vpc` to 
 
 ## Try the Terragrunt example
 
-The example discovers `live/demo/terragrunt.hcl` as component `demo` in stack `live`. Run `atmos terraform plan demo -s live` to see the greeting evaluated from HCL. It uses local state and the built-in `terraform_data` resource, so you can apply and destroy it without cloud credentials. For a local plugin build, follow the example README’s development profile instructions.
+The example discovers `live/demo/terragrunt.hcl` as component `demo` in stack `live`. Run `atmos terraform plan demo -s live` to see the greeting evaluated from HCL. It uses local state and the built-in `terraform_data` resource, so you can apply and destroy it without cloud credentials.
 
 <CastEmbed src="/casts/demo/fixtures/terragrunt-native/plan.cast" title="Discover and plan a Terragrunt unit with Atmos" chrome controls scrubber />
 

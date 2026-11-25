@@ -5,6 +5,8 @@ cast:
   file: /casts/demo/fixtures/terragrunt-native/plan.cast
   title: Discover and plan a Terragrunt unit with Atmos
 related_docs:
+  - label: Terragrunt with Terraform components
+    url: /components/terraform/terragrunt
   - label: Terragrunt migration
     url: /migration/terragrunt
   - label: Plugin usage
@@ -13,112 +15,42 @@ related_docs:
 
 # Terragrunt
 
-Use an existing Terragrunt HCL unit as an Atmos [Terraform component](https://atmos.tools/components/terraform) without adding
-Atmos stack YAML. The example discovers component `demo` in stack `live`, evaluates
-its HCL with Terragrunt Go modules, and executes OpenTofu through Atmos. It does not
-run the Terragrunt executable.
+Run an existing Terragrunt unit as an Atmos Terraform component. This example uses
+OpenTofu, local state, and a built-in `terraform_data` resource. It requires no cloud credentials.
 
-The module uses the built-in `terraform_data` resource and local state. No cloud
-credentials or provider downloads are needed.
+## Discover and plan
 
-## Install the plugin
+With Atmos and OpenTofu installed, run these commands from the example directory:
 
-From the root of an existing Atmos project, run this command to install the Terragrunt plugin and add it to `atmos.yaml`:
+```shell
+atmos list instances
+atmos terraform plan demo -s live
+```
+
+On first use, `atmos list instances` installs the plugin declared in `atmos.yaml`,
+writes `.atmos.plugins.lock.yaml`, and lists component `demo` in stack `live`.
+You can also run `atmos plugin install` to install it up front. Commit the lockfile
+before running in CI so Atmos can restore the same release.
+
+The plan shows one resource to add. Its input is `HELLO FROM TERRAGRUNT`,
+which the unit computes with the HCL `upper` function.
+
+## Apply and clean up
+
+```shell
+atmos terraform apply demo -s live
+atmos terraform output demo -s live -- -raw greeting
+atmos terraform destroy demo -s live
+```
+
+## Use in your own project
+
+To add the plugin to your project's `atmos.yaml` and install it, run:
 
 ```shell
 atmos plugin install oci://ghcr.io/cloudposse/atmos/plugins/terragrunt \
   --as=terragrunt --version='^0.1.0'
 ```
 
-The command writes the following package declaration. The example already includes it.
-
-```yaml
-plugins:
-  packages:
-    terragrunt:
-      source: oci://ghcr.io/cloudposse/atmos/plugins/terragrunt
-      version: "^0.1.0"
-```
-
-Install Atmos and OpenTofu, copy the example into a new directory, and install the plugin:
-
-```shell
-atmos init ./examples/terragrunt ./terragrunt \
-  --copy --no-git
-cd terragrunt
-atmos plugin install
-```
-
-`atmos plugin install` downloads the release, verifies its digest, and writes it to
-`.atmos.plugins.lock.yaml`. Commit that file: the lock pins the exact release, so every machine
-and CI run restores the same bytes, and CI refuses to create a new lock entry on its own.
-Without this step the first command that needs the plugin installs it and creates the lock entry;
-`atmos plugin install --frozen` restores exactly what the lock records and never changes it.
-If the package cannot be fetched (for example because the registry is unreachable or the release is
-not yet published), Atmos reports which source and version constraint it could not prepare and
-changes nothing.
-
-After installing the plugin in an existing project, enable Terragrunt discovery from that project's root:
-
-```shell
-atmos config set components.terraform.base_path \
-  components/terraform
-atmos config set components.terraform.command tofu
-atmos config set components.terraform.terragrunt.enabled true
-atmos config set components.terraform.terragrunt.mode native
-atmos config set --type=yaml \
-  components.terraform.terragrunt.discovery.included_paths \
-  '["live/**"]'
-atmos config set \
-  components.terraform.terragrunt.discovery.enabled true
-```
-
-Adjust `included_paths` to match your Terragrunt directory layout;
-see [discovery paths](https://atmos.tools/migration/terragrunt#discovery-paths) for the
-pattern rules. `components.terraform.base_path` is required by Atmos even though
-Terragrunt units do not live there; the directory does not need to exist.
-If you use Terraform instead, set `components.terraform.command` to `terraform`
-and install Terraform 1.4 or newer.
-
-## Develop against a local build
-
-Only plugin developers need this. The `dev` profile replaces the registry package with a local
-build, which is never fetched, locked, or signature-checked. From the root of the Atmos checkout
-containing this example:
-
-```shell
-go build -o build/atmos .
-export PATH="$PWD/build:$PATH"
-atmos plugin build plugins/terragrunt
-export ATMOS_TERRAGRUNT_PLUGIN_PATH="$PWD/plugins/terragrunt"
-export ATMOS_PROFILE=dev
-```
-
-Run the commands below from the copied example directory with `ATMOS_PROFILE=dev` set.
-`profiles/dev/atmos.yaml` reads the plugin path from `ATMOS_TERRAGRUNT_PLUGIN_PATH`.
-
-## Discover and plan
-
-```shell
-atmos list stacks
-atmos list instances
-atmos terraform plan demo -s live
-```
-
-The plan contains one `terraform_data.demo` resource with the input
-`HELLO FROM TERRAGRUNT`, evaluated by HCL's `upper` function. Atmos prepares an isolated workdir; the source HCL and
-module stay in place. The local backend retains the unit's state path at
-`live/demo/state/terraform.tfstate`.
-
-## Apply and clean up
-
-```shell
-atmos terraform apply demo -s live -- -auto-approve
-atmos terraform output demo -s live -- -raw greeting
-atmos terraform plan demo -s live -- -detailed-exitcode
-atmos terraform destroy demo -s live -- -auto-approve
-```
-
-After apply, output prints the greeting and the unchanged plan exits with code
-zero. Destroy removes the local test resource. This example demonstrates one local
-unit; it does not establish compatibility with all Terragrunt constructs.
+See [Enable Terragrunt support](https://atmos.tools/components/terraform/terragrunt#enable-terragrunt-support)
+to configure discovery for your project's units.

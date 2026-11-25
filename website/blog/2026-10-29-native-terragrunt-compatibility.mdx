@@ -41,11 +41,9 @@ The plugin and example are experimental. The registry installation requires a pu
 
 <TryExample example="terragrunt">
 
-Install OpenTofu and the example's declared plugin, then inspect and plan the discovered unit:
+With OpenTofu installed, list the example's components and plan the Terragrunt unit. The first command installs the declared plugin automatically.
 
 ```shell
-atmos plugin install
-atmos list stacks
 atmos list instances
 atmos terraform plan demo -s live
 ```
