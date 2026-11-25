@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestSignPublishesVerifiableEvidenceForExactIndex(t *testing.T) {
+// fixtureIndex builds the plugin release index the signing tests publish and sign.
+func fixtureIndex(t *testing.T) v1.ImageIndex {
+	t.Helper()
 	directory := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin"), []byte("prebuilt"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(`apiVersion: atmos/v1
@@ -50,6 +53,11 @@ spec:
 	require.NoError(t, descriptors.Register(extension.Descriptor{Capability: "fixture", Path: []string{"fixtures"}, Version: 1, Validate: func(extension.Binding) error { return nil }}))
 	index, err := pluginoci.BuildIndex(directory, descriptors)
 	require.NoError(t, err)
+	return index
+}
+
+func TestSignPublishesVerifiableEvidenceForExactIndex(t *testing.T) {
+	index := fixtureIndex(t)
 	server := httptest.NewServer(registry.New())
 	defer server.Close()
 	client := oci.NewClient(nil)
