@@ -61,8 +61,8 @@ terraform { source = local.module }
   source=%q
   path="env"
   values={name="app"}
- }`, uri+"//stacks/environment?ref="+pin))
-	request := model.Request{Phase: "inventory", BasePath: root, Catalogs: map[string]string{uri + "?ref=" + pin: pin}, Environment: map[string]string{"PATH": os.Getenv("PATH"), "XDG_CACHE_HOME": t.TempDir()}}
+ }`, uri+"//stacks/environment?ref=stable"))
+	request := model.Request{Phase: "inventory", BasePath: root, Catalogs: map[string]string{uri + "?ref=stable": pin}, Environment: map[string]string{"PATH": os.Getenv("PATH"), "XDG_CACHE_HOME": t.TempDir()}}
 	check := func() {
 		t.Helper()
 		res, err := Resolve(t.Context(), request)
@@ -103,6 +103,42 @@ terraform { source = local.module }
 	check()
 	server.Close()
 	check()
+	t.Run("missing unit in cached catalog", func(t *testing.T) {
+		req := request
+		req.BasePath = t.TempDir()
+		write(req.BasePath, "terragrunt.stack.hcl", fmt.Sprintf(`unit "db" {
+  source=%q
+  path="db"
+}`, uri+"//units/missing?ref=stable"))
+		result, err := Resolve(t.Context(), req)
+		require.NoError(t, err)
+		require.Empty(t, result.Inventory)
+		require.Len(t, result.Failures, 1)
+		var problem *model.Problem
+		require.ErrorAs(t, result.Failures[0].Err, &problem)
+		require.Equal(t, model.CodeEvaluationError, problem.Code)
+		require.Equal(t, "source", problem.Key)
+		require.ErrorIs(t, problem, os.ErrNotExist)
+	})
+
+	t.Run("siblings request different revisions", func(t *testing.T) {
+		req := request
+		req.BasePath = t.TempDir()
+		write(req.BasePath, "terragrunt.stack.hcl", fmt.Sprintf(`unit "first" {
+  source=%q
+  path="first"
+}
+unit "second" {
+  source=%q
+  path="second"
+}`, uri+"//units/db?ref=stable", uri+"//units/db?ref=next"))
+		result, err := Resolve(t.Context(), req)
+		require.NoError(t, err)
+		require.Empty(t, result.Inventory)
+		require.Len(t, result.Failures, 1)
+		require.ErrorContains(t, result.Failures[0].Err, "one revision of each catalog")
+	})
+
 	request.Phase = "discover"
 	request.Command = "generate"
 	request.Path = filepath.Join(root, "live", "terragrunt.stack.hcl")

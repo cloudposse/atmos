@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -320,6 +321,38 @@ func TestIAMResponseOmitsWhatIsNotSet(t *testing.T) {
 	huge, err := iamResponse(&model.IAM{Role: "r", DurationSeconds: 1 << 40})
 	require.NoError(t, err)
 	require.Equal(t, uint32(1<<32-1), huge.DurationSeconds)
+}
+
+func TestCatalogSettingsInComponentRequest(t *testing.T) {
+	const source = "github.com/example/catalog?ref=stable"
+	const other = "github.com/example/other?ref=v1"
+	const pin = "abcdef0123456789abcdef0123456789abcdef01"
+	const otherPin = "1234567890abcdef1234567890abcdef12345678"
+	request := componentRequest(t)
+	provider := New(nil)
+	entry := map[string]string{"source": source, "commit": strings.ToUpper(pin)}
+	request.ProviderConfiguration = encodedOption(t, map[string]any{
+		"catalogs": []map[string]string{entry, {"source": other, "commit": otherPin}},
+	})
+	result, err := provider.componentRequest(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{source: pin, other: otherPin}, result.Catalogs)
+
+	for name, catalogs := range map[string]any{
+		"entry outside list": entry,
+		"missing source":     []any{map[string]string{"commit": pin}},
+		"abbreviated commit": []any{map[string]string{"source": source, "commit": pin[:7]}},
+		"duplicate source":   []any{entry, map[string]string{"source": source, "commit": otherPin}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			request.ProviderConfiguration = encodedOption(t, map[string]any{"catalogs": catalogs})
+			_, err := provider.componentRequest(t.Context(), request)
+			var problem *model.Problem
+			require.ErrorAs(t, err, &problem)
+			require.Equal(t, model.CodeUnsupportedSetting, problem.Code)
+			require.Equal(t, "components.terraform.terragrunt.catalogs", problem.Key)
+		})
+	}
 }
 
 func TestFeatureSettingsAndEnvironmentMerge(t *testing.T) {
