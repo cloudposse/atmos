@@ -90,7 +90,13 @@ func WorkingDir(logger log.Logger, env *venv.Venv, source, download, directory s
 //
 //nolint:lintroller // Standalone compatibility module cannot import the host performance tracker.
 func GenerateStack(ctx context.Context, logger log.Logger, env *venv.Venv, path, tofu string) error {
+	return GenerateStackWithSources(ctx, logger, env, path, tofu, nil)
+}
+
+// GenerateStackWithSources uses Terragrunt's source-map support for resolved catalog checkouts.
+func GenerateStackWithSources(ctx context.Context, logger log.Logger, env *venv.Venv, path, tofu string, sources map[string]string) error {
 	opts := options.NewTerragruntOptions(env.Exec)
+	opts.SourceMap = sources
 	opts.WorkingDir = filepath.Dir(path)
 	opts.RootWorkingDir = opts.WorkingDir
 	opts.TerragruntStackConfigPath = path

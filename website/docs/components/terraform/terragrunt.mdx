@@ -1,0 +1,104 @@
+---
+title: Using Terragrunt with Terraform Components
+sidebar_label: Terragrunt
+sidebar_position: 8
+id: terragrunt
+sidebar_group: component-library
+sidebar_parent: components/terraform/terraform
+description: Discover existing Terragrunt units as Atmos Terraform components and run them with Terraform or OpenTofu.
+---
+
+import CastEmbed from '@site/src/components/CastEmbed'
+import EmbedExample from '@site/src/components/EmbedExample'
+
+## How native support works
+
+The Atmos Terragrunt plugin uses **Terragrunt's own Go modules** to read HCL, evaluate includes and stack values, and expand explicit stacks. Through the Atmos component plugin API, it returns each unit's component address, module source, and dependencies. Atmos can therefore list a Terragrunt unit alongside components defined in YAML and use its dependency edges to order a bulk plan or apply.
+
+In **native mode**, Atmos invokes Terraform or OpenTofu for each selected unit. During preparation the plugin evaluates the unit's inputs and backend configuration, and Atmos supplies the selected identity, toolchain, and working directory. The Terragrunt CLI is optional in this mode. In [executable mode](/migration/terragrunt#executable-mode), Atmos still discovers and schedules units, but invokes the Terragrunt binary to run each unit.
+
+## Enable Terragrunt support
+
+Terragrunt support is experimental and opt-in. In your project's `atmos.yaml`, declare the plugin under `plugins.packages` and set `components.terraform.terragrunt.enabled` to `true`. Enable `discovery` to list units automatically and adjust `included_paths` to match your layout. This example uses OpenTofu. Set `command: terraform` if you use Terraform.
+
+```yaml
+base_path: .
+
+components:
+  terraform:
+    base_path: components/terraform
+    command: tofu
+    terragrunt:
+      enabled: true
+      mode: native
+      discovery:
+        enabled: true
+        included_paths: ["live/**"]
+
+plugins:
+  packages:
+    terragrunt:
+      source: oci://ghcr.io/cloudposse/atmos/plugins/terragrunt
+      version: "^0.1.0"
+```
+
+To have Atmos write the `plugins.packages.terragrunt` entry and install the plugin in one step, run this command from the project root:
+
+```shell
+atmos plugin install oci://ghcr.io/cloudposse/atmos/plugins/terragrunt \
+  --as=terragrunt --version='^0.1.0'
+```
+
+With the package declared and discovery enabled, `atmos list instances` installs the plugin automatically on first use. You can also run `atmos plugin install` to install it up front. Commit the resulting `.atmos.plugins.lock.yaml` so CI can restore the same version with `atmos plugin install --frozen`.
+
+<details>
+<summary>Use a local plugin build</summary>
+
+From the root of the Atmos source checkout, build Atmos and the plugin:
+
+```shell
+go build -o build/atmos .
+export PATH="$PWD/build:$PATH"
+atmos plugin build plugins/terragrunt
+```
+
+In your infrastructure project's `atmos.yaml`, replace the Terragrunt package's `source` and `version` with `path: /absolute/path/to/atmos/plugins/terragrunt`, pointing at that checkout. Atmos loads the built plugin directly.
+
+</details>
+
+## Discover and plan a unit
+
+Run `atmos list instances` from your infrastructure project to verify discovery. For a unit at `live/dev/vpc/terragrunt.hcl`, the output should include component `vpc` in stack `live/dev`. Inspect and plan it with the same names:
+
+```shell
+atmos list instances
+atmos describe component vpc -s live/dev
+atmos terraform plan vpc -s live/dev
+```
+
+To place the unit in an existing YAML stack, add `terragrunt://live/dev/vpc` to the manifest's top-level `import` list. Then select the importing stack's name with `-s`. Explicit imports also work with automatic discovery disabled. See [importing units](/migration/terragrunt#import-units-into-a-stack) and [stack overrides](/migration/terragrunt#override-a-unit-from-stack-configuration) for the merge rules.
+
+## Try the Terragrunt example
+
+The example discovers `live/demo/terragrunt.hcl` as component `demo` in stack `live`. Run `atmos terraform plan demo -s live` to see the greeting evaluated from HCL. It uses local state and the built-in `terraform_data` resource, so you can apply and destroy it without cloud credentials.
+
+<CastEmbed src="/casts/demo/fixtures/terragrunt-native/plan.cast" title="Discover and plan a Terragrunt unit with Atmos" chrome controls scrubber />
+
+<EmbedExample example="terragrunt" />
+
+## Catalogs, discovery, and CLI differences
+
+In Terragrunt v1.2.1, **catalog browsing** answers “What can I reuse?” and **discovery** answers “What is configured in this checkout?” Edit the `catalog.urls` list in HCL to add or remove a repository from catalog searches. Edit the repository files to publish or change its contents. Discovery reflects the configuration files on disk. Neither workflow has a separate CRUD command group.
+
+| Workflow | Terragrunt v1.2.1 | When using the Atmos plugin |
+| --- | --- | --- |
+| Browse a catalog and create a unit | `terragrunt catalog` opens the catalog browser. Use `--format=jsonl` for scripts. The browser and `terragrunt scaffold` can scaffold a local configuration. | [Remote Git catalog pins](/migration/terragrunt#use-a-remote-git-catalog) let Atmos consume units and stacks already referenced in HCL. Use Terragrunt to browse available catalog entries or scaffold a new unit from one. |
+| Inspect the checkout | `terragrunt find --format=json`, `terragrunt list --tree`, and `terragrunt browse --experiment browse-tui` expose the inventory. `--queue-construct-as` on `find` or `list` previews the queue for a particular operation. | Use `atmos list instances` for configured units and `atmos list dependencies` for their relationships. Use Terragrunt for its interactive browser, filter expressions, and operation-specific queue preview. |
+| Inspect or validate HCL | `terragrunt render` emits evaluated HCL or JSON. `terragrunt hcl fmt` formats Terragrunt files. `terragrunt hcl validate --inputs --strict` checks the unit's inputs against the module's variables. | `atmos describe component` shows the Atmos component model. `atmos validate stacks` checks Atmos stack configuration. Use the Terragrunt commands for rendered HCL, HCL formatting, or strict input checks. |
+| Work with an explicit stack | `terragrunt stack generate`, `stack clean`, and `stack output` materialize the stack, remove its generated files, and read nested outputs. | Atmos expands stacks during discovery and generates them for execution. `atmos terraform output` reads one component's outputs. Use Terragrunt for standalone stack generation, cleanup, or aggregate output. |
+
+Terragrunt writes `.terragrunt-stack-manifest` files inside generated unit directories to track files across generations. If a hook packages a Lambda from one of those directories, build a fresh archive from the handler and its runtime dependencies. Recursively zipping the whole directory also includes the manifests.
+
+The plugin exposes [selected Terragrunt flags](/migration/terragrunt#flags). In executable mode, arguments after `--` go to Terraform or OpenTofu. Run Terragrunt directly for CLI controls such as `--source-map`, `--cas-offline`, `--cas-refresh`, and `--strict-control`. Atmos can reuse a cached catalog offline, but it has no flag to require a cache hit.
+
+See [native evaluation limits](/migration/terragrunt#what-it-does-not-support-yet) for unsupported HCL settings and how failures are reported.

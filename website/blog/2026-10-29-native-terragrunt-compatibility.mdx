@@ -4,7 +4,7 @@ title: "Experimental Native Terragrunt Support"
 authors: [osterman]
 tags: [feature, experimental]
 cast: "/casts/demo/fixtures/terragrunt-native/plan.cast"
-castTitle: "Native Terragrunt discovery and planning"
+castTitle: "Discover and plan a Terragrunt unit with Atmos"
 ---
 Teams with working Terragrunt configurations should be able to use Atmos without first refactoring those configurations into Atmos conventions. Experimental native Terragrunt support lets you keep the HCL, units, and stacks you have, discover them as Atmos components, and run them with their backend identity, generated files, and dependencies intact.
 
@@ -13,9 +13,11 @@ Teams with working Terragrunt configurations should be able to use Atmos without
 import CastEmbed from '@site/src/components/CastEmbed';
 import TryExample from '@site/src/components/TryExample';
 
-<CastEmbed src="/casts/demo/fixtures/terragrunt-native/plan.cast" title="Native Terragrunt discovery and planning" chrome controls scrubber />
+<CastEmbed src="/casts/demo/fixtures/terragrunt-native/plan.cast" title="Discover and plan a Terragrunt unit with Atmos" chrome controls scrubber />
 
-[View the full example](/examples/terragrunt-native)
+- [Run existing Terragrunt units as Atmos Terraform components](/components/terraform/terragrunt)
+- [Migrate from Terragrunt to Atmos](/migration/terragrunt)
+- [View the full example](/examples/terragrunt)
 
 ## The problem
 
@@ -37,13 +39,11 @@ The example keeps a Terragrunt unit under `live/`, discovers it as an Atmos Terr
 The plugin and example are experimental. The registry installation requires a published plugin release matching the example's version constraint.
 :::
 
-<TryExample example="terragrunt-native">
+<TryExample example="terragrunt">
 
-Install OpenTofu and the example's declared plugin, then inspect and plan the discovered unit:
+With OpenTofu installed, list the example's components and plan the Terragrunt unit. The first command installs the declared plugin automatically.
 
 ```shell
-atmos plugin install
-atmos list stacks
 atmos list instances
 atmos terraform plan demo -s live
 ```
@@ -133,4 +133,4 @@ Native mode evaluates HCL through Terragrunt Go modules and executes through Atm
 
 The package remains experimental. Local fixture results do not establish a compatibility percentage, and real cloud provisioning needs its own acceptance evidence.
 
-See the [Terragrunt migration guide](/migration/terragrunt), [plugin usage](/cli/commands/plugin/usage), and [instance listing](/cli/commands/list/list-instances).
+See [plugin usage](/cli/commands/plugin/usage) and [instance listing](/cli/commands/list/list-instances) for the CLI details.

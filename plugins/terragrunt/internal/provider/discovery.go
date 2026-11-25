@@ -35,7 +35,7 @@ func discoveryRequest(request *pluginv1.DiscoverComponentsRequest) (model.Reques
 	if err := settings(request.GetProviderConfiguration()); err != nil {
 		return req, rpcError(err)
 	}
-	if err := withFeatures(&req, request.GetProviderConfiguration()); err != nil {
+	if err := withProviderSettings(&req, request.GetProviderConfiguration()); err != nil {
 		return req, rpcError(err)
 	}
 	paths, err := importPaths(request)

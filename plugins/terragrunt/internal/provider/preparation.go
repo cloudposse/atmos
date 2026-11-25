@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
+	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/zclconf/go-cty/cty"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
@@ -37,7 +38,7 @@ func (p *Provider) componentRequest(ctx context.Context, request *pluginv1.Compo
 		return req, ErrUnsupported
 	}
 	req.Path = filepath.Join(request.RootDirectory, filepath.FromSlash(request.Source))
-	if err := withFeatures(&req, request.ProviderConfiguration); err != nil {
+	if err := withProviderSettings(&req, request.ProviderConfiguration); err != nil {
 		return req, err
 	}
 	var config struct {
@@ -410,14 +411,30 @@ func featureSettings(value any) (map[string]string, error) {
 	return result, nil
 }
 
-// withFeatures sets the request's feature overrides. Overrides from the `features` setting apply
+// withProviderSettings applies the project catalog pins and feature overrides. Overrides from the `features` setting apply
 // first; TG_FEATURE in the invocation environment replaces them per name, as environment
 // variables outrank configuration files.
-func withFeatures(req *model.Request, configuration *pluginv1.ComponentValue) error {
+func withProviderSettings(req *model.Request, configuration *pluginv1.ComponentValue) error {
 	var config map[string]any
 	if configuration != nil {
 		if err := decode(configuration, &config); err != nil {
 			return err
+		}
+	}
+	if raw, exists := config["catalogs"]; exists {
+		entries, ok := raw.([]any)
+		if !ok {
+			return settingProblem("catalogs", "Invalid Terragrunt catalogs", "Use a list of repositories with source and commit fields.")
+		}
+		req.Catalogs = map[string]string{}
+		for _, entry := range entries {
+			item, _ := entry.(map[string]any)
+			source, _ := item["source"].(string)
+			commit, _ := item["commit"].(string)
+			if source == "" || !atmosbridge.ValidCatalogCommit(commit) || req.Catalogs[source] != "" {
+				return settingProblem("catalogs", "Invalid Terragrunt catalog", "Each entry needs a distinct repository source and a full Git commit SHA.")
+			}
+			req.Catalogs[source] = strings.ToLower(commit)
 		}
 	}
 	features, err := featureSettings(config["features"])

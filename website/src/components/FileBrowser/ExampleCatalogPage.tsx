@@ -119,15 +119,13 @@ function Preview({
           <div>
             <RiFolderLine /> {example.name}
           </div>
-          <pre>
-            {example.root.children
-              .slice(0, 4)
-              .map(
-                (file, index, files) =>
-                  `${index === files.length - 1 ? "└─" : "├─"} ${file.name}${file.type === "directory" ? "/" : ""}`,
-              )
-              .join("\n")}
-          </pre>
+          <ul>
+            {example.root.children.slice(0, 4).map((file) => (
+              <li key={file.name}>
+                {file.name}{file.type === "directory" ? "/" : ""}
+              </li>
+            ))}
+          </ul>
           <span>
             Explore project files <RiArrowRightLine />
           </span>
