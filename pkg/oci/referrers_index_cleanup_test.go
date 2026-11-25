@@ -78,20 +78,17 @@ func (f *tagSchemaRegistry) refusedIndexDeletes(allowed ...ocispec.Descriptor) i
 	return refused
 }
 
-// attachmentManifest builds a manifest that names subject, distinguished by note.
-func attachmentManifest(t *testing.T, config, subject ocispec.Descriptor, note string) (ocispec.Descriptor, []byte) {
+// attachmentManifest builds a manifest that names subject, distinguished by note. It uses the same empty
+// config pushAttachment pushed, so the config blob already exists in the repository.
+func attachmentManifest(t *testing.T, subject *ocispec.Descriptor, note string) (ocispec.Descriptor, []byte) {
 	t.Helper()
-	manifest := ocispec.Manifest{Config: config, Layers: []ocispec.Descriptor{}, Subject: &subject, Annotations: map[string]string{"note": note}}
+	config := oci.Descriptor("application/vnd.oci.empty.v1+json", []byte("{}"))
+	manifest := ocispec.Manifest{Config: config, Layers: []ocispec.Descriptor{}, Subject: subject, Annotations: map[string]string{"note": note}}
 	manifest.SchemaVersion = 2
 	manifest.MediaType = ocispec.MediaTypeImageManifest
 	raw, err := json.Marshal(manifest)
 	require.NoError(t, err)
 	return oci.Descriptor(ocispec.MediaTypeImageManifest, raw), raw
-}
-
-// configOf returns the empty config descriptor pushAttachment used.
-func configOf() ocispec.Descriptor {
-	return oci.Descriptor("application/vnd.oci.empty.v1+json", []byte("{}"))
 }
 
 // Re-signing a release on a registry without the referrers API replaces the tag-schema referrers index.
@@ -105,9 +102,9 @@ func TestPushAttachmentSucceedsWhenTheRegistryRefusesToDeleteTheReplacedReferrer
 	// The first attachment creates the referrers index, so there is nothing to delete yet.
 	subject, first := pushAttachment(t, store)
 
-	byDigest, byDigestRaw := attachmentManifest(t, configOf(), subject, "signature by digest")
+	byDigest, byDigestRaw := attachmentManifest(t, &subject, "signature by digest")
 	pushErr := store.Push(t.Context(), byDigest, strings.NewReader(string(byDigestRaw)))
-	byTag, byTagRaw := attachmentManifest(t, configOf(), subject, "signature by reference")
+	byTag, byTagRaw := attachmentManifest(t, &subject, "signature by reference")
 	pushReferenceErr := store.PushReference(t.Context(), byTag, strings.NewReader(string(byTagRaw)), byTag.Digest.String())
 
 	require.NoError(t, pushErr, "Push of an attachment")
@@ -133,7 +130,7 @@ func TestPushAttachmentFailsWhenTheRegistryRefusesTheNewReferrersIndex(t *testin
 	fixture.rejectTags = true
 	fixture.mu.Unlock()
 
-	desc, raw := attachmentManifest(t, configOf(), subject, "signature")
+	desc, raw := attachmentManifest(t, &subject, "signature")
 	err = store.Push(t.Context(), desc, strings.NewReader(string(raw)))
 
 	require.Error(t, err)
@@ -156,7 +153,7 @@ func TestDeleteAttachmentFailsWhenTheRegistryRefusesToDeleteTheReplacedReferrers
 			// With no other attachment, the old index stays tagged and still lists the attachment.
 			listed := []string{removed.Digest.String()}
 			if extra {
-				kept, keptRaw := attachmentManifest(t, configOf(), subject, "kept")
+				kept, keptRaw := attachmentManifest(t, &subject, "kept")
 				require.NoError(t, store.Push(t.Context(), kept, strings.NewReader(string(keptRaw))))
 				// The replacement index lists only the kept attachment, but the removed one was never deleted.
 				listed = []string{kept.Digest.String()}
