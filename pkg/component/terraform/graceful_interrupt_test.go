@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -49,7 +50,12 @@ func TestTerraformHelperInvocationsStopGracefully(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{Command: "terraform", SubCommand: "version"}
 		config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 		require.NoError(t, hookExecutor(shell).handleVersionSubcommand(config, info))
-		require.Equal(t, []string{"terraform version"}, shell.names())
+		require.Len(t, shell.calls, 1)
+		// On Windows the executable is resolved as terraform.exe.
+		fields := strings.Fields(shell.names()[0])
+		require.Len(t, fields, 2)
+		assert.Equal(t, "terraform", strings.TrimSuffix(fields[0], ".exe"))
+		assert.Equal(t, "version", fields[1])
 		assert.Equal(t, process.InterruptGraceful, shell.calls[0].options.Interrupt)
 	})
 	t.Run("terragrunt executable mode", func(t *testing.T) {
