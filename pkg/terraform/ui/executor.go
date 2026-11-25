@@ -444,6 +444,8 @@ func newInitCommand(ctx context.Context, opts *ExecuteOptions) (*initCommandResu
 	cmd.Stdout = teeWriter(pw, opts.StdoutCapture)
 	cmd.Stderr = teeWriter(pw, opts.StderrCapture)
 
+	run.abortOutput = func() { _ = pr.CloseWithError(io.ErrClosedPipe) }
+
 	if err := run.start(); err != nil {
 		return nil, err
 	}

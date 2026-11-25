@@ -49,7 +49,7 @@ func NewGracefulChild(ctx context.Context) (*GracefulChild, error) {
 func (c *GracefulChild) Context() context.Context { return c.ctx }
 
 // Start starts cmd, which must have been created with Context and must have its stdin
-// assigned, and joins the graceful stop. notify, when set, is called after the first
+// assigned, and joins the graceful stop. When notify is set, it is called after the first
 // signal has been forwarded to the child, so a caller can show that Atmos is waiting.
 func (c *GracefulChild) Start(cmd *exec.Cmd, notify func(os.Signal)) error {
 	defer perf.Track(nil, "process.GracefulChild.Start")()

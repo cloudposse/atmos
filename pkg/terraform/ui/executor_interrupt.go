@@ -35,6 +35,10 @@ type runningCommand struct {
 	cmd *exec.Cmd
 	// Child is nil when a test builds the command directly; it then can only be killed.
 	child *process.GracefulChild
+	// AbortOutput, when set, stops the command's output from blocking once nothing reads it:
+	// init merges stdout and stderr into an io.Pipe whose writes block until the TUI reads them,
+	// and exec.Cmd.Wait waits for that copy to finish.
+	abortOutput func()
 
 	mu   sync.Mutex
 	send func(tea.Msg)
@@ -114,8 +118,12 @@ func (r *runningCommand) interrupt() error {
 	return r.child.Interrupt()
 }
 
-// kill terminates terraform immediately, as the second Ctrl-C keypress does.
+// kill terminates terraform immediately, as the second Ctrl-C keypress does. The TUI no
+// longer reads the output then, so pending output writes are aborted and Wait can return.
 func (r *runningCommand) kill() {
+	if r.abortOutput != nil {
+		r.abortOutput()
+	}
 	if r.child != nil {
 		r.child.Kill()
 		return
@@ -168,15 +176,11 @@ type gracefulModel struct {
 }
 
 // Init starts the wrapped model.
-//
-//nolint:gocritic // bubbletea models must be passed by value
 func (m gracefulModel) Init() tea.Cmd {
 	return m.inner.Init()
 }
 
 // Update intercepts the first quit key and signal notifications, and delegates the rest.
-//
-//nolint:gocritic // bubbletea models must be passed by value
 func (m gracefulModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case interruptMsg:
@@ -194,8 +198,6 @@ func (m gracefulModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders the wrapped model, with the stopping notice until it reaches its final view.
-//
-//nolint:gocritic // bubbletea models must be passed by value
 func (m gracefulModel) View() string {
 	view := m.inner.View()
 	if !m.stopping {

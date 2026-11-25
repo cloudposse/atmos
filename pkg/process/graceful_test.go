@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -167,7 +168,7 @@ func TestCommandDisplayName(t *testing.T) {
 		"TERRAFORM.EXE":                "TERRAFORM",
 		"terraform.exe":                "terraform",
 		"/opt/homebrew/bin/terragrunt": "terragrunt",
-		"bin" + string(os.PathSeparator) + "tofu": "tofu",
+		filepath.Join("bin", "tofu"):   "tofu",
 	}
 	for command, want := range tests {
 		assert.Equal(t, want, commandDisplayName(command), command)

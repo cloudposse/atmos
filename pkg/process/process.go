@@ -133,6 +133,7 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 
 // buildCommand prepares the exec.Cmd for spec under the execution context.
 func buildCommand(ctx context.Context, command string, spec *TaskSpec) *exec.Cmd {
+	//nolint:gosec // The runner executes exactly the command its caller configured.
 	cmd := exec.CommandContext(ctx, command, spec.Args...)
 	cmd.Args[0] = spec.Command
 	applyWindowsCmdExeQuoting(cmd, spec.Command, spec.Args)

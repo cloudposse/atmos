@@ -9,10 +9,13 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // stopOnInterruptOptions runs the test binary as a terraform that stops gracefully on interrupt.
@@ -75,4 +78,37 @@ func awaitReady(t *testing.T, r io.Reader) io.Reader {
 	require.NoError(t, err)
 	require.Equal(t, "ready", strings.TrimSpace(line), "prerequisite: the helper handles signals")
 	return reader
+}
+
+// TestExecuteInitReturnsWhenTheTUIFailsAfterOutput verifies a TUI failure does not hang while
+// init has written output that nothing reads: the merged-output copy would block Wait forever.
+func TestExecuteInitReturnsWhenTheTUIFailsAfterOutput(t *testing.T) {
+	opts := stopOnInterruptOptions(t, []string{"-test.run=^$"})
+	fakeStreamingTerminal(t, func(p *tea.Program) (tea.Model, error) {
+		time.Sleep(200 * time.Millisecond) // Let init write its first line, which nothing reads.
+		return nil, errUtils.ErrTUIRun
+	})
+
+	result := make(chan error, 1)
+	go func() { result <- ExecuteInit(context.Background(), opts) }()
+	select {
+	case err := <-result:
+		assert.ErrorIs(t, err, errUtils.ErrTUIRun)
+	case <-time.After(10 * time.Second):
+		t.Fatal("ExecuteInit hung after the TUI failed")
+	}
+}
+
+// TestInitCommandSecondCtrlCKillsAfterUnreadOutput verifies the forced path also returns.
+func TestInitCommandSecondCtrlCKillsAfterUnreadOutput(t *testing.T) {
+	res, err := newInitCommand(context.Background(), stopOnInterruptOptions(t, []string{"-test.run=^$"}))
+	require.NoError(t, err)
+	time.Sleep(200 * time.Millisecond) // The helper's "ready" line is pending in the pipe.
+
+	killIfCancelled(true, res.run)
+	select {
+	case <-res.done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the killed init command was never reaped")
+	}
 }

@@ -79,6 +79,11 @@ second signal forces the exit as before.
   init goroutine was already waiting, and two concurrent `exec.Cmd.Wait` calls could block forever. A new test
   exposed this hang under coverage instrumentation. `Execute`/`ExecuteInit` now check their streaming preconditions
   through `streamingUIPreconditions`, a package variable, so tests can run them without a terminal.
+  When Terraform is killed (TUI failure or second Ctrl-C), `kill` first closes the read side of init's merged
+  output pipe: nothing reads it then, and a pending write would otherwise keep `exec.Cmd.Wait` blocked.
+- `GracefulStops` review fixes: `release` closes the drained channel only after `onDrain` renewed the credential
+  cleanup budget, so a woken waiter sees the renewed budget; `Wait` re-checks the participants after each wake-up,
+  so a child registered while the last one was leaving is waited for too. Tests for both fail on the old code.
 - `errors/errors.go`: `ErrProcessInterrupted`, `ErrSignalReceived`, `ErrInterruptUnsupported`.
 - Docs: "Interrupting Terraform" in `website/docs/cli/commands/terraform/usage.mdx` and "Interrupting an Apply" in
   `terraform-apply.mdx`.

@@ -6,11 +6,15 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // GracefulStopNotice tells the user that Atmos is waiting for the named commands to stop
 // after the first signal, and how to force the exit.
 func GracefulStopNotice(sig os.Signal, names []string) string {
+	defer perf.Track(nil, "signals.GracefulStopNotice")()
+
 	commands := "the running command"
 	if len(names) > 0 {
 		commands = strings.Join(slices.Compact(slices.Sorted(slices.Values(names))), ", ")

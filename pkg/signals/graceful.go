@@ -96,12 +96,15 @@ func (g *GracefulStops) release(id uint64) {
 		g.mu.Unlock()
 		return
 	}
-	close(g.drained)
+	drained := g.drained
 	finishing := g.signal != nil
 	g.mu.Unlock()
+	// Publish the drain only after onDrain renewed the cleanup budget, so a woken waiter
+	// that goes on to wait for credential cleanup already sees the renewed budget.
 	if finishing && g.onDrain != nil {
 		g.onDrain()
 	}
+	close(drained)
 }
 
 // Begin handles a SIGINT/SIGTERM that would otherwise exit Atmos. When children
@@ -162,15 +165,19 @@ func (g *GracefulStops) Stopping() bool {
 func (g *GracefulStops) Wait() {
 	defer perf.Track(nil, "signals.GracefulStops.Wait")()
 
-	g.mu.Lock()
-	if len(g.participants) == 0 {
+	for {
+		g.mu.Lock()
+		if len(g.participants) == 0 {
+			g.mu.Unlock()
+			return
+		}
+		drained, forced := g.drained, g.forced
 		g.mu.Unlock()
-		return
-	}
-	drained, forced := g.drained, g.forced
-	g.mu.Unlock()
-	select {
-	case <-drained:
-	case <-forced:
+		select {
+		case <-drained:
+			// A child may have registered after the last one left; wait for it too.
+		case <-forced:
+			return
+		}
 	}
 }
