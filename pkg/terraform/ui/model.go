@@ -242,3 +242,11 @@ func (m *Model) GetTracker() *ResourceTracker {
 func (m Model) Cancelled() bool {
 	return m.cancelled
 }
+
+// Finished reports whether the model reached its final view: the command completed or the
+// user cancelled. Value receiver, for the same reason as Cancelled.
+//
+//nolint:gocritic // bubbletea models must be passed by value
+func (m Model) Finished() bool {
+	return m.done
+}

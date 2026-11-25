@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -45,6 +46,13 @@ func (s *syncWriter) Write(p []byte) (int, error) {
 	mu.Lock()
 	defer mu.Unlock()
 	return s.w.Write(p)
+}
+
+// gracefulInterruptOptions marks a Terraform, OpenTofu, or Terragrunt invocation so that the first
+// Ctrl-C or SIGTERM reaches it once and Atmos waits for it to save state and release its lock,
+// instead of terminating it. User hook commands do not use it and keep the default behavior.
+func gracefulInterruptOptions(opts []component.ExecutionOption) []component.ExecutionOption {
+	return append(slices.Clone(opts), component.WithGracefulInterrupt())
 }
 
 // streamingExecRequest bundles the arguments executeStreamingOrShell needs beyond
@@ -86,7 +94,7 @@ func (e *Executor) executeStreamingOrShell(atmosConfig *schema.AtmosConfiguratio
 			info.ComponentEnvList,
 			info.DryRun,
 			req.redirectStdErr,
-			req.shellOpts...,
+			gracefulInterruptOptions(req.shellOpts)...,
 		)
 	}
 

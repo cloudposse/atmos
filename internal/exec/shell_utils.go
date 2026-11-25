@@ -39,6 +39,9 @@ import (
 
 const logFieldCommand = "command"
 
+// shellProcessRunner runs ExecuteShellCommand subprocesses. Tests substitute a mock.
+var shellProcessRunner = process.NewDefaultRunner()
+
 // ShellCommandOption is the compatibility name for component execution options.
 type ShellCommandOption = component.ExecutionOption
 
@@ -342,7 +345,7 @@ func ExecuteShellCommand(
 		ctx = context.Background()
 	}
 
-	result := process.DefaultRunner{}.Run(ctx, process.TaskSpec{
+	result := shellProcessRunner.Run(ctx, process.TaskSpec{
 		Command: command,
 		Args:    args,
 		Dir:     dir,
@@ -352,6 +355,7 @@ func ExecuteShellCommand(
 			Stdout: stdout,
 			Stderr: stderr,
 		},
+		Interrupt: cfg.Interrupt,
 	})
 	flushStreamMaskers(streamMaskers)
 	emitProcessEndDiagnostics(diagConfig, diagID, diagStartedAt, &result)

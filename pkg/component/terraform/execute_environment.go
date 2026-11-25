@@ -337,7 +337,7 @@ func (e *Executor) handleVersionSubcommand(atmosConfig *schema.AtmosConfiguratio
 			tenv.EnvVars(),
 			false,
 			info.RedirectStdErr,
-			opts...,
+			gracefulInterruptOptions(opts)...,
 		)
 	}, baseOpts...)
 }
