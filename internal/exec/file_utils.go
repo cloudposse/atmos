@@ -37,12 +37,9 @@ func printOrWriteToFile(
 ) error {
 	defer perf.Track(atmosConfig, "exec.printOrWriteToFile")()
 
-	// Determine if we should use expensive formatting (syntax highlighting).
-	// Only use highlighting when outputting to a TTY (terminal), or when
-	// ForceColor is set via ATMOS_FORCE_COLOR.
-	// For files or pipes (without force), use simple formatting without highlighting.
-	forceColor := atmosConfig != nil && atmosConfig.Settings.Terminal.ForceColor
-	isTTY := file == "" && (tuiTerm.IsTTYSupportForStdout() || forceColor)
+	// A custom command can inherit forced color from its parent while piping
+	// its own stdout to a parser. Only highlight structured data on a terminal.
+	isTTY := file == "" && tuiTerm.IsTTYSupportForStdout()
 
 	switch format {
 	case "yaml":

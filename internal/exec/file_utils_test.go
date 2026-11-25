@@ -268,6 +268,8 @@ func TestPrintOrWriteToFile_ScalarResults(t *testing.T) {
 	}
 
 	atmosConfig := &schema.AtmosConfiguration{}
+	// Custom command steps inherit forced color even when stdout feeds a parser.
+	atmosConfig.Settings.Terminal.ForceColor = true
 
 	for _, tt := range tests {
 		for _, format := range []string{"yaml", "json"} {
