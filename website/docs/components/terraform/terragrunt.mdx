@@ -17,18 +17,13 @@ The Atmos Terragrunt plugin uses **Terragrunt's own Go modules** to read HCL, ev
 
 In **native mode**, Atmos invokes Terraform or OpenTofu for each selected unit. During preparation the plugin evaluates the unit's inputs and backend configuration, and Atmos supplies the selected identity, toolchain, and working directory. The Terragrunt CLI is optional in this mode. In [executable mode](/migration/terragrunt#executable-mode), Atmos still discovers and schedules units, but invokes the Terragrunt binary to run each unit.
 
-## Discover and plan a unit
+## Enable Terragrunt support
 
-This integration is experimental. Build the plugin from the Atmos development checkout with plugin support:
-
-```shell
-atmos build
-./build/atmos plugin build plugins/terragrunt
-```
-
-In your infrastructure project's `atmos.yaml`, point `path` at the built plugin directory and select the directories containing your Terragrunt units:
+Terragrunt support is experimental and opt-in. In your project's `atmos.yaml`, declare the plugin under `plugins.packages` and set `components.terraform.terragrunt.enabled` to `true`. Enable `discovery` to list units automatically and adjust `included_paths` to match your layout. This example uses OpenTofu. Set `command: terraform` if you use Terraform.
 
 ```yaml
+base_path: .
+
 components:
   terraform:
     base_path: components/terraform
@@ -43,10 +38,30 @@ components:
 plugins:
   packages:
     terragrunt:
-      path: /absolute/path/to/atmos/plugins/terragrunt
+      source: oci://ghcr.io/cloudposse/atmos/plugins/terragrunt
+      version: "^0.1.0"
 ```
 
-For a unit at `live/dev/vpc/terragrunt.hcl`, discovery derives the component name `vpc` and stack name `live/dev`. Run these commands with the development build of Atmos from the infrastructure project:
+Run `atmos plugin install` from the project root to install a release matching the version constraint. Commit the resulting `.atmos.plugins.lock.yaml` so CI can restore the same version with `atmos plugin install --frozen`.
+
+<details>
+<summary>Use a local plugin build</summary>
+
+From the root of the Atmos source checkout, build Atmos and the plugin:
+
+```shell
+go build -o build/atmos .
+export PATH="$PWD/build:$PATH"
+atmos plugin build plugins/terragrunt
+```
+
+In your infrastructure project's `atmos.yaml`, replace the Terragrunt package's `source` and `version` with `path: /absolute/path/to/atmos/plugins/terragrunt`, pointing at that checkout. Atmos loads the built plugin directly.
+
+</details>
+
+## Discover and plan a unit
+
+Run `atmos list instances` from your infrastructure project to verify discovery. For a unit at `live/dev/vpc/terragrunt.hcl`, the output should include component `vpc` in stack `live/dev`. Inspect and plan it with the same names:
 
 ```shell
 atmos list instances
