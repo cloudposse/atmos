@@ -1,6 +1,9 @@
 ---
 title: Terragrunt
 tags: [Terraform, Components, Stacks]
+cast:
+  file: /casts/demo/fixtures/terragrunt-native/plan.cast
+  title: Discover and plan a Terragrunt unit with Atmos
 related_docs:
   - label: Terragrunt migration
     url: /migration/terragrunt
