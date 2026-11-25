@@ -4,11 +4,13 @@ tags: [Automation]
 related_docs:
   - label: Artifact repositories
     url: /artifacts
+  - label: Artifact commands
+    url: /cli/commands/artifacts/usage
 ---
 
 # Artifacts
 
-Publish a directory as a versioned artifact, list it in a local repository, and restore its files. This example runs entirely on your filesystem.
+Publish a directory as a [versioned artifact](https://atmos.tools/artifacts), list it in a local repository, and restore its files. This example runs entirely on your filesystem.
 
 From the repository root, run these commands with a version of Atmos that includes `atmos artifacts`:
 
