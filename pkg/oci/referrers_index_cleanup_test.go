@@ -141,28 +141,44 @@ func TestPushAttachmentFailsWhenTheRegistryRefusesTheNewReferrersIndex(t *testin
 	assert.Equal(t, 0, fixture.refusedIndexDeletes(), "the replaced index is never deleted when the new one was not tagged")
 }
 
-// Deleting an attachment also replaces the tag-schema referrers index. When the attachment itself is deleted
-// and only the cleanup of the replaced index is refused, the delete succeeds and the index no longer lists it.
-func TestDeleteAttachmentSucceedsWhenTheRegistryRefusesToDeleteTheReplacedReferrersIndex(t *testing.T) {
-	fixture := newTagSchemaRegistry(t)
-	client := registryClient(t, fixture.host, nil)
-	store, err := client.Repository(t.Context(), oci.Repository{Registry: fixture.host, Path: "acme/plugin"})
-	require.NoError(t, err)
-	subject, removed := pushAttachment(t, store)
-	kept, keptRaw := attachmentManifest(t, configOf(), subject, "kept")
-	require.NoError(t, store.Push(t.Context(), kept, strings.NewReader(string(keptRaw))))
-	fixture.mu.Lock()
-	fixture.allowDelete[removed.Digest.String()] = true
-	fixture.mu.Unlock()
-	ref, err := name.NewDigest(fixture.host + "/acme/plugin@" + removed.Digest.String())
-	require.NoError(t, err)
+// Deletes are not forgiven. ORAS replaces the referrers index before it deletes the target, so when the
+// registry refuses to delete the replaced index, the target DELETE is never sent and the attachment stays
+// downloadable. Removing the last attachment pushes no replacement index at all, so it also stays listed.
+// Reporting success in either case would claim a removal that did not happen.
+func TestDeleteAttachmentFailsWhenTheRegistryRefusesToDeleteTheReplacedReferrersIndex(t *testing.T) {
+	for scenario, extra := range map[string]bool{"one of several attachments": true, "the last attachment": false} {
+		t.Run(scenario, func(t *testing.T) {
+			fixture := newTagSchemaRegistry(t)
+			client := registryClient(t, fixture.host, nil)
+			store, err := client.Repository(t.Context(), oci.Repository{Registry: fixture.host, Path: "acme/plugin"})
+			require.NoError(t, err)
+			subject, removed := pushAttachment(t, store)
+			// With no other attachment, the old index stays tagged and still lists the attachment.
+			listed := []string{removed.Digest.String()}
+			if extra {
+				kept, keptRaw := attachmentManifest(t, configOf(), subject, "kept")
+				require.NoError(t, store.Push(t.Context(), kept, strings.NewReader(string(keptRaw))))
+				// The replacement index lists only the kept attachment, but the removed one was never deleted.
+				listed = []string{kept.Digest.String()}
+			}
+			fixture.mu.Lock()
+			fixture.allowDelete[removed.Digest.String()] = true
+			fixture.mu.Unlock()
+			ref, err := name.NewDigest(fixture.host + "/acme/plugin@" + removed.Digest.String())
+			require.NoError(t, err)
 
-	require.NoError(t, client.Delete(t.Context(), ref))
+			err = client.Delete(t.Context(), ref)
 
-	assert.Equal(t, 2, fixture.refusedIndexDeletes(removed), "the push of kept and the delete of removed each had a replaced index refused")
-	fresh, err := client.Repository(t.Context(), oci.Repository{Registry: fixture.host, Path: "acme/plugin"})
-	require.NoError(t, err)
-	referrers, err := fresh.Referrers(t.Context(), subject, "")
-	require.NoError(t, err)
-	assert.Equal(t, []string{kept.Digest.String()}, referrerDigests(referrers))
+			require.Error(t, err, "the delete must not report success")
+			assert.ErrorIs(t, err, errUtils.ErrOCIRegistry)
+			fresh, err := client.Repository(t.Context(), oci.Repository{Registry: fixture.host, Path: "acme/plugin"})
+			require.NoError(t, err)
+			exists, err := fresh.Exists(t.Context(), removed)
+			require.NoError(t, err)
+			assert.True(t, exists, "the target DELETE was never sent, so the attachment still exists")
+			referrers, err := fresh.Referrers(t.Context(), subject, "")
+			require.NoError(t, err)
+			assert.Equal(t, listed, referrerDigests(referrers))
+		})
+	}
 }

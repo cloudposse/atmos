@@ -23,7 +23,7 @@ delete the replaced referrers index, but the attachment and the new index that l
 - `atmos plugin publish/release --sign` re-signs a release even when it is unchanged (`cmd/plugin/publish.go`,
   `publishLayout`). This is intentional: existing referrers may be untrusted or from another signer.
 - GHCR doesn't serve the OCI 1.1 referrers API, so oras-go (`v2.6.2`) indexes attachments through the referrers
-  **tag schema**. When a manifest with a `subject` is pushed (or such a manifest is deleted), oras-go:
+  **tag schema**. When a manifest with a `subject` is pushed, oras-go:
   1. pushes the manifest;
   2. pushes a new referrers index and tags it `sha256-<subject digest>`;
   3. deletes the index it replaced (`registry/remote/repository.go`, "delete the dangling original
@@ -33,15 +33,21 @@ delete the replaced referrers index, but the attachment and the new index that l
 - The first signature of a release has no previous index to delete, so it succeeds. Every later re-sign of the
   same release fails, and re-running the job can't help.
 - Atmos built the `remote.Repository` with the default `SkipReferrersGC: false` and wrapped every error from
-  `Push`, `PushReference` and `Delete` as a failure.
+  `Push` and `PushReference` as a failure.
+- Deleting an attachment works the other way round: oras-go updates the index first and deletes the target last.
+  A refused index cleanup returns before the target `DELETE` is sent. When the last attachment is removed, no
+  replacement index is pushed, so the old index stays tagged and still lists it.
 
 ## Changes
 
-- `pkg/oci/transport_registry.go`: new `manifestWriteResult` used by `registryStore.Push`, `PushReference` and
-  `Delete`. It returns success when the only failure is a `*remote.ReferrersError` with
+- `pkg/oci/transport_registry.go`: new `manifestPushResult` used by `registryStore.Push` and `PushReference`.
+  It returns success when the only failure is a `*remote.ReferrersError` with
   `IsReferrersIndexDelete()`, and logs it at debug level. The replaced index is left untagged, as it would be with
   `SkipReferrersGC`. Every other error is still wrapped with `wrapRegistry`, so a refused manifest push or a
   refused new referrers index still fails.
+- `registryStore.Delete` is unchanged and still fails on this error. Forgiving it would report an attachment as
+  deleted while it still exists, and after removing the last attachment, while it is still listed. This was
+  caught in review (CodeRabbit) on the first revision, which forgave deletes too.
 - The cleanup DELETE is still attempted, so registries that allow it (most of them) keep garbage-collecting
   replaced indexes. Setting `SkipReferrersGC` globally was rejected for that reason.
 - No plugin package version bump: `pkg/oci` is not an input of either package in `plugins/releases.yaml`.
@@ -55,8 +61,9 @@ delete the replaced referrers index, but the attachment and the new index that l
     three attachments.
   - `TestPushAttachmentFailsWhenTheRegistryRefusesTheNewReferrersIndex` (negative path): when the new index tag is
     refused (403), the push still fails with `ErrOCIRegistry`, and no index delete is attempted.
-  - `TestDeleteAttachmentSucceedsWhenTheRegistryRefusesToDeleteTheReplacedReferrersIndex`: deleting an attachment
-    succeeds, and the index lists only the remaining one.
+  - `TestDeleteAttachmentFailsWhenTheRegistryRefusesToDeleteTheReplacedReferrersIndex` (negative path, two
+    scenarios): deleting one of several attachments, and deleting the last one, both still fail with
+    `ErrOCIRegistry`. The attachment still exists, and the listing shows the real registry state.
   - Before the fix, both success-path tests failed with the exact CI error (`failed to delete dangling referrers
     index ... 405`).
 - New `pkg/plugin/sign/sign_resign_test.go`. `TestReSignSucceedsWhenTheRegistryRefusesToDeleteTheReplacedReferrersIndex`
