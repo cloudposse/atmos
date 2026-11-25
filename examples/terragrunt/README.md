@@ -1,5 +1,5 @@
 ---
-title: Native Terragrunt
+title: Terragrunt
 tags: [Components, Stacks]
 related_docs:
   - label: Terragrunt migration
@@ -8,7 +8,7 @@ related_docs:
     url: /cli/commands/plugin/usage
 ---
 
-# Native Terragrunt
+# Terragrunt
 
 Use an existing Terragrunt HCL unit as an Atmos [Terraform component](https://atmos.tools/components/terraform) without adding
 Atmos stack YAML. The example discovers component `demo` in stack `live`, evaluates
@@ -34,9 +34,9 @@ plugins:
 Install Atmos and OpenTofu, copy the example into a new directory, and install the plugin:
 
 ```shell
-atmos init ./examples/terragrunt-native ./terragrunt-native \
+atmos init ./examples/terragrunt ./terragrunt \
   --copy --no-git
-cd terragrunt-native
+cd terragrunt
 atmos plugin install
 ```
 

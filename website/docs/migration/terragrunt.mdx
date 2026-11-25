@@ -806,7 +806,7 @@ See [YAML Functions](/functions/yaml) for the complete reference.
 
 <Tabs>
   <TabItem value="terragrunt" label="Terragrunt" default>
-    Terragrunt commands are directory-based—you `cd` into a component's directory and run commands there. For multi-component operations, `run-all` traverses the directory tree and executes in dependency order.
+    Terragrunt commands are directory-based—you `cd` into a component's directory and run commands there. For multi-component operations, `terragrunt run --all` traverses the directory tree and executes in dependency order.
 
     ```bash
     # Plan a single component
@@ -818,10 +818,10 @@ See [YAML Functions](/functions/yaml) for the complete reference.
     terragrunt apply
 
     # Plan all components
-    terragrunt run-all plan
+    terragrunt run --all -- plan
 
     # Apply all components
-    terragrunt run-all apply
+    terragrunt run --all -- apply
 
     # Show outputs
     terragrunt output
@@ -880,9 +880,11 @@ See [YAML Functions](/functions/yaml) for the complete reference.
   </TabItem>
 </Tabs>
 
+For catalog browsing, discovery, rendering, validation, and stack commands, see [Terragrunt CLI differences](/components/terraform/terragrunt#catalogs-discovery-and-cli-differences).
+
 ## Adopt Terragrunt Units Incrementally (Experimental)
 
-You do not have to convert every `terragrunt.hcl` before Atmos is useful. An experimental plugin reads your existing Terragrunt HCL and presents each unit as an Atmos Terraform component, so you can list, plan, apply, and target them with Atmos while you migrate the rest. The plugin evaluates the HCL with Terragrunt's Go modules. Atmos runs every command, so Atmos authentication, the toolchain, and `dependencies.tools` apply. The Terragrunt executable is never used.
+You do not have to convert every `terragrunt.hcl` before Atmos is useful. An experimental plugin reads your existing Terragrunt HCL and presents each unit as an Atmos Terraform component, so you can list, plan, apply, and target them with Atmos while you migrate the rest. The plugin evaluates the HCL with Terragrunt's Go modules. Atmos runs every command, so Atmos authentication, the toolchain, and `dependencies.tools` apply. Native mode runs without the Terragrunt executable. See [Terragrunt as a Terraform component](/components/terraform/terragrunt) for the execution model.
 
 :::note Development build
 The plugin is not yet published. Until it is, build it from the Atmos repository and point `plugins.packages` at its directory with `path`. See the [plugin README](https://github.com/cloudposse/atmos/blob/main/plugins/terragrunt/README.md) for the build commands.
@@ -917,6 +919,24 @@ atmos describe affected --base origin/main
 ```
 
 Units found this way get their names from where they live on disk, so no stack YAML is needed. To place a unit in a stack you already have, import it instead (see [Import units into a stack](#import-units-into-a-stack)).
+
+### Use a remote Git catalog
+
+When a `terragrunt.stack.hcl` file takes unit or stack definitions from a Git repository, add that repository and its 40-character commit SHA to the Terragrunt configuration in `atmos.yaml`. For example, the following entry supplies the public Gruntwork catalog to stack sources beginning with `github.com/gruntwork-io/terragrunt-infrastructure-catalog-example//`.
+
+```yaml
+components:
+  terraform:
+    terragrunt:
+      enabled: true
+      discovery:
+        enabled: true
+      catalogs:
+        - source: github.com/gruntwork-io/terragrunt-infrastructure-catalog-example
+          commit: fa8660771ff886f43aef1f5b9b682aef914c330d
+```
+
+Use `atmos list instances` to discover the generated units. The first lookup needs Git and access to the repository. Further lookups reuse the pinned snapshot from the user cache. Preserve the source's `?ref=` in the catalog entry when present. Change the commit in `atmos.yaml` to update the snapshot. Terraform module provisioning and backend access have their own network requirements.
 
 ### Component and stack names
 
@@ -1092,15 +1112,13 @@ Set `components.terraform.terragrunt.mode: executable` to keep Terragrunt itself
 
 ### What it does not support yet
 
-### What it does not support yet
-
 Unsupported settings fail before any infrastructure command runs, with an error that names the unit, the file with line and column, and the setting. With automatic discovery, a broken unit does not affect other units or YAML components: it stays listed, and only commands that target it fail. An explicit import is stricter: it fails when any unit it selects reports an error, so that import contributes no units until the error is fixed. `apply`, `plan`, and `destroy` with `--all` validate every selected unit first and report "no infrastructure command was run". Evaluation errors can contain secrets, so at the default log level Atmos shows the location and a hint but not the evaluator's text; run with `--logs-level=Debug` (or `ATMOS_LOGS_LEVEL=Debug`) and the error includes the evaluator's text, which is also logged, with secrets masked. Atmos does not fall back to the Terragrunt executable. Currently rejected:
 
 - Inline modules without `terraform.source`.
 - Output dependencies in a non-default workspace during discovery.
 - Stack-level overrides of a unit's `backend`, `backend_type`, `metadata.component`, or `source.uri`, because they would change state identity. Edit the unit's `remote_state` instead. Like any other unit error, a rejected override fails only the commands that target that unit and the bulk runs that select it; the rest of the project keeps working.
 
-Terragrunt's built-in default retry list for transient errors, the `--no-auto-retry` flag, and `errors` handling around `read-config` hooks are not implemented; use `settings.retry` or an `errors` block. `atmos terraform deploy` verification of a stored plan on a fresh runner is not supported; use `planfile download` and `apply --from-plan`. Discovery runs without side effects, so a unit whose `locals` call `run_cmd` cannot be discovered.
+Terragrunt's built-in default retry list for transient errors, the `--no-auto-retry` flag, and `errors` handling around `read-config` hooks are not implemented; use `settings.retry` or an `errors` block. `atmos terraform deploy` verification of a stored plan on a fresh runner is not supported; use `planfile download` and `apply --from-plan`. Discovery blocks HCL command execution. A unit whose discovery requires `run_cmd` reports an evaluation error.
 
 ## Migration Steps
 

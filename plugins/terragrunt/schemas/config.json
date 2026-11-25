@@ -15,6 +15,26 @@
       ],
       "description": "native adapts units to Atmos; executable runs each unit with the pinned terragrunt executable."
     },
+    "catalogs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{40}$"
+          }
+        },
+        "required": [
+          "source",
+          "commit"
+        ],
+        "additionalProperties": false
+      }
+    },
     "features": {
       "type": "object",
       "additionalProperties": {

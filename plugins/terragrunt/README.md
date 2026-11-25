@@ -4,6 +4,8 @@ This development package evaluates Terragrunt HCL with Terragrunt Go modules. At
 
 This is an unmerged implementation with limited compatibility. It is not a published plugin release.
 
+For user-facing command coverage, see [Catalogs, discovery, and CLI differences](../../website/docs/components/terraform/terragrunt.mdx#catalogs-discovery-and-cli-differences).
+
 ## Build and run
 
 From the repository root:
@@ -62,6 +64,26 @@ User-facing rules are in [the migration guide](https://atmos.tools/migration/ter
 - `included_paths` and `excluded_paths` share one matcher (`engine/discovery_paths.go`): a pattern selects what it matches and everything below it. Unmatched include patterns, shared `terragrunt.hcl` files without `terraform.source`, and skipped directory symlinks are returned as warning diagnostics, not failures.
 - Symlinks follow Terragrunt v1.2.1: directory links are not followed (a warning names them) and a symlinked `terragrunt.hcl` is a unit at the link's location (`engine.logicalPath`).
 
+## Remote Git catalogs
+
+For an explicit stack with a source such as `github.com/gruntwork-io/terragrunt-infrastructure-catalog-example//units/dynamodb-table`, add a pin to the existing Terragrunt provider configuration in `atmos.yaml`.
+
+```yaml
+components:
+  terraform:
+    terragrunt:
+      enabled: true
+      discovery:
+        enabled: true
+      catalogs:
+        - source: github.com/gruntwork-io/terragrunt-infrastructure-catalog-example
+          commit: fa8660771ff886f43aef1f5b9b682aef914c330d
+```
+
+Run `atmos list instances` as usual. On first use the plugin downloads the repository through Terragrunt's Git getter. Later runs reuse the complete snapshot under `atmos/terragrunt/catalogs` in the user cache (`XDG_CACHE_HOME` when set). Change the commit to select another snapshot. Each catalog entry uses the repository spelling from the stack source with the `//subdirectory` removed. Keep any `?ref=` in the entry. The commit field locks that reference for Atmos. Use GitHub shorthand or Git over HTTPS, HTTP, or SSH. Git must be available on the invocation PATH for a cold fetch.
+
+Catalog units and nested stacks retain values and autoincludes. A relative source marked `update_source_with_cas = true` resolves to the same Git commit when the generated unit or stack is consumed. The cache is shared across worktrees for the user. The generator uses one revision per repository within a single stack file. Use an explicit `//subdirectory` selector. Catalogs containing symlinks or nested Git checkouts are currently rejected. The top-level Terragrunt `catalog.urls` setting configures catalog browsing and grants no fetch permission to Atmos.
+
 ## Affected selection
 
 The `describe affected --base <ref>` and `terraform plan --affected --ref <ref>` paths discover HEAD and BASE independently. Both checkouts use the invocation's trusted plugin and discovery scope. Historical HCL never reuses the current inventory or reads dependency state.
@@ -78,7 +100,7 @@ The host executes `extra_arguments` and `before_hook`, `after_hook`, and `error_
 
 A saved plan is kept until it is applied. `output`, `validate`, `init` and `state list` leave it in place. A successful `apply`, `deploy` or `destroy` removes the plan and its Atmos record, so applying the same plan twice reports that no saved plan exists. Apply reuses the execution data recorded at plan time and requires the original working directory. The record holds no input values and no backend settings; Atmos compares the backend by digest at apply time.
 
-Remote module sources (`git::https`, `git::http`, `git::ssh`, `git::file`, `https`, `http`) keep their getter URI for the Atmos source provisioner. A local module is copied into the working directory again only when its files change (path, size, or modification time); an explicit `source.ttl` takes precedence. A source that follows a branch (`?ref=main`) is fetched once and reused, and Atmos prints a notice when it reuses such a copy: run `atmos terraform source pull <component> -s <stack> --force` to refresh it, or set `source.ttl`. Release tags and commit ids are never reported. `tfr://` registry sources are resolved to their getter URL when the unit is prepared for a command; discovery never contacts the registry. A unit with `read-config` after-hooks keeps its registry source as written in that preparation: the host runs the hooks, then prepares the unit again with the `source_hooks_completed` operation option, and the registry is first contacted by that second preparation, so a hook can create the registry credentials. The unit is evaluated twice in that case; the host takes only the resolved source from the second evaluation. Remote stack catalogs are not supported. Backend configuration is adopted, including cloud backends, but Atmos does not provision the backend resources.
+Remote module sources (`git::https`, `git::http`, `git::ssh`, `git::file`, `https`, `http`) keep their getter URI for the Atmos source provisioner. A local module is copied into the working directory again only when its files change (path, size, or modification time); an explicit `source.ttl` takes precedence. A source that follows a branch (`?ref=main`) is fetched once and reused, and Atmos prints a notice when it reuses such a copy: run `atmos terraform source pull <component> -s <stack> --force` to refresh it, or set `source.ttl`. Release tags and commit ids are never reported. `tfr://` registry sources are resolved to their getter URL when the unit is prepared for a command; discovery never contacts the registry. A unit with `read-config` after-hooks keeps its registry source as written in that preparation: the host runs the hooks, then prepares the unit again with the `source_hooks_completed` operation option, and the registry is first contacted by that second preparation, so a hook can create the registry credentials. The unit is evaluated twice in that case; the host takes only the resolved source from the second evaluation. Backend configuration is adopted, including cloud backends, but Atmos does not provision the backend resources.
 
 Atmos removes a generated file when its `generate` block is removed, but only while the file is unchanged or still carries the Terragrunt signature. `if_exists = "error"` accepts the file Atmos generated on an earlier run, and all generated files are mode 0600. A `generate` block whose contents declare a `backend` or `cloud` block is rejected because Atmos cannot verify its state-reader identity. Declare the backend with `remote_state` and use `remote_state.generate` instead. Backend-only state reads inspect generation without evaluating inputs or commands. Literal generate declarations are checked as written. A dynamic one, including one in a parent configuration that interpolates locals, is rendered by a second evaluation in the read-only discovery environment, with inputs projected away and dependency outputs replaced by unknown placeholders; it is accepted when every rendered Terraform file parses and declares no backend, and rejected when rendering needs a command, a secret, or a dependency output. `atmos terraform generate backend` and `generate backends` skip provider-owned units, because the unit's own backend is written when it runs. A `remote_state` block without `generate` is written by the host as `backend.tf.json`, or, when the module declares its own `backend` block, passed to `init` as `-backend-config=atmos-backend.tfbackend`, so Terraform keeps the state at the identity that state readers use. Automatic includes are also rejected for state reads because the upstream partial parser does not merge them; use explicit includes for backend configuration. The `.terraform.lock.hcl` beside `terragrunt.hcl` is copied into the working directory when it changes; Atmos does not copy changes back, so copy `.workdir/.../.terraform.lock.hcl` yourself after `init -upgrade`.
 
@@ -92,7 +114,7 @@ Unsupported semantics fail before any infrastructure command and never switch ex
 
 Unsupported settings fail with an error that names the unit, the file, and the setting, plus the line and column when the evaluator reports a position (settings rejected after decoding, such as `terraform_binary`, name only the file). A broken unit does not affect other units or YAML components: it stays listed, and only commands that target it fail. `apply`, `plan`, and `destroy` with `--all` validate every selected unit first and fail with "no infrastructure command was run". Evaluation errors can contain secrets, so at the default log level Atmos shows the file, line, unit, and a hint but not the evaluator's text. The cause travels as unsafe detail, redacted by the plugin's log sink and dropped when the call's log events were withheld; at `--logs-level=Debug` or `Trace` Atmos includes it in the error and logs it, with secrets masked. A stack-level backend override of a unit is recorded during stack compilation and fails only the commands and bulk runs that target that unit.
 
-Plugin settings are validated when first used, not when `atmos.yaml` loads, so `atmos config set` can always repair them. Unknown keys under `components.terraform.terragrunt` and invalid `mode` values fail with the key name. With `discovery.enabled: true` and no `included_paths`, discovery covers every unit under the project root. Only the enabled, mode, provider, discovery, and features settings are accepted by this package. Additional plugin settings and typed CLI option handling remain planned. Discovery that needs command execution, decryption, network access, or identity-dependent effects fails. The native plugin is trusted code, not an OS sandbox.
+Plugin settings are validated when first used, not when `atmos.yaml` loads, so `atmos config set` can always repair them. Unknown keys under `components.terraform.terragrunt` and invalid `mode` values fail with the key name. With `discovery.enabled: true` and no `included_paths`, discovery covers every unit under the project root. Only the enabled, mode, provider, catalogs, discovery, and features settings are accepted by this package. Additional plugin settings and typed CLI option handling remain planned. Discovery that needs command execution, decryption, network access, or identity-dependent effects fails. The native plugin is trusted code, not an OS sandbox.
 
 ## Options, modes, values, logs, and Pro
 

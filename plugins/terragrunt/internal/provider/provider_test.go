@@ -326,12 +326,12 @@ func TestFeatureSettingsAndEnvironmentMerge(t *testing.T) {
 	config, err := encode(map[string]any{"enabled": true, "features": map[string]any{"flag": true, "size": 3, "tier": "gold", "env": "config"}})
 	require.NoError(t, err)
 	req := model.Request{Environment: map[string]string{"TG_FEATURE": "env=environment, extra=1"}}
-	require.NoError(t, withFeatures(&req, config))
+	require.NoError(t, withProviderSettings(&req, config))
 	require.Equal(t, map[string]string{"flag": "true", "size": "3", "tier": "gold", "env": "environment", "extra": "1"}, req.Features,
 		"TG_FEATURE replaces the configured value per name")
 
 	none := model.Request{}
-	require.NoError(t, withFeatures(&none, nil))
+	require.NoError(t, withProviderSettings(&none, nil))
 	require.Nil(t, none.Features)
 
 	for name, bad := range map[string]any{
@@ -343,14 +343,14 @@ func TestFeatureSettingsAndEnvironmentMerge(t *testing.T) {
 			value, err := encode(bad)
 			require.NoError(t, err)
 			var request model.Request
-			require.Error(t, withFeatures(&request, value))
+			require.Error(t, withProviderSettings(&request, value))
 		})
 	}
 	unknown, err := encode(map[string]any{"features": map[string]any{}, "typo": 1})
 	require.NoError(t, err)
 	require.Error(t, settings(unknown))
 	invalid := model.Request{Environment: map[string]string{"TG_FEATURE": "novalue"}}
-	require.Error(t, withFeatures(&invalid, nil))
+	require.Error(t, withProviderSettings(&invalid, nil))
 }
 
 func TestOperationCommandNamesTheTerragruntAction(t *testing.T) {
@@ -572,7 +572,7 @@ func TestFeatureOptionsRankAboveEnvironmentAndConfiguration(t *testing.T) {
 	config, err := encode(map[string]any{"enabled": true, "features": map[string]any{"tier": "config", "size": 3}})
 	require.NoError(t, err)
 	req := model.Request{Environment: map[string]string{"TG_FEATURE": "tier=environment,wide=true"}, Features: map[string]string{"tier": "option"}}
-	require.NoError(t, withFeatures(&req, config))
+	require.NoError(t, withProviderSettings(&req, config))
 	require.Equal(t, map[string]string{"tier": "option", "size": "3", "wide": "true"}, req.Features)
 }
 
