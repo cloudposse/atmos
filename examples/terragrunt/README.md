@@ -23,8 +23,14 @@ credentials or provider downloads are needed.
 
 ## Install the plugin
 
-The Terragrunt configuration provider is a plugin package that Atmos installs from the registry.
-`atmos.yaml` declares it with a source and a version constraint:
+From the root of an existing Atmos project, run this command to install the Terragrunt plugin and add it to `atmos.yaml`:
+
+```shell
+atmos plugin install oci://ghcr.io/cloudposse/atmos/plugins/terragrunt \
+  --as=terragrunt --version='^0.1.0'
+```
+
+The command writes the following package declaration. The example already includes it.
 
 ```yaml
 plugins:
@@ -52,11 +58,9 @@ If the package cannot be fetched (for example because the registry is unreachabl
 not yet published), Atmos reports which source and version constraint it could not prepare and
 changes nothing.
 
-To enable the same behavior in an existing project, run these commands from that project's root:
+After installing the plugin in an existing project, enable Terragrunt discovery from that project's root:
 
 ```shell
-atmos plugin install oci://ghcr.io/cloudposse/atmos/plugins/terragrunt \
-  --as=terragrunt
 atmos config set components.terraform.base_path \
   components/terraform
 atmos config set components.terraform.command tofu

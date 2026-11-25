@@ -42,7 +42,14 @@ plugins:
       version: "^0.1.0"
 ```
 
-Run `atmos plugin install` from the project root to install a release matching the version constraint. Commit the resulting `.atmos.plugins.lock.yaml` so CI can restore the same version with `atmos plugin install --frozen`.
+To have Atmos write the `plugins.packages.terragrunt` entry and install the plugin in one step, run this command from the project root:
+
+```shell
+atmos plugin install oci://ghcr.io/cloudposse/atmos/plugins/terragrunt \
+  --as=terragrunt --version='^0.1.0'
+```
+
+If the package is already declared, run `atmos plugin install`. Commit the resulting `.atmos.plugins.lock.yaml` so CI can restore the same version with `atmos plugin install --frozen`.
 
 <details>
 <summary>Use a local plugin build</summary>
