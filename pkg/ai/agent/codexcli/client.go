@@ -46,6 +46,7 @@ type Client struct {
 	hasMCPServers  bool   // True if MCP servers were written to ~/.codex/config.toml.
 	originalConfig []byte // Original ~/.codex/config.toml content for restore.
 	configBackedUp bool   // True if original config was backed up.
+	configRestored bool   // True once restored; the next call must write it again.
 }
 
 // NewClient creates a new Codex CLI client from Atmos configuration.
@@ -126,6 +127,13 @@ func (c *Client) buildArgs() []string {
 // SendMessage sends a prompt to Codex CLI and returns the response.
 func (c *Client) SendMessage(ctx context.Context, message string) (string, error) {
 	defer perf.Track(nil, "codexcli.Client.SendMessage")()
+
+	// The config is restored after every call, so a later turn must write it again.
+	if c.hasMCPServers && c.configRestored {
+		if err := c.writeMCPToGlobalConfig(); err != nil {
+			return "", err
+		}
+	}
 
 	args := c.buildArgs()
 
@@ -300,6 +308,7 @@ func (c *Client) writeMCPToGlobalConfig() error {
 	configPath := codexConfigPath()
 
 	// Backup existing config.
+	c.originalConfig, c.configBackedUp, c.configRestored = nil, false, false
 	if data, err := os.ReadFile(configPath); err == nil {
 		c.originalConfig = data
 		c.configBackedUp = true
@@ -336,6 +345,7 @@ func (c *Client) writeMCPToGlobalConfig() error {
 
 // restoreGlobalConfig restores the original ~/.codex/config.toml content.
 func (c *Client) restoreGlobalConfig() {
+	c.configRestored = true
 	configPath := codexConfigPath()
 	if c.configBackedUp {
 		if err := os.WriteFile(configPath, c.originalConfig, configFilePerms); err != nil {

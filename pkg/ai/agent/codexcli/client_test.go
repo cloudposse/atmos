@@ -3,8 +3,10 @@ package codexcli
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -13,6 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -423,4 +426,42 @@ func TestRestoreGlobalConfig_NoBackup(t *testing.T) {
 	client.restoreGlobalConfig()
 	// In a real test, the actual ~/.codex/config.toml path is used.
 	// This test verifies the logic branch.
+}
+
+func TestSendMessage_MCPConfigPresentOnEveryCall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as the fake CLI")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// The home directory is cached process-wide; drop it so codex paths use this HOME.
+	homedir.Reset()
+	t.Cleanup(homedir.Reset)
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	seen := filepath.Join(t.TempDir(), "seen")
+	binary := filepath.Join(t.TempDir(), "fake-cli")
+	script := fmt.Sprintf("#!/bin/sh\ncat >/dev/null\nif grep -q aws-docs '%s' 2>/dev/null; then echo present >>'%s'; else echo missing >>'%s'; fi\necho 'ok'\n", configPath, seen, seen)
+	require.NoError(t, os.WriteFile(binary, []byte(script), 0o700))
+
+	client, err := NewClient(&schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: map[string]*schema.AIProviderConfig{ProviderName: {Binary: binary}},
+		},
+		MCP: schema.MCPSettings{
+			Servers: map[string]schema.MCPServerConfig{"aws-docs": {Command: "uvx"}},
+		},
+	})
+	require.NoError(t, err)
+
+	for range 2 {
+		_, err = client.SendMessage(context.Background(), "hello")
+		require.NoError(t, err)
+		// The file we created must not outlive the call.
+		assert.NoFileExists(t, configPath)
+	}
+
+	got, err := os.ReadFile(seen)
+	require.NoError(t, err)
+	assert.Equal(t, "present\npresent\n", string(got))
 }

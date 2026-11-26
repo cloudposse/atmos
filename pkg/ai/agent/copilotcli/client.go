@@ -49,6 +49,7 @@ type Client struct {
 	hasMCPServers  bool   // True if MCP servers were written to ~/.copilot/mcp-config.json.
 	originalConfig []byte // Original mcp-config.json content for restore.
 	configBackedUp bool   // True if original config was backed up.
+	configRestored bool   // True once restored; the next call must write it again.
 }
 
 // NewClient creates a new Copilot CLI client from Atmos configuration.
@@ -131,6 +132,13 @@ func (c *Client) buildArgs(message string) []string {
 // SendMessage sends a prompt to Copilot CLI and returns the response.
 func (c *Client) SendMessage(ctx context.Context, message string) (string, error) {
 	defer perf.Track(nil, "copilotcli.Client.SendMessage")()
+
+	// The config is restored after every call, so a later turn must write it again.
+	if c.hasMCPServers && c.configRestored {
+		if err := c.writeMCPConfig(); err != nil {
+			return "", err
+		}
+	}
 
 	args := c.buildArgs(message)
 
@@ -250,6 +258,7 @@ func (c *Client) writeMCPConfig() error {
 	configPath := copilotMCPConfigPath()
 
 	// Backup existing config.
+	c.originalConfig, c.configBackedUp, c.configRestored = nil, false, false
 	servers := map[string]json.RawMessage{}
 	if data, err := os.ReadFile(configPath); err == nil {
 		c.originalConfig = data
@@ -302,6 +311,7 @@ func (c *Client) writeMCPConfig() error {
 
 // restoreMCPConfig restores the original mcp-config.json content.
 func (c *Client) restoreMCPConfig() {
+	c.configRestored = true
 	configPath := copilotMCPConfigPath()
 	if c.configBackedUp {
 		if err := os.WriteFile(configPath, c.originalConfig, configFilePerms); err != nil {
