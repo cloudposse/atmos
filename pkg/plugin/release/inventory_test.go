@@ -115,7 +115,12 @@ func TestInventoryFailFastFailuresAlwaysCleanUpAndStop(t *testing.T) {
 				}
 			}
 			results, err := RunInventory(ctx, []releaseplan.Entry{entry, {Name: "must-not-run"}}, func(releaseplan.Entry, string) Backend { return backend }, WithInventoryRunner(runner), WithInventoryTemporaryDirectory(parent), WithInventoryCheck(true), WithInventoryFailFast(true))
-			require.Empty(t, results)
+			if phase == "cleanup" {
+				// The check completed before cleanup failed, so the package is still recorded.
+				require.Equal(t, []InventoryRelease{{Entry: entry}}, results)
+			} else {
+				require.Empty(t, results)
+			}
 			require.ErrorIs(t, err, errUtils.ErrPluginInventoryRelease)
 			require.NotContains(t, err.Error(), "must-not-run")
 			if phase == "cancel" {

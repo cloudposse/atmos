@@ -96,8 +96,8 @@ func runInventoryRelease(cmd *cobra.Command, values *viper.Viper) error {
 		failFast:  failFast,
 		succeeded: len(results),
 		catalog:   target != "",
-		failed:    incompletePackages(plan.Packages.Include, results),
-		reconcile: func(excluded []string) error { return reconcileReleasedCatalog(cmd, manager, values, target, excluded) },
+		released:  releasedPackages(results),
+		reconcile: func(released []string) error { return reconcileReleasedCatalog(cmd, manager, values, target, released) },
 		present:   func() error { return presentInventoryReleases(plan, results, values) },
 	})
 }
@@ -107,9 +107,9 @@ type inventoryCompletion struct {
 	failFast  bool
 	succeeded int
 	catalog   bool
-	// Failed lists packages that failed or never started; they keep their current catalog entries.
-	failed    []string
-	reconcile func(excluded []string) error
+	// Released lists the packages released in this run; only they are reconciled into the catalog.
+	released  []string
+	reconcile func(released []string) error
 	present   func() error
 }
 
@@ -122,22 +122,20 @@ func completeInventoryRelease(ctx context.Context, runErr error, c *inventoryCom
 		return runErr
 	}
 	if c.catalog {
-		if err := c.reconcile(c.failed); err != nil {
+		if err := c.reconcile(c.released); err != nil {
 			return errors.Join(runErr, err)
 		}
 	}
 	return errors.Join(runErr, c.present())
 }
 
-// incompletePackages returns the inventory packages that are not among the successful results.
-func incompletePackages(entries []releaseplan.Entry, results []pluginrelease.InventoryRelease) []string {
-	var incomplete []string
-	for _, entry := range entries {
-		if !slices.ContainsFunc(results, func(result pluginrelease.InventoryRelease) bool { return result.Entry.Name == entry.Name }) {
-			incomplete = append(incomplete, entry.Name)
-		}
+// releasedPackages returns the names of the packages released in this run, in plan order.
+func releasedPackages(results []pluginrelease.InventoryRelease) []string {
+	released := make([]string, 0, len(results))
+	for index := range results {
+		released = append(released, results[index].Entry.Name)
 	}
-	return incomplete
+	return released
 }
 
 func presentInventoryReleases(plan *releaseplan.Plan, results []pluginrelease.InventoryRelease, values *viper.Viper) error {
@@ -160,7 +158,7 @@ func presentInventoryReleases(plan *releaseplan.Plan, results []pluginrelease.In
 	return pluginoutput.PublishedBatch(published, values.GetString(outputFormatFlag))
 }
 
-func reconcileReleasedCatalog(cmd *cobra.Command, manager *manage.Manager, values *viper.Viper, alias string, excluded []string) error {
+func reconcileReleasedCatalog(cmd *cobra.Command, manager *manage.Manager, values *viper.Viper, alias string, released []string) error {
 	target, err := catalogReference(alias)
 	if err != nil {
 		return err
@@ -173,7 +171,7 @@ func reconcileReleasedCatalog(cmd *cobra.Command, manager *manage.Manager, value
 	if err != nil {
 		return err
 	}
-	selections = withoutPackages(selections, excluded)
+	selections = onlyPackages(selections, released)
 	if len(selections) == 0 {
 		return nil
 	}
@@ -184,11 +182,12 @@ func reconcileReleasedCatalog(cmd *cobra.Command, manager *manage.Manager, value
 	return catalog.NewSyncer(manager.Installer.Registry, manager.Installer.Descriptors).Sync(cmd.Context(), target, selections, options...)
 }
 
-// withoutPackages drops catalog selections for packages that did not release in this run,
-// so a failed package keeps its existing catalog entry instead of a version that may be
-// missing, unsigned, or only partially verified.
-func withoutPackages(selections []catalog.ReleaseSelection, excluded []string) []catalog.ReleaseSelection {
+// onlyPackages keeps the catalog selections of packages released in this run. Packages that
+// failed, never started, or were not part of this run's plan (for example one added to the
+// default branch after planning) keep their existing catalog entry instead of a version that
+// may be missing, unsigned, or only partially verified.
+func onlyPackages(selections []catalog.ReleaseSelection, released []string) []catalog.ReleaseSelection {
 	return slices.DeleteFunc(selections, func(selection catalog.ReleaseSelection) bool {
-		return slices.Contains(excluded, selection.Name)
+		return !slices.Contains(released, selection.Name)
 	})
 }

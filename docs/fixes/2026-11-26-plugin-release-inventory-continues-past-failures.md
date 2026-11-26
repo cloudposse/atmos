@@ -36,12 +36,18 @@ flag keeps the previous stop-at-first-failure behavior.
 ## Changes
 
 - `pkg/plugin/release/inventory.go`:
-  - `RunInventory` now continues after a package fails and returns the successful packages as
-    `[]InventoryRelease` (entry plus release, in plan order), so each release stays paired with the
-    entry that produced it.
+  - `RunInventory` now continues after a package fails and returns the packages whose release
+    completed as `[]InventoryRelease` (entry plus release, in plan order), so each release stays paired
+    with the entry that produced it.
+  - `run` reports a failed `git worktree remove` separately from the release outcome. A package that
+    published (or passed `--check`) but whose worktree could not be removed is still recorded as
+    released, so it reaches the catalog and the output, and the cleanup failure is still reported as
+    that package's error (and stops the run under fail-fast). Before, the joined error discarded the
+    completed release. Found in review (CodeRabbit).
   - The error joins every package failure (`plugin release <name>: ...`) under a summary wrapping the
-    new sentinel `ErrPluginInventoryRelease` (`plugin inventory release failed: N of M packages did not
-    complete`). N counts failed packages plus packages never started after cancellation or fail-fast.
+    new sentinel `ErrPluginInventoryRelease` (`plugin inventory release failed: N of M packages failed or
+    did not run`). N counts packages with an error plus packages never started after cancellation or
+    fail-fast.
   - Cancellation always stops the run, before the next package and after a package that was cancelled.
   - New `WithInventoryFailFast(bool)` restores returning at the first failure.
 - `cmd/plugin/release_inventory.go`:
@@ -51,9 +57,12 @@ flag keeps the previous stop-at-first-failure behavior.
     is set) and presents the released packages, then returns the joined package errors so the command
     exits non-zero. Fail-fast, a run in which no package succeeded, and cancellation return the package
     errors without touching the catalog or the output, which matches the previous behavior.
-  - Catalog decision: `reconcileReleasedCatalog` drops the selections of packages that failed or never
-    started (`withoutPackages`), so they keep their existing catalog entry instead of a possibly
-    unsigned or unverified version. If nothing remains to reconcile, the catalog is not written.
+  - Catalog decision: `reconcileReleasedCatalog` keeps only the selections of packages released in this
+    run (`onlyPackages`). Packages that failed, never started, or were not part of this run's plan keep
+    their existing catalog entry instead of a possibly unsigned or unverified version. The plan-scope
+    case matters because reconciliation re-reads the inventory at the current default-branch head, which
+    can list a package added after planning (found in review, CodeRabbit; the first revision only
+    excluded failed packages). If nothing remains to reconcile, the catalog is not written.
   - `presentInventoryReleases` reports `result.Entry.Repository` for each result instead of indexing the
     plan, and the `--check` summary counts the packages that were checked.
 - `errors/plugin.go`: new `ErrPluginInventoryRelease`.
@@ -71,19 +80,25 @@ flag keeps the previous stop-at-first-failure behavior.
 - New `pkg/plugin/release/inventory_continue_test.go`:
   - `TestInventoryContinuesPastAFailingPackage`: three packages with the middle one failing. By default
     the first and last are released, the error wraps `ErrPluginInventoryRelease` and `ErrPluginBuild`,
-    names only `broken`, and reports `1 of 3`. With fail-fast only the first is released, the last never
+    names only `broken`, and reports `1 of 3` packages failed or did not run. With fail-fast only the first is released, the last never
     starts, and the error reports `2 of 3`. Every started package removes its worktree.
   - `TestInventoryCancellationStopsWithoutFailFast`: cancelling during the second package stops the run
     without fail-fast; the third package never starts and the error wraps `context.Canceled`.
-  - `TestInventoryErrorIsNilWithoutFailures`: summary formatting and the no-failure case.
+  - `TestInventoryKeepsACompletedReleaseWhenCleanupFails`: `Publish` succeeds and worktree removal
+    fails; the release is still in the results, the next package still runs, and the error wraps the
+    cleanup failure (`ErrGitCommandExited`).
+  - `TestInventoryFailFastStopsAfterACleanupFailure`: with fail-fast the cleanup failure stops the run,
+    the completed release is kept, and the next package never starts.
+  - `TestInventoryTallyErrorIsNilWithoutFailures`: summary formatting and the no-failure case.
 - `pkg/plugin/release/inventory_test.go`: the existing stop-on-failure test now runs with fail-fast
-  (renamed `TestInventoryFailFastFailuresAlwaysCleanUpAndStop`) and asserts the new sentinel; the success
-  test asserts entry-paired results.
+  (renamed `TestInventoryFailFastFailuresAlwaysCleanUpAndStop`) and asserts the new sentinel; in its
+  `cleanup` case the completed check is now recorded. The success test asserts entry-paired results.
 - New `cmd/plugin/release_inventory_test.go`:
-  - `TestCompleteInventoryReleaseAfterPackageFailures` (9 cases): partial failure reconciles with the
-    failed packages excluded and presents; fail-fast, nothing released, and cancellation skip both;
+  - `TestCompleteInventoryReleaseAfterPackageFailures` (9 cases): partial failure reconciles only the
+    released packages and presents; fail-fast, nothing released, and cancellation skip both;
     catalog failure stops before output and keeps both errors; output errors are returned.
-  - `TestIncompletePackagesListsFailedAndUnstartedEntries`, `TestWithoutPackagesDropsOnlyExcludedSelections`,
+  - `TestReleasedPackagesListsResultsInPlanOrder`, `TestOnlyPackagesKeepsReleasedSelections` (a failed
+    package and one added after planning are both dropped),
     `TestFailFastRequiresInventory`, `TestReleaseCommandRegistersFailFast`.
   - `TestPresentInventoryReleasesReportsOnlyReleasedPackages` (JSON output keeps each release's own
     repository and omits the failed package) and `TestPresentInventoryReleasesCountsCheckedPackages`.
@@ -93,7 +108,7 @@ flag keeps the previous stop-at-first-failure behavior.
   return in `completeInventoryRelease` fails the three partial-failure cases.
 - `go build ./...` passes. `go test ./pkg/plugin/release/ ./cmd/plugin/ ./errors/ ./pkg/plugin/catalog/`
   passes; `pkg/plugin/release` is at 100% statement coverage, and the new `cmd/plugin` functions
-  (`completeInventoryRelease`, `incompletePackages`, `withoutPackages`) are at 100%.
+  (`completeInventoryRelease`, `releasedPackages`, `onlyPackages`) are at 100%.
 - Not covered by unit tests: `runInventoryRelease` and `reconcileReleasedCatalog` wiring, which need a real
   git checkout and registry (both were already untested before this change).
 - `atmos --chdir=demo/casts casts generate screengrabs cli --filter "atmos plugin release --help"` regenerated

@@ -36,7 +36,7 @@ func TestCompleteInventoryReleaseAfterPackageFailures(t *testing.T) {
 		failFast  bool
 		succeeded int
 		catalog   bool
-		failed    []string
+		released  []string
 		reconcile error
 		present   error
 		// Expected behavior.
@@ -45,14 +45,14 @@ func TestCompleteInventoryReleaseAfterPackageFailures(t *testing.T) {
 		wantPresented  bool
 		wantErr        []error
 	}{
-		{name: "all released with catalog", ctx: t.Context(), succeeded: 2, catalog: true, wantReconcile: true, wantPresented: true},
+		{name: "all released with catalog", ctx: t.Context(), succeeded: 2, catalog: true, released: []string{"first", "last"}, wantReconciled: []string{"first", "last"}, wantReconcile: true, wantPresented: true},
 		{name: "all released without catalog", ctx: t.Context(), succeeded: 2, wantPresented: true},
-		{name: "partial failure reconciles and reports the released packages", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, succeeded: 2, catalog: true, failed: []string{"broken"}, wantReconciled: []string{"broken"}, wantReconcile: true, wantPresented: true, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
-		{name: "partial failure without catalog still reports", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, succeeded: 1, failed: []string{"broken"}, wantPresented: true, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
-		{name: "fail fast skips catalog and output", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, failFast: true, succeeded: 1, catalog: true, failed: []string{"broken", "later"}, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
-		{name: "nothing released skips catalog and output", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, catalog: true, failed: []string{"only"}, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
-		{name: "cancellation skips catalog and output", ctx: cancelled, runErr: context.Canceled, succeeded: 1, catalog: true, failed: []string{"later"}, wantErr: []error{context.Canceled}},
-		{name: "catalog failure stops before output and keeps both errors", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, succeeded: 1, catalog: true, failed: []string{"broken"}, reconcile: errUtils.ErrPluginCatalogConflict, wantReconciled: []string{"broken"}, wantReconcile: true, wantErr: []error{errUtils.ErrPluginInventoryRelease, errUtils.ErrPluginCatalogConflict}},
+		{name: "partial failure reconciles and reports the released packages", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, succeeded: 2, catalog: true, released: []string{"first", "last"}, wantReconciled: []string{"first", "last"}, wantReconcile: true, wantPresented: true, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
+		{name: "partial failure without catalog still reports", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, succeeded: 1, released: []string{"first"}, wantPresented: true, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
+		{name: "fail fast skips catalog and output", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, failFast: true, succeeded: 1, catalog: true, released: []string{"first"}, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
+		{name: "nothing released skips catalog and output", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, catalog: true, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
+		{name: "cancellation skips catalog and output", ctx: cancelled, runErr: context.Canceled, succeeded: 1, catalog: true, released: []string{"first"}, wantErr: []error{context.Canceled}},
+		{name: "catalog failure stops before output and keeps both errors", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, succeeded: 1, catalog: true, released: []string{"first"}, reconcile: errUtils.ErrPluginCatalogConflict, wantReconciled: []string{"first"}, wantReconcile: true, wantErr: []error{errUtils.ErrPluginInventoryRelease, errUtils.ErrPluginCatalogConflict}},
 		{name: "output failure is returned", ctx: t.Context(), succeeded: 1, present: errUtils.ErrPluginInvalidConfig, wantPresented: true, wantErr: []error{errUtils.ErrPluginInvalidConfig}},
 	}
 	for _, test := range tests {
@@ -63,10 +63,10 @@ func TestCompleteInventoryReleaseAfterPackageFailures(t *testing.T) {
 				failFast:  test.failFast,
 				succeeded: test.succeeded,
 				catalog:   test.catalog,
-				failed:    test.failed,
-				reconcile: func(excluded []string) error {
+				released:  test.released,
+				reconcile: func(released []string) error {
 					reconcileCalled = true
-					reconciled = excluded
+					reconciled = released
 					return test.reconcile
 				},
 				present: func() error {
@@ -75,7 +75,7 @@ func TestCompleteInventoryReleaseAfterPackageFailures(t *testing.T) {
 				},
 			})
 			require.Equal(t, test.wantReconcile, reconcileCalled, "catalog reconciliation")
-			require.Equal(t, test.wantReconciled, reconciled, "packages excluded from the catalog")
+			require.Equal(t, test.wantReconciled, reconciled, "packages reconciled into the catalog")
 			require.Equal(t, test.wantPresented, presentCalled, "release output")
 			if len(test.wantErr) == 0 {
 				require.NoError(t, err)
@@ -88,22 +88,26 @@ func TestCompleteInventoryReleaseAfterPackageFailures(t *testing.T) {
 	}
 }
 
-func TestIncompletePackagesListsFailedAndUnstartedEntries(t *testing.T) {
-	entries := []releaseplan.Entry{{Name: "first"}, {Name: "broken"}, {Name: "last"}, {Name: "never"}}
-	results := []pluginrelease.InventoryRelease{{Entry: entries[0]}, {Entry: entries[2]}}
-	require.Equal(t, []string{"broken", "never"}, incompletePackages(entries, results))
-	require.Empty(t, incompletePackages(entries[:1], results))
+func TestReleasedPackagesListsResultsInPlanOrder(t *testing.T) {
+	results := []pluginrelease.InventoryRelease{{Entry: releaseplan.Entry{Name: "first"}}, {Entry: releaseplan.Entry{Name: "last"}}}
+	require.Equal(t, []string{"first", "last"}, releasedPackages(results))
+	require.Empty(t, releasedPackages(nil))
 }
 
-// A failed package keeps its existing catalog entry: only its selection is dropped.
-func TestWithoutPackagesDropsOnlyExcludedSelections(t *testing.T) {
-	selections := []catalog.ReleaseSelection{{Name: "first", Version: "1.0.0"}, {Name: "broken", Version: "2.0.0"}, {Name: "last", Version: "3.0.0"}}
-	kept := withoutPackages(selections, []string{"broken"})
+// Only packages released in this run are reconciled: a failed package and an inventory
+// package that was not part of this run's plan both keep their existing catalog entry.
+func TestOnlyPackagesKeepsReleasedSelections(t *testing.T) {
+	selections := []catalog.ReleaseSelection{
+		{Name: "first", Version: "1.0.0"},
+		{Name: "broken", Version: "2.0.0"},
+		{Name: "added-after-planning", Version: "1.0.0"},
+		{Name: "last", Version: "3.0.0"},
+	}
+	kept := onlyPackages(selections, []string{"first", "last"})
 	require.Len(t, kept, 2)
 	require.Equal(t, catalog.ReleaseSelection{Name: "first", Version: "1.0.0"}, kept[0])
 	require.Equal(t, catalog.ReleaseSelection{Name: "last", Version: "3.0.0"}, kept[1])
-	all := []catalog.ReleaseSelection{{Name: "first"}}
-	require.Equal(t, []catalog.ReleaseSelection{{Name: "first"}}, withoutPackages(all, nil))
+	require.Empty(t, onlyPackages([]catalog.ReleaseSelection{{Name: "first"}}, nil))
 }
 
 func TestFailFastRequiresInventory(t *testing.T) {

@@ -15,7 +15,8 @@ import (
 )
 
 // expectIsolatedSource expects the source resolution, worktree creation, and cleanup of one package.
-func expectIsolatedSource(t *testing.T, runner *MockRunner, entry releaseplan.Entry) {
+// A non-nil cleanupErr is returned by the worktree removal.
+func expectIsolatedSource(t *testing.T, runner *MockRunner, entry *releaseplan.Entry, cleanupErr error) {
 	t.Helper()
 	runner.EXPECT().Run(gomock.Any(), "git", []string{"rev-parse", "--verify", "--end-of-options", entry.Source + "^{commit}"}, &pkgit.RunOptions{}).Return(pkgit.RunResult{Stdout: entry.Source}, nil)
 	runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), &pkgit.RunOptions{}).DoAndReturn(func(_ context.Context, _ string, args []string, _ *pkgit.RunOptions) (pkgit.RunResult, error) {
@@ -26,7 +27,7 @@ func expectIsolatedSource(t *testing.T, runner *MockRunner, entry releaseplan.En
 	runner.EXPECT().Run(gomock.Any(), "git", gomock.Any(), &pkgit.RunOptions{}).DoAndReturn(func(cleanup context.Context, _ string, args []string, _ *pkgit.RunOptions) (pkgit.RunResult, error) {
 		require.NoError(t, cleanup.Err(), "every started package must remove its worktree")
 		require.Equal(t, []string{"worktree", "remove", "--force"}, args[:3])
-		return pkgit.RunResult{}, nil
+		return pkgit.RunResult{}, cleanupErr
 	})
 }
 
@@ -47,16 +48,16 @@ func TestInventoryContinuesPastAFailingPackage(t *testing.T) {
 		released   []string
 		incomplete string
 	}{
-		{name: "continues by default", started: entries, released: []string{"first", "last"}, incomplete: "1 of 3 packages did not complete"},
-		{name: "fail fast stops at the first failure", failFast: true, started: entries[:2], released: []string{"first"}, incomplete: "2 of 3 packages did not complete"},
+		{name: "continues by default", started: entries, released: []string{"first", "last"}, incomplete: "1 of 3 packages failed or did not run"},
+		{name: "fail fast stops at the first failure", failFast: true, started: entries[:2], released: []string{"first"}, incomplete: "2 of 3 packages failed or did not run"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			runner := NewMockRunner(ctrl)
 			parent := t.TempDir()
-			for _, entry := range test.started {
-				expectIsolatedSource(t, runner, entry)
+			for index := range test.started {
+				expectIsolatedSource(t, runner, &test.started[index], nil)
 			}
 			factory := func(entry releaseplan.Entry, _ string) Backend {
 				backend := NewMockBackend(ctrl)
@@ -101,8 +102,8 @@ func TestInventoryCancellationStopsWithoutFailFast(t *testing.T) {
 		{Name: "cancelled", Path: "plugins/cancelled", Source: "cancelled-source"},
 		{Name: "never", Path: "plugins/never", Source: "never-source"},
 	}
-	expectIsolatedSource(t, runner, entries[0])
-	expectIsolatedSource(t, runner, entries[1])
+	expectIsolatedSource(t, runner, &entries[0], nil)
+	expectIsolatedSource(t, runner, &entries[1], nil)
 	var started []string
 	factory := func(entry releaseplan.Entry, _ string) Backend {
 		started = append(started, entry.Name)
@@ -120,17 +121,67 @@ func TestInventoryCancellationStopsWithoutFailFast(t *testing.T) {
 
 	require.ErrorIs(t, err, context.Canceled)
 	require.ErrorIs(t, err, errUtils.ErrPluginInventoryRelease)
-	require.Contains(t, err.Error(), "2 of 3 packages did not complete")
+	require.Contains(t, err.Error(), "2 of 3 packages failed or did not run")
 	require.Equal(t, []string{"first", "cancelled"}, started, "no package starts after cancellation")
 	require.Len(t, results, 1)
 	require.Equal(t, "first", results[0].Entry.Name)
 }
 
+// A package whose release completed but whose worktree could not be removed is still
+// recorded as released, so it reaches the catalog and the output, and the cleanup failure
+// is still reported.
+func TestInventoryKeepsACompletedReleaseWhenCleanupFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	runner := NewMockRunner(ctrl)
+	entries := []releaseplan.Entry{{Name: "published", Path: "plugins/published", Source: "published-source"}, {Name: "next", Path: "plugins/next", Source: "next-source"}}
+	expectIsolatedSource(t, runner, &entries[0], errUtils.ErrGitCommandExited)
+	expectIsolatedSource(t, runner, &entries[1], nil)
+	factory := func(entry releaseplan.Entry, _ string) Backend {
+		backend := NewMockBackend(ctrl)
+		gomock.InOrder(backend.EXPECT().Validate(gomock.Any(), gomock.Any()), backend.EXPECT().Build(gomock.Any(), gomock.Any()), backend.EXPECT().Test(gomock.Any(), gomock.Any()), backend.EXPECT().Pack(gomock.Any(), gomock.Any(), gomock.Any()))
+		backend.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(&pluginoci.Release{Name: entry.Name}, nil)
+		return backend
+	}
+
+	results, err := RunInventory(t.Context(), entries, factory, WithInventoryRunner(runner), WithInventoryTemporaryDirectory(t.TempDir()))
+
+	require.ErrorIs(t, err, errUtils.ErrPluginInventoryRelease)
+	require.ErrorIs(t, err, errUtils.ErrGitCommandExited)
+	require.Contains(t, err.Error(), "plugin release published: remove plugin source worktree:")
+	require.Contains(t, err.Error(), "1 of 2 packages failed or did not run")
+	require.Len(t, results, 2)
+	require.Equal(t, "published", results[0].Entry.Name)
+	require.Equal(t, &pluginoci.Release{Name: "published"}, results[0].Release)
+	require.Equal(t, "next", results[1].Entry.Name)
+}
+
+// Fail-fast stops after a cleanup failure too, but keeps the completed release.
+func TestInventoryFailFastStopsAfterACleanupFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	runner := NewMockRunner(ctrl)
+	entries := []releaseplan.Entry{{Name: "published", Path: "plugins/published", Source: "published-source"}, {Name: "never", Path: "plugins/never", Source: "never-source"}}
+	expectIsolatedSource(t, runner, &entries[0], errUtils.ErrGitCommandExited)
+	factory := func(entry releaseplan.Entry, _ string) Backend {
+		require.Equal(t, "published", entry.Name, "no package starts after fail-fast stops the run")
+		backend := NewMockBackend(ctrl)
+		gomock.InOrder(backend.EXPECT().Validate(gomock.Any(), gomock.Any()), backend.EXPECT().Build(gomock.Any(), gomock.Any()), backend.EXPECT().Test(gomock.Any(), gomock.Any()), backend.EXPECT().Pack(gomock.Any(), gomock.Any(), gomock.Any()))
+		backend.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(&pluginoci.Release{Name: entry.Name}, nil)
+		return backend
+	}
+
+	results, err := RunInventory(t.Context(), entries, factory, WithInventoryRunner(runner), WithInventoryTemporaryDirectory(t.TempDir()), WithInventoryFailFast(true))
+
+	require.ErrorIs(t, err, errUtils.ErrGitCommandExited)
+	require.Contains(t, err.Error(), "2 of 2 packages failed or did not run")
+	require.Len(t, results, 1)
+	require.Equal(t, "published", results[0].Entry.Name)
+}
+
 // An inventory in which every package succeeds reports no error.
-func TestInventoryErrorIsNilWithoutFailures(t *testing.T) {
-	require.NoError(t, inventoryError(0, 2, nil))
-	err := inventoryError(1, 2, []error{errUtils.ErrPluginBuild})
+func TestInventoryTallyErrorIsNilWithoutFailures(t *testing.T) {
+	require.NoError(t, (&inventoryTally{total: 2, attempted: 2}).err())
+	err := (&inventoryTally{total: 3, attempted: 2, failed: 1, errors: []error{errUtils.ErrPluginBuild}}).err()
 	require.ErrorIs(t, err, errUtils.ErrPluginInventoryRelease)
 	require.ErrorIs(t, err, errUtils.ErrPluginBuild)
-	require.Equal(t, "plugin inventory release failed: 1 of 2 packages did not complete\nplugin build failed", err.Error())
+	require.Equal(t, "plugin inventory release failed: 2 of 3 packages failed or did not run\nplugin build failed", err.Error())
 }
