@@ -13,8 +13,6 @@ commands:
           load("casts.star", "demo_config")
 
           rec = cast.recorder(title="Publish and restore a local artifact", **demo_config("examples/artifacts/publish-and-restore", fixture="artifacts"))
-          rec.run("mkdir -p bundle")
-          rec.run("printf '%s\\n' '# App bundle' '' '**Verify the restore** with `diff -r bundle restored`.' > bundle/README.md")
           rec.run("atmos artifacts publish ./bundle --repository=local --name=builds/app --version=1.0.0 --readme=README.md", expect=["Published builds/app:1.0.0", ".artifacts/builds/app/1.0.0", "Content digest"])
           rec.run("atmos artifacts list --repository=local", expect=["builds/app", "1.0.0"])
           rec.run("atmos artifacts pull builds/app:1.0.0 --repository=local --output=./restored", expect=["Pulled builds/app:1.0.0", "Content digest", "App bundle", "Verify the restore", "diff -r bundle restored"])
