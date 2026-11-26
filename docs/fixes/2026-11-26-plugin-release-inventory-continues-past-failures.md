@@ -57,12 +57,14 @@ flag keeps the previous stop-at-first-failure behavior.
     is set) and presents the released packages, then returns the joined package errors so the command
     exits non-zero. Fail-fast, a run in which no package succeeded, and cancellation return the package
     errors without touching the catalog or the output, which matches the previous behavior.
-  - Catalog decision: `reconcileReleasedCatalog` keeps only the selections of packages released in this
-    run (`onlyPackages`). Packages that failed, never started, or were not part of this run's plan keep
-    their existing catalog entry instead of a possibly unsigned or unverified version. The plan-scope
-    case matters because reconciliation re-reads the inventory at the current default-branch head, which
-    can list a package added after planning (found in review, CodeRabbit; the first revision only
-    excluded failed packages). If nothing remains to reconcile, the catalog is not written.
+  - Catalog decision: `reconcileReleasedCatalog` keeps only the selections that match a package version
+    released in this run (`onlyPackages`): same name, same version after `catalog.NormalizeVersion`, and
+    same repository, carried from the plan entries by `releasedPackages`. Packages that failed, never
+    started, or were not part of this run's plan keep their existing catalog entry instead of a possibly
+    unsigned or unverified version. This matters because reconciliation re-reads the inventory at the
+    current default-branch head, which can list a package added after planning or a different version of
+    a released package (found in review, CodeRabbit; the first revision only excluded failed packages,
+    the second matched by name only). If nothing remains to reconcile, the catalog is not written.
   - `presentInventoryReleases` reports `result.Entry.Repository` for each result instead of indexing the
     plan, and the `--check` summary counts the packages that were checked.
 - `errors/plugin.go`: new `ErrPluginInventoryRelease`.
@@ -97,8 +99,9 @@ flag keeps the previous stop-at-first-failure behavior.
   - `TestCompleteInventoryReleaseAfterPackageFailures` (9 cases): partial failure reconciles only the
     released packages and presents; fail-fast, nothing released, and cancellation skip both;
     catalog failure stops before output and keeps both errors; output errors are returned.
-  - `TestReleasedPackagesListsResultsInPlanOrder`, `TestOnlyPackagesKeepsReleasedSelections` (a failed
-    package and one added after planning are both dropped),
+  - `TestReleasedPackagesKeepsNameVersionAndRepository`, `TestOnlyPackagesKeepsExactlyTheReleasedVersions`
+    (a failed package, one added after planning, a newer version of a released package, and a released
+    package listed under another repository are all dropped; a `v`-prefixed version still matches),
     `TestFailFastRequiresInventory`, `TestReleaseCommandRegistersFailFast`.
   - `TestPresentInventoryReleasesReportsOnlyReleasedPackages` (JSON output keeps each release's own
     repository and omits the failed package) and `TestPresentInventoryReleasesCountsCheckedPackages`.

@@ -50,7 +50,7 @@ in the protected release job.
   <dt><code>--base</code></dt>
   <dd>Revision for independent package version checks. When omitted in CI mode, Atmos uses its CI provider to resolve the comparison base.</dd>
   <dt><code>--catalog</code></dt>
-  <dd>Catalog alias or reference to reconcile after inventory publication. Reads accepted inventory from the current default branch on origin. Serialize releases with a shared writer lock. When some packages fail, the catalog is still reconciled for the packages that released in this run. Every other package, including a failed one, keeps its existing catalog entry. See <a href="#when-a-package-fails">When a package fails</a>.</dd>
+  <dd>Catalog alias or reference to reconcile after inventory publication. Reads accepted inventory from the current default branch on origin. Serialize releases with a shared writer lock. When some packages fail, the catalog is still reconciled for the package versions released in this run. Every other package, including a failed one, keeps its existing catalog entry. See <a href="#when-a-package-fails">When a package fails</a>.</dd>
   <dt><code>--fail-fast</code></dt>
   <dd>Stop at the first failing package in an inventory release instead of continuing with the remaining packages. Nothing is reconciled or reported after the failure. Requires --inventory. Also ATMOS_PLUGIN_RELEASE_FAIL_FAST.</dd>
   <dt><code>--sign</code></dt>
@@ -98,9 +98,9 @@ problem in one package, such as a signing or registry error, cannot hold back th
 
 When the run finishes:
 
-- The packages that released are reported in the normal output, and with `--catalog` only they are
-  added to the catalog. Every other package, including a failed one, keeps its existing catalog entry;
-  the catalog never lists a version from a failed release.
+- The packages that released are reported in the normal output, and with `--catalog` only the versions
+  this run released are added to the catalog. Every other package, including a failed one, keeps its
+  existing catalog entry; the catalog never lists a version from a failed release.
 - A package that published but whose temporary source checkout could not be cleaned up afterward still
   counts as released, and the cleanup problem is reported as an error.
 - The command exits with an error that lists every failed package and how many packages did not
