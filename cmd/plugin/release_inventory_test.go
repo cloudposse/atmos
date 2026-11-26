@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"slices"
 	"testing"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -29,8 +28,6 @@ import (
 func TestCompleteInventoryReleaseAfterPackageFailures(t *testing.T) {
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
-	firstOnly := []catalog.ReleaseSelection{{Name: "first", Version: "1.0.0", Repository: "oci://registry.example.com/first"}}
-	firstAndLast := append(slices.Clone(firstOnly), catalog.ReleaseSelection{Name: "last", Version: "3.0.0", Repository: "oci://registry.example.com/last"})
 	tests := []struct {
 		name string
 		// Input state.
@@ -39,35 +36,35 @@ func TestCompleteInventoryReleaseAfterPackageFailures(t *testing.T) {
 		failFast  bool
 		succeeded int
 		catalog   bool
-		released  []catalog.ReleaseSelection
+		released  []string
 		reconcile error
 		present   error
 		// Expected behavior.
-		wantReconciled []catalog.ReleaseSelection
+		wantReconciled []string
 		wantReconcile  bool
 		wantPresented  bool
 		wantErr        []error
 	}{
-		{name: "all released with catalog", ctx: t.Context(), succeeded: 2, catalog: true, released: firstAndLast, wantReconciled: firstAndLast, wantReconcile: true, wantPresented: true},
+		{name: "all released with catalog", ctx: t.Context(), succeeded: 2, catalog: true, released: []string{"first", "last"}, wantReconciled: []string{"first", "last"}, wantReconcile: true, wantPresented: true},
 		{name: "all released without catalog", ctx: t.Context(), succeeded: 2, wantPresented: true},
-		{name: "partial failure reconciles and reports the released packages", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, succeeded: 2, catalog: true, released: firstAndLast, wantReconciled: firstAndLast, wantReconcile: true, wantPresented: true, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
-		{name: "partial failure without catalog still reports", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, succeeded: 1, released: firstOnly, wantPresented: true, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
-		{name: "fail fast skips catalog and output", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, failFast: true, succeeded: 1, catalog: true, released: firstOnly, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
+		{name: "partial failure reconciles and reports the released packages", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, succeeded: 2, catalog: true, released: []string{"first", "last"}, wantReconciled: []string{"first", "last"}, wantReconcile: true, wantPresented: true, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
+		{name: "partial failure without catalog still reports", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, succeeded: 1, released: []string{"first"}, wantPresented: true, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
+		{name: "fail fast skips catalog and output", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, failFast: true, succeeded: 1, catalog: true, released: []string{"first"}, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
 		{name: "nothing released skips catalog and output", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, catalog: true, wantErr: []error{errUtils.ErrPluginInventoryRelease}},
-		{name: "cancellation skips catalog and output", ctx: cancelled, runErr: context.Canceled, succeeded: 1, catalog: true, released: firstOnly, wantErr: []error{context.Canceled}},
-		{name: "catalog failure stops before output and keeps both errors", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, succeeded: 1, catalog: true, released: firstOnly, reconcile: errUtils.ErrPluginCatalogConflict, wantReconciled: firstOnly, wantReconcile: true, wantErr: []error{errUtils.ErrPluginInventoryRelease, errUtils.ErrPluginCatalogConflict}},
+		{name: "cancellation skips catalog and output", ctx: cancelled, runErr: context.Canceled, succeeded: 1, catalog: true, released: []string{"first"}, wantErr: []error{context.Canceled}},
+		{name: "catalog failure stops before output and keeps both errors", ctx: t.Context(), runErr: errUtils.ErrPluginInventoryRelease, succeeded: 1, catalog: true, released: []string{"first"}, reconcile: errUtils.ErrPluginCatalogConflict, wantReconciled: []string{"first"}, wantReconcile: true, wantErr: []error{errUtils.ErrPluginInventoryRelease, errUtils.ErrPluginCatalogConflict}},
 		{name: "output failure is returned", ctx: t.Context(), succeeded: 1, present: errUtils.ErrPluginInvalidConfig, wantPresented: true, wantErr: []error{errUtils.ErrPluginInvalidConfig}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			var reconciled []catalog.ReleaseSelection
+			var reconciled []string
 			reconcileCalled, presentCalled := false, false
 			err := completeInventoryRelease(test.ctx, test.runErr, &inventoryCompletion{
 				failFast:  test.failFast,
 				succeeded: test.succeeded,
 				catalog:   test.catalog,
 				released:  test.released,
-				reconcile: func(released []catalog.ReleaseSelection) error {
+				reconcile: func(released []string) error {
 					reconcileCalled = true
 					reconciled = released
 					return test.reconcile
@@ -91,40 +88,26 @@ func TestCompleteInventoryReleaseAfterPackageFailures(t *testing.T) {
 	}
 }
 
-func TestReleasedPackagesKeepsNameVersionAndRepository(t *testing.T) {
-	results := []pluginrelease.InventoryRelease{
-		{Entry: releaseplan.Entry{Name: "first", Version: "1.0.0", Repository: "oci://registry.example.com/first", Source: "first-source"}},
-		{Entry: releaseplan.Entry{Name: "last", Version: "3.0.0", Repository: "oci://registry.example.com/last", Source: "last-source"}},
-	}
-	released := releasedPackages(results)
-	require.Len(t, released, 2)
-	require.Equal(t, catalog.ReleaseSelection{Name: "first", Version: "1.0.0", Repository: "oci://registry.example.com/first"}, released[0])
-	require.Equal(t, catalog.ReleaseSelection{Name: "last", Version: "3.0.0", Repository: "oci://registry.example.com/last"}, released[1])
+func TestReleasedPackagesListsResultsInPlanOrder(t *testing.T) {
+	results := []pluginrelease.InventoryRelease{{Entry: releaseplan.Entry{Name: "first"}}, {Entry: releaseplan.Entry{Name: "last"}}}
+	require.Equal(t, []string{"first", "last"}, releasedPackages(results))
 	require.Empty(t, releasedPackages(nil))
 }
 
-// Only package versions released in this run are reconciled. A failed package, a package added
-// after planning, a newer version of a released package listed at the current head, and a
-// released package whose repository changed all keep their existing catalog entry.
-func TestOnlyPackagesKeepsExactlyTheReleasedVersions(t *testing.T) {
-	released := []catalog.ReleaseSelection{
-		{Name: "first", Version: "1.0.0", Repository: "oci://registry.example.com/first"},
-		{Name: "moved", Version: "2.0.0", Repository: "oci://registry.example.com/moved"},
-		{Name: "last", Version: "3.0.0", Repository: "oci://registry.example.com/last"},
-	}
+// Only packages released in this run are reconciled: a failed package and an inventory
+// package that was not part of this run's plan both keep their existing catalog entry.
+func TestOnlyPackagesKeepsReleasedSelections(t *testing.T) {
 	selections := []catalog.ReleaseSelection{
-		{Name: "first", Version: "v1.0.0", Repository: "oci://registry.example.com/first"},
-		{Name: "broken", Version: "2.0.0", Repository: "oci://registry.example.com/broken"},
-		{Name: "added-after-planning", Version: "1.0.0", Repository: "oci://registry.example.com/added"},
-		{Name: "moved", Version: "2.0.0", Repository: "oci://registry.example.com/elsewhere"},
-		{Name: "last", Version: "3.1.0", Repository: "oci://registry.example.com/last"},
-		{Name: "last", Version: "3.0.0", Repository: "oci://registry.example.com/last"},
+		{Name: "first", Version: "1.0.0"},
+		{Name: "broken", Version: "2.0.0"},
+		{Name: "added-after-planning", Version: "1.0.0"},
+		{Name: "last", Version: "3.0.0"},
 	}
-	kept := onlyPackages(selections, released)
+	kept := onlyPackages(selections, []string{"first", "last"})
 	require.Len(t, kept, 2)
-	require.Equal(t, catalog.ReleaseSelection{Name: "first", Version: "v1.0.0", Repository: "oci://registry.example.com/first"}, kept[0], "versions match after normalization")
-	require.Equal(t, catalog.ReleaseSelection{Name: "last", Version: "3.0.0", Repository: "oci://registry.example.com/last"}, kept[1])
-	require.Empty(t, onlyPackages([]catalog.ReleaseSelection{{Name: "first", Version: "1.0.0"}}, nil))
+	require.Equal(t, catalog.ReleaseSelection{Name: "first", Version: "1.0.0"}, kept[0])
+	require.Equal(t, catalog.ReleaseSelection{Name: "last", Version: "3.0.0"}, kept[1])
+	require.Empty(t, onlyPackages([]catalog.ReleaseSelection{{Name: "first"}}, nil))
 }
 
 func TestFailFastRequiresInventory(t *testing.T) {

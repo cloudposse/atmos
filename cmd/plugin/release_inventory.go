@@ -97,10 +97,8 @@ func runInventoryRelease(cmd *cobra.Command, values *viper.Viper) error {
 		succeeded: len(results),
 		catalog:   target != "",
 		released:  releasedPackages(results),
-		reconcile: func(released []catalog.ReleaseSelection) error {
-			return reconcileReleasedCatalog(cmd, manager, values, target, released)
-		},
-		present: func() error { return presentInventoryReleases(plan, results, values) },
+		reconcile: func(released []string) error { return reconcileReleasedCatalog(cmd, manager, values, target, released) },
+		present:   func() error { return presentInventoryReleases(plan, results, values) },
 	})
 }
 
@@ -109,9 +107,9 @@ type inventoryCompletion struct {
 	failFast  bool
 	succeeded int
 	catalog   bool
-	// Released lists the package versions released in this run; only they are reconciled into the catalog.
-	released  []catalog.ReleaseSelection
-	reconcile func(released []catalog.ReleaseSelection) error
+	// Released lists the packages released in this run; only they are reconciled into the catalog.
+	released  []string
+	reconcile func(released []string) error
 	present   func() error
 }
 
@@ -131,13 +129,11 @@ func completeInventoryRelease(ctx context.Context, runErr error, c *inventoryCom
 	return errors.Join(runErr, c.present())
 }
 
-// releasedPackages returns the name, version, and repository of each package released in
-// this run, in plan order.
-func releasedPackages(results []pluginrelease.InventoryRelease) []catalog.ReleaseSelection {
-	released := make([]catalog.ReleaseSelection, 0, len(results))
+// releasedPackages returns the names of the packages released in this run, in plan order.
+func releasedPackages(results []pluginrelease.InventoryRelease) []string {
+	released := make([]string, 0, len(results))
 	for index := range results {
-		entry := &results[index].Entry
-		released = append(released, catalog.ReleaseSelection{Name: entry.Name, Version: entry.Version, Repository: entry.Repository})
+		released = append(released, results[index].Entry.Name)
 	}
 	return released
 }
@@ -162,7 +158,7 @@ func presentInventoryReleases(plan *releaseplan.Plan, results []pluginrelease.In
 	return pluginoutput.PublishedBatch(published, values.GetString(outputFormatFlag))
 }
 
-func reconcileReleasedCatalog(cmd *cobra.Command, manager *manage.Manager, values *viper.Viper, alias string, released []catalog.ReleaseSelection) error {
+func reconcileReleasedCatalog(cmd *cobra.Command, manager *manage.Manager, values *viper.Viper, alias string, released []string) error {
 	target, err := catalogReference(alias)
 	if err != nil {
 		return err
@@ -186,21 +182,18 @@ func reconcileReleasedCatalog(cmd *cobra.Command, manager *manage.Manager, value
 	return catalog.NewSyncer(manager.Installer.Registry, manager.Installer.Descriptors).Sync(cmd.Context(), target, selections, options...)
 }
 
-// onlyPackages keeps the catalog selections that match a package version released in this run:
-// the same name, the same normalized version, and the same repository. The inventory is re-read
-// at the current default-branch head, so it can list a package this run did not release (one
-// that failed, never started, or was added after planning) or a different version of a released
-// package; those keep their existing catalog entry instead of a version that this run did not
-// publish and verify.
-func onlyPackages(selections []catalog.ReleaseSelection, released []catalog.ReleaseSelection) []catalog.ReleaseSelection {
+// onlyPackages keeps the catalog selections of packages released in this run. Packages that
+// failed, never started, or were not part of this run's plan (for example one added to the
+// default branch after planning) keep their existing catalog entry instead of a version that
+// may be missing, unsigned, or only partially verified.
+//
+// Selections are matched by package name only, not by the version this run released. The
+// catalog intentionally follows the accepted inventory on the current default branch: when an
+// older queued release runs after a newer one, reconciling the current head's version keeps the
+// newer accepted version in the catalog instead of skipping the package. Sync still requires that
+// version to be published (and, with --verify-public, publicly readable).
+func onlyPackages(selections []catalog.ReleaseSelection, released []string) []catalog.ReleaseSelection {
 	return slices.DeleteFunc(selections, func(selection catalog.ReleaseSelection) bool {
-		return !slices.ContainsFunc(released, func(candidate catalog.ReleaseSelection) bool {
-			return sameRelease(&selection, &candidate)
-		})
+		return !slices.Contains(released, selection.Name)
 	})
-}
-
-// sameRelease reports whether two selections name the same package version in the same repository.
-func sameRelease(left, right *catalog.ReleaseSelection) bool {
-	return left.Name == right.Name && left.Repository == right.Repository && catalog.NormalizeVersion(left.Version) == catalog.NormalizeVersion(right.Version)
 }
