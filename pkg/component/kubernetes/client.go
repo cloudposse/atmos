@@ -6,6 +6,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -322,7 +323,7 @@ func (c *sdkClient) versionLacksKind(ctx context.Context, groupVersion, kind str
 	}
 
 	for i := range list.APIResources {
-		if list.APIResources[i].Kind == kind {
+		if strings.EqualFold(list.APIResources[i].Kind, kind) {
 			return false
 		}
 	}

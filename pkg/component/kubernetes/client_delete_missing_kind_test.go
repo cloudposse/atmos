@@ -107,11 +107,14 @@ func TestSDKClientDiffStillFailsOnUnservedKind(t *testing.T) {
 func TestSDKClientDeleteFailsWhenAnotherVersionServesKind(t *testing.T) {
 	client := newDiscoveryTestClient(t)
 
-	_, err := client.Delete(context.Background(), []*unstructured.Unstructured{
-		kubernetesObject("moved.example.com/v1beta1", "Gadget", "first", "apps"),
-	})
+	// The loader accepts any casing of the kind, so the discovery match must too.
+	for _, kind := range []string{"Gadget", "gadget"} {
+		_, err := client.Delete(context.Background(), []*unstructured.Unstructured{
+			kubernetesObject("moved.example.com/v1beta1", kind, "first", "apps"),
+		})
 
-	require.ErrorIs(t, err, errUtils.ErrKubernetesResolveResource)
+		require.ErrorIs(t, err, errUtils.ErrKubernetesResolveResource, kind)
+	}
 }
 
 func TestSDKClientKindUnservedNeedsConfirmation(t *testing.T) {
