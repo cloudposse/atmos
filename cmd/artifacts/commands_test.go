@@ -3,6 +3,7 @@ package artifacts
 import (
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -45,6 +46,26 @@ func TestPublishMapsEveryFlagAndEmitsTheNamedOutputs(t *testing.T) {
 	assert.Equal(t, string(manifestDigest), object["resolved_digest"])
 	assert.Equal(t, string(recordDigest), object["record_digest"])
 	assert.Empty(t, got.stderr, "structured output prints no human status")
+}
+
+func TestPublishDisplaysLocalLocationRelativeToWorkingDirectory(t *testing.T) {
+	h, svc := newHarness(t)
+	res := operation(artifact.ActionPublish, artifact.OutcomeCreated)
+	relative := filepath.Join(".artifacts", "builds", "app", "1.0.0")
+	var err error
+	res.Location, err = filepath.Abs(relative)
+	require.NoError(t, err)
+	svc.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(res, nil).Times(2)
+
+	args := []string{"publish", "./bundle", "--repository=dir", "--name=builds/app", "--version=1.0.0"}
+	got := h.run(args...)
+	require.NoError(t, got.err)
+	assert.Contains(t, got.stdout, relative)
+	assert.NotContains(t, got.stdout, res.Location)
+
+	got = h.run(append(args, "--format=json")...)
+	require.NoError(t, got.err)
+	assert.Equal(t, res.Location, decodeObject(t, got.stdout)["location"])
 }
 
 func TestShortFlagsEnvironmentAndPrecedence(t *testing.T) {
