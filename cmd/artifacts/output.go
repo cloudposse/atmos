@@ -14,7 +14,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // result is the structured result of one operation. The type is shared with the artifact step and
@@ -65,9 +67,21 @@ type keyValue struct {
 	value string
 }
 
-// writeText writes aligned `key: value` lines to the data channel, skipping empty values so a
-// missing optional value is omitted, never filled with a misleading empty string.
+// writeText renders terminal details as a table and keeps redirected text in key: value format.
 func writeText(pairs []keyValue) error {
+	if terminal.New().IsTTY(terminal.Stdout) {
+		rows := make([][]string, 0, len(pairs))
+		for _, pair := range pairs {
+			if pair.value != "" {
+				rows = append(rows, []string{detailLabel(pair.key), pair.value})
+			}
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		return data.Writeln(theme.CreateMinimalTable([]string{"Property", "Value"}, rows))
+	}
+
 	width := 0
 	for _, pair := range pairs {
 		if pair.value != "" && len(pair.key) > width {
@@ -82,6 +96,23 @@ func writeText(pairs []keyValue) error {
 		fmt.Fprintf(&builder, "%-*s %s\n", width+1, pair.key+":", pair.value)
 	}
 	return data.Write(builder.String())
+}
+
+// detailLabel converts internal field names into labels for the terminal table.
+func detailLabel(key string) string {
+	switch key {
+	case invoke.OutputRef:
+		return "Reference"
+	case invoke.OutputSize:
+		return "Size (bytes)"
+	case "readme":
+		return "README"
+	case "changelog":
+		return "CHANGELOG"
+	default:
+		label := strings.ReplaceAll(key, "_", " ")
+		return strings.ToUpper(label[:1]) + label[1:]
+	}
 }
 
 // operationPairs are the named outputs shared by every operation, in a stable order, followed by
