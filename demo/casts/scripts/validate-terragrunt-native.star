@@ -11,7 +11,7 @@ def validate():
     assert_colored(text, "Plan:")
     # Commands alone are not proof: require the inventory and real engine plan.
     for needle in [
-        "installed automatically",
+        "▶ Plugin terragrunt was installed automatically",
         "oci://ghcr.io/cloudposse/atmos/plugins/terragrunt",
         "atmos list instances",
         "Component", "Stack", "Type", "Engine", "opentofu",
