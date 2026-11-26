@@ -372,8 +372,10 @@ key and suggests how to fix it:
 - Enable the plugin package that provides it under `plugins.packages`, if it configures a provider.
 - Otherwise remove it.
 
-When a plugin package is enabled but not installed yet, Atmos cannot tell which sections it provides,
-so it does not report unknown sections until the package is installed.
+Atmos reads which sections an enabled plugin package provides from its entry in the plugin lock file,
+or from the manifest of a local build, without installing anything. When it cannot tell, it does not
+report unknown sections: this happens when the package has no lock entry, when its lock entry does not
+match the declared `source` or `version`, or when the lock file or a local build's manifest cannot be read.
 
 Earlier releases ignored unknown sections. Projects pinned to an [edition](/cli/configuration/edition)
 before `2026-11-27` keep ignoring them, and Atmos logs a warning for each one instead. To migrate,

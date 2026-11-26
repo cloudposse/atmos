@@ -177,7 +177,7 @@ to the release date rolls back every unlisted entry.
 built from, then commit it to `main`:
 
 ```bash
-ATMOS_REGENERATE_EDITION_RELEASE=v1.235.0@2026-11-25 go test ./pkg/edition -run TestJournalReleaseBoundary
+ATMOS_REGENERATE_EDITION_RELEASE=v1.235.0@2026-11-26 go test ./pkg/edition -run TestJournalReleaseBoundary
 ```
 
 The value is `<tag>@<publication date>`. Regenerating records every entry in that commit's journal

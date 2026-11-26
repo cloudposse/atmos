@@ -38,8 +38,10 @@ Any other key is an [unknown section](/cli/configuration/components/terraform#un
 reports every unknown key in one error and suggests the fix: correct a misspelled name, enable the plugin
 package that provides the section, or remove it.
 
-When a plugin package is enabled but not installed yet, Atmos cannot know which sections it provides, so
-it does not report unknown sections until the package is installed.
+Atmos reads which sections an enabled plugin package provides from the plugin lock file, or from the
+manifest of a local build, without installing anything. When it cannot tell, for example because the
+package has no lock entry yet or its entry no longer matches the declared version, it does not report
+unknown sections.
 
 ## How to Use It
 
