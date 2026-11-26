@@ -48,5 +48,8 @@ func textPull(res *result) error {
 	if err := textOperation(res); err != nil || res.PullReadme == "" {
 		return err
 	}
+	if err := data.Writeln(""); err != nil {
+		return err
+	}
 	return data.Markdown(res.PullReadme)
 }
