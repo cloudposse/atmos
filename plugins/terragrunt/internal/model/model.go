@@ -4,6 +4,7 @@ package model
 import "time"
 
 type Request struct {
+	Catalogs       map[string]string `json:"catalogs,omitempty"`
 	IncludedPaths  []string          `json:"included_paths,omitempty"`
 	ExcludedPaths  []string          `json:"excluded_paths,omitempty"`
 	Phase          string            `json:"phase,omitempty"`

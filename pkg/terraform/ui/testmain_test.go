@@ -3,7 +3,9 @@ package ui
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -21,7 +23,13 @@ import (
 //   - _ATMOS_TEST_TF_SHOW_STDERR: writes its value to stderr and exits 1; stands in for a
 //     `terraform show` failure that prints a real error message, so tests can verify that
 //     message is surfaced rather than discarded.
+//   - _ATMOS_TEST_STOP_ON_INTERRUPT: writes "ready" once it handles signals, waits for
+//     SIGINT/SIGTERM, writes the signal's name to stdout and exits 0; stands in for
+//     terraform stopping gracefully after an interrupt.
 func TestMain(m *testing.M) {
+	if os.Getenv("_ATMOS_TEST_STOP_ON_INTERRUPT") == "1" {
+		stopOnInterrupt()
+	}
 	if secs := os.Getenv("_ATMOS_TEST_SLEEP_SECONDS"); secs != "" {
 		if n, err := strconv.Atoi(secs); err == nil {
 			time.Sleep(time.Duration(n) * time.Second)
@@ -40,4 +48,18 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	os.Exit(m.Run())
+}
+
+// stopOnInterrupt implements _ATMOS_TEST_STOP_ON_INTERRUPT.
+func stopOnInterrupt() {
+	received := make(chan os.Signal, 1)
+	signal.Notify(received, os.Interrupt, syscall.SIGTERM)
+	fmt.Fprintln(os.Stdout, "ready")
+	select {
+	case sig := <-received:
+		fmt.Fprintln(os.Stdout, sig.String())
+		os.Exit(0)
+	case <-time.After(30 * time.Second):
+		os.Exit(2)
+	}
 }

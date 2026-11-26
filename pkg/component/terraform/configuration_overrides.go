@@ -30,11 +30,18 @@ import (
 // localBackendType is the placeholder backend type the provider gives every discovered component.
 const localBackendType = "local"
 
+// stateBackendHint tells the user where a provider-owned unit's backend is defined.
+const stateBackendHint = "Define the backend in the unit's `remote_state` block; the unit's state identity is shared with dependency reads and saved plans."
+
 // checkStackOverrides rejects stack configuration that tries to change a provider-owned setting.
 func checkStackOverrides(info *schema.ConfigAndStacksInfo) error {
+	// Stack compilation records a component-level override it rejected, while it can still tell
+	// component layers from stack-global defaults, so that only this component's commands fail.
+	if setting := schema.RejectedConfigurationOverride(info.ComponentSettingsSection); setting != "" {
+		return overrideError(info, setting, "the state backend", stateBackendHint)
+	}
 	if setting, overridden := backendOverride(info); overridden {
-		return overrideError(info, setting, "the state backend",
-			"Define the backend in the unit's `remote_state` block (or its `generate \"backend\"` block); the unit's state identity is shared with dependency reads and saved plans.")
+		return overrideError(info, setting, "the state backend", stateBackendHint)
 	}
 	if component, _ := info.ComponentMetadataSection["component"].(string); component != "" {
 		return overrideError(info, "metadata.component: "+component, "the Terraform module",

@@ -48,17 +48,39 @@ func mergeConfigurationStacks(config *schema.AtmosConfiguration, stacks map[stri
 	return nil
 }
 
-// checkConfigurationBackendOverrides passes the component's own backend layers to the
+// markConfigurationBackendOverrides passes the component's own backend layers to the
 // configuration package before normalization discards their origin. Global backends remain
-// allowed; the provider replaces them during preparation.
-func checkConfigurationBackendOverrides(opts *ComponentProcessorOptions, result *ComponentProcessorResult, settings map[string]any) error {
-	defer perf.Track(nil, "exec.checkConfigurationBackendOverrides")()
+// allowed; the provider replaces them during preparation. A rejected override is recorded on the
+// component's settings rather than failing the stack, so only the commands that target the
+// component fail and every other component keeps working.
+func markConfigurationBackendOverrides(result *ComponentProcessorResult, settings map[string]any) {
+	defer perf.Track(nil, "exec.markConfigurationBackendOverrides")()
 
-	return configuration.CheckBackendOverrides(
-		opts.Component, opts.StackName, settings,
+	configuration.MarkBackendOverrides(
+		settings,
 		configuration.BackendLayer{Type: result.BaseComponentBackendType, Settings: result.BaseComponentBackendSection},
 		configuration.BackendLayer{Type: result.ComponentBackendType, Settings: result.ComponentBackendSection},
 	)
+}
+
+// backendLayers are the component-level backend layers that backend normalization merges.
+type backendLayers struct {
+	baseType, componentType       string
+	baseSection, componentSection map[string]any
+}
+
+// componentBackendLayers returns the component-level backend layers to normalize. For a component whose
+// override was rejected (see markConfigurationBackendOverrides), they are dropped: the override never
+// applies, and normalizing it, for example a backend_type without its options, could fail the whole stack
+// instead of only the commands that target the component.
+func componentBackendLayers(result *ComponentProcessorResult, settings map[string]any) backendLayers {
+	if schema.RejectedConfigurationOverride(settings) != "" {
+		return backendLayers{}
+	}
+	return backendLayers{
+		baseType: result.BaseComponentBackendType, baseSection: result.BaseComponentBackendSection,
+		componentType: result.ComponentBackendType, componentSection: result.ComponentBackendSection,
+	}
 }
 
 // validateDiscoveredManifests adapts the configuration package's manifest validation

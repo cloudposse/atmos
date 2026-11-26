@@ -8,6 +8,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -62,6 +63,13 @@ func (s *Operations) ExecuteGenerateBackend(opts *GenerateBackendOptions, atmosC
 	info, err := s.host.ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, nil)
 	if err != nil {
 		return err
+	}
+
+	// A configuration provider owns the backend of its units, as plan and apply do: the provider writes
+	// the unit's own backend file when the unit runs, so an Atmos backend.tf.json would be a second one.
+	if schema.ConfigurationOwned(info.ComponentSettingsSection) {
+		ui.Warningf("Skipped backend generation for component `%s` in stack `%s`: its backend is owned by the configuration provider, which writes it when the component runs", opts.Component, opts.Stack)
+		return nil
 	}
 
 	// Ensure component exists, provisioning via JIT if needed.

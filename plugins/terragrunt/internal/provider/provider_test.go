@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -322,16 +323,48 @@ func TestIAMResponseOmitsWhatIsNotSet(t *testing.T) {
 	require.Equal(t, uint32(1<<32-1), huge.DurationSeconds)
 }
 
+func TestCatalogSettingsInComponentRequest(t *testing.T) {
+	const source = "github.com/example/catalog?ref=stable"
+	const other = "github.com/example/other?ref=v1"
+	const pin = "abcdef0123456789abcdef0123456789abcdef01"
+	const otherPin = "1234567890abcdef1234567890abcdef12345678"
+	request := componentRequest(t)
+	provider := New(nil)
+	entry := map[string]string{"source": source, "commit": strings.ToUpper(pin)}
+	request.ProviderConfiguration = encodedOption(t, map[string]any{
+		"catalogs": []map[string]string{entry, {"source": other, "commit": otherPin}},
+	})
+	result, err := provider.componentRequest(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{source: pin, other: otherPin}, result.Catalogs)
+
+	for name, catalogs := range map[string]any{
+		"entry outside list": entry,
+		"missing source":     []any{map[string]string{"commit": pin}},
+		"abbreviated commit": []any{map[string]string{"source": source, "commit": pin[:7]}},
+		"duplicate source":   []any{entry, map[string]string{"source": source, "commit": otherPin}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			request.ProviderConfiguration = encodedOption(t, map[string]any{"catalogs": catalogs})
+			_, err := provider.componentRequest(t.Context(), request)
+			var problem *model.Problem
+			require.ErrorAs(t, err, &problem)
+			require.Equal(t, model.CodeUnsupportedSetting, problem.Code)
+			require.Equal(t, "components.terraform.terragrunt.catalogs", problem.Key)
+		})
+	}
+}
+
 func TestFeatureSettingsAndEnvironmentMerge(t *testing.T) {
 	config, err := encode(map[string]any{"enabled": true, "features": map[string]any{"flag": true, "size": 3, "tier": "gold", "env": "config"}})
 	require.NoError(t, err)
 	req := model.Request{Environment: map[string]string{"TG_FEATURE": "env=environment, extra=1"}}
-	require.NoError(t, withFeatures(&req, config))
+	require.NoError(t, withProviderSettings(&req, config))
 	require.Equal(t, map[string]string{"flag": "true", "size": "3", "tier": "gold", "env": "environment", "extra": "1"}, req.Features,
 		"TG_FEATURE replaces the configured value per name")
 
 	none := model.Request{}
-	require.NoError(t, withFeatures(&none, nil))
+	require.NoError(t, withProviderSettings(&none, nil))
 	require.Nil(t, none.Features)
 
 	for name, bad := range map[string]any{
@@ -343,14 +376,14 @@ func TestFeatureSettingsAndEnvironmentMerge(t *testing.T) {
 			value, err := encode(bad)
 			require.NoError(t, err)
 			var request model.Request
-			require.Error(t, withFeatures(&request, value))
+			require.Error(t, withProviderSettings(&request, value))
 		})
 	}
 	unknown, err := encode(map[string]any{"features": map[string]any{}, "typo": 1})
 	require.NoError(t, err)
 	require.Error(t, settings(unknown))
 	invalid := model.Request{Environment: map[string]string{"TG_FEATURE": "novalue"}}
-	require.Error(t, withFeatures(&invalid, nil))
+	require.Error(t, withProviderSettings(&invalid, nil))
 }
 
 func TestOperationCommandNamesTheTerragruntAction(t *testing.T) {
@@ -572,7 +605,7 @@ func TestFeatureOptionsRankAboveEnvironmentAndConfiguration(t *testing.T) {
 	config, err := encode(map[string]any{"enabled": true, "features": map[string]any{"tier": "config", "size": 3}})
 	require.NoError(t, err)
 	req := model.Request{Environment: map[string]string{"TG_FEATURE": "tier=environment,wide=true"}, Features: map[string]string{"tier": "option"}}
-	require.NoError(t, withFeatures(&req, config))
+	require.NoError(t, withProviderSettings(&req, config))
 	require.Equal(t, map[string]string{"tier": "option", "size": "3", "wide": "true"}, req.Features)
 }
 

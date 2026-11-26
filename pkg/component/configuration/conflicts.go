@@ -119,17 +119,18 @@ type BackendLayer struct {
 	Settings map[string]any
 }
 
-// CheckBackendOverrides rejects a component-level backend for a component a configuration provider
-// owns: the unit's own backend is its state identity. A component without a provider is unaffected.
-func CheckBackendOverrides(component, stack string, settings map[string]any, layers ...BackendLayer) error {
-	defer perf.Track(nil, "configuration.CheckBackendOverrides")()
+// RejectedBackendOverride returns the component-level backend setting that a component a configuration
+// provider owns may not set, or an empty string: the unit's own backend is its state identity. A
+// component without a provider is unaffected.
+func RejectedBackendOverride(settings map[string]any, layers ...BackendLayer) string {
+	defer perf.Track(nil, "configuration.RejectedBackendOverride")()
 
 	// Only a provider owns the backend; the user's own `settings.configuration` data does not.
 	if !schema.ConfigurationOwned(settings) {
-		return nil
+		return ""
 	}
+	setting := ""
 	for _, layer := range layers {
-		setting := ""
 		if layer.Type != "" && layer.Type != "local" {
 			setting = "backend_type"
 		}
@@ -137,11 +138,44 @@ func CheckBackendOverrides(component, stack string, settings map[string]any, lay
 			setting = "backend.local"
 		}
 		if setting != "" {
-			return errUtils.Build(fmt.Errorf("%w: the state backend of component %q in stack %q is owned by the configuration provider, so `%s` cannot be set", errUtils.ErrConfigurationOverrideUnsupported, component, stack, setting)).
-				WithContext("component", component).
-				WithContext("stack", stack).
-				WithHint("Define the backend in the unit's remote_state block; component backend overrides cannot change the unit's state identity.").Err()
+			return setting
 		}
 	}
-	return nil
+	return ""
+}
+
+// MarkBackendOverrides records on a component's merged settings the backend setting it may not
+// override (see RejectedBackendOverride). The component still compiles, so the rest of the project
+// keeps working, and the commands that target it fail with the rejection. A stale or user-written
+// marker is removed. The configuration map is copied before it changes, because merged settings can
+// share it with a cached provider result.
+func MarkBackendOverrides(settings map[string]any, layers ...BackendLayer) {
+	defer perf.Track(nil, "configuration.MarkBackendOverrides")()
+
+	configuration, ok := settings["configuration"].(map[string]any)
+	if !ok {
+		return
+	}
+	setting := RejectedBackendOverride(settings, layers...)
+	if _, marked := configuration[schema.ConfigurationRejectedOverrideKey]; setting == "" && !marked {
+		return
+	}
+	updated := maps.Clone(configuration)
+	if setting == "" {
+		delete(updated, schema.ConfigurationRejectedOverrideKey)
+	} else {
+		updated[schema.ConfigurationRejectedOverrideKey] = setting
+	}
+	settings["configuration"] = updated
+}
+
+// BackendOverrideError describes a component-level backend setting that a component a configuration
+// provider owns may not set. Commands that target the component return it.
+func BackendOverrideError(component, stack, setting string) error {
+	defer perf.Track(nil, "configuration.BackendOverrideError")()
+
+	return errUtils.Build(fmt.Errorf("%w: the state backend of component %q in stack %q is owned by the configuration provider, so `%s` cannot be set", errUtils.ErrConfigurationOverrideUnsupported, component, stack, setting)).
+		WithContext("component", component).
+		WithContext("stack", stack).
+		WithHint("Define the backend in the unit's remote_state block; component backend overrides cannot change the unit's state identity.").Err()
 }

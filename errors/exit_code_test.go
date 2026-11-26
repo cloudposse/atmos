@@ -170,3 +170,23 @@ func TestExitCodeSIGINT_UserAbort(t *testing.T) {
 	err := WithExitCode(ErrUserAborted, ExitCodeSIGINT)
 	assert.Equal(t, ExitCodeSIGINT, GetExitCode(err), "User abort should use SIGINT exit code")
 }
+
+func TestDetailedPlanChangesMarker(t *testing.T) {
+	assert.NoError(t, AsDetailedPlanChanges(nil))
+	assert.False(t, IsDetailedPlanChanges(nil))
+
+	original := ExitCodeError{Code: 2}
+	marked := AsDetailedPlanChanges(original)
+	assert.True(t, IsDetailedPlanChanges(marked))
+	assert.Equal(t, original.Error(), marked.Error(), "the message is unchanged")
+	assert.ErrorIs(t, marked, original, "the chain is unchanged")
+	assert.Equal(t, 2, GetExitCode(marked))
+
+	// The marker survives wrapping and joining, so callers that must reject joined failures check them separately.
+	assert.True(t, IsDetailedPlanChanges(errors.Wrap(marked, "plan")))
+	assert.True(t, IsDetailedPlanChanges(errors.Join(marked, ErrPolicyDenied)))
+
+	// Exit 2 alone is not the plan's status.
+	assert.False(t, IsDetailedPlanChanges(original))
+	assert.False(t, IsDetailedPlanChanges(errors.Wrap(original, "authentication failed")))
+}

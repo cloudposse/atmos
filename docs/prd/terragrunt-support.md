@@ -100,6 +100,15 @@ Discovery defaults to denying commands, network, secret decryption, writes, and 
 
 Native plugins are trusted code. Broker grants and evaluator controls are not an OS sandbox. Test actual effect interception through nested includes and stack expansion.
 
+### Remote Git catalogs for explicit stacks
+
+A live repository may declare a `unit.source` or `stack.source` in another Git repository. Resolve that definition before inventory, backend inspection, and preparation. Its `terraform.source` independently selects the module that the Atmos provisioner installs. Keep stack values, autoincludes, dependency addresses, and the generated unit's paths intact.
+
+- Authorize repository sources and immutable commit pins in `components.terraform.terragrunt.catalogs`. Keep the original Terragrunt HCL usable. A cold lookup may fetch that specific Git snapshot. A warm lookup must support offline generation with the same snapshot. Keep HCL command execution, network calls, decryption, hooks, and state reads under their existing discovery policy.
+- Use the pinned Terragrunt Go module's Git getter and stack generator through the bridge. Publish complete snapshots atomically. Keep catalog cache paths out of project inventory and affected-file watches.
+- Resolve catalog-relative `update_source_with_cas` references against the catalog commit, including nested stack or unit definitions and Terraform modules. Preserve access to sibling modules. Report a failed source or revision as a stack diagnostic.
+- Verify cold acquisition, offline reuse, nested expansion, preparation, and cancellation. The public Gruntwork live-stacks example supplies a compatibility case with a table, an IAM role, and a Lambda function in each environment.
+
 ## Atmos execution contracts
 
 Treat environment, identity, toolchain, and workdir behavior as release gates.

@@ -174,6 +174,26 @@ func TestDecodeInputsRegistersSensitivePathsForMasking(t *testing.T) {
 	assert.Equal(t, "visible-value", atmosio.MaskString("visible-value"), "an input that is not sensitive is left alone")
 }
 
+// A whole sensitive object registers its distinctive values only. Its keys and trivial values, such as
+// "app" or 3, would otherwise mask "known after apply" and digits in timings.
+func TestDecodeInputsSensitiveObjectDoesNotMaskKeysOrTrivialValues(t *testing.T) {
+	t.Cleanup(atmosio.Reset)
+	atmosio.Reset()
+	require.NoError(t, atmosio.Initialize())
+	value := cty.ObjectVal(map[string]cty.Value{
+		"object":   cty.ObjectVal(map[string]cty.Value{"name": cty.StringVal("app"), "count": cty.NumberIntVal(3)}),
+		"password": cty.StringVal("object-secret-value-77c2"),
+	})
+	encoded := objectWireValue(t, value)
+	encoded.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+
+	_, err := DecodeInputs(encoded)
+
+	require.NoError(t, err)
+	assert.Equal(t, "known after apply in 3s: object name count password", atmosio.MaskString("known after apply in 3s: object name count password"))
+	assert.Equal(t, "<MASKED>", atmosio.MaskString("object-secret-value-77c2"))
+}
+
 func TestDecodeInputsNamesTheUnknownInput(t *testing.T) {
 	value := cty.ObjectVal(map[string]cty.Value{
 		"fine": cty.StringVal("ok"),

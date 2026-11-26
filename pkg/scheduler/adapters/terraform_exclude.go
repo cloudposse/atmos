@@ -13,7 +13,8 @@ import (
 )
 
 // terraformExcludeSetting is where a configuration provider records the exclude block of a unit:
-// `settings.terragrunt.exclude` with `actions` and `exclude_dependencies`.
+// `settings.terragrunt.exclude` with `actions` and `exclude_dependencies`. It is read only from
+// components the Terragrunt provider owns.
 const (
 	terraformExcludeProvider = "terragrunt"
 	terraformExcludeKey      = "exclude"
@@ -72,15 +73,31 @@ func excludeDependencies(graph *dependency.Graph, node *dependency.Node, exclude
 	}
 }
 
-// terraformExcludeBlock returns the provider's exclude section of a node, or nil.
+// terraformExcludeBlock returns the provider's exclude section of a node, or nil. Only a unit the
+// Terragrunt configuration provider owns has one: the stack processor marks ownership in
+// `settings.configuration`, and the provider records the block after evaluating its `if`. On any other
+// component `settings.terragrunt` is free-form user data and never excludes it from a bulk run.
 func terraformExcludeBlock(node *dependency.Node) map[string]any {
 	if node == nil {
 		return nil
 	}
 	settings, _ := node.Metadata["settings"].(map[string]any)
+	if !terragruntOwned(settings) {
+		return nil
+	}
 	provider, _ := settings[terraformExcludeProvider].(map[string]any)
 	block, _ := provider[terraformExcludeKey].(map[string]any)
 	return block
+}
+
+// terragruntOwned reports whether the Terragrunt configuration provider supplies a component.
+func terragruntOwned(settings map[string]any) bool {
+	if !schema.ConfigurationOwned(settings) {
+		return false
+	}
+	configuration, _ := settings["configuration"].(map[string]any)
+	provider, _ := configuration["provider"].(string)
+	return provider == terraformExcludeProvider
 }
 
 func stringList(value any) []string {

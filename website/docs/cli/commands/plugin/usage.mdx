@@ -295,9 +295,10 @@ plugins:
 
 ## Automatic installation
 
-Declared project plugins install automatically, but only when a command needs one. Commands such as
-`describe`, `list`, or `validate` install nothing unless the configuration references an `auth`
-provider or identity kind that Atmos does not provide itself. The lock records the exports of every
+Atmos installs a declared project plugin when a command needs one of its exports. For example,
+when Terragrunt discovery is enabled, `atmos list instances` needs the Terragrunt configuration
+provider and installs the plugin on first use. Commands that reference a plugin-provided auth
+provider or identity kind can also trigger installation. The lock records the exports of every
 package, so Atmos chooses the package that exports the referenced kind without a network request.
 Kinds that no locked package covers fall back to the declared packages that have no lock entry yet.
 

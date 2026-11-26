@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"errors"
 	"math/big"
 	"path/filepath"
 	"slices"
@@ -42,8 +41,11 @@ func sensitiveInputs(fsys afero.Fs, files []string, inputs map[string]any, unit 
 	var found [][]string
 	bodies := make(map[string]*hclsyntax.Body)
 	for _, file := range files {
+		if moduleSourceFile(file, unit) {
+			continue
+		}
 		content, err := afero.ReadFile(fsys, file)
-		if errors.Is(err, errNotEvaluated) {
+		if notEvaluated(err, file, unit) {
 			// The contents Terragrunt evaluated are unknown, so any input may be sensitive.
 			found = append(found, nil)
 			continue
@@ -72,7 +74,7 @@ func sensitiveInputs(fsys afero.Fs, files []string, inputs map[string]any, unit 
 		if file == filepath.Clean(unit) {
 			evaluated = includes
 		}
-		found = append(found, scanFile(body, file, bodies, evaluated)...)
+		found = append(found, scanFile(body, file, filepath.Clean(unit), bodies, evaluated)...)
 	}
 	return existingPaths(uniquePaths(found), inputs)
 }
@@ -84,12 +86,12 @@ func isJSONConfiguration(file string) bool {
 }
 
 // scanFile finds the sensitive paths declared by one file's inputs attribute.
-func scanFile(body *hclsyntax.Body, file string, bodies map[string]*hclsyntax.Body, includes config.IncludeConfigsMap) [][]string {
+func scanFile(body *hclsyntax.Body, file, unit string, bodies map[string]*hclsyntax.Body, includes config.IncludeConfigsMap) [][]string {
 	attribute := body.Attributes[inputsName]
 	if attribute == nil {
 		return nil
 	}
-	scanner := &sensitivityScanner{locals: localExpressions(body), includes: exposedIncludes(body, file, bodies, includes), file: file, bodies: bodies}
+	scanner := &sensitivityScanner{locals: localExpressions(body), includes: exposedIncludes(body, file, bodies, includes), file: file, unit: unit, bodies: bodies}
 	scanner.walk(attribute.Expr, nil, 0)
 	return scanner.paths
 }
@@ -115,6 +117,8 @@ type sensitivityScanner struct {
 	// file and bodies locate the configuration files that read_terragrunt_config reads.
 	file   string
 	bodies map[string]*hclsyntax.Body
+	// unit is the evaluated unit, if known. An included file evaluates find_in_parent_folders from it.
+	unit string
 }
 
 // exposedInclude is what an exposed include contributes to the include.<alias> references of the file.
@@ -368,7 +372,7 @@ func (s *sensitivityScanner) readsSensitiveConfig(call *hclsyntax.FunctionCallEx
 	if !ok {
 		return true
 	}
-	target, targetFile := readFile(path, parentSearch, s.file, s.bodies)
+	target, targetFile := s.readTarget(path, parentSearch)
 	if target == nil && !parentSearch && len(call.Args) > 1 {
 		// A missing literal file yields the default argument, which the caller scans like any other argument.
 		return false
@@ -376,7 +380,7 @@ func (s *sensitivityScanner) readsSensitiveConfig(call *hclsyntax.FunctionCallEx
 	if target == nil || slices.ContainsFunc(target.Blocks, func(block *hclsyntax.Block) bool { return block.Type == "include" }) {
 		return true
 	}
-	reader := &sensitivityScanner{locals: localExpressions(target), file: targetFile, bodies: s.bodies}
+	reader := &sensitivityScanner{locals: localExpressions(target), file: targetFile, unit: s.unit, bodies: s.bodies}
 	expressions := make([]hclsyntax.Expression, 0, len(reader.locals)+1)
 	if attribute := target.Attributes[inputsName]; attribute != nil {
 		expressions = append(expressions, attribute.Expr)

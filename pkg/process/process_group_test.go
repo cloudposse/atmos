@@ -122,6 +122,8 @@ func runProcessHelper(mode string) {
 		time.Sleep(childShutdownGrace + time.Second)
 		_, _ = io.WriteString(os.Stdout, "LATE-STDOUT\n")
 		_, _ = io.WriteString(os.Stderr, "LATE-STDERR\n")
+	default:
+		runGracefulHelper(mode, dir)
 	}
 }
 

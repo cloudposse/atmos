@@ -110,7 +110,7 @@ func (e *Executor) prepareConfigurationPhase(
 	if err != nil {
 		return nil, err
 	}
-	if err = e.beginPreparedConfiguration(ctx, atmosConfig, info, prepared); err != nil {
+	if err = e.beginPreparedConfiguration(ctx, atmosConfig, info, prepared, rebuild != nil); err != nil {
 		return nil, err
 	}
 	return &componentExecContext{preparedConfiguration: prepared, tenv: tenv, rebuild: rebuild}, nil
@@ -174,6 +174,7 @@ func (e *Executor) beginPreparedConfiguration(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	prepared *schema.PreparedComponentConfiguration,
+	rebuilding bool,
 ) error {
 	if excludedFromOperation(info, prepared) {
 		skipExcluded(info)
@@ -191,8 +192,13 @@ func (e *Executor) beginPreparedConfiguration(
 		return nil
 	}
 	warnOverlappingRetry(info, prepared)
-	if err := clearStaleSignals(atmosConfig, info); err != nil {
-		return err
+	// A reviewed rebuild re-provisions a working directory that holds only the restored plan, its record
+	// and the lock file, so there are no stale signals, and the directory has no instance owner to
+	// resolve until the rebuild provisions it.
+	if !rebuilding {
+		if err := clearStaleSignals(atmosConfig, info); err != nil {
+			return err
+		}
 	}
 	return e.runReadConfigHooks(ctx, atmosConfig, info, prepared)
 }

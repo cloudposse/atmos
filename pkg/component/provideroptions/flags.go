@@ -247,7 +247,8 @@ func (r *registration) read(cmd *cobra.Command, v *viper.Viper, option *Option) 
 	if !r.explicit(cmd, option, primary) {
 		return nil, false, nil
 	}
-	value, err := convert(option, primary, r.raw(cmd, v, option, primary))
+	raw, source := r.raw(cmd, v, option, primary)
+	value, err := convert(option, source, raw)
 	if err != nil {
 		return nil, false, err
 	}
@@ -274,25 +275,35 @@ func (r *registration) fromCLI(cmd *cobra.Command, option *Option) bool {
 	return false
 }
 
+// valueSource names where a value came from in an error: a flag or an environment variable.
+type valueSource struct {
+	name string
+	env  bool
+}
+
+func flagSource(flag string) valueSource { return valueSource{name: "--" + flag} }
+
+func envSource(variable string) valueSource { return valueSource{name: variable, env: true} }
+
 // convert turns a flag or environment value into the declared type.
-func convert(option *Option, flag string, raw any) (any, error) {
+func convert(option *Option, source valueSource, raw any) (any, error) {
 	switch option.Type {
 	case TypeBool:
 		parsed, err := strconv.ParseBool(strings.TrimSpace(fmt.Sprint(raw)))
 		if err != nil {
-			return nil, invalidValue(option, flag, "expected true or false")
+			return nil, invalidValue(option, source, "expected true or false")
 		}
 		return parsed, nil
 	case TypeInt:
 		parsed, err := strconv.Atoi(strings.TrimSpace(fmt.Sprint(raw)))
 		if err != nil {
-			return nil, invalidValue(option, flag, "expected a whole number")
+			return nil, invalidValue(option, source, "expected a whole number")
 		}
 		return parsed, nil
 	case TypeList:
 		return listValues(raw), nil
 	case TypeMap:
-		return mapValues(option, flag, raw)
+		return mapValues(option, source, raw)
 	}
 	return fmt.Sprint(raw), nil
 }
@@ -325,24 +336,29 @@ func listValues(raw any) []string {
 }
 
 // mapValues parses name=value entries and rejects malformed ones instead of dropping them.
-func mapValues(option *Option, flag string, raw any) (map[string]any, error) {
+func mapValues(option *Option, source valueSource, raw any) (map[string]any, error) {
 	result := make(map[string]any)
 	for _, entry := range listValues(raw) {
 		key, value, found := strings.Cut(entry, "=")
 		if !found || strings.TrimSpace(key) == "" {
-			return nil, invalidValue(option, flag, "each entry must look like name=value")
+			return nil, invalidValue(option, source, "each entry must look like name=value")
 		}
 		result[strings.TrimSpace(key)] = value
 	}
 	return result, nil
 }
 
-// invalidValue never echoes the value, which may be a secret.
-func invalidValue(option *Option, flag, problem string) error {
+// invalidValue never echoes the value, which may be a secret. It names the flag or the environment
+// variable that supplied the value, so a value the user never typed can be found.
+func invalidValue(option *Option, source valueSource, problem string) error {
+	hint := fmt.Sprintf("Check `%s` or the environment variable that supplies it. Run the command with `--help` to see the accepted values.", source.name)
+	if source.env {
+		hint = fmt.Sprintf("Check the `%s` environment variable. Run the command with `--help` to see the accepted values.", source.name)
+	}
 	return errUtils.Build(errUtils.ErrProviderOption).
-		WithExplanationf("The value for `--%s` (option `%s`) is invalid: %s.", flag, option.Name, problem).
+		WithExplanationf("The value for `%s` (option `%s`) is invalid: %s.", source.name, option.Name, problem).
 		WithContext("option", option.Name).
-		WithHintf("Check `--%s` or the environment variable that supplies it. Run the command with `--help` to see the accepted values.", flag).
+		WithHint(hint).
 		Err()
 }
 
@@ -377,17 +393,17 @@ func SplitFlags(set *pflag.FlagSet) (*pflag.FlagSet, []Section) {
 }
 
 // raw returns the value of an alias the user typed, which Viper does not see because only the
-// primary flag is bound, and otherwise the layered value of the primary flag.
-func (r *registration) raw(cmd *cobra.Command, v *viper.Viper, option *Option, primary string) any {
+// primary flag is bound, and otherwise the layered value of the primary flag, with where it came from.
+func (r *registration) raw(cmd *cobra.Command, v *viper.Viper, option *Option, primary string) (any, valueSource) {
 	for _, name := range option.Aliases {
 		flag := lookupFlag(cmd, name)
 		if flag == nil || !flag.Changed {
 			continue
 		}
 		if slice, ok := flag.Value.(pflag.SliceValue); ok {
-			return slice.GetSlice()
+			return slice.GetSlice(), flagSource(name)
 		}
-		return flag.Value.String()
+		return flag.Value.String(), flagSource(name)
 	}
 	if flag := lookupFlag(cmd, primary); flag == nil || !flag.Changed {
 		// Viper treats an empty environment variable as unset and falls through to the next name, so an
@@ -395,11 +411,11 @@ func (r *registration) raw(cmd *cobra.Command, v *viper.Viper, option *Option, p
 		// present in the environment wins, even when empty.
 		for _, name := range option.EnvNames(r.provider.Name) {
 			if value, present := os.LookupEnv(name); present {
-				return value
+				return value, envSource(name)
 			}
 		}
 	}
-	return v.Get(primary)
+	return v.Get(primary), flagSource(primary)
 }
 
 // InvocationValue resolves environment-derived options against the invocation before RPC encoding.
@@ -408,7 +424,7 @@ func InvocationValue(name string, option schema.ComponentProviderOption, environ
 	if !option.FromCLI && option.Type != "" {
 		for _, variable := range option.EnvNames {
 			if raw, found := environment[variable]; found {
-				value, err := convert(&Option{Name: name, Type: option.Type, Sensitive: option.Sensitive}, name, raw)
+				value, err := convert(&Option{Name: name, Type: option.Type, Sensitive: option.Sensitive}, envSource(variable), raw)
 				return value, true, err
 			}
 		}

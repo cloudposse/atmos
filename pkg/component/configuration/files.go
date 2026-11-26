@@ -312,9 +312,10 @@ func writeOwnedFile(root *os.Root, file schema.ComponentConfigurationFile, recor
 	if remove {
 		return "", removeGeneratedFile(root, file.Path)
 	}
-	// Register sensitive bytes even when the file is kept, so a hook that prints it is masked.
+	// Register sensitive bytes even when the file is kept, so a hook that prints it is masked. Its
+	// structural lines, such as closing braces, are not registered on their own.
 	if file.Sensitive {
-		atmosio.RegisterSecretValue(string(file.Content))
+		atmosio.RegisterSensitiveText(string(file.Content))
 	}
 	digest := contentDigest(file.Content)
 	existing, exists := fileDigest(root, file.Path)

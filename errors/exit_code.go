@@ -123,3 +123,38 @@ func AsPrerequisiteError(err error) error {
 	}
 	return &PrerequisiteError{Err: err}
 }
+
+// DetailedPlanChangesError marks exit status 2 that the plan subprocess itself returned with
+// `-detailed-exitcode` in effect, meaning the plan succeeded and found changes. Only the executor
+// that ran `terraform plan` (or `tofu plan`) attaches it. Callers that treat a plan with changes as
+// a successful operation (after-plan hooks, CI status, the bulk scheduler) must check for this marker
+// rather than for exit code 2: an exit 2 from anything else, such as an authentication failure
+// before Terraform ran, init, workspace selection, or a hook, is an ordinary failure. The message,
+// the wrapped chain, and the exit code are unchanged.
+type DetailedPlanChangesError struct {
+	Err error
+}
+
+func (e *DetailedPlanChangesError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *DetailedPlanChangesError) Unwrap() error {
+	return e.Err
+}
+
+// AsDetailedPlanChanges marks err as the plan's own "changes present" status. A nil error stays nil.
+func AsDetailedPlanChanges(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &DetailedPlanChangesError{Err: err}
+}
+
+// IsDetailedPlanChanges reports whether err carries the plan's own "changes present" marker
+// anywhere in its chain. It does not exclude failures joined with the marker; callers that must
+// reject those (for example a policy denial after the plan) check for them separately.
+func IsDetailedPlanChanges(err error) bool {
+	var changes *DetailedPlanChangesError
+	return errors.As(err, &changes)
+}

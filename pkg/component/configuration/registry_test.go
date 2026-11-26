@@ -234,16 +234,45 @@ func TestOwnsComponentReadsTheOwnershipMarker(t *testing.T) {
 func TestBackendOverridesRequireProviderOwnership(t *testing.T) {
 	s3 := BackendLayer{Type: "s3", Settings: map[string]any{"bucket": "other"}}
 	owned := map[string]any{"configuration": map[string]any{"provider": "terragrunt", schema.ConfigurationOwnedKey: true}}
-	require.NoError(t, CheckBackendOverrides("app", "dev", map[string]any{"configuration": map[string]any{}}, s3))
-	require.NoError(t, CheckBackendOverrides("app", "dev", map[string]any{"configuration": map[string]any{"provider": "aws"}}, s3))
-	require.NoError(t, CheckBackendOverrides("app", "dev", map[string]any{}, s3))
-	require.NoError(t, CheckBackendOverrides("app", "dev", owned, BackendLayer{Type: "local"}, BackendLayer{}))
-
-	err := CheckBackendOverrides("app", "dev", owned, BackendLayer{}, s3)
-	require.ErrorIs(t, err, errUtils.ErrConfigurationOverrideUnsupported)
-	require.ErrorContains(t, err, "backend_type")
-	require.ErrorContains(t, err, `component "app" in stack "dev"`)
-
+	require.Empty(t, RejectedBackendOverride(map[string]any{"configuration": map[string]any{}}, s3))
+	require.Empty(t, RejectedBackendOverride(map[string]any{"configuration": map[string]any{"provider": "aws"}}, s3))
+	require.Empty(t, RejectedBackendOverride(map[string]any{}, s3))
+	require.Empty(t, RejectedBackendOverride(owned, BackendLayer{Type: "local"}, BackendLayer{}))
+	require.Equal(t, "backend_type", RejectedBackendOverride(owned, BackendLayer{}, s3))
 	inherited := BackendLayer{Type: "local", Settings: map[string]any{"local": map[string]any{"path": "inherited.tfstate"}}}
-	require.ErrorContains(t, CheckBackendOverrides("app", "dev", owned, inherited), "backend.local")
+	require.Equal(t, "backend.local", RejectedBackendOverride(owned, inherited))
+}
+
+// A rejected override is recorded on the component instead of failing the whole stack, so only the
+// commands that target the component fail. The settings map is copied, and a stale or user-written
+// marker is removed when nothing is rejected.
+func TestMarkBackendOverridesRecordsTheRejectedSetting(t *testing.T) {
+	s3 := BackendLayer{Type: "s3", Settings: map[string]any{"bucket": "other"}}
+	configuration := map[string]any{"provider": "terragrunt", schema.ConfigurationOwnedKey: true}
+	settings := map[string]any{"configuration": configuration}
+
+	MarkBackendOverrides(settings, BackendLayer{}, s3)
+
+	require.Equal(t, "backend_type", schema.RejectedConfigurationOverride(settings))
+	require.NotContains(t, configuration, schema.ConfigurationRejectedOverrideKey, "the shared configuration map is not modified")
+
+	MarkBackendOverrides(settings, BackendLayer{Type: "local"})
+	require.Empty(t, schema.RejectedConfigurationOverride(settings))
+
+	// Nothing rejected and nothing marked leaves the settings exactly as they were.
+	clean := map[string]any{"configuration": configuration}
+	MarkBackendOverrides(clean, BackendLayer{Type: "local"})
+	require.Equal(t, map[string]any{"configuration": configuration}, clean)
+
+	spoofed := map[string]any{"configuration": map[string]any{"notes": "user data", schema.ConfigurationRejectedOverrideKey: "backend_type"}}
+	MarkBackendOverrides(spoofed, s3)
+	require.Empty(t, schema.RejectedConfigurationOverride(spoofed), "a component no provider owns never carries the marker")
+	require.Equal(t, map[string]any{"notes": "user data"}, spoofed["configuration"])
+
+	MarkBackendOverrides(map[string]any{}, s3)
+
+	err := BackendOverrideError("app", "dev", "backend_type")
+	require.ErrorIs(t, err, errUtils.ErrConfigurationOverrideUnsupported)
+	require.ErrorContains(t, err, `component "app" in stack "dev"`)
+	require.ErrorContains(t, err, "backend_type")
 }

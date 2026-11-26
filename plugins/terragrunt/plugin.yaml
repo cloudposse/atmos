@@ -2,7 +2,7 @@ apiVersion: atmos/v1
 kind: AtmosPluginConfig
 metadata:
   name: cloudposse/terragrunt
-  version: 0.1.1
+  version: 0.1.3
   display_name: Terragrunt configuration
   description: Evaluate local Terragrunt stacks and units for native Atmos execution
   author: Cloud Posse

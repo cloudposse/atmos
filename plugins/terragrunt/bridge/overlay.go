@@ -54,7 +54,8 @@ func collectOverlayFiles(memory, fsys afero.Fs, unit, destination string) (map[s
 		if err != nil {
 			return err
 		}
-		if name == ".terragrunt-module-manifest" {
+		// Upstream writes a copy manifest into every directory it copies, so one can appear at any depth.
+		if filepath.Base(name) == ".terragrunt-module-manifest" {
 			return nil
 		}
 		// The lock file beside the unit is handed to the host as a unit file copy with its own

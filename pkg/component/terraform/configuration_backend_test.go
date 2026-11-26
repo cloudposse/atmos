@@ -249,21 +249,28 @@ func TestRestoreSensitiveContentAcceptsRemovedFiles(t *testing.T) {
 // whether the host writes backend.tf.json, so a project that disabled generation stays disabled.
 func TestPreparedBackendGenerationHonorsTheProjectSetting(t *testing.T) {
 	for _, test := range []struct {
-		name      string
-		project   bool
-		generated bool
-		want      bool
+		name        string
+		project     bool
+		generated   bool
+		backendType string
+		want        bool
 	}{
 		{name: "project disabled, provider does not own the backend", project: false, generated: false, want: false},
 		{name: "project enabled, provider does not own the backend", project: true, generated: false, want: true},
 		{name: "project enabled, provider owns the backend", project: true, generated: true, want: false},
 		{name: "project disabled, provider owns the backend", project: false, generated: true, want: false},
+		// A unit's remote_state without `generate` is still the state identity every reader uses, so the
+		// host writes it even when the project does not generate backends; otherwise Terraform would keep
+		// the state somewhere no reader looks.
+		{name: "project disabled, provider reports a backend it does not generate", project: false, backendType: "local", want: true},
+		{name: "project enabled, provider reports a backend it does not generate", project: true, backendType: "s3", want: true},
+		{name: "project enabled, provider generates the backend it reports", project: true, generated: true, backendType: "local", want: false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			config := &schema.AtmosConfiguration{}
 			config.Components.Terraform.AutoGenerateBackendFile = test.project
 			info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}}
-			prepared := &schema.PreparedComponentConfiguration{BackendGenerated: test.generated}
+			prepared := &schema.PreparedComponentConfiguration{BackendGenerated: test.generated, BackendType: test.backendType}
 
 			applyPreparedConfiguration(config, info, prepared)
 

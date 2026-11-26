@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strings"
 
 	"github.com/google/shlex"
 	"github.com/spf13/cobra"
@@ -20,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tf "github.com/cloudposse/atmos/pkg/terraform"
+	"github.com/cloudposse/atmos/pkg/terraform/planout"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -272,12 +272,13 @@ func validatePlanOutputFlags(command string, args []string) error {
 	}
 	count := 0
 	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "-out" || arg == "--out" {
-			count++
+		parsed, ok := planout.Parse(args[i])
+		if !ok {
+			continue
+		}
+		count++
+		if !parsed.Joined {
 			i++
-		} else if strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=") {
-			count++
 		}
 		if count > 1 {
 			return fmt.Errorf("%w: multiple plan output flags", errUtils.ErrPlanVerificationFailed)
@@ -352,28 +353,15 @@ func planEnvironment(atmosConfig *schema.AtmosConfiguration, info *schema.Config
 
 // containsOutputFlag reports any plan output flag, with or without a value.
 func containsOutputFlag(args []string) bool {
-	return slices.ContainsFunc(args, func(arg string) bool {
-		return arg == "-out" || arg == "--out" || strings.HasPrefix(arg, "-out=") || strings.HasPrefix(arg, "--out=")
-	})
+	return planout.Contains(args)
 }
 
+// plannedOutputPath returns the plan file the first output flag with a value selects, resolved
+// against directory, or "" when the arguments choose none.
 func plannedOutputPath(directory string, args []string) string {
-	for i, arg := range args {
-		path := ""
-		switch {
-		case (arg == "-out" || arg == "--out") && i+1 < len(args):
-			path = args[i+1]
-		case strings.HasPrefix(arg, "-out="):
-			path = strings.TrimPrefix(arg, "-out=")
-		case strings.HasPrefix(arg, "--out="):
-			path = strings.TrimPrefix(arg, "--out=")
-		}
-		if path != "" {
-			if filepath.IsAbs(path) {
-				return path
-			}
-			return filepath.Join(directory, path)
-		}
+	path := planout.Value(args)
+	if path == "" || filepath.IsAbs(path) {
+		return path
 	}
-	return ""
+	return filepath.Join(directory, path)
 }

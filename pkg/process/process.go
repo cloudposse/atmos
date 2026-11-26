@@ -33,6 +33,9 @@ type TaskSpec struct {
 	// Steps that report their own result, such as shell and atmos steps, set it so running them
 	// through the runner does not add a "Total for this invocation" line they never printed.
 	SkipMetrics bool
+	// Interrupt selects what happens to the running child when Atmos receives SIGINT or SIGTERM.
+	// The zero value keeps the default: the child's process tree is terminated.
+	Interrupt InterruptPolicy
 }
 
 // Streams contains the standard streams passed to a subprocess.
@@ -95,23 +98,17 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	}
 
 	command, err := resolveCommand(&spec)
+	if err == nil {
+		err = gracefulStartError(ctx, spec.Interrupt)
+	}
 	if err != nil {
 		result.Err = fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessStartFailed, err)
 		result.ExitCode = -1
 		return result
 	}
-	executionCtx, cancel := context.WithCancel(ctx)
+	executionCtx, cancel := executionContext(ctx, spec.Interrupt)
 	defer cancel()
-	cmd := exec.CommandContext(executionCtx, command, spec.Args...)
-	cmd.Args[0] = spec.Command
-	applyWindowsCmdExeQuoting(cmd, spec.Command, spec.Args)
-	cmd.Dir = spec.Dir
-	if spec.Env != nil {
-		cmd.Env = append([]string{}, spec.Env...)
-	}
-	cmd.Stdin = spec.Streams.Stdin
-	cmd.Stdout = writerOrDiscard(spec.Streams.Stdout)
-	cmd.Stderr = writerOrDiscard(spec.Streams.Stderr)
+	cmd := buildCommand(executionCtx, command, &spec)
 
 	// Run the child in its own process group (unless it needs the terminal) so
 	// cancellation and Atmos being signalled terminate its whole process tree.
@@ -125,11 +122,29 @@ func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
 	result.Started = true
 	result.StartedAt = time.Now()
 	group.started(cancel)
+	leaveGracefulStop := group.joinGracefulStop(spec.Command, spec.Interrupt)
 
 	err = group.tolerateWaitDelay(ctx, cmd.Wait())
+	leaveGracefulStop()
 	group.finished()
 	recordWaitOutcome(ctx, cmd, &result, err, !spec.SkipMetrics)
 	return result
+}
+
+// buildCommand prepares the exec.Cmd for spec under the execution context.
+func buildCommand(ctx context.Context, command string, spec *TaskSpec) *exec.Cmd {
+	//nolint:gosec // The runner executes exactly the command its caller configured.
+	cmd := exec.CommandContext(ctx, command, spec.Args...)
+	cmd.Args[0] = spec.Command
+	applyWindowsCmdExeQuoting(cmd, spec.Command, spec.Args)
+	cmd.Dir = spec.Dir
+	if spec.Env != nil {
+		cmd.Env = append([]string{}, spec.Env...)
+	}
+	cmd.Stdin = spec.Streams.Stdin
+	cmd.Stdout = writerOrDiscard(spec.Streams.Stdout)
+	cmd.Stderr = writerOrDiscard(spec.Streams.Stderr)
+	return cmd
 }
 
 // recordWaitOutcome fills result from the finished command and its Wait error. The command's

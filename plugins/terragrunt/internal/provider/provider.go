@@ -133,9 +133,9 @@ func settings(value *pluginv1.ComponentValue) error {
 	}
 	for _, key := range slices.Sorted(maps.Keys(config)) {
 		switch key {
-		case "enabled", "provider", "mode", "discovery", "features":
+		case "enabled", "provider", "mode", "discovery", "features", "catalogs":
 		default:
-			return settingProblem(key, fmt.Sprintf("Unknown setting `components.terraform.terragrunt.%s`", key), "Valid keys are `enabled`, `provider`, `mode`, `discovery`, and `features`. Check the spelling.")
+			return settingProblem(key, fmt.Sprintf("Unknown setting `components.terraform.terragrunt.%s`", key), "Valid keys are `enabled`, `provider`, `mode`, `discovery`, `features`, and `catalogs`. Check the spelling.")
 		}
 	}
 	if mode, _ := config["mode"].(string); mode != "" && mode != ModeNative && mode != ModeExecutable {

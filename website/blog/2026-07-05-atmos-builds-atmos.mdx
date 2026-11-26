@@ -4,6 +4,8 @@ title: "Atmos Now Builds Atmos"
 date: 2026-07-05T12:00:00.000Z
 authors: [osterman]
 tags: [dx, core]
+cast: "/casts/examples/custom-commands/hello-greet.cast"
+castTitle: "Run the hello and greet custom commands"
 ---
 
 Atmos now builds itself through a first-class Atmos command:
@@ -15,6 +17,8 @@ atmos build --target linux
 We replaced the old Make-based build and CI entrypoints with Atmos custom commands to improve the developer experience and dogfood our own workflow engine. Build and test workflows now expose the flags developers actually care about, such as the target platform, while Atmos owns the shell details, cross-compilation wiring, output paths, and CI glue behind the command.
 
 <!--truncate-->
+
+import CastEmbed from '@site/src/components/CastEmbed'
 
 import TryExample from '@site/src/components/TryExample';
 
@@ -51,6 +55,8 @@ This is dogfooding in the useful sense: Atmos exercises its own custom command e
 It also removes a layer. CI now calls grouped Atmos commands such as `atmos build deps`, `atmos build --target linux`, and `atmos test acceptance --cover`. The screengrab workflow calls `atmos screengrabs all`. The install script has its own Linux, macOS, and Windows smoke test, so the installer path gets exercised directly too.
 
 ## Try the Pattern
+
+<CastEmbed src="/casts/examples/custom-commands/hello-greet.cast" title="Run the hello and greet custom commands" chrome controls scrubber />
 
 If you are maintaining a repo with an aging Makefile, `.atmos.d/` is a good place to split the command surface by concern. Keep project configuration in `atmos.yaml`; keep operational commands in grouped files such as `.atmos.d/build.yaml`, `.atmos.d/test.yaml`, and `.atmos.d/lint.yaml`.
 

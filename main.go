@@ -30,6 +30,12 @@ func main() {
 			if !shouldExitOnSignal(sig) {
 				continue
 			}
+			// Terraform saves state and releases its lock when it stops on its own. The first
+			// signal is forwarded to it once and Atmos waits; a second signal forces the exit.
+			if names, waiting := signals.BeginGracefulStop(sig); waiting {
+				ui.Warning(signals.GracefulStopNotice(sig, names))
+				continue
+			}
 			signals.RequestExit(sig)
 			signals.WaitForCleanup()
 			// Run registered exit cleanups (e.g. restore the terminal from raw

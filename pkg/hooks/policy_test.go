@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -227,9 +228,13 @@ func TestPolicyHookSkipControls(t *testing.T) {
 }
 
 func TestPolicyPlanDetailedExitCode(t *testing.T) {
-	run := &hookRunContext{event: AfterTerraformPlan, outcome: Outcome{Status: RunFailure, ExitCode: 2}}
+	changes := errUtils.AsDetailedPlanChanges(errUtils.ExitCodeError{Code: 2})
+	run := &hookRunContext{event: AfterTerraformPlan, outcome: Outcome{Status: RunFailure, ExitCode: 2, Err: changes}}
 	require.Equal(t, RunSuccess, policyOperationStatus(run))
-	run.outcome.Err = errors.Join(errUtils.ErrPolicyRequirements, errUtils.ErrPolicyPlan)
+	run.outcome.Err = errors.Join(changes, errUtils.ErrPolicyRequirements, errUtils.ErrPolicyPlan)
+	require.Equal(t, RunFailure, policyOperationStatus(run))
+	// An exit 2 the plan subprocess did not produce (an authentication failure) stays a failure.
+	run.outcome.Err = fmt.Errorf("authentication failed: %w", errUtils.ExitCodeError{Code: 2})
 	require.Equal(t, RunFailure, policyOperationStatus(run))
 	run.outcome.Err = nil
 	run.event = AfterTerraformApply

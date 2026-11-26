@@ -3,6 +3,8 @@ slug: artifacts
 title: "Publish, Discover, and Restore Versioned Artifacts from One Repository Config"
 authors: [osterman]
 tags: [feature, experimental]
+cast: "/casts/screengrabs/atmos-artifacts--help.cast"
+castTitle: "atmos artifacts command help"
 ---
 
 Every team ends up with the same pile of shared assets: component source trees, scaffolds, backups, configuration, container images. Each one tends to grow its own way to publish and fetch it. One lives in an OCI registry, another in an S3 bucket, a third in a directory somebody copies around, and none of them tell you in the CI log what was actually published. Moving a workflow from one storage backend to another means rewriting the workflow.
@@ -10,6 +12,10 @@ Every team ends up with the same pile of shared assets: component source trees, 
 Atmos now has a single artifact model for all of it. You configure the destinations once, publish many named, versioned artifacts into them, and switch backends by changing the repository name rather than the workflow.
 
 <!--truncate-->
+
+import CastEmbed from '@site/src/components/CastEmbed'
+
+<CastEmbed src="/casts/screengrabs/atmos-artifacts--help.cast" title="atmos artifacts command help" chrome controls scrubber />
 
 ## The Problem
 

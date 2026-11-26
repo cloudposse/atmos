@@ -54,6 +54,7 @@ func (h *terragruntHost) Execute(_ context.Context, command *terragruntexec.Comm
 
 	opts := append([]component.ExecutionOption{}, h.opts...)
 	opts = append(opts, component.WithEnvironment(h.info.SanitizedEnv))
+	opts = gracefulInterruptOptions(opts)
 	return h.executor.services.ExecuteShellCommand(*h.atmosConfig, command.Binary, command.Args, command.WorkingDir, command.Env, command.DryRun, h.info.RedirectStdErr, opts...)
 }
 
@@ -96,6 +97,8 @@ func (e *Executor) executeTerragruntUnit(ctx context.Context, atmosConfig *schem
 	var stdout, stderr bytes.Buffer
 	hostOpts := append(slices.Clone(opts), component.WithMetadataOutputCapture(&stdout, &stderr))
 	err = terragruntexec.Run(ctx, &terragruntHost{executor: e, atmosConfig: atmosConfig, info: info, opts: hostOpts, lookupErr: lookupErr}, request)
+	// Exit 2 of `terragrunt run -- plan -detailed-exitcode` is the plan's own "changes present" status.
+	err = successfulPlanResult(info.SubCommand, request.Arguments, request.Environment, err, opts...)
 	info.ExecMetadataRawOutput = combineExecMetadataOutput(&stdout, &stderr)
 	info.ExecMetadataRawExitCode = resolveExitCode(err)
 	if !info.DryRun {

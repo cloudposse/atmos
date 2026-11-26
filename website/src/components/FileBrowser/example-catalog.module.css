@@ -342,14 +342,33 @@
   align-items: center;
   gap: 8px;
 }
-.filePreview pre {
+.filePreview ul {
+  position: relative;
   margin: 12px 0;
   padding: 0;
-  color: inherit;
+  list-style: none;
   opacity: 0.7;
-  font: inherit;
   line-height: 1.6;
-  background: transparent;
+}
+.filePreview ul::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0.5lh 0.5ch;
+  border-left: 1px solid currentColor;
+}
+.filePreview li {
+  position: relative;
+  margin: 0;
+  padding-left: 3ch;
+  white-space: pre;
+}
+.filePreview li::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0.5ch;
+  width: 1.5ch;
+  border-top: 1px solid currentColor;
 }
 .filePreview > span {
   display: flex;

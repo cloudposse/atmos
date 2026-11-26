@@ -2,6 +2,8 @@ package ui
 
 import (
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/terraform/planout"
 )
 
 // hasJSONFlag checks if the -json flag is present in arguments.
@@ -78,17 +80,9 @@ func buildArgsWithJSON(args []string) []string {
 	return result
 }
 
-// extractOutFlag checks if -out flag is present and returns its value.
+// extractOutFlag returns the plan file a user output flag (-out, -out=, --out, --out=) selects, or "".
 func extractOutFlag(args []string) string {
-	for i, arg := range args {
-		if arg == "-out" && i+1 < len(args) {
-			return args[i+1]
-		}
-		if strings.HasPrefix(arg, "-out=") {
-			return strings.TrimPrefix(arg, "-out=")
-		}
-	}
-	return ""
+	return planout.Value(args)
 }
 
 func hasFlag(args []string, flag string) bool {

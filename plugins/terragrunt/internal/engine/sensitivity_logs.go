@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -280,8 +281,11 @@ func isLiteralTemplate(template *hclsyntax.TemplateExpr) bool {
 // about it.
 func unredactedSensitivity(fsys afero.Fs, files []string, unit string, resolved bool) bool {
 	for _, file := range files {
+		if moduleSourceFile(file, unit) {
+			continue
+		}
 		if _, err := fsys.Stat(file); err != nil {
-			if errors.Is(err, errNotEvaluated) {
+			if notEvaluated(err, file, unit) {
 				// The evaluated contents are unknown, so the file may call `sensitive`.
 				return true
 			}
@@ -546,6 +550,8 @@ type evaluatedFS struct {
 	afero.Fs
 	mu    sync.Mutex
 	files map[string]*evaluatedFile
+	// opened records every regular file the evaluation opened for reading, captured or not.
+	opened map[string]bool
 }
 
 type evaluatedFile struct {
@@ -555,7 +561,7 @@ type evaluatedFile struct {
 }
 
 func newEvaluatedFS(fsys afero.Fs) *evaluatedFS {
-	return &evaluatedFS{Fs: fsys, files: map[string]*evaluatedFile{}}
+	return &evaluatedFS{Fs: fsys, files: map[string]*evaluatedFile{}, opened: map[string]bool{}}
 }
 
 func (f *evaluatedFS) Open(name string) (afero.File, error) {
@@ -579,7 +585,11 @@ func (f *evaluatedFS) record(file afero.File, err error, name string) (afero.Fil
 	if info, statErr := file.Stat(); statErr != nil || info.IsDir() {
 		return file, nil
 	}
-	return &recordingFile{File: file, owner: f, path: filepath.Clean(name), sequential: true}, nil
+	path := filepath.Clean(name)
+	f.mu.Lock()
+	f.opened[path] = true
+	f.mu.Unlock()
+	return &recordingFile{File: file, owner: f, path: path, sequential: true}, nil
 }
 
 func (f *evaluatedFS) capture(path string, content []byte) {
@@ -599,7 +609,7 @@ func (f *evaluatedFS) Evaluated() afero.Fs {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	memory := afero.NewMemMapFs()
-	view := &evaluatedView{Fs: afero.NewReadOnlyFs(memory), disk: f.Fs, captured: map[string]bool{}, changed: map[string]bool{}}
+	view := &evaluatedView{Fs: afero.NewReadOnlyFs(memory), disk: f.Fs, captured: map[string]bool{}, changed: map[string]bool{}, opened: maps.Clone(f.opened)}
 	for path, file := range f.files {
 		if file.changed {
 			// Remember it: a file that changed while it was evaluated stays unverifiable even after it is deleted.
@@ -644,13 +654,15 @@ func (r *recordingFile) Seek(offset int64, whence int) (int64, error) {
 }
 
 // evaluatedView serves only the files that were captured. A file that was not captured and does not
-// exist reads as missing, as it did for Terragrunt; one that exists, or that changed while it was
-// evaluated, reads as errNotEvaluated.
+// exist reads as missing, as it did for Terragrunt; one that exists but was never opened reads as
+// errNotRead; one that was opened but not captured, or that changed while it was evaluated, reads as
+// errNotEvaluated.
 type evaluatedView struct {
 	afero.Fs
 	disk     afero.Fs
 	captured map[string]bool
 	changed  map[string]bool
+	opened   map[string]bool
 }
 
 func (v *evaluatedView) Open(name string) (afero.File, error) {
@@ -674,6 +686,11 @@ func (v *evaluatedView) missing(op, name string) error {
 	if _, err := v.disk.Stat(name); err != nil {
 		return &os.PathError{Op: op, Path: name, Err: err}
 	}
+	if !v.opened[filepath.Clean(name)] {
+		// Terragrunt listed the file as read without opening it, as it does for the files of a local
+		// module source, so the evaluation took no configuration from it.
+		return &os.PathError{Op: op, Path: name, Err: errNotRead}
+	}
 	return &os.PathError{Op: op, Path: name, Err: errNotEvaluated}
 }
 
@@ -686,8 +703,9 @@ func (e *unitEvaluator) checkedFS() afero.Fs {
 	return e.environment.FS
 }
 
-// unverifiable reports whether the file's evaluated contents are unavailable.
+// unverifiable reports whether the file's evaluated contents are unavailable. The unit itself is always
+// opened by its evaluation, so callers ask this about the unit, and an unread unit is unverifiable too.
 func unverifiable(fsys afero.Fs, file string) bool {
 	_, err := fsys.Stat(file)
-	return errors.Is(err, errNotEvaluated)
+	return errors.Is(err, errNotEvaluated) || errors.Is(err, errNotRead)
 }

@@ -640,8 +640,8 @@ func TestEvaluatedFSServesTheBytesTerragruntRead(t *testing.T) {
 
 	assert.Equal(t, "inputs = { a = 1 }\n", readThrough(t, view, unit), "the file changed on disk after evaluation")
 	_, err := view.Stat(unread)
-	require.ErrorIs(t, err, errNotEvaluated, "an existing file that was never read cannot be vouched for")
-	assert.True(t, unverifiable(view, unread))
+	require.ErrorIs(t, err, errNotRead, "an existing file that was never opened took no part in the evaluation")
+	assert.True(t, unverifiable(view, unread), "a unit that was never opened cannot be vouched for")
 	_, err = view.Stat("/repo/absent.hcl")
 	require.ErrorIs(t, err, os.ErrNotExist, "a file that does not exist was never evaluated")
 	assert.False(t, unverifiable(view, "/repo/absent.hcl"))
@@ -1200,4 +1200,24 @@ func TestSensitiveInputsResolveNestedReadsFromTheTargetFile(t *testing.T) {
 			assert.Equal(t, test.want, SensitiveInputs(fsys, read, map[string]any{"copy": "s"}))
 		})
 	}
+}
+
+// The unsafe detail of a failure is redacted like the events: a registered value is masked, a withheld
+// call drops the detail, and a sink that collects nothing knows no value and returns the text unchanged.
+func TestLogSinkRedactDetail(t *testing.T) {
+	sink := NewLogSink("debug", "")
+	sink.RedactValue("detail-secret-5d1")
+	redacted, ok := sink.RedactDetail("cause detail-secret-5d1")
+	assert.True(t, ok)
+	assert.Equal(t, "cause <MASKED>", redacted)
+
+	sink.Withhold()
+	redacted, ok = sink.RedactDetail("cause detail-secret-5d1")
+	assert.False(t, ok)
+	assert.Empty(t, redacted)
+
+	off := NewLogSink("warn", "")
+	redacted, ok = off.RedactDetail("cause text")
+	assert.True(t, ok)
+	assert.Equal(t, "cause text", redacted)
 }

@@ -222,9 +222,13 @@ type unitPlacement struct {
 }
 
 func (p *unitPlacement) child(name, source string, files []string) *unitPlacement {
+	folders := slices.Clone(p.folders)
+	if source != "" {
+		folders = append(folders, source)
+	}
 	return &unitPlacement{
 		stack: p.stack, name: filepath.Join(p.name, name), generationRoot: p.generationRoot,
-		files: files, folders: append(slices.Clone(p.folders), source),
+		files: files, folders: folders,
 	}
 }
 
@@ -254,7 +258,9 @@ func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement *uni
 	files := append(slices.Clone(placement.files), resolved.Files...)
 	for _, child := range slices.Sorted(maps.Keys(resolved.StackConfigs)) {
 		source := resolved.StackSources[child]
-		d.templates[source] = true
+		if source != "" {
+			d.templates[source] = true
+		}
 		if logical, err := logicalPath(resolved.StackConfigs[child]); err == nil {
 			d.generated[logical] = true
 		}
@@ -264,7 +270,9 @@ func (d *projectDiscovery) visitStack(resolved *model.Resolution, placement *uni
 	}
 	for _, child := range slices.Sorted(maps.Keys(resolved.UnitConfigs)) {
 		source := resolved.UnitSources[child]
-		d.templates[source] = true
+		if source != "" {
+			d.templates[source] = true
+		}
 		if logical, err := logicalPath(resolved.UnitConfigs[child]); err == nil {
 			d.generated[logical] = true
 		}
@@ -323,7 +331,7 @@ func (e *unitEvaluator) resolveStack(ctx context.Context) (*model.Resolution, er
 	if err != nil {
 		return nil, err
 	}
-	return stackResolution(e.pctx, stack, e.path)
+	return stackResolution(e.pctx, stack, e.path, e.request.Catalogs)
 }
 
 func readStack(ctx context.Context, logger log.Logger, environment *atmosbridge.Venv, pctx *config.ParsingContext, path string) (*config.StackConfig, error) {
@@ -340,11 +348,11 @@ func (e *unitEvaluator) generateStack(ctx context.Context, path string, depth in
 	if depth > maxStackDepth {
 		return fmt.Errorf("%w at %s", errStackDepth, path)
 	}
-	if err := atmosbridge.GenerateStack(ctx, e.logger, e.environment, path, e.request.Tofu); err != nil {
-		return err
-	}
 	stack, err := readStack(ctx, e.logger, e.environment, requestParsingContext(e.request, path), path)
 	if err != nil {
+		return err
+	}
+	if err := e.generateCatalogStack(ctx, path, stack); err != nil {
 		return err
 	}
 	for _, child := range stack.Stacks {
@@ -370,8 +378,15 @@ func instanceIdentity(kind, name, key string, expanded bool) (string, error) {
 	return name + "/" + key, nil
 }
 
-func stackResolution(pctx *config.ParsingContext, stack *config.StackConfig, path string) (*model.Resolution, error) {
+func stackResolution(pctx *config.ParsingContext, stack *config.StackConfig, path string, catalogs map[string]string) (*model.Resolution, error) {
 	dir := filepath.Dir(path)
+	templatePath := func(source string) string {
+		repository, _ := atmosbridge.CatalogRepository(source)
+		if catalogPin(catalogs, repository) != "" {
+			return ""
+		}
+		return localPath(dir, source)
+	}
 	result := &model.Resolution{
 		Path: path, Files: append(pctx.FilesRead.Paths(), path),
 		Units: map[string]string{}, UnitSources: map[string]string{}, UnitConfigs: map[string]string{},
@@ -379,8 +394,8 @@ func stackResolution(pctx *config.ParsingContext, stack *config.StackConfig, pat
 	}
 	for _, unit := range stack.Units {
 		result.OwnedPaths = append(result.OwnedPaths, filepath.Join(unit.GeneratedPath(dir), unitFile))
-		if unit.Source != "" {
-			result.OwnedSources = append(result.OwnedSources, localPath(dir, unit.Source))
+		if template := templatePath(unit.Source); unit.Source != "" && template != "" {
+			result.OwnedSources = append(result.OwnedSources, template)
 		}
 		if !unit.IsEnabled() {
 			continue
@@ -394,7 +409,7 @@ func stackResolution(pctx *config.ParsingContext, stack *config.StackConfig, pat
 			return nil, fmt.Errorf("%w unit instance %s in %s", errDuplicateInstance, id, path)
 		}
 		result.Units[id] = unit.Path
-		result.UnitSources[id] = localPath(dir, unit.Source)
+		result.UnitSources[id] = templatePath(unit.Source)
 		result.UnitConfigs[id] = filepath.Join(unit.GeneratedPath(dir), unitFile)
 	}
 	for _, child := range stack.Stacks {
@@ -410,7 +425,7 @@ func stackResolution(pctx *config.ParsingContext, stack *config.StackConfig, pat
 			return nil, fmt.Errorf("%w stack instance %s in %s", errDuplicateInstance, id, path)
 		}
 		result.Stacks[id] = child.Path
-		result.StackSources[id] = localPath(dir, child.Source)
+		result.StackSources[id] = templatePath(child.Source)
 		result.StackConfigs[id] = filepath.Join(child.GeneratedPath(dir), stackFile)
 	}
 	return result, nil

@@ -17,6 +17,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// planChanges is the error the executor returns for a plan run with -detailed-exitcode that found
+// changes: exit 2 carrying the plan's own marker.
+func planChanges() error {
+	return errUtils.AsDetailedPlanChanges(fmt.Errorf("plan: %w", errUtils.ExitCodeError{Code: 2}))
+}
+
 func TestRunCIHooksForNodePreservesDetailedPlanStatus(t *testing.T) {
 	withGitHubActionsDetection(t)
 	initOutputTestIO(t)
@@ -29,11 +35,12 @@ func TestRunCIHooksForNodePreservesDetailedPlanStatus(t *testing.T) {
 		ciExitCode int
 	}{
 		{"unchanged plan", h.AfterTerraformPlan, nil, false, false, 0},
-		{"changed plan", h.AfterTerraformPlan, fmt.Errorf("plan: %w", errUtils.ExitCodeError{Code: 2}), true, false, 2},
+		{"changed plan", h.AfterTerraformPlan, planChanges(), true, false, 2},
 		{"failed plan", h.AfterTerraformPlan, errUtils.ExitCodeError{Code: 1}, false, true, 1},
 		{"init failure", h.AfterTerraformPlan, errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2}), false, true, 1},
 		{"before hook failure", h.AfterTerraformPlan, fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2})), false, true, 1},
-		{"policy failure", h.AfterTerraformPlan, errors.Join(errUtils.ExitCodeError{Code: 2}, errUtils.ErrPolicyDenied), false, true, 1},
+		{"policy failure", h.AfterTerraformPlan, errors.Join(planChanges(), errUtils.ErrPolicyDenied), false, true, 1},
+		{"exit two before terraform ran", h.AfterTerraformPlan, fmt.Errorf("authentication failed: %w", errUtils.ExitCodeError{Code: 2}), false, true, 1},
 		{"apply exit two", h.AfterTerraformApply, errUtils.ExitCodeError{Code: 2}, false, true, 2},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -72,11 +79,12 @@ func TestRunHooksOnErrorPreservesDetailedPlanStatus(t *testing.T) {
 		hasErrors  bool
 		ciExitCode int
 	}{
-		{"changed plan", h.AfterTerraformPlan, fmt.Errorf("plan: %w", errUtils.ExitCodeError{Code: 2}), true, false, 2},
+		{"changed plan", h.AfterTerraformPlan, planChanges(), true, false, 2},
 		{"failed plan", h.AfterTerraformPlan, errUtils.ExitCodeError{Code: 1}, false, true, 1},
 		{"init failure", h.AfterTerraformPlan, errUtils.AsPrerequisiteError(fmt.Errorf("init failed: %w", errUtils.ExitCodeError{Code: 2})), false, true, 1},
 		{"before hook failure", h.AfterTerraformPlan, fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2})), false, true, 1},
-		{"policy failure", h.AfterTerraformPlan, errors.Join(errUtils.ExitCodeError{Code: 2}, errUtils.ErrPolicyDenied), false, true, 1},
+		{"policy failure", h.AfterTerraformPlan, errors.Join(planChanges(), errUtils.ErrPolicyDenied), false, true, 1},
+		{"exit two before terraform ran", h.AfterTerraformPlan, fmt.Errorf("authentication failed: %w", errUtils.ExitCodeError{Code: 2}), false, true, 1},
 		{"apply exit two", h.AfterTerraformApply, errUtils.ExitCodeError{Code: 2}, false, true, 2},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -134,14 +142,18 @@ func TestTerraformHookOutcomePreservesDetailedPlanStatus(t *testing.T) {
 		code   int
 	}{
 		{"unchanged plan", h.AfterTerraformPlan, nil, h.RunSuccess, 0},
-		{"changed plan", h.AfterTerraformPlan, fmt.Errorf("plan: %w", errUtils.ExitCodeError{Code: 2}), h.RunSuccess, 2},
+		{"changed plan", h.AfterTerraformPlan, planChanges(), h.RunSuccess, 2},
 		{"failed plan", h.AfterTerraformPlan, errUtils.ExitCodeError{Code: 1}, h.RunFailure, 1},
 		{"apply exit two", h.AfterTerraformApply, errUtils.ExitCodeError{Code: 2}, h.RunFailure, 2},
-		{"policy denied after changes", h.AfterTerraformPlan, errors.Join(errUtils.ExitCodeError{Code: 2}, errUtils.ErrPolicyDenied), h.RunFailure, 2},
-		{"policy evaluation after changes", h.AfterTerraformPlan, errors.Join(errUtils.ExitCodeError{Code: 2}, errUtils.ErrPolicyEvaluation), h.RunFailure, 2},
+		{"policy denied after changes", h.AfterTerraformPlan, errors.Join(planChanges(), errUtils.ErrPolicyDenied), h.RunFailure, 2},
+		{"policy evaluation after changes", h.AfterTerraformPlan, errors.Join(planChanges(), errUtils.ErrPolicyEvaluation), h.RunFailure, 2},
 		{"exit two from init", h.AfterTerraformPlan, errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2}), h.RunFailure, 2},
 		{"exit two from wrapped workspace selection", h.AfterTerraformPlan, fmt.Errorf("workspace: %w", errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2})), h.RunFailure, 2},
 		{"exit two from before hook", h.AfterTerraformPlan, fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, errUtils.AsPrerequisiteError(errUtils.ExitCodeError{Code: 2})), h.RunFailure, 2},
+		{"exit two before terraform ran", h.AfterTerraformPlan, fmt.Errorf("authentication failed: %w", errUtils.ExitCodeError{Code: 2}), h.RunFailure, 2},
+		{"exit two without -detailed-exitcode", h.AfterTerraformPlan, fmt.Errorf("plan: %w", errUtils.ExitCodeError{Code: 2}), h.RunFailure, 2},
+		{"marked exit two from a prerequisite", h.AfterTerraformPlan, errUtils.AsPrerequisiteError(planChanges()), h.RunFailure, 2},
+		{"marked apply exit two", h.AfterTerraformApply, planChanges(), h.RunFailure, 2},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			actual := terraformHookOutcome(test.event, test.err)
@@ -189,7 +201,10 @@ components:
 	withoutCIDetection(t)
 	command := newHookTestCmd()
 	require.NoError(t, command.Flags().Set("stack", "dev"))
-	require.ErrorContains(t, runHooksWithResult(h.AfterTerraformPlan, command, []string{"probe"}, "", errUtils.ExitCodeError{Code: 2}), "required-after-plan-was-enforced")
+	require.ErrorContains(t, runHooksWithResult(h.AfterTerraformPlan, command, []string{"probe"}, "", planChanges()), "required-after-plan-was-enforced")
+	// An exit 2 that did not come from the plan (an authentication failure before Terraform ran)
+	// must not run this success-only hook.
+	require.NoError(t, runHooksWithResult(h.AfterTerraformPlan, command, []string{"probe"}, "", fmt.Errorf("authentication failed: %w", errUtils.ExitCodeError{Code: 2})))
 	// A failed engine plan must not run this success-only hook.
 	require.NoError(t, runHooksWithResult(h.AfterTerraformPlan, command, []string{"probe"}, "", errUtils.ExitCodeError{Code: 1}))
 	// A before-hook exit 2 must not run success hooks for a plan that never executed.
@@ -200,6 +215,26 @@ components:
 // Exercise planCmd's deferred dispatch with a real child process returning Terraform's
 // detailed exit code, rather than invoking the hook dispatcher directly.
 func TestPlanCommandDispatchesSuccessHookOnDetailedExit(t *testing.T) {
+	// Terraform reads TF_CLI_ARGS_plan itself, so the child plan runs with -detailed-exitcode.
+	t.Setenv("TF_CLI_ARGS_plan", "-detailed-exitcode")
+	require.ErrorContains(t, runPlanCommandExitingTwo(t), "required-after-plan-was-enforced")
+}
+
+// Without -detailed-exitcode an exit 2 is not Terraform's "changes present" status, so the
+// success-only after-hook does not run and the command reports the original failure.
+func TestPlanCommandDoesNotDispatchSuccessHookForExitTwoWithoutDetailedExitCode(t *testing.T) {
+	t.Setenv("TF_CLI_ARGS_plan", "")
+	err := runPlanCommandExitingTwo(t)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "required-after-plan-was-enforced")
+	require.Equal(t, 2, errUtils.GetExitCode(err))
+	require.False(t, errUtils.IsDetailedPlanChanges(err))
+}
+
+// runPlanCommandExitingTwo runs planCmd for a component whose engine is the test binary, which
+// exits 2 for `plan`, with a required success-only after-plan hook. It returns RunE's error.
+func runPlanCommandExitingTwo(t *testing.T) error {
+	t.Helper()
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "components", "terraform", "probe"), 0o755))
@@ -260,7 +295,7 @@ components:
 	})
 	require.NoError(t, terraformCmd.PersistentFlags().Set("stack", "dev"))
 	require.NoError(t, terraformCmd.PersistentFlags().Set("skip-init", "true"))
-	require.ErrorContains(t, planCmd.RunE(planCmd, []string{"probe"}), "required-after-plan-was-enforced")
+	return planCmd.RunE(planCmd, []string{"probe"})
 }
 
 func TestPrerequisiteErrorKeepsMessageAndChain(t *testing.T) {
@@ -317,7 +352,7 @@ components:
 	require.NoError(t, command.Flags().Set("ci", "true"))
 
 	planOutput := "Terraform will perform the following actions:\n\nPlan: 1 to add, 0 to change, 0 to destroy.\n"
-	err := runHooksWithResult(h.AfterTerraformPlan, command, []string{"probe"}, planOutput, errUtils.ExitCodeError{Code: 2})
+	err := runHooksWithResult(h.AfterTerraformPlan, command, []string{"probe"}, planOutput, planChanges())
 	require.ErrorContains(t, err, "required-after-plan-was-enforced")
 	published, readErr := os.ReadFile(summary)
 	require.NoError(t, readErr, "the CI hooks must still publish the plan result")

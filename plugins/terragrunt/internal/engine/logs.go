@@ -207,6 +207,24 @@ func (s *LogSink) Withhold() {
 	s.withheld = true
 }
 
+// RedactDetail redacts the registered sensitive values from the unsafe detail of a failure, as Entries does
+// for events. It reports false when the sink withheld the call's events: a value the sink never learned
+// may be in the detail too. A sink that collects nothing knows no values and returns the text as is; the
+// host shows unsafe detail only at Debug, where the sink collects.
+//
+//nolint:lintroller // Plugin evaluator code cannot import the host performance tracker.
+func (s *LogSink) RedactDetail(text string) (string, bool) {
+	if !s.collecting() {
+		return text, true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.withheld {
+		return "", false
+	}
+	return redact(text, s.sortedSecrets(), false), true
+}
+
 // Entries returns the collected events in order, with every registered sensitive value redacted. When
 // events were dropped, the last entry says how many.
 //

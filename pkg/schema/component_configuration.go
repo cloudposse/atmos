@@ -184,6 +184,19 @@ func ConfigurationOwned(settings map[string]any) bool {
 	return owned
 }
 
+// ConfigurationRejectedOverrideKey is the reserved `settings.configuration` key that records a
+// provider-owned setting, such as a component-level backend, that stack configuration tried to override.
+// Stack compilation records it instead of failing, so only the commands that target the component fail.
+const ConfigurationRejectedOverrideKey = "atmos_rejected_override"
+
+// RejectedConfigurationOverride returns the provider-owned setting that stack configuration tried to
+// override for a component, or an empty string.
+func RejectedConfigurationOverride(settings map[string]any) string {
+	configuration, _ := settings["configuration"].(map[string]any)
+	setting, _ := configuration[ConfigurationRejectedOverrideKey].(string)
+	return setting
+}
+
 // SelectsConfigurationProvider reports whether an enabled section under `components.terraform`
 // selects the named configuration provider.
 func (c *AtmosConfiguration) SelectsConfigurationProvider(provider string) bool {

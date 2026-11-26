@@ -86,7 +86,7 @@ func TestProblemForPassesCancellationAndWrapsUnknownErrors(t *testing.T) {
 	problem := asProblem(t, wrapped)
 	require.False(t, problem.Safe)
 	require.Equal(t, model.CodeEvaluationError, problem.Code)
-	require.Empty(t, problem.Detail, "raw evaluator text stays out of Detail")
+	require.Equal(t, "secret detail", problem.Detail, "the cause is sent as unsafe detail, which the host shows only at Debug")
 	require.NotContains(t, problem.Summary, "secret detail")
 	require.ErrorContains(t, problem.Err, "secret detail", "the cause is kept for errors.Is and errors.As")
 	require.Equal(t, filepath.Join("a", "b.hcl"), problem.File)

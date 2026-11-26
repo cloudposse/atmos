@@ -151,15 +151,29 @@ func waitForCleanup(ctx context.Context) bool {
 }
 
 // ResolveExitCode preserves interruption even if command code swallowed an error
-// or raced the main signal handler after finishing its final cleanup.
+// or raced the main signal handler after finishing its final cleanup. After an
+// interrupt it first waits for graceful children (for example Terraform saving
+// state) to exit, so returning early cannot trigger exit cleanup that kills them.
 func ResolveExitCode(fallback int) int {
 	defer perf.Track(nil, "signals.ResolveExitCode")()
 
 	if !ExitRequested() {
 		return fallback
 	}
+	defaultGraceful.Wait()
 	WaitForCleanup()
 	return int(pendingExitCode.Load())
+}
+
+// restartCleanupBudget gives credential cleanup a full shutdown budget once a
+// graceful stop finishes. The stop itself is unbounded, so the budget started by
+// the first signal may have expired while Terraform was still saving state.
+func restartCleanupBudget() {
+	cleanupScopes.Lock()
+	defer cleanupScopes.Unlock()
+	if ExitRequested() {
+		cleanupScopes.deadline = time.Now().Add(maxCleanupShutdownWait)
+	}
 }
 
 // CleanupExitDeferred reports whether bounded credential cleanup owns shutdown.

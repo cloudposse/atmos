@@ -1996,9 +1996,11 @@ func terraformPlanHasNoChanges(result TerraformExecutionResult, execErr error) b
 		strings.Contains(output, "No changes. Infrastructure is up-to-date.")
 }
 
-// terraformPlanChangedError treats Terraform plan exit code 2 as a changed result.
+// terraformPlanChangedError treats Terraform plan exit code 2 as a changed result, but only when the
+// plan subprocess itself returned it with -detailed-exitcode (the executor's DetailedPlanChangesError
+// marker). Any other exit 2, such as an authentication failure before Terraform ran, fails the node.
 func terraformPlanChangedError(info *schema.ConfigAndStacksInfo, err error) bool {
-	if info == nil || info.SubCommand != terraformSubCommandPlan {
+	if info == nil || info.SubCommand != terraformSubCommandPlan || !errUtils.IsDetailedPlanChanges(err) {
 		return false
 	}
 	var prerequisiteErr *errUtils.PrerequisiteError

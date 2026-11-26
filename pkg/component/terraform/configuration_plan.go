@@ -79,10 +79,11 @@ func usesConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
 }
 
 // dropCIPlanLocation forgets the plan path the CI download hook records while it fetches a stored
-// plan for `deploy`. An apply may have an explicitly supplied PlanFile even when
-// UseTerraformPlan is false, so only deploy's hook path is discarded.
+// plan for `deploy`, both for deploy itself and for the init, plan and show runs that verify the
+// stored plan. An apply may have an explicitly supplied PlanFile even when UseTerraformPlan is
+// false, so an apply keeps it.
 func dropCIPlanLocation(info *schema.ConfigAndStacksInfo) {
-	if info.SubCommand == "deploy" && info.PlanFile != "" && !info.UseTerraformPlan && info.StoredPlanFile != "" {
+	if info.SubCommand != "apply" && info.PlanFile != "" && !info.UseTerraformPlan && info.StoredPlanFile != "" {
 		info.PlanFile = ""
 	}
 }
