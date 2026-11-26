@@ -20,7 +20,7 @@ From the repository root, run these commands with a version of Atmos that includ
 ```shell
 cd examples/artifacts
 mkdir -p bundle
-echo 'Welcome to the Atmos artifacts example.' > bundle/README.md
+echo '# Welcome to the Atmos artifacts example.' > bundle/README.md
 atmos artifacts publish ./bundle --repository=local --name=builds/app --version=1.0.0 --readme=README.md
 atmos artifacts list --repository=local
 atmos artifacts show readme builds/app:1.0.0 --repository=local
