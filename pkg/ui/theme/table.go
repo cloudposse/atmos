@@ -271,6 +271,21 @@ func CreateThemedTable(headers []string, rows [][]string) string {
 	return CreateTable(&config, headers, rows)
 }
 
+// CreateDetailTable renders a headerless list of labeled values, as used by auth login.
+func CreateDetailTable(rows [][]string) string {
+	label := lipgloss.NewStyle().Foreground(lipgloss.Color(GetCurrentColorScheme().Link)).Padding(0, 1, 0, 2)
+	value := lipgloss.NewStyle().Padding(0, 1)
+	return table.New().Rows(rows...).
+		BorderTop(false).BorderBottom(false).BorderLeft(false).BorderRight(false).
+		BorderRow(false).BorderColumn(false).
+		StyleFunc(func(_, col int) lipgloss.Style {
+			if col == 0 {
+				return label
+			}
+			return value
+		}).String()
+}
+
 // CreateMinimalTable creates a table with minimal styling (header separator only).
 func CreateMinimalTable(headers []string, rows [][]string) string {
 	config := DefaultTableConfig()

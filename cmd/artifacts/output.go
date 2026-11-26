@@ -79,7 +79,7 @@ func writeText(pairs []keyValue) error {
 		if len(rows) == 0 {
 			return nil
 		}
-		return data.Writeln(theme.CreateMinimalTable([]string{"Property", "Value"}, rows))
+		return data.Writeln("\n" + theme.CreateDetailTable(rows))
 	}
 
 	width := 0
