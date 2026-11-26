@@ -11,9 +11,10 @@ shards finished that step in 2 to 3.5 minutes. The cancelled shard failed the `A
 aggregator and the merge queue evicted the PR, so the whole queue cycle had to run again.
 
 Every workflow step that calls the action now sets `timeout-minutes` (15, or less in jobs whose own timeout is
-short), and each cache restore inside the action now turns a stalled download into a cache miss after 3 minutes
-per segment instead of 10. A guard test
-fails if a call site omits the bound or a restore loses its fallback.
+short), except the two calls in `plugin-packages.yaml`, which stay unbounded because that workflow is a plugin
+release build input. Each cache restore inside the action now turns a stalled download into a cache miss after
+3 minutes per segment instead of 10. A guard test fails if a call site outside `plugin-packages.yaml` omits the
+bound, or a restore loses its fallback.
 
 ## Context
 
@@ -39,15 +40,21 @@ fails if a call site omits the bound or a restore loses its fallback.
 
 ## Changes
 
-- `.github/workflows/*.yml|yaml` (20 files, 36 call sites): every step that uses
-  `./.github/actions/setup-go-cache` sets `timeout-minutes`:
+- `.github/workflows/*.yml|yaml` (20 files, 36 of the 38 call sites): every step that uses
+  `./.github/actions/setup-go-cache` sets `timeout-minutes`, except the 2 in `plugin-packages.yaml` (below):
   - 15 minutes by default, about 1.8 times the slowest healthy run. A hang now fails the step after 15 minutes
     instead of consuming a 40 to 60 minute job budget.
-  - Less in the six jobs whose own timeout is 15 minutes or under, so the step bound can actually fire first:
+  - Less in the six jobs whose own timeout is 15 minutes or under, so the configured step bound sits at least
+    3 minutes below the configured job timeout:
     7 minutes in the 10-minute jobs (`release-pipeline.yml` `complete`, `test.yml` `race-plan`) and 12 minutes in
     the 15-minute ones (`test.yml` `pact`, `magefiles`, `coverage`, `container-step`). All six run on Linux, where
     the slowest healthy step took 5.1 minutes; the release `complete` job's step took 2.3 minutes on v1.235.0.
     Found in review (CodeRabbit).
+  - The 3-minute headroom compares configured durations, so it only holds while the steps before Go setup are
+    short. In the last 15 `Tests` runs and recent release runs, those six jobs reached `Set up Go` within 0.2 to
+    0.9 minutes of starting. The `coverage` job used to download every shard's artifacts (a step bounded at 10
+    minutes) before Go setup; Go setup now runs first, since the download only uses the installed atmos binary
+    and `gh`. Found in review (CodeRabbit).
   - `plugin-packages.yaml` (2 call sites) is left unchanged. `plugins/releases.yaml` lists that workflow as a
     build input of every plugin package, so editing it fails the `Official plugin packages / check` job unless
     every plugin version is bumped, which would republish unchanged plugins.

@@ -1261,13 +1261,6 @@ jobs:
           path: ${{ github.workspace }}
           add-to-path: 'true'
 
-      # Atmos downloads all shard artifacts concurrently with per-shard retry.
-      - name: Download linux shard coverage artifacts
-        timeout-minutes: 10
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: atmos test coverage download-shards
-
       # The composite (restore-only) rather than raw setup-go: this thin job
       # merges coverage and tests the SDK, and with setup-go's built-in
       # cache it could win the save race and freeze a near-empty archive
@@ -1275,6 +1268,16 @@ jobs:
       - name: Set up Go for native coverage merge
         uses: ./.github/actions/setup-go-cache
         timeout-minutes: 12
+        # Runs before the (up to 10-minute) shard download, which only needs
+        # the installed atmos binary, so a hung setup reaches its 12-minute
+        # bound before the 15-minute job timeout (#3766).
+
+      # Atmos downloads all shard artifacts concurrently with per-shard retry.
+      - name: Download linux shard coverage artifacts
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: atmos test coverage download-shards
 
       - name: Merge native coverage data
         run: go tool mage coverage:mergeShards

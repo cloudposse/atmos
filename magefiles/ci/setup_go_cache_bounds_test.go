@@ -23,8 +23,9 @@ const (
 	// 43 minutes (#3766).
 	maxSetupGoCacheMinutes = 15
 
-	// A literal job timeout must exceed the call-site bound by at least minJobHeadroomMinutes, so the
-	// step bound expires first and the hang fails as "Set up Go" instead of a cancelled job.
+	// A literal job timeout must exceed the call-site bound by at least minJobHeadroomMinutes. This
+	// compares configured durations only: the step bound fires first while the steps before it take
+	// less than the headroom, which is why Go setup runs before any long step in the short jobs.
 	minJobHeadroomMinutes = 3
 
 	// One 128 MB cache segment may stall for at most maxCacheSegmentMinutes before @actions/cache gives
@@ -85,7 +86,7 @@ func workflowPaths(t *testing.T) []string {
 }
 
 // checkSetupGoCacheBound asserts one call site's literal step bound fits the cap and, when the job has a
-// literal timeout, expires at least minJobHeadroomMinutes before it.
+// literal timeout, is configured at least minJobHeadroomMinutes below it.
 func checkSetupGoCacheBound(t assert.TestingT, where string, job *boundedJob, step *boundedStep) {
 	if helper, ok := t.(interface{ Helper() }); ok {
 		helper.Helper()
