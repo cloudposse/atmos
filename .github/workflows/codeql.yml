@@ -144,6 +144,7 @@ jobs:
       # (install @latest, run with -format/-C) minus its non-retried install.
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         with:
           go-version-file: go.mod
 
@@ -334,6 +335,7 @@ jobs:
       # "could not load export data" errors due to cache corruption
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         with:
           go-version-file: go.mod
 

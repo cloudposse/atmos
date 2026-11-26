@@ -86,6 +86,7 @@ jobs:
       # host recorder tools are available.
       - name: Setup Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         with:
           go-version-file: go.mod
 

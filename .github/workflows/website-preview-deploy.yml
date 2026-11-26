@@ -80,6 +80,7 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
 
       # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
       - name: Configure AWS Credentials

@@ -45,6 +45,7 @@ jobs:
       - name: Set up Go and release cache
         id: go-cache
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         with:
           cache: release
           go-version-file: go.mod

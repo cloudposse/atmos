@@ -63,6 +63,7 @@ jobs:
           echo "ATMOS_BENCH_BASE_SHA=${base}" >> "$GITHUB_ENV"
       - name: Set up Go and restore build cache
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
       - name: Collect measurements
         run: go tool mage bench:run build/benchmarks/candidate
       - name: Save measurements and diagnostics

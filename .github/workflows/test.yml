@@ -180,6 +180,7 @@ jobs:
       - name: Set up Go
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         id: go
 
       # Hosted Intel AMX CPUs can overrun Go 1.26.11's exception reserve.
@@ -497,6 +498,7 @@ jobs:
       - name: Set up Go
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         id: go
 
       - name: Reserve Windows exception-stack space
@@ -706,6 +708,7 @@ jobs:
       - name: Set up Go
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         id: go
 
       - name: Reserve Windows exception-stack space
@@ -818,6 +821,7 @@ jobs:
           persist-credentials: false
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 12
       - name: Set up Atmos bootstrap
         uses: ./.github/actions/setup-atmos-bootstrap
         with:
@@ -849,6 +853,7 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 12
 
       # Native custom-command tests import Atmos's CGO dependencies; -race
       # requires CGO, just like the main race suite.
@@ -931,6 +936,7 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 7
         with:
           # Planning only needs Mage and `go list`; restore its dedicated
           # nightly-warmed cache instead of the multi-gigabyte race archive.
@@ -991,6 +997,7 @@ jobs:
       # the ~400-package -race compile is mostly incremental.
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
 
       - name: Set up Atmos bootstrap
         uses: ./.github/actions/setup-atmos-bootstrap
@@ -1085,6 +1092,7 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
 
       - name: Test comparison and service fixtures
         run: go -C tests/compatibility test ./...
@@ -1185,6 +1193,7 @@ jobs:
       - name: Set up Go
         if: ${{ !cancelled() }}
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         with:
           go-version-file: "go.mod"
           cache: 'false'
@@ -1252,19 +1261,23 @@ jobs:
           path: ${{ github.workspace }}
           add-to-path: 'true'
 
-      # Atmos downloads all shard artifacts concurrently with per-shard retry.
-      - name: Download linux shard coverage artifacts
-        timeout-minutes: 10
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: atmos test coverage download-shards
-
       # The composite (restore-only) rather than raw setup-go: this thin job
       # merges coverage and tests the SDK, and with setup-go's built-in
       # cache it could win the save race and freeze a near-empty archive
       # under the shared Linux key.
       - name: Set up Go for native coverage merge
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 12
+        # Runs before the (up to 10-minute) shard download, which only needs
+        # the installed atmos binary, so a hung setup reaches its 12-minute
+        # bound before the 15-minute job timeout (#3766).
+
+      # Atmos downloads all shard artifacts concurrently with per-shard retry.
+      - name: Download linux shard coverage artifacts
+        timeout-minutes: 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: atmos test coverage download-shards
 
       - name: Merge native coverage data
         run: go tool mage coverage:mergeShards
@@ -1569,6 +1582,7 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
 
       # Restore the toolchain directory first so the install below skips
       # tools already on disk (restore-only; the build job's linux leg is
@@ -1862,6 +1876,7 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
 
       - name: Download Go dependencies
         shell: bash
@@ -2298,6 +2313,7 @@ jobs:
 
       - name: Set up Go for the Buildx cache integration test
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 12
 
       - name: Verify remote Buildx registry cache
         env:
