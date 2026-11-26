@@ -75,6 +75,62 @@ func TestEvidenceRejectsMalformedAndOversizedFiles(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPluginSignatureInvalid)
 }
 
+func TestFetchBoundsSignatureCandidates(t *testing.T) {
+	server := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(server.Close)
+	client := oci.NewClient(nil)
+	repo, err := name.NewRepository(server.Listener.Addr().String() + "/plugin")
+	require.NoError(t, err)
+	require.NoError(t, client.WriteIndex(t.Context(), repo.Tag("1.0.0"), empty.Index))
+	subjectDescriptor, err := client.Head(t.Context(), repo.Tag("1.0.0"))
+	require.NoError(t, err)
+	subject := repo.Digest(subjectDescriptor.Digest.String())
+	raw := []byte(`{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json"}`)
+	image, err := mutate.AppendLayers(empty.Image, static.NewLayer(raw, types.MediaType("application/json")))
+	require.NoError(t, err)
+	image = mutate.MediaType(image, types.OCIManifestSchema1)
+	image = mutate.Subject(image, *subjectDescriptor).(v1.Image)
+	digest, err := image.Digest()
+	require.NoError(t, err)
+	require.NoError(t, client.WriteImage(t.Context(), repo.Digest(digest.String()), image))
+	descriptor, err := client.Get(t.Context(), repo.Digest(digest.String()))
+	require.NoError(t, err)
+	candidate := descriptor.Descriptor
+	candidate.ArtifactType = "application/vnd.dev.sigstore.bundle.v0.3+json"
+
+	for _, test := range []struct {
+		name       string
+		unrelated  int
+		candidates int
+		want       int
+	}{
+		{name: "unrelated referrers only", unrelated: MaxBundles + 9},
+		{name: "signature after unrelated referrers", unrelated: MaxBundles + 9, candidates: 1, want: 1},
+		{name: "signature candidate cap", candidates: MaxBundles + 9, want: MaxBundles},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			items := make([]v1.Descriptor, 0, test.unrelated+test.candidates)
+			for range test.unrelated {
+				items = append(items, v1.Descriptor{ArtifactType: "application/spdx+json"})
+			}
+			for range test.candidates {
+				items = append(items, candidate)
+			}
+			index := NewMockImageIndex(gomock.NewController(t))
+			index.EXPECT().IndexManifest().Return(&v1.IndexManifest{Manifests: items}, nil)
+			registry := NewMockReferrerRegistry(gomock.NewController(t))
+			registry.EXPECT().Referrers(gomock.Any(), subject).Return(index, nil)
+			registry.EXPECT().Get(gomock.Any(), repo.Digest(digest.String())).Return(descriptor, nil).Times(test.want)
+			bundles, err := Fetch(t.Context(), registry, subject)
+			require.NoError(t, err)
+			require.Len(t, bundles, test.want)
+			for _, bundle := range bundles {
+				require.Equal(t, raw, bundle)
+			}
+		})
+	}
+}
+
 func TestFetchRejectsUnboundEvidenceAndFailedBlobDownloads(t *testing.T) {
 	for _, tc := range []string{"no subject", "different subject", "extra layer", "blob unavailable", "collection too large"} {
 		t.Run(tc, func(t *testing.T) {

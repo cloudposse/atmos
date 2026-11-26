@@ -72,7 +72,7 @@ func TestFetchPropagatesDiscoveryAndManifestFailures(t *testing.T) {
 	require.Nil(t, bundles)
 }
 
-func TestFetchBoundsDescriptorsAndIgnoresOtherArtifactTypes(t *testing.T) {
+func TestFetchIgnoresOtherArtifactTypes(t *testing.T) {
 	subject, err := name.NewDigest("registry.example.com/plugin@sha256:" + strings.Repeat("a", 64))
 	require.NoError(t, err)
 	for _, tc := range []struct {
@@ -80,7 +80,7 @@ func TestFetchBoundsDescriptorsAndIgnoresOtherArtifactTypes(t *testing.T) {
 		items []v1.Descriptor
 		want  error
 	}{
-		{"bounded discovery", make([]v1.Descriptor, MaxBundles+1), errUtils.ErrPluginPayloadTooLarge},
+		{"many unrelated artifacts", make([]v1.Descriptor, MaxBundles+1), nil},
 		{"unrelated artifacts", []v1.Descriptor{{ArtifactType: "application/vnd.example.sbom"}}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

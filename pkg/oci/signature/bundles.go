@@ -26,7 +26,8 @@ const (
 	maxCollectionSize = 16 << 20
 )
 
-// Fetch reads bounded Sigstore bundle attachments for the exact subject digest.
+// Fetch reads at most MaxBundles Sigstore attachments for the exact subject
+// digest. Other artifact types do not consume the signature candidate budget.
 func Fetch(ctx context.Context, registry oci.ReferrerRegistry, subject name.Digest) ([][]byte, error) {
 	defer perf.Track(nil, "signature.Fetch")()
 	index, err := registry.Referrers(ctx, subject)
@@ -37,12 +38,12 @@ func Fetch(ctx context.Context, registry oci.ReferrerRegistry, subject name.Dige
 	if err != nil {
 		return nil, err
 	}
-	if len(manifest.Manifests) > MaxBundles {
-		return nil, errUtils.ErrPluginPayloadTooLarge
-	}
 	var bundles [][]byte
 	total := 0
 	for i := range manifest.Manifests {
+		if len(bundles) == MaxBundles {
+			break
+		}
 		descriptor := &manifest.Manifests[i]
 		if !strings.HasPrefix(descriptor.ArtifactType, "application/vnd.dev.sigstore.bundle.") {
 			continue
