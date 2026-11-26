@@ -1,0 +1,21 @@
+commands:
+  - name: casts generate examples artifacts publish-and-restore
+    description: Regenerate the artifacts example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: script
+        name: record
+        interpreter: starlark
+        script: |
+          load("casts.star", "demo_config")
+
+          rec = cast.recorder(title="Publish and restore a local artifact", **demo_config("examples/artifacts/publish-and-restore", fixture="artifacts"))
+          rec.run("atmos artifacts publish ./bundle --repository=local --name=builds/app --version=1.0.0 >/dev/null", expect="Published builds/app:1.0.0")
+          rec.run("atmos artifacts list --repository=local", expect=["builds/app", "1.0.0"])
+          rec.run("atmos artifacts pull builds/app:1.0.0 --repository=local --output=./restored >/dev/null", expect="Pulled builds/app:1.0.0")
+          rec.run("diff -r bundle restored")
+          rec.run("cat restored/message.txt", expect="Welcome to the Atmos artifacts example.")
+          rec.generate()

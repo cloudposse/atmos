@@ -1,6 +1,9 @@
 ---
 title: Artifacts
 tags: [Automation]
+cast:
+  file: /casts/examples/artifacts/publish-and-restore.cast
+  title: Publish and restore a local artifact
 related_docs:
   - label: Artifact repositories
     url: /artifacts
