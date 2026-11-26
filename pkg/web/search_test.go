@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -298,6 +299,63 @@ func TestGoogleEngine_Search_FollowsSecureRedirect(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 1, response.Count)
+}
+
+func TestGoogleEngine_Search_StopsRedirectLoop(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/customsearch/v1?"+r.URL.RawQuery, http.StatusFound)
+	}))
+	defer server.Close()
+
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", server.URL+"/customsearch/v1")
+
+	_, err := engine.Search(context.Background(), "test query", 5)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebSearchFailed)
+	assert.Contains(t, err.Error(), "stopped after 10 redirects")
+	assert.NotContains(t, err.Error(), "test-api-key")
+}
+
+func TestGoogleEngine_Search_RejectsFragmentBaseURL(t *testing.T) {
+	mockTransport := new(MockRoundTripper)
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", "https://search.example.com/customsearch/v1#top")
+	engine.client = &http.Client{Transport: mockTransport}
+
+	_, err := engine.Search(context.Background(), "test query", 5)
+
+	assert.ErrorIs(t, err, errUtils.ErrWebSearchFailed)
+	mockTransport.AssertNotCalled(t, "RoundTrip", mock.Anything)
+}
+
+func TestBuildGoogleAPIURL_RejectsUnparsableBaseURL(t *testing.T) {
+	_, err := buildGoogleAPIURL("https://search.example.com/%zz", "test-api-key", "test-cse-id", "test query", 10)
+	assert.ErrorIs(t, err, errUtils.ErrWebSearchFailed)
+}
+
+func TestGoogleEngine_Search_ConnectionRefusedKeepsKeyOutOfError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	baseURL := server.URL + "/customsearch/v1"
+	server.Close()
+
+	engine := NewGoogleEngine("test-api-key", "test-cse-id", baseURL)
+
+	_, err := engine.Search(context.Background(), "test query", 5)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWebSearchFailed)
+	var netErr *net.OpError
+	assert.ErrorAs(t, err, &netErr)
+	assert.NotContains(t, err.Error(), "test-api-key")
+}
+
+func TestSearchRequestError_NonURLError(t *testing.T) {
+	cause := errors.New("transport closed")
+
+	err := searchRequestError(cause)
+
+	assert.ErrorIs(t, err, errUtils.ErrWebSearchFailed)
+	assert.ErrorIs(t, err, cause)
 }
 
 func TestConvertGoogleResults(t *testing.T) {
