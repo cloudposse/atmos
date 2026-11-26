@@ -50,7 +50,9 @@ in the protected release job.
   <dt><code>--base</code></dt>
   <dd>Revision for independent package version checks. When omitted in CI mode, Atmos uses its CI provider to resolve the comparison base.</dd>
   <dt><code>--catalog</code></dt>
-  <dd>Catalog alias or reference to reconcile after inventory publication. Reads accepted inventory from the current default branch on origin. Serialize releases with a shared writer lock.</dd>
+  <dd>Catalog alias or reference to reconcile after inventory publication. Reads accepted inventory from the current default branch on origin. Serialize releases with a shared writer lock. When some packages fail, the catalog is still reconciled for the packages that released, and each failed package keeps its existing catalog entry. See <a href="#when-a-package-fails">When a package fails</a>.</dd>
+  <dt><code>--fail-fast</code></dt>
+  <dd>Stop at the first failing package in an inventory release instead of continuing with the remaining packages. Nothing is reconciled or reported after the failure. Requires --inventory. Also ATMOS_PLUGIN_RELEASE_FAIL_FAST.</dd>
   <dt><code>--sign</code></dt>
   <dd>Sign the published multi-platform index using keyless Sigstore signing.</dd>
   <dt><code>--yes</code>, <code>-y</code></dt>
@@ -74,7 +76,7 @@ atmos plugin release ./my-plugin --to oci://ghcr.io/acme/my-plugin --sign --yes 
 
 Signing and anonymous verification happen after publication. If either fails, the immutable release
 remains published and the command fails. Retry with identical bytes; an existing version containing
-different bytes is rejected. Inventory releases can reconcile a catalog with `--catalog` after all packages publish successfully. [plugin catalog sync](catalog-sync.mdx) remains available separately.
+different bytes is rejected. Inventory releases can reconcile a catalog with `--catalog` after the packages publish. [plugin catalog sync](catalog-sync.mdx) remains available separately.
 
 A simple CI workflow needs two jobs: a read-only check job and a protected release job. Both run
 `plugin release --inventory`; the release job rebuilds the recorded sources instead of transferring
@@ -87,3 +89,30 @@ fails its anonymous access check until you select **Package settings → Danger 
 in GitHub. Rerun the same release command afterward. The plugin and catalog are separate packages,
 and each needs this one-time setting. Source repository labels do not make either package public.
 See [Public packages on GHCR](publish.mdx#public-packages-on-ghcr) for the complete first-publication flow.
+
+## When a package fails
+
+An inventory release processes its packages in order, and one failing package does not block the
+others. Atmos records the failure and continues with the remaining packages, so an unrelated
+problem in one package, such as a signing or registry error, cannot hold back the releases after it.
+
+When the run finishes:
+
+- The packages that released are reported in the normal output, and with `--catalog` they are added
+  to the catalog. A failed package keeps its existing catalog entry; the catalog never lists a version
+  from a failed release.
+- The command exits with an error that lists every failed package and how many packages did not
+  complete, so CI still fails and the failures are visible in one place.
+- If no package released, nothing is reconciled or reported.
+
+Cancellation, for example Ctrl-C or a CI job being stopped, always ends the run: the current package
+stops and no later package starts.
+
+To stop at the first failure instead, as earlier Atmos versions did, pass `--fail-fast`:
+
+```shell
+atmos plugin release --inventory plugins/releases.yaml --sign --yes --catalog cloudposse --fail-fast
+```
+
+With `--fail-fast`, the packages after the failure are not started, and neither the catalog nor the
+output is updated, even for packages that released before the failure.

@@ -1,0 +1,58 @@
+---
+slug: plugin-release-continues-past-failures
+title: "Plugin Inventory Releases Keep Going When One Package Fails"
+authors: [aknysh]
+tags: [enhancement]
+---
+When a repository releases several independently versioned plugins in one run, a failure in one
+package should not hold back the others. Until now it did: releasing an inventory stopped at the first
+package that failed, so every package after it stayed unpublished and the catalog stayed stale, even
+when those packages had nothing to do with the failure.
+<!--truncate-->
+
+## The Problem
+
+An [inventory release](/cli/commands/plugin/release) builds and publishes each package in the
+committed inventory in order. If one package failed, for example because its re-signing was rejected
+by the registry, the run ended right there. Later packages were never built or published, and with
+`--catalog` the catalog was never reconciled, so even the packages that had published before the
+failure did not show up in it.
+
+That is how a registry problem with one plugin recently kept an unrelated plugin release from
+reaching users for several days: the failing package was first in the inventory, so the next one
+never ran.
+
+## The Fix
+
+An inventory release now continues past a failing package:
+
+- Every other package is still built, published, and reported.
+- With `--catalog`, the catalog is reconciled for the packages that released. A failed package keeps
+  its existing catalog entry, so the catalog never lists a version from a failed release.
+- The command still exits with an error that lists every failed package and how many packages did
+  not complete, so CI stays red and all failures are visible in one place.
+- Cancellation, such as Ctrl-C or a stopped CI job, still ends the run immediately.
+
+## How to Use It
+
+No change is needed. Run an inventory release as before:
+
+```shell
+atmos plugin release --inventory plugins/releases.yaml --sign --yes --verify-public --catalog cloudposse
+```
+
+To keep the previous behavior and stop at the first failure, add the new
+[`--fail-fast`](/cli/commands/plugin/release#when-a-package-fails) flag, or set
+`ATMOS_PLUGIN_RELEASE_FAIL_FAST=true`:
+
+```shell
+atmos plugin release --inventory plugins/releases.yaml --sign --yes --catalog cloudposse --fail-fast
+```
+
+With `--fail-fast`, the packages after the failure are not started, and neither the catalog nor the
+output is updated.
+
+## Get Involved
+
+Plugin publishing is experimental and evolving. Share feedback or report issues on
+[GitHub](https://github.com/cloudposse/atmos/issues).

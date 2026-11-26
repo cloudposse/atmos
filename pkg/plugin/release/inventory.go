@@ -28,6 +28,14 @@ type inventorySettings struct {
 	runner             pkgit.Runner
 	temporaryDirectory string
 	check              bool
+	failFast           bool
+}
+
+// InventoryRelease pairs a successful release with the inventory entry that produced it.
+// Release is nil in check mode, where nothing is published.
+type InventoryRelease struct {
+	Entry   releaseplan.Entry
+	Release *pluginoci.Release
 }
 
 // InventoryOption configures execution of committed inventory entries.
@@ -54,10 +62,25 @@ func WithInventoryCheck(check bool) InventoryOption {
 	return func(s *inventorySettings) { s.check = check }
 }
 
+// WithInventoryFailFast stops at the first failing package instead of continuing
+// with the remaining packages.
+func WithInventoryFailFast(failFast bool) InventoryOption {
+	defer perf.Track(nil, "pluginrelease.WithInventoryFailFast")()
+
+	return func(s *inventorySettings) { s.failFast = failFast }
+}
+
 // RunInventory processes packages in plan order, using detached source snapshots.
 // Target compilation remains bounded and parallel within each package. The caller
 // retains its checkout, including uncommitted files, throughout the operation.
-func RunInventory(ctx context.Context, entries []releaseplan.Entry, factory BackendFactory, options ...InventoryOption) ([]*pluginoci.Release, error) {
+//
+// A failing package does not stop the packages after it: each failure is recorded
+// and the remaining packages are still released, so one broken package cannot block
+// unrelated releases. The returned slice holds the packages that succeeded, in plan
+// order, and the error joins every package failure under ErrPluginInventoryRelease.
+// Cancellation always stops the run, and WithInventoryFailFast restores stopping at
+// the first failure.
+func RunInventory(ctx context.Context, entries []releaseplan.Entry, factory BackendFactory, options ...InventoryOption) ([]InventoryRelease, error) {
 	defer perf.Track(nil, "pluginrelease.RunInventory")()
 
 	s := inventorySettings{runner: pkgit.NewExecRunner()}
@@ -67,18 +90,35 @@ func RunInventory(ctx context.Context, entries []releaseplan.Entry, factory Back
 	if factory == nil || s.runner == nil {
 		return nil, errUtils.ErrPluginInvalidConfig
 	}
-	results := make([]*pluginoci.Release, 0, len(entries))
-	for _, entry := range entries {
+	results := make([]InventoryRelease, 0, len(entries))
+	var failures []error
+	for index := range entries {
+		entry := entries[index]
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return results, inventoryError(len(entries)-len(results), len(entries), append(failures, err))
 		}
 		result, err := s.run(ctx, &entry, factory)
-		if err != nil {
-			return nil, fmt.Errorf("plugin release %s: %w", entry.Name, err)
+		if err == nil {
+			results = append(results, InventoryRelease{Entry: entry, Release: result})
+			continue
 		}
-		results = append(results, result)
+		failures = append(failures, fmt.Errorf("plugin release %s: %w", entry.Name, err))
+		if s.failFast || ctx.Err() != nil {
+			return results, inventoryError(len(entries)-len(results), len(entries), failures)
+		}
 	}
-	return results, nil
+	return results, inventoryError(len(entries)-len(results), len(entries), failures)
+}
+
+// inventoryError summarizes package failures; it returns nil when every package succeeded.
+// Incomplete counts failed packages and, after cancellation or fail-fast, the packages
+// that were never started.
+func inventoryError(incomplete, total int, failures []error) error {
+	if len(failures) == 0 {
+		return nil
+	}
+	summary := fmt.Errorf("%w: %d of %d packages did not complete", errUtils.ErrPluginInventoryRelease, incomplete, total)
+	return errors.Join(append([]error{summary}, failures...)...)
 }
 
 func (s *inventorySettings) run(ctx context.Context, entry *releaseplan.Entry, factory BackendFactory) (result *pluginoci.Release, resultErr error) {

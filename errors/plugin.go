@@ -6,6 +6,8 @@ import "errors"
 var (
 	// ErrPluginReleasePlan identifies invalid or inconsistent committed release inputs.
 	ErrPluginReleasePlan = errors.New("plugin release planning failed")
+	// ErrPluginInventoryRelease identifies an inventory release in which one or more packages failed.
+	ErrPluginInventoryRelease = errors.New("plugin inventory release failed")
 	// ErrPluginBuild identifies a failed native plugin compilation.
 	ErrPluginBuild = errors.New("plugin build failed")
 	// ErrPluginCatalogConflict prevents replacing newer or inconsistent catalog metadata.
