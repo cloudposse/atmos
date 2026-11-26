@@ -185,8 +185,14 @@ func (e *Executor) handleToolCalls(
 
 // setFinalResult sets the final response and token usage on the result.
 func setFinalResult(result *formatter.ExecutionResult, accumulatedResponse string, response *types.Response, totalUsage *types.Usage) {
-	result.Response = accumulatedResponse + response.Content
 	result.Metadata.StopReason = response.StopReason
+	setResponseAndUsage(result, accumulatedResponse+response.Content, totalUsage)
+}
+
+// setResponseAndUsage sets the response text and token usage on the result. Failure paths use it
+// too, so a run that fails mid-loop still reports what the completed rounds produced and consumed.
+func setResponseAndUsage(result *formatter.ExecutionResult, response string, totalUsage *types.Usage) {
+	result.Response = response
 
 	if totalUsage == nil {
 		return
@@ -268,6 +274,7 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, history 
 				Details: map[string]interface{}{"iteration": iteration},
 				Err:     err,
 			}
+			setResponseAndUsage(result, accumulatedResponse, totalUsage)
 			return
 		}
 
@@ -285,6 +292,7 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, history 
 					Message: infraErr.Error(),
 					Type:    "tool_error",
 				}
+				setResponseAndUsage(result, accumulatedResponse, totalUsage)
 				return
 			}
 			continue
@@ -299,6 +307,7 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, history 
 		Message: fmt.Sprintf("exceeded maximum tool execution iterations (%d)", maxIter),
 		Type:    "tool_error",
 	}
+	setResponseAndUsage(result, accumulatedResponse, totalUsage)
 }
 
 // executeTools executes a batch of tool calls and records results. It returns
