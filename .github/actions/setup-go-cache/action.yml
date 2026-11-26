@@ -33,8 +33,10 @@ description: >-
   Release consumers restore only; regular CI never downloads this larger cache.
 
   Hangs are bounded in two places (#3766). Composite steps cannot set timeout-minutes, so every
-  workflow step that calls this action sets `timeout-minutes: 15` (healthy runs take at most about
-  8 minutes, usually 2 to 4); magefiles/ci/setup_go_cache_bounds_test.go enforces it. Inside the
+  workflow step that calls this action sets one: 15 minutes, or less when the job's own timeout is
+  short, so the step bound always expires at least 3 minutes before the job's (healthy runs take at
+  most about 8 minutes, usually 2 to 4). magefiles/ci/setup_go_cache_bounds_test.go enforces it, and
+  exempts only plugin-packages.yaml, a plugin release build input. Inside the
   action, each cache restore sets SEGMENT_DOWNLOAD_TIMEOUT_MINS to 3 (the @actions/cache default is
   10 per 128 MB segment, and a healthy segment takes seconds): @actions/cache aborts the stalled
   segment, logs "Failed to restore", and the job continues with a cache miss instead of hanging.

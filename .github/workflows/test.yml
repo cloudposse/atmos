@@ -821,7 +821,7 @@ jobs:
           persist-credentials: false
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
-        timeout-minutes: 15
+        timeout-minutes: 12
       - name: Set up Atmos bootstrap
         uses: ./.github/actions/setup-atmos-bootstrap
         with:
@@ -853,7 +853,7 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
-        timeout-minutes: 15
+        timeout-minutes: 12
 
       # Native custom-command tests import Atmos's CGO dependencies; -race
       # requires CGO, just like the main race suite.
@@ -936,7 +936,7 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
-        timeout-minutes: 15
+        timeout-minutes: 7
         with:
           # Planning only needs Mage and `go list`; restore its dedicated
           # nightly-warmed cache instead of the multi-gigabyte race archive.
@@ -1274,7 +1274,7 @@ jobs:
       # under the shared Linux key.
       - name: Set up Go for native coverage merge
         uses: ./.github/actions/setup-go-cache
-        timeout-minutes: 15
+        timeout-minutes: 12
 
       - name: Merge native coverage data
         run: go tool mage coverage:mergeShards
@@ -2310,7 +2310,7 @@ jobs:
 
       - name: Set up Go for the Buildx cache integration test
         uses: ./.github/actions/setup-go-cache
-        timeout-minutes: 15
+        timeout-minutes: 12
 
       - name: Verify remote Buildx registry cache
         env:

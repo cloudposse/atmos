@@ -297,7 +297,7 @@ jobs:
           path: ${{ runner.temp }}/release-plan
           merge-multiple: true
       - uses: ./.github/actions/setup-go-cache
-        timeout-minutes: 15
+        timeout-minutes: 7
       - name: Check release credentials
         id: credentials
         shell: bash
