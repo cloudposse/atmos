@@ -44,6 +44,9 @@ The `destroy` alias runs the same command, so `atmos kubernetes destroy <compone
 discovery and a RESTMapper, and deletes each object by name and namespace
 through the Kubernetes dynamic client.
 
+Objects that no longer exist are reported as `not-found`. This includes objects
+whose kind the cluster no longer serves, for example after their CRD was removed.
+
 The command does not require the `kubectl` binary.
 
 ## Example
