@@ -20,7 +20,7 @@ From the repository root, run these commands with a version of Atmos that includ
 ```shell
 cd examples/artifacts
 mkdir -p bundle
-echo '# Welcome to the Atmos artifacts example.' > bundle/README.md
+printf '%s\n' '# App bundle' '' '**Verify the restore** with `diff -r bundle restored`.' > bundle/README.md
 atmos artifacts publish ./bundle --repository=local --name=builds/app --version=1.0.0 --readme=README.md
 atmos artifacts list --repository=local
 atmos artifacts pull builds/app:1.0.0 --repository=local --output=./restored
