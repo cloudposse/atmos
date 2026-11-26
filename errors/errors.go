@@ -102,6 +102,7 @@ var (
 	ErrWorkdirSourceKeyInvalid               = errors.New("workdir source map keys must be strings")
 	ErrUnsafeVendorTarget                    = errors.New("unsafe vendor target directory")
 	ErrInvalidConfig                         = errors.New("invalid configuration")
+	ErrUnknownTerraformSection               = errors.New("unknown section under components.terraform")
 	ErrStackBasePathMissing                  = errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")
 	ErrStackIncludedPathsMissing             = errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
 	ErrSpecifiedConfigNotFound               = errors.New("specified config file not found")

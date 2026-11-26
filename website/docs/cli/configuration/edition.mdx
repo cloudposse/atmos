@@ -86,6 +86,10 @@ reads the variable, while `foo: "!env SOMETHING"` remains literal text. Earlier 
 retain legacy string-prefix evaluation. Unpinned projects use the new behavior;
 pin `edition: "2026-10-19"` while migrating. See [the migration guide](/changelog/explicit-yaml-function-tags).
 
+From `2026-11-27`, an [unknown section under `components.terraform`](/cli/configuration/components/terraform#unknown-sections),
+such as a misspelled setting or a section for a plugin package that is not enabled, is a configuration
+error. Earlier pins keep ignoring such sections and log a warning for each one.
+
 Both `atmos list editions` and `atmos describe edition` include these transitions. Their keys
 identify behaviors, not YAML settings, and their old/new values describe the two behaviors.
 

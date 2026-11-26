@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -54,8 +55,30 @@ func TestAttachKeepsDeclaredPluginProviderSection(t *testing.T) {
 		"hcl":           {Enabled: true, Provider: "fixture/hcl"},
 		"team_defaults": {Enabled: true, Options: map[string]any{"owner": "platform"}},
 	}
+	// Editions before the unknown-sections transition ignore the unrelated mapping.
+	atmos.Edition = "2026-11-26"
 	require.NoError(t, configuration.Attach(t.Context(), atmos, "list"))
 	require.NotNil(t, atmos.ComponentConfigurations)
 	require.Contains(t, atmos.Components.Terraform.ConfigurationProviders, "hcl")
 	require.NotContains(t, atmos.Components.Terraform.ConfigurationProviders, "team_defaults")
+}
+
+// TestAttachRejectsUnclaimedSectionBesideDeclaredProvider is the current-edition path: the declared
+// package's provider section is valid, and the unrelated mapping beside it is a configuration error.
+func TestAttachRejectsUnclaimedSectionBesideDeclaredProvider(t *testing.T) {
+	atmos := localComponentFixture(t)
+	atmos.BasePathAbsolute = t.TempDir()
+	atmos.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{
+		"hcl":           {Enabled: true, Provider: "fixture/hcl"},
+		"team_defaults": {Enabled: true, Options: map[string]any{"owner": "platform"}},
+	}
+	err := configuration.Attach(t.Context(), atmos, "list")
+	require.ErrorIs(t, err, errUtils.ErrUnknownTerraformSection)
+	require.Nil(t, atmos.ComponentConfigurations)
+
+	atmos.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{
+		"hcl": {Enabled: true, Provider: "fixture/hcl"},
+	}
+	require.NoError(t, configuration.Attach(t.Context(), atmos, "list"))
+	require.NotNil(t, atmos.ComponentConfigurations)
 }

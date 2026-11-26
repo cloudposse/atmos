@@ -771,6 +771,11 @@ type SourceSettings struct {
 type Terraform struct {
 	// ConfigurationProviders contains opt-in configuration formats such as Terragrunt.
 	ConfigurationProviders map[string]ComponentConfiguration `yaml:",inline" json:"-" mapstructure:",remain"`
+	// UnknownSections lists, sorted, the keys under `components.terraform` that are neither a
+	// built-in setting nor a mapping marked with `enabled` or `provider`. The loader drops them
+	// before decoding and records their names here, so validation can report them. They are
+	// never decoded or serialized.
+	UnknownSections []string `yaml:"-" json:"-" mapstructure:"-"`
 
 	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`

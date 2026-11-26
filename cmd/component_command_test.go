@@ -91,6 +91,11 @@ func componentCommandFixture(t *testing.T, family string) string {
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "components", "app"), 0o700))
 	require.NoError(t, os.Mkdir(filepath.Join(root, "stacks"), 0o700))
+	// use_eks is a Helmfile setting; under terraform it would be an unknown section.
+	familySettings := ""
+	if family == "helmfile" {
+		familySettings = "    use_eks: false\n"
+	}
 	config := `base_path: .
 stacks:
   base_path: stacks
@@ -100,8 +105,7 @@ components:
     base_path: components
     command: executable-that-must-not-run
     auto_generate_backend_file: false
-    use_eks: false
-    init:
+` + familySettings + `    init:
       mode: never
 `
 	stack := `name: dev

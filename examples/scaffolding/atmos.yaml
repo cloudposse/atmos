@@ -9,8 +9,8 @@ components:
   terraform:
     # Path to Terraform components (relative to base_path).
     base_path: "components/terraform"
-    # Apply auto-generated backend configuration.
-    apply_auto_generated_backend_file: true
+    # Generate the backend configuration file automatically.
+    auto_generate_backend_file: true
 
 # Stack configuration.
 stacks:

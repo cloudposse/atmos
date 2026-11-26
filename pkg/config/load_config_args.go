@@ -109,6 +109,7 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 	if err := v.Unmarshal(atmosConfig, atmosDecodeHook()); err != nil {
 		return err
 	}
+	recordUnknownTerraformSections(v, atmosConfig)
 	if err := applyPluginPolicy(v, atmosConfig); err != nil {
 		return err
 	}
