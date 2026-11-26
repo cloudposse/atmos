@@ -59,7 +59,7 @@ func runOperation(ctx context.Context, svc artifact.Service, params *Params) (*R
 		return runPublish(ctx, svc, params)
 	case artifact.ActionPull:
 		return withRef(params, func(ref artifact.Ref) (*Result, error) {
-			op, err := svc.Pull(ctx, artifact.PullRequest{Execution: params.Execution, Repository: params.Repository, Ref: ref, Destination: params.Destination, Force: params.Force})
+			op, err := svc.Pull(ctx, artifact.PullRequest{IncludeReadme: params.IncludeReadme, Execution: params.Execution, Repository: params.Repository, Ref: ref, Destination: params.Destination, Force: params.Force})
 			return fromOperation(op), err
 		})
 	case artifact.ActionCopy:

@@ -13,7 +13,7 @@ related_docs:
 
 # Artifacts
 
-Publish a directory as a [versioned artifact](https://atmos.tools/artifacts), list it in a local repository, preview its README, and restore its files. This example runs entirely on your filesystem.
+Publish a directory as a [versioned artifact](https://atmos.tools/artifacts), list it in a local repository, and restore its files. This example runs entirely on your filesystem.
 
 From the repository root, run these commands with a version of Atmos that includes `atmos artifacts`:
 
@@ -23,9 +23,8 @@ mkdir -p bundle
 echo '# Welcome to the Atmos artifacts example.' > bundle/README.md
 atmos artifacts publish ./bundle --repository=local --name=builds/app --version=1.0.0 --readme=README.md
 atmos artifacts list --repository=local
-atmos artifacts show readme builds/app:1.0.0 --repository=local
 atmos artifacts pull builds/app:1.0.0 --repository=local --output=./restored
 diff -r bundle restored
 ```
 
-The list includes `builds/app` at version `1.0.0`. An empty diff confirms the restored files match the original bundle.
+The list includes `builds/app` at version `1.0.0`. In a terminal, pull displays the published README after the operation summary. An empty diff confirms the restored files match the original bundle.

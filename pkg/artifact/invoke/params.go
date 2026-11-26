@@ -123,6 +123,9 @@ func AllFields() []Field {
 // Params is the transport-neutral input of one artifact operation: the union of the CLI flags and
 // the artifact step fields. Which fields an action reads is described by [SpecFor].
 type Params struct {
+	// IncludeReadme requests a package README on pull for interactive CLI output.
+	IncludeReadme bool
+
 	// Action selects the operation.
 	Action artifact.Action
 

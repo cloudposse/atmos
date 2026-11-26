@@ -44,10 +44,32 @@ func (s *Service) pull(ctx context.Context, op *operation, request *artifact.Pul
 		return err
 	}
 	unchanged, err := checkDestination(op, request, inspection.Record)
-	if err != nil || unchanged {
+	if err != nil {
 		return err
 	}
-	return s.download(ctx, op, request, &pinnedSource{repo: repo, pinned: &pinned, inspection: inspection})
+	if !unchanged {
+		if err := s.download(ctx, op, request, &pinnedSource{repo: repo, pinned: &pinned, inspection: inspection}); err != nil {
+			return err
+		}
+	}
+	if request.IncludeReadme {
+		loadPullReadme(ctx, op, repo, &pinned, inspection.Record)
+	}
+	return nil
+}
+
+func loadPullReadme(ctx context.Context, op *operation, repo artifact.Repository, pinned *artifact.PinnedReference, record *artifact.Record) {
+	for _, doc := range record.Documents {
+		if doc.Role == artifact.DocumentReadme {
+			_, content, err := readPinnedDocument(ctx, repo, pinned, record, doc.Role)
+			if err != nil {
+				op.warn("readme_unavailable", "Could not display the package README: "+err.Error())
+				return
+			}
+			op.result.PullReadme = string(content)
+			return
+		}
+	}
 }
 
 // pinnedSource is a repository together with the subject that was pinned and inspected in it.

@@ -48,6 +48,37 @@ func TestPull_RoundTripEveryPackaging(t *testing.T) {
 	}
 }
 
+func TestPull_OptionalPackageReadme(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		published bool
+		requested bool
+		want      string
+		opens     int
+	}{
+		{name: "display published document", published: true, requested: true, want: "package readme\n", opens: 1},
+		{name: "no published document", requested: true},
+		{name: "no preview requested", published: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, envConfig{})
+			src := e.source("hello")
+			if !tc.published {
+				require.NoError(t, os.Remove(filepath.Join(src, fixtures.ReservedDir, "README.md")))
+			}
+			e.publish("dst", src)
+			request := artifact.PullRequest{Repository: "dst", Ref: exampleRef, Destination: out(t), IncludeReadme: tc.requested}
+			for i, outcome := range []artifact.Outcome{artifact.OutcomeRead, artifact.OutcomeUnchanged} {
+				res, err := e.svc.Pull(t.Context(), request)
+				require.NoError(t, err)
+				assert.Equal(t, outcome, res.Outcome)
+				assert.Equal(t, tc.want, res.PullReadme)
+				assert.Equal(t, (i+1)*tc.opens, e.repos["dst"].Calls("OpenDocument"))
+			}
+		})
+	}
+}
+
 func TestPull_ExistingDestinationRules(t *testing.T) {
 	e := newEnv(t, envConfig{})
 	e.publish("dst", e.source("hello"))

@@ -6,6 +6,8 @@ import (
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/invoke"
+	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -37,10 +39,14 @@ func paramsPull(in *input) (*invoke.Params, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &invoke.Params{Action: artifact.ActionPull, Repository: repository, Ref: in.args[0], Destination: destination, Force: in.flag(flagForce)}, nil
+	includeReadme := in.str(flagFormat) == formatText && terminal.New().IsTTY(terminal.Stdout)
+	return &invoke.Params{IncludeReadme: includeReadme, Action: artifact.ActionPull, Repository: repository, Ref: in.args[0], Destination: destination, Force: in.flag(flagForce)}, nil
 }
 
 func textPull(res *result) error {
 	ui.Successf("Pulled **%s** from repository **%s**.", res.Ref, res.Repository)
-	return textOperation(res)
+	if err := textOperation(res); err != nil || res.PullReadme == "" {
+		return err
+	}
+	return data.Markdown(res.PullReadme)
 }

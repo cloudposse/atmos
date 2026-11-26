@@ -39,6 +39,8 @@ atmos artifacts pull 'components/terraform/vpc@sha256:<digest>' --repository=sha
 
 ## Behavior
 
+After a successful pull, the default text output renders the published package README in the terminal when one is available. Piped, redirected, JSON, and YAML output omit this preview.
+
 Atmos resolves the reference once and reads only that pinned content, so a tag that moves mid-operation is never followed. Each consumed content descriptor is verified against its digest.
 
 When the effective policy requires a signature or supplies trust constraints, verification runs before anything is materialized, and a failure leaves the output untouched. Without trust configuration the artifact is consumed as unchecked and is not reported as verified.

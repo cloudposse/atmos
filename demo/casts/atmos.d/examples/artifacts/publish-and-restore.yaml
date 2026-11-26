@@ -17,7 +17,6 @@ commands:
           rec.run("echo '# Welcome to the Atmos artifacts example.' > bundle/README.md")
           rec.run("atmos artifacts publish ./bundle --repository=local --name=builds/app --version=1.0.0 --readme=README.md", expect=["Published builds/app:1.0.0", ".artifacts/builds/app/1.0.0", "content_digest:"])
           rec.run("atmos artifacts list --repository=local", expect=["builds/app", "1.0.0"])
-          rec.run("atmos artifacts show readme builds/app:1.0.0 --repository=local", expect="Welcome to the Atmos artifacts example.")
-          rec.run("atmos artifacts pull builds/app:1.0.0 --repository=local --output=./restored", expect=["Pulled builds/app:1.0.0", "content_digest:"])
+          rec.run("atmos artifacts pull builds/app:1.0.0 --repository=local --output=./restored", expect=["Pulled builds/app:1.0.0", "content_digest:", "Welcome to the Atmos artifacts example."])
           rec.run("diff -r bundle restored")
           rec.generate()
