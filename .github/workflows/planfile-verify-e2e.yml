@@ -78,6 +78,7 @@ jobs:
           persist-credentials: false
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         with:
           go-version-file: "go.mod"
       - name: Set up Atmos
@@ -133,6 +134,7 @@ jobs:
           persist-credentials: false
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         with:
           go-version-file: "go.mod"
       - name: Set up Atmos
@@ -180,6 +182,7 @@ jobs:
           persist-credentials: false
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         with:
           go-version-file: "go.mod"
       - name: Set up Atmos

@@ -24,6 +24,7 @@ jobs:
           path: ${{ runner.temp }}/release-tools
           add-to-path: 'true'
       - uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         with:
           # Official plugins build in their own modules. plugins/terragrunt requires the newest Go in the repository.
           go-version-file: plugins/terragrunt/go.mod
@@ -81,6 +82,7 @@ jobs:
           path: ${{ runner.temp }}/release-tools
           add-to-path: 'true'
       - uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         with:
           # Official plugins build in their own modules. plugins/terragrunt requires the newest Go in the repository.
           go-version-file: plugins/terragrunt/go.mod

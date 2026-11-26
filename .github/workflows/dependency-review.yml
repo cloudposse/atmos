@@ -20,6 +20,7 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         with:
           go-version-file: go.mod
           # NOTICE generation does not need the full build/test cache archive.

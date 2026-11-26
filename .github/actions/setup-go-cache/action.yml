@@ -32,6 +32,13 @@ description: >-
   release-cache-warmup.yml with the production GoReleaser matrix and flags.
   Release consumers restore only; regular CI never downloads this larger cache.
 
+  Hangs are bounded in two places (#3766). Composite steps cannot set timeout-minutes, so every
+  workflow step that calls this action sets `timeout-minutes: 15` (healthy runs take at most about
+  8 minutes, usually 2 to 4); magefiles/ci/setup_go_cache_bounds_test.go enforces it. Inside the
+  action, each cache restore sets SEGMENT_DOWNLOAD_TIMEOUT_MINS to 3 (the @actions/cache default is
+  10 per 128 MB segment, and a healthy segment takes seconds): @actions/cache aborts the stalled
+  segment, logs "Failed to restore", and the job continues with a cache miss instead of hanging.
+
 inputs:
   go-version-file:
     description: Passed through to actions/setup-go.
@@ -163,6 +170,10 @@ runs:
       id: restore
       if: inputs.cache == 'true'
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      env:
+        # A stalled 128 MB segment aborts after this many minutes, and the restore
+        # becomes a "Failed to restore" warning and a cache miss (see the description).
+        SEGMENT_DOWNLOAD_TIMEOUT_MINS: "3"
       with:
         path: |
           ${{ env.GOCACHE }}
@@ -179,6 +190,10 @@ runs:
       id: restore-release
       if: inputs.cache == 'release'
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      env:
+        # A stalled 128 MB segment aborts after this many minutes, and the restore
+        # becomes a "Failed to restore" warning and a cache miss (see the description).
+        SEGMENT_DOWNLOAD_TIMEOUT_MINS: "3"
       with:
         path: |
           ${{ env.GOCACHE }}
@@ -195,6 +210,10 @@ runs:
       id: restore-race-plan
       if: inputs.cache == 'race-plan'
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      env:
+        # A stalled 128 MB segment aborts after this many minutes, and the restore
+        # becomes a "Failed to restore" warning and a cache miss (see the description).
+        SEGMENT_DOWNLOAD_TIMEOUT_MINS: "3"
       with:
         path: |
           ${{ env.GOCACHE }}

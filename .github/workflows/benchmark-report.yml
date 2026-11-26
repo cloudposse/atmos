@@ -53,6 +53,7 @@ jobs:
           persist-credentials: false
       - name: Set up Go and restore build cache
         uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
       - name: Compare snapshots and update sticky comment
         run: go tool mage bench:report "$GITHUB_REPOSITORY" "$BENCHMARK_RUN_ID"
       - name: Save full comparisons

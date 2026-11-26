@@ -35,6 +35,7 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       # Install Go and toolchain dependencies
       - uses: ./.github/actions/setup-go-cache
+        timeout-minutes: 15
         with:
           go-version-file: go.mod
       - run: go mod tidy
