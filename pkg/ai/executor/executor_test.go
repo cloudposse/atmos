@@ -1091,3 +1091,71 @@ func (c *historyCapturingClient) SendMessageWithSystemPromptAndTools(
 	}
 	return c.mockClient.SendMessageWithSystemPromptAndTools(ctx, systemPrompt, atmosMemory, messages, availableTools)
 }
+
+// failAfterClient returns its scripted responses and then fails, simulating a
+// provider error in a later round of the tool loop.
+type failAfterClient struct {
+	mockClient
+	err error
+}
+
+func (c *failAfterClient) SendMessageWithSystemPromptAndTools(ctx context.Context, systemPrompt string, atmosMemory string, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	if c.callIndex >= len(c.responses) {
+		return nil, c.err
+	}
+	return c.mockClient.SendMessageWithSystemPromptAndTools(ctx, systemPrompt, atmosMemory, messages, availableTools)
+}
+
+// TestExecutor_ExecuteWithTools_FailureKeepsUsage verifies that a failed tool
+// loop still reports the tokens and text of the rounds that completed.
+func TestExecutor_ExecuteWithTools_FailureKeepsUsage(t *testing.T) {
+	tests := []struct {
+		name      string
+		toolName  string
+		maxIter   int
+		errorType string
+	}{
+		{name: "provider error", toolName: "some_tool", maxIter: 5, errorType: "ai_error"},
+		{name: "infrastructure tool error", toolName: "unregistered_tool", maxIter: 5, errorType: "tool_error"},
+		{name: "max iterations", toolName: "some_tool", maxIter: 1, errorType: "tool_error"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &failAfterClient{
+				mockClient: mockClient{
+					responses: []*types.Response{
+						{
+							Content:    "I'll use a tool",
+							StopReason: types.StopReasonToolUse,
+							ToolCalls:  []types.ToolCall{{ID: "call-1", Name: tt.toolName, Input: map[string]interface{}{}}},
+							Usage: &types.Usage{
+								InputTokens:         100,
+								OutputTokens:        20,
+								TotalTokens:         120,
+								CacheReadTokens:     30,
+								CacheCreationTokens: 10,
+							},
+						},
+					},
+				},
+				err: errors.New("rate limited"),
+			}
+
+			registry := tools.NewRegistry()
+			require.NoError(t, registry.Register(&mockTool{name: "some_tool", description: "a tool"}))
+			toolExecutor := tools.NewExecutor(registry, nil, 30*time.Second)
+			exec := NewExecutor(client, toolExecutor, &schema.AtmosConfiguration{
+				AI: schema.AISettings{MaxToolIterations: tt.maxIter},
+			})
+
+			result := exec.Execute(context.Background(), Options{Prompt: "test", ToolsEnabled: true})
+
+			require.False(t, result.Success)
+			require.NotNil(t, result.Error)
+			assert.Equal(t, tt.errorType, result.Error.Type)
+			assert.Equal(t, formatter.TokenUsage{Prompt: 100, Completion: 20, Total: 120, Cached: 30, CacheCreation: 10}, result.Tokens)
+			assert.Equal(t, "I'll use a tool\n\n", result.Response)
+		})
+	}
+}
