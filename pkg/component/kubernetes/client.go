@@ -45,6 +45,7 @@ type sdkClient struct {
 
 // groupVersionDiscovery is the uncached discovery lookup used to confirm that a kind is no longer served.
 type groupVersionDiscovery interface {
+	ServerGroups() (*metav1.APIGroupList, error)
 	ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error)
 }
 
@@ -276,7 +277,8 @@ func (c *sdkClient) Validate(ctx context.Context, objects []*unstructured.Unstru
 	return results, stderrors.Join(errs...)
 }
 
-// kindUnserved confirms a RESTMapper "no match" against discovery for that group version.
+// kindUnserved confirms a RESTMapper "no match" against discovery for every served version of the group,
+// because objects of a removed version may still exist through another one.
 // The mapper also reports no match for groups whose discovery failed (such as an
 // unavailable aggregated API), where objects may still exist.
 func (c *sdkClient) kindUnserved(ctx context.Context, gvk schema.GroupVersionKind) bool {
@@ -284,15 +286,43 @@ func (c *sdkClient) kindUnserved(ctx context.Context, gvk schema.GroupVersionKin
 		return false
 	}
 
+	groups, err := recovery.Call(ctx, c.recovery, "discovery", c.discovery.ServerGroups)
+	if err != nil {
+		return false
+	}
+
+	versions := []string{gvk.Version}
+	for i := range groups.Groups {
+		if groups.Groups[i].Name != gvk.Group {
+			continue
+		}
+		for _, served := range groups.Groups[i].Versions {
+			if served.Version != gvk.Version {
+				versions = append(versions, served.Version)
+			}
+		}
+	}
+
+	for _, version := range versions {
+		groupVersion := schema.GroupVersion{Group: gvk.Group, Version: version}.String()
+		if !c.versionLacksKind(ctx, groupVersion, gvk.Kind) {
+			return false
+		}
+	}
+	return true
+}
+
+// versionLacksKind reports whether discovery positively confirms that the group version does not serve the kind.
+func (c *sdkClient) versionLacksKind(ctx context.Context, groupVersion, kind string) bool {
 	list, err := recovery.Call(ctx, c.recovery, "discovery", func() (*metav1.APIResourceList, error) {
-		return c.discovery.ServerResourcesForGroupVersion(gvk.GroupVersion().String())
+		return c.discovery.ServerResourcesForGroupVersion(groupVersion)
 	})
 	if err != nil {
 		return errors.IsNotFound(err)
 	}
 
 	for i := range list.APIResources {
-		if list.APIResources[i].Kind == gvk.Kind {
+		if list.APIResources[i].Kind == kind {
 			return false
 		}
 	}
