@@ -98,10 +98,12 @@ func TestMSALCacheLock_DoesNotHoldARemovedLockfile(t *testing.T) {
 	}()
 	time.Sleep(300 * time.Millisecond)
 
-	// The old holder deletes the path while still locked, a new holder creates and locks a new
-	// lock file at the same path, and only then does the old holder unlock its (unlinked) file.
-	require.NoError(t, os.Remove(lockPath))
-	replacement, err := acquireTestMSALLock(lockPath)
+	// The old holder's file is unlinked while still locked and a new holder's locked lock file
+	// takes its path, and only then does the old holder unlock its (unlinked) file. The
+	// replacement is renamed over the path in one step: a separate remove and create would leave
+	// a window in which the waiting lock reopens the missing path itself (gofrs/flock opens with
+	// O_CREATE), which made this test fail with "file exists".
+	replacement, err := replaceTestMSALLock(lockPath)
 	require.NoError(t, err)
 	require.NoError(t, old.lock.Unlock())
 

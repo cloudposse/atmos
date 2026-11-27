@@ -10,6 +10,10 @@ import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import SecondaryCTA from '@site/src/components/SecondaryCTA'
+import AtmosProScreenshot from '@site/src/components/AtmosProScreenshot'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 Atmos CLI handles the execution layer — how you architect your cloud infrastructure, run automation
@@ -18,6 +22,16 @@ that, giving you visibility and coordination across all your teams, repositories
 </Intro>
 
 <a href="https://atmos-pro.com"><img src="https://atmos-pro.com/api/media-kit/logo/badge/560x112/metallic" alt="Atmos Pro" width="280" height="56" /></a>
+
+Atmos Pro is a [GitHub App](https://github.com/apps/atmos-pro). You install it on the GitHub
+organization that owns your infrastructure repositories, and it turns GitHub Actions into an ordered,
+drift-aware deployment engine for the Terraform and OpenTofu you already have.
+
+<AtmosProScreenshot
+  view="pr-comment"
+  alt="Atmos Pro pull request comment showing the affected stack, its components, and plan results"
+  caption="Every pull request gets a live summary of affected stacks, dispatched plans, and resource changes."
+/>
 
 ## Why Atmos Pro?
 
@@ -31,20 +45,77 @@ organizations, dozens of teams, hundreds of components. You need to know what ch
 drifting, what's failing, who approved what, and what the current state of every deployment is —
 across everything.
 
-Because Atmos CLI already handles execution, Atmos Pro doesn't need elevated access to your cloud
-accounts. It receives what the CLI uploads — affected stacks, component inventories, plan results —
-and gives you the coordination layer on top:
+Your workflows run on your own GitHub Actions runners and authenticate to your cloud with your own
+OIDC roles. Atmos Pro receives only what the CLI uploads — affected stacks, component inventories,
+plan results — and coordinates on top of it:
 
+- **Ordered deployments** — Dispatch plan and apply workflows in dependency order for pull requests, merge queues, and releases
 - **Visibility** — See what's affected on every PR, across every repo and organization
 - **Drift detection** — Know which stacks have drifted and trigger remediation automatically
-- **Approvals and change requests** — Coordinate who can apply what, with full audit trails
+- **Approvals** — Require independent human approval before changes are applied, with full audit trails
 - **Failing runs** — Stay on top of failures across all teams without digging through CI logs
 - **Stack locking** — Prevent concurrent modifications during deployments
 - **Inventory** — Understand what's deployed, where, and with what configuration
 
-## Quick Start
+<AtmosProScreenshot
+  view="board"
+  alt="Atmos Pro board grouping component instances by status: error, drifted, remediation, in sync"
+  caption="The board shows every component instance across your repositories by status: in sync, drifted, remediating, or failing."
+/>
 
-### 1. Configure Your Workspace
+## Get Started
+
+Atmos Pro connects to your repositories through its GitHub App, so setup starts on
+[atmos-pro.com](https://atmos-pro.com), not in your code. Once the app is installed and your
+repositories are imported, you configure Atmos and your workflows to talk to it.
+
+:::tip Working example
+The [Atmos Pro Example Advanced](https://github.com/cloudposse-examples/atmos-pro-example-advanced)
+repository is a fully working reference for every step below.
+:::
+
+### 1. Sign Up and Create a Workspace
+
+Go to [atmos-pro.com](https://atmos-pro.com) and choose **Continue with GitHub**. Then create a
+workspace for your company or team, or join one you've been invited to. A workspace groups your
+repositories, team members, and settings.
+
+### 2. Install the Atmos Pro GitHub App
+
+From your new workspace, choose **Install** to add the
+[Atmos Pro GitHub App](https://github.com/apps/atmos-pro) to your GitHub organization, and select
+the repositories it may access.
+
+- **GitHub organization administrators** choose **Install and Authorize**.
+- **Everyone else** chooses **Authorize and Request**, which asks an administrator to approve the app.
+
+The app is what lets Atmos Pro receive pull request webhooks, dispatch your workflows, and post
+status checks and comments. Uploads from the CLI are rejected for repositories where it is not installed.
+
+### 3. Import Repositories and Set Permissions
+
+Import the repositories you want Atmos Pro to manage. Then configure
+[repository permissions](https://atmos-pro.com/docs/learn/permissions) to control which branches,
+environments, and workflow files may upload affected stacks, take locks, and report deployments.
+
+### 4. Configure Your Workspace ID
+
+Copy your workspace ID from the Atmos Pro workspace settings. It is not a secret. Store it in one
+place: either commit it to `atmos.yaml` or set it as a GitHub Actions variable.
+
+<Tabs groupId="atmos-pro-workspace-id" defaultValue="atmos-yaml">
+<TabItem value="atmos-yaml" label="atmos.yaml">
+
+Commit it with [`atmos config set`](/cli/commands/config/config-set), which keeps the file's existing
+comments and formatting:
+
+<Terminal title="shell">
+```bash
+atmos config set settings.pro.workspace_id "your-workspace-id"
+```
+</Terminal>
+
+That writes:
 
 <File title="atmos.yaml">
 ```yaml
@@ -54,34 +125,163 @@ settings:
 ```
 </File>
 
-### 2. Add Workflow Permissions
+Every workflow that runs Atmos in this repository picks it up, with no extra workflow configuration.
 
-<File title=".github/workflows/atmos.yaml">
+</TabItem>
+<TabItem value="github-variable" label="GitHub variable">
+
+Set a repository or organization variable:
+
+<Terminal title="shell">
+```bash
+gh variable set ATMOS_PRO_WORKSPACE_ID --body "your-workspace-id"
+```
+</Terminal>
+
+Each workflow then passes it to Atmos as the `ATMOS_PRO_WORKSPACE_ID` environment variable (see step 6).
+Use this option to keep the ID out of the repository.
+
+</TabItem>
+</Tabs>
+
+### 5. Enable Atmos Pro in Your Stacks
+
+Tell Atmos Pro which workflows to dispatch for each GitHub event. A mixin keeps this in one place
+for every stack:
+
+<File title="stacks/mixins/atmos-pro.yaml">
 ```yaml
-permissions:
-  id-token: write   # Required for OIDC token exchange with Atmos Pro
-  contents: read
+plan-wf-config: &plan-wf-config
+  atmos-terraform-plan.yaml:
+    inputs:
+      component: "{{ .atmos_component }}"
+      stack: "{{ .atmos_stack }}"
+
+apply-wf-config: &apply-wf-config
+  atmos-terraform-apply.yaml:
+    inputs:
+      component: "{{ .atmos_component }}"
+      stack: "{{ .atmos_stack }}"
+      github_environment: "{{ .vars.stage }}"
+
+settings:
+  pro:
+    enabled: true
+    pull_request:
+      opened:
+        workflows: *plan-wf-config
+      synchronize:
+        workflows: *plan-wf-config
+      reopened:
+        workflows: *plan-wf-config
+    release:
+      released:
+        workflows: *apply-wf-config
 ```
 </File>
 
-### 3. Upload Affected Stacks from Your Workflow
+Import the mixin into each stack that Atmos Pro should manage. A stack that does not import it has no
+`settings.pro`, so Atmos Pro dispatches nothing for it:
 
-<File title=".github/workflows/atmos.yaml">
+<File title="stacks/deploy/prod.yaml">
 ```yaml
+import:
+  - mixins/atmos-pro
+```
+</File>
+
+This mixin plans every pull request update and applies when you publish a release. To apply each pull request as it
+merges, map [`pull_request.merged`](/cli/configuration/settings/pro) to the apply workflow instead.
+
+See [Configure Atmos Stacks](https://atmos-pro.com/docs/configure/stacks) for merge queues, labels,
+drift detection, and component dependencies.
+
+### 6. Add the GitHub Actions Workflows
+
+Atmos Pro needs four workflows in each repository:
+
+<dl>
+  <dt>Affected Stacks</dt>
+  <dd>Runs `atmos describe affected --upload` on pull requests and merges so Atmos Pro knows what changed.</dd>
+
+  <dt>Upload Instances</dt>
+  <dd>Runs `atmos list instances --upload` on merges to the default branch and on a daily schedule to keep the inventory current.</dd>
+
+  <dt>Plan</dt>
+  <dd>Dispatched by Atmos Pro to run `atmos terraform plan` for each affected component.</dd>
+
+  <dt>Apply</dt>
+  <dd>Dispatched by Atmos Pro to run `atmos terraform deploy` for each approved component.</dd>
+</dl>
+
+Each workflow needs the `id-token: write` permission so Atmos can exchange a GitHub OIDC token
+for a short-lived Atmos Pro token:
+
+<Tabs groupId="atmos-pro-workspace-id" defaultValue="atmos-yaml">
+<TabItem value="atmos-yaml" label="atmos.yaml">
+
+<File title=".github/workflows/atmos-pro-affected-stacks.yaml">
+```yaml
+name: Atmos Pro Affected Stacks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  id-token: write   # Required for OIDC token exchange with Atmos Pro
+  contents: read
+
 jobs:
   affected:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Upload affected stacks
         run: atmos describe affected --upload
 ```
 </File>
 
-<ActionCard title="Pro Configuration">
-    Configure workspace ID, authentication, payload chunking, and drift detection in your `atmos.yaml`.
+</TabItem>
+<TabItem value="github-variable" label="GitHub variable">
+
+<File title=".github/workflows/atmos-pro-affected-stacks.yaml">
+```yaml
+name: Atmos Pro Affected Stacks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  id-token: write   # Required for OIDC token exchange with Atmos Pro
+  contents: read
+
+jobs:
+  affected:
+    runs-on: ubuntu-latest
+    env:
+      ATMOS_PRO_WORKSPACE_ID: ${{ vars.ATMOS_PRO_WORKSPACE_ID }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Upload affected stacks
+        run: atmos describe affected --upload
+```
+</File>
+
+</TabItem>
+</Tabs>
+
+<ActionCard title="Complete Workflow Setup">
+    Copy the full Affected Stacks, Upload Instances, Plan, and Apply workflows, including cloud
+    authentication with Atmos Auth profiles.
     <div>
-      <PrimaryCTA to="/cli/configuration/settings/pro">Configuration Reference</PrimaryCTA>
+      <PrimaryCTA to="https://atmos-pro.com/docs/configure/github-workflows">GitHub Actions Workflows</PrimaryCTA>
+      <SecondaryCTA to="https://atmos-pro.com/docs/install">Installation Guide</SecondaryCTA>
     </div>
 </ActionCard>
 
@@ -91,24 +291,21 @@ Atmos Pro uses **GitHub OIDC token exchange** for authentication. No API keys or
 are needed. When running in GitHub Actions with `id-token: write` permission, Atmos automatically
 requests an OIDC token and exchanges it for a short-lived Atmos Pro bearer token.
 
-The only configuration required is your `workspace_id`, which identifies your organization's
-workspace. This value is not a secret and is safe to commit to version control.
+Atmos Pro accepts the token only when three things line up: the repository has the Atmos Pro
+GitHub App installed, the repository is imported into the workspace named by `workspace_id`, and
+the workflow matches one of the workspace's repository permissions.
 
-<File title="atmos.yaml">
-```yaml
-settings:
-  pro:
-    workspace_id: "your-workspace-id"
-```
-</File>
+Cloud credentials are a separate OIDC flow between your workflows and your cloud provider. Atmos Pro
+never holds them. See [Cloud Authentication](https://atmos-pro.com/docs/configure/cloud-authentication)
+and [Auth](/stacks/auth).
 
 ## Features
 
 ### Affected Stacks
 
 Upload the results of `atmos describe affected` to Atmos Pro for visibility into what changed
-on each pull request. Atmos Pro correlates uploads with GitHub webhooks to show affected
-components directly in your PR workflow.
+on each pull request. Atmos Pro correlates uploads with GitHub webhooks to dispatch plans in
+dependency order and summarize the results on the pull request.
 
 <Terminal title="shell">
 ```bash
@@ -127,6 +324,24 @@ organization.
 atmos list instances --upload
 ```
 </Terminal>
+
+<AtmosProScreenshot
+  view="stacks"
+  cropAspectRatio={1280 / 400}
+  alt="Atmos Pro stacks view showing component instances organized by repository, region, and stage"
+  caption="Uploaded instances populate the stacks view, organized by repository and stack hierarchy."
+/>
+
+### Deployment Approvals
+
+Combine Atmos Pro with [GitHub Environments](https://atmos-pro.com/docs/configure/github-environments)
+to require verified Atmos Pro dispatches and independent human approval before changes are applied.
+
+<AtmosProScreenshot
+  view="approvals"
+  alt="Atmos Pro approvals queue listing pull requests with stacks awaiting plan approval"
+  caption="Reviewers see every pending approval across repositories, grouped by pull request."
+/>
 
 ### Stack Locking
 
@@ -153,6 +368,9 @@ atmos terraform plan vpc -s prod-use1 --upload-status
 ```
 </Terminal>
 
+See [Configure Drift Detection](https://atmos-pro.com/docs/configure/drift-detection) to schedule
+detection and remediation.
+
 ## Commands
 
 <dl>
@@ -167,6 +385,9 @@ atmos terraform plan vpc -s prod-use1 --upload-status
 
   <dt>[`atmos pro unlock`](/cli/commands/pro/unlock)</dt>
   <dd>Unlock a previously locked stack.</dd>
+
+  <dt>[`atmos pro commit`](/cli/commands/pro/commit)</dt>
+  <dd>Commit generated files back to the pull request branch as a verified Atmos Pro App commit.</dd>
 
   <dt>[`atmos terraform plan --upload-status`](/cli/commands/terraform/plan)</dt>
   <dd>Upload plan results for drift detection.</dd>
@@ -194,19 +415,22 @@ atmos terraform plan vpc -s prod-use1 --upload-status
 
 If `--upload` fails with an authentication error:
 
-1. Verify your workflow has `id-token: write` permission
-2. Confirm `ATMOS_PRO_WORKSPACE_ID` is set to the correct workspace
-3. Check that the Atmos Pro GitHub App is installed on your repository
+1. Check that the [Atmos Pro GitHub App](https://github.com/apps/atmos-pro) is installed on your repository
+2. Verify your workflow has `id-token: write` permission
+3. Confirm the workspace ID (`settings.pro.workspace_id` or `ATMOS_PRO_WORKSPACE_ID`) names the correct workspace
 
 ### Upload Access Denied (403)
 
 If the upload succeeds authentication but returns a 403:
 
 1. Verify the repository has been imported into your Atmos Pro workspace
-2. Check repository permissions in your Atmos Pro workspace settings
+2. Check that a repository permission in your workspace matches the workflow's branch, environment, and workflow file
+
+See [Atmos Pro Troubleshooting](https://atmos-pro.com/docs/learn/troubleshooting) for more.
 
 ## Related
 
+- [Atmos Pro Documentation](https://atmos-pro.com/docs) - Installation, configuration, and concepts
 - [Pro Configuration](/cli/configuration/settings/pro) - Full configuration reference for `settings.pro`
 - [Auth](/stacks/auth) - Configure OIDC authentication
 - [Native CI](/ci) - CI/CD integration for GitHub Actions
