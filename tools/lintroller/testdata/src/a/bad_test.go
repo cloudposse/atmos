@@ -77,3 +77,16 @@ func BenchmarkGoodOsArgs(b *testing.B) {
 
 	os.Args = []string{"bench", "arg"} // OK: os.Args is allowed in benchmarks.
 }
+
+// Test log level checks in test file - these are allowed in test files.
+func TestGoodLogLevelInTest(t *testing.T) {
+	// OK: log level checks are allowed in test files.
+	var atmosConfig struct {
+		Logs struct {
+			Level string
+		}
+	}
+	if atmosConfig.Logs.Level == "Debug" {
+		// This is fine in test files.
+	}
+}
