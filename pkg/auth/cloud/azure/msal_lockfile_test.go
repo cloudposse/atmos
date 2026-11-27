@@ -2,6 +2,7 @@ package azure
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -161,6 +162,22 @@ func acquireTestMSALLock(lockPath string) (*testMSALLock, error) {
 		return nil, err
 	}
 	return &testMSALLock{path: lockPath, lock: lock}, nil
+}
+
+// replaceTestMSALLock simulates another process replacing the lock file at lockPath: it creates
+// and locks a new file beside it, then renames that file over lockPath. The rename unlinks the
+// previous file from the path and installs the locked replacement atomically, so no other
+// process can create a lock file at the path in between.
+func replaceTestMSALLock(lockPath string) (*testMSALLock, error) {
+	nextPath := lockPath + ".next"
+	next, err := acquireTestMSALLock(nextPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Rename(nextPath, lockPath); err != nil {
+		return nil, errors.Join(err, next.release())
+	}
+	return &testMSALLock{path: lockPath, lock: next.lock}, nil
 }
 
 // release unlocks and then deletes the lock file, as msal-extensions does.
