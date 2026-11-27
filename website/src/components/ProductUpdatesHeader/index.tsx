@@ -1,4 +1,5 @@
 import React from 'react';
+import SubscribeButton from '../AtmosNewsletter/SubscribeButton';
 import ProductUpdatesNav, { type ProductUpdatesNavProps } from '../ProductUpdatesNav';
 import styles from './styles.module.css';
 
@@ -8,6 +9,11 @@ export default function ProductUpdatesHeader({ activeView }: ProductUpdatesNavPr
     <header className={styles.header}>
       <h1 className={styles.title}>Atmos Updates</h1>
       <p className={styles.description}>What's new and what's next for Atmos.</p>
+      <nav className={styles.subscriptions} aria-label="Subscribe to Atmos updates">
+        <SubscribeButton />
+        <a href="/changelog/rss.xml">RSS</a>
+        <a href="/changelog/atom.xml">Atom</a>
+      </nav>
       <ProductUpdatesNav activeView={activeView} />
     </header>
   );
