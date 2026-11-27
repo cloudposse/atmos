@@ -137,19 +137,20 @@ func requiredIdentities(policy *schema.PluginPolicy, entry *pluginlock.Entry) ([
 	if len(policy.TrustedPublishers) != 0 {
 		groups = append(groups, policy.TrustedPublishers)
 	}
-	if isOfficialSource(entry.Source) {
-		groups = append(groups, []schema.PluginPublisher{{Publisher: "cloudposse", Identity: officialSigner, Issuer: officialIssuer}})
-	}
-	if len(groups) == 0 {
-		return nil, errUtils.ErrPluginSignatureInvalid
-	}
-	identities := make([][]signature.Identity, 0, len(groups))
+	var identities [][]signature.Identity
 	for _, group := range groups {
 		matches := publisherIdentities(entry.Plugin, group)
 		if len(matches) == 0 {
 			return nil, errUtils.ErrPluginSignatureInvalid
 		}
 		identities = append(identities, matches)
+	}
+	// The release workflow signs every plugin published under the official registry path.
+	if isOfficialSource(entry.Source) {
+		identities = append(identities, []signature.Identity{{Identity: officialSigner, Issuer: officialIssuer}})
+	}
+	if len(identities) == 0 {
+		return nil, errUtils.ErrPluginSignatureInvalid
 	}
 	return identities, nil
 }
