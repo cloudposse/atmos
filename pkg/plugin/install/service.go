@@ -126,7 +126,7 @@ func (s *Service) prepareRelease(ctx context.Context, request *Request, release 
 		return nil, err
 	}
 	evidence := &verifiedEvidence{verification: pluginlock.Verification{Signature: "unverified"}}
-	if SignatureRequired(&s.Config.Plugins.Policy) {
+	if ReleaseSignatureRequired(&s.Config.Plugins.Policy, request.Source) {
 		reportPhase("Verifying publisher")
 		var err error
 		evidence, err = s.loadEvidence(ctx, releaseEntry(request, release, nil), request.Layout, request.Layout != "")

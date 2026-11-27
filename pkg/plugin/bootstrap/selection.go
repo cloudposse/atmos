@@ -112,20 +112,24 @@ func selectLockedPackages(ctx context.Context, atmos *schema.AtmosConfiguration,
 }
 
 func verifySelections(ctx context.Context, atmos *schema.AtmosConfiguration, declarations map[string]schema.PluginPackage, file *pluginlock.File) error {
-	if install.SignatureRequired(&atmos.Plugins.Policy) {
-		descriptors, err := Descriptors()
-		if err != nil {
-			return err
+	var service *install.Service
+	for alias := range declarations {
+		entry := file.Spec.Packages[alias]
+		if !install.ReleaseSignatureRequired(&atmos.Plugins.Policy, entry.Source) {
+			continue
 		}
-		service, err := install.NewService(atmos, descriptors)
-		if err != nil {
-			return err
-		}
-		for alias := range declarations {
-			entry := file.Spec.Packages[alias]
-			if _, err := service.VerifyInstalled(ctx, &entry); err != nil {
+		if service == nil {
+			descriptors, err := Descriptors()
+			if err != nil {
 				return err
 			}
+			service, err = install.NewService(atmos, descriptors)
+			if err != nil {
+				return err
+			}
+		}
+		if _, err := service.VerifyInstalled(ctx, &entry); err != nil {
+			return err
 		}
 	}
 	return nil
