@@ -102,7 +102,7 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 
 	// Apply the edition pin (if any) before unmarshaling, same as the main
 	// LoadConfig flow (this path skips that hook otherwise).
-	if err := applyEditionDefaults(v); err != nil {
+	if err := applyEditionDefaults(v, false); err != nil {
 		return err
 	}
 
@@ -112,6 +112,8 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 	if err := applyPluginPolicy(v, atmosConfig); err != nil {
 		return err
 	}
+	resolveDiscoveryStackDefaults(v, atmosConfig)
+
 	extractEnvMapsFromViper(v, atmosConfig)
 
 	// Fix auth.identities after Viper unmarshal (same as in main LoadConfig flow).

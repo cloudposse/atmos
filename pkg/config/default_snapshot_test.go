@@ -218,7 +218,13 @@ func regenerateSnapshot(t *testing.T, path string, current map[string]string) {
 	builder.WriteString("#   " + regenerateSnapshotEnvVar + "=true go test ./pkg/config -run TestDefaultConfigurationSnapshot\n")
 	builder.WriteString("# Changing an existing value here requires a journal entry in pkg/edition/journal.yaml.\n")
 	for _, key := range keys {
-		builder.WriteString(key + ": " + current[key] + "\n")
+		var node yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte(current[key]), &node))
+		value := node.Content[0]
+		value.Style |= yaml.FlowStyle
+		encoded, err := yaml.Marshal(value)
+		require.NoError(t, err)
+		fmt.Fprintf(&builder, "%s: %s", key, encoded)
 	}
 
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))

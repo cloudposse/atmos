@@ -66,22 +66,21 @@ default in `describe component`, and the component filter defaulting to `schema`
 
 ## Architecture
 
-### The four default layers
+### Default layers
 
-All defaults funnel through `LoadConfig` (`pkg/config/load.go`). A default can originate in four
+All defaults funnel through `LoadConfig` (`pkg/config/load.go`). A default can originate in three
 places, and understanding them is essential because the journal can only roll back one of them:
 
 | Layer | Where | Viper layer | Journal coverage |
 |---|---|---|---|
 | (a) `setDefaultConfiguration` | `pkg/config/load.go` | defaults (`SetDefault`) | **v1 target** |
 | (b) embedded `atmos.yaml` | `pkg/config/atmos.yaml` (go:embed) | config (`MergeConfig`) | must never contain journaled keys (test-enforced) |
-| (c) `defaultCliConfig` struct | `pkg/config/default.go` | config; only when **no** atmos.yaml exists | must agree with each entry's `New` (test-enforced) |
 | (d) flag defaults | `pkg/flags/` | defaults, on the global Viper | deferred to v2 |
 
-Layers (b) and (c) merge into Viper's **config layer**, which the defaults layer cannot override.
-That is why the invariant tests in `pkg/config/edition_invariants_test.go` pin down two policies:
-journaled keys must be absent from the embedded atmos.yaml, and `defaultCliConfig` must state the
-same current value as the journal (or omit the field).
+The project loader registers the same Viper defaults for every project before reading any
+configuration files. File discovery can add commands from the Git root's `.atmos.d` and
+records which file was found. Edition pins apply to omitted settings in all discovery modes.
+The embedded file merges at config precedence and must stay free of journaled keys.
 
 ### Components
 
@@ -142,7 +141,7 @@ Two test layers make an unjournaled default change un-mergeable:
 2. **Invariants** (`pkg/edition/journal_invariants_test.go` and
     `pkg/config/edition_invariants_test.go`): dates valid and chronological per key; chains
     consistent (`entry[n+1].Old == entry[n].New`); each key's newest `New` equals the live default;
-    journaled keys absent from the embedded atmos.yaml; `defaultCliConfig` agreement; the `edition`
+    journaled keys absent from the embedded atmos.yaml; config-file presence parity; the `edition`
     key never journaled.
 3. **Release boundary** (`pkg/edition/journal_release_test.go` +
     `pkg/edition/testdata/latest-release.yaml`): see below.
@@ -188,10 +187,8 @@ against the previous release, which is weaker but never wrong.
 
 Changing a shipped default means updating every live layer that sets it, in one PR:
 
-1. Change the literal in `setDefaultConfiguration` (`pkg/config/load.go`), **and** in
-    `defaultCliConfig` (`pkg/config/default.go`) if that struct also carries the field — the
-    invariant tests require both to agree with the journal's current value. Confirm the key isn't
-    set in the embedded `atmos.yaml` (layer (b) must stay free of journaled keys).
+1. Change the registered default in `pkg/config`. Confirm the key isn't also set in the embedded
+    `atmos.yaml`, where it would outrank an edition pin.
 2. Append a dated entry to `pkg/edition/journal.yaml` (date = expected merge date, `Ref` = PR URL,
     `Old`/`New` in the type the field uses today). The date must be after the latest published
     release; update it to the actual merge date before merging (see "Release boundary").
@@ -246,8 +243,7 @@ The `2026-10-26` value transitions for `templates.settings.enabled`,
 values from `false` to `true` for projects with CLI configuration. The documented defaults and
 `defaultCliConfig` already enabled them, but `setDefaultConfiguration` did not supply them.
 Unpinned projects and pins on or after the transition get enabled defaults; earlier pins retain
-`false`. Explicit configuration wins. The no-config-file fallback retains its existing enabled
-values because it already supplied them at the config layer.
+`false`. Explicit configuration wins. For pins before that transition, zero-config projects retain their historically enabled template settings.
 
 ## Historical drift this feature surfaced (and fixed)
 

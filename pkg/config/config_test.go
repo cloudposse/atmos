@@ -21,16 +21,17 @@ import (
 // schema.Terraform.EffectiveInitMode/EffectiveInitUpgrade's doc comments for why.
 //
 // Init.Reconfigure itself is asserted empty, not "auto": EffectiveInitReconfigure's legacy
-// fallback (deprecated init_run_reconfigure, which defaultCliConfig sets to true) needs
+// fallback (deprecated init_run_reconfigure, which defaults to true) needs
 // Init.Reconfigure to stay genuinely unset to resolve to auto -- see
-// EffectiveInitReconfigure's doc comment and defaultCliConfig's matching comment in default.go.
+// EffectiveInitReconfigure's doc comment.
 func TestDefaultConfig_TerraformInit(t *testing.T) {
-	assert.Equal(t, schema.TerraformInitModeAuto, defaultCliConfig.Components.Terraform.Init.Mode)
-	assert.Empty(t, defaultCliConfig.Components.Terraform.Init.Reconfigure)
-	assert.True(t, defaultCliConfig.Components.Terraform.InitRunReconfigure)
-	assert.Equal(t, schema.TerraformInitReconfigureAuto, defaultCliConfig.Components.Terraform.EffectiveInitReconfigure())
-	assert.Equal(t, schema.TerraformInitUpgradeAuto, defaultCliConfig.Components.Terraform.Init.Upgrade)
-	assert.False(t, defaultCliConfig.Components.Terraform.Init.PassVars)
+	cfg := loadProjectDefaults(t)
+	assert.Equal(t, schema.TerraformInitModeAuto, cfg.Components.Terraform.Init.Mode)
+	assert.Empty(t, cfg.Components.Terraform.Init.Reconfigure)
+	assert.True(t, cfg.Components.Terraform.InitRunReconfigure)
+	assert.Equal(t, schema.TerraformInitReconfigureAuto, cfg.Components.Terraform.EffectiveInitReconfigure())
+	assert.Equal(t, schema.TerraformInitUpgradeAuto, cfg.Components.Terraform.Init.Upgrade)
+	assert.False(t, cfg.Components.Terraform.Init.PassVars)
 }
 
 // TestInitCliConfig should initialize atmos configuration with the correct base path and atmos Config File Path.
@@ -148,8 +149,8 @@ terraform:
 				require.NoError(t, err)
 				// check if the atmos config path is set to empty
 				assert.Equal(t, "", cfg.CliConfigPath)
-				// check if the base path is set correctly from the default value
-				assert.Equal(t, ".", cfg.BasePath)
+				// An omitted base path uses Git-root discovery, then the working directory.
+				assert.Empty(t, cfg.BasePath)
 				// check if the apply auto approve is set correctly from the default value
 				assert.Equal(t, false, cfg.Components.Terraform.ApplyAutoApprove)
 			},

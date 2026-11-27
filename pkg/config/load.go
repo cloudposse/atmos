@@ -439,7 +439,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// Apply the edition pin (if any) as a rollback overlay on the defaults layer.
 	// This must run after every config source has merged (so the `edition:` key is
 	// visible) and before the final unmarshal; SetDefault never beats user-set values.
-	if err := applyEditionDefaults(v); err != nil {
+	if err := applyEditionDefaults(v, atmosConfig.CliConfigPath == ""); err != nil {
 		return atmosConfig, fmt.Errorf("apply edition defaults: %w", err)
 	}
 
@@ -455,6 +455,8 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	if err != nil {
 		return atmosConfig, err
 	}
+
+	resolveDiscoveryStackDefaults(v, &atmosConfig)
 
 	if atmosConfig.Settings.Functions.Exec.Concurrency() < 1 {
 		return atmosConfig, fmt.Errorf("%w: settings.functions.exec.max_concurrency must be at least 1", errUtils.ErrInvalidConfig)
@@ -614,7 +616,7 @@ func loadConventionalConfig(v *viper.Viper, configAndStacksInfo *schema.ConfigAn
 	if err := loadConfigSources(v, configAndStacksInfo); err != nil {
 		return err
 	}
-	if err := loadMissingConfigDefaults(v); err != nil {
+	if err := loadImportsWithoutConfig(v); err != nil {
 		return err
 	}
 	if v.ConfigFileUsed() != "" {
@@ -633,8 +635,8 @@ func loadConventionalConfig(v *viper.Viper, configAndStacksInfo *schema.ConfigAn
 	return nil
 }
 
-func loadMissingConfigDefaults(v *viper.Viper) error {
-	// If no config file is used, fall back to the default CLI config.
+func loadImportsWithoutConfig(v *viper.Viper) error {
+	// A project without a config file can still contribute commands via .atmos.d.
 	if v.ConfigFileUsed() != "" {
 		return nil
 	}
@@ -643,9 +645,7 @@ func loadMissingConfigDefaults(v *viper.Viper) error {
 	log.Debug("Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'")
 	log.Debug("Using the default CLI config")
 
-	if err := mergeDefaultConfig(v); err != nil {
-		return err
-	}
+	v.SetDefault("default", true) // Discovery metadata: no project config file was found.
 
 	// Also search git root for .atmos.d even with default config.
 	// This enables custom commands defined in .atmos.d at the repo root
@@ -939,6 +939,7 @@ func bindEnv(v *viper.Viper, key ...string) {
 // journal entry — only regenerate the snapshot. Projects pinned to an earlier
 // edition get pre-change values re-applied by applyEditionDefaults.
 func setDefaultConfiguration(v *viper.Viper) {
+	setProjectDefaults(v)
 	v.SetDefault("init.repository", schema.DefaultInitRepository)
 	v.SetDefault("init.ref", "")
 	v.SetDefault("init.git", true)
@@ -953,22 +954,13 @@ func setDefaultConfiguration(v *viper.Viper) {
 	// Docker remains preferred whenever it is already available.
 	v.SetDefault("container.runtime.auto_start", true)
 
-	// EKS is opt-in since PR #1903 (journaled in pkg/edition; previously this
-	// SetDefault contradicted defaultCliConfig and kept the old behavior alive).
+	// EKS is opt-in since PR #1903 (journaled in pkg/edition).
 	v.SetDefault("components.helmfile.use_eks", false)
 	v.SetDefault("components.terraform.append_user_agent",
 		fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
 	// Plugin cache enabled by default for zero-config performance.
 	v.SetDefault("components.terraform.plugin_cache", true)
 	v.SetDefault("components.terraform.auto_provision_workdir_for_outputs", true)
-	// Pre-existing bug fix, not a behavior change: init_run_reconfigure's documented/intended
-	// default has always been true (see defaultCliConfig in pkg/config/default.go), but this key
-	// was never set here at all, so any project WITH an atmos.yaml (the vast majority of real
-	// usage -- defaultCliConfig, layer (c), only applies when no atmos.yaml exists) silently got
-	// Go's zero value (false) instead, via EffectiveInitReconfigure's legacy fallback. No journal
-	// entry: the intended default never changed, layer (a) was just missing it -- same class of
-	// layer-disagreement bug as the historical logs.level/pager/use_eks cases documented in
-	// docs/prd/editions.md.
 	v.SetDefault("components.terraform.init_run_reconfigure", true)
 	// terraform init only runs when something that affects it changed, since 2026-09-12
 	// (journaled in pkg/edition; previously always, since init.mode didn't exist). A project
@@ -1050,8 +1042,7 @@ func setRuntimeDefaults(v *viper.Viper) {
 	// already-installed listed tools, since 2026-10-09 (journaled in pkg/edition; previously
 	// only explicit dependencies were installed, since toolchain.install didn't exist). A
 	// project pinned to an edition before that date gets "declared" restored by
-	// applyEditionDefaults. defaultCliConfig deliberately omits the field so a pin is never
-	// shadowed by the config layer.
+	// applyEditionDefaults.
 	v.SetDefault("toolchain.install", "auto")
 
 	// Atmos Pro defaults

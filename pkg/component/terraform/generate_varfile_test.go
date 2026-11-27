@@ -20,6 +20,7 @@ import (
 	schema "github.com/cloudposse/atmos/pkg/schema"
 	store "github.com/cloudposse/atmos/pkg/store"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	"github.com/cockroachdb/errors"
 	hcl "github.com/hashicorp/hcl/v2"
 	hclsyntax "github.com/hashicorp/hcl/v2/hclsyntax"
 	tfconfig "github.com/hashicorp/terraform-config-inspect/tfconfig"
@@ -161,7 +162,11 @@ func TestEnsureTerraformComponentExists_ReturnsErrorWithBasePath(t *testing.T) {
 	err := EnsureTerraformComponentExists(atmosConfig, info)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "missing-comp")
-	assert.Contains(t, err.Error(), filepath.Join("components", "terraform"))
+	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
+	assert.Contains(t, err.Error(), filepath.Join("components", "terraform", "missing-comp"))
+	hints := strings.Join(errors.GetAllHints(err), "\n")
+	assert.Contains(t, hints, "components.terraform.base_path")
+	assert.Contains(t, hints, "ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
 }
 
 func TestExecuteTerraformGenerateVarfileCmd_Deprecated(t *testing.T) {

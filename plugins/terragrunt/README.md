@@ -34,7 +34,6 @@ Configure a project with:
 ```yaml
 components:
   terraform:
-    base_path: components/terraform
     command: tofu
     terragrunt:
       enabled: true

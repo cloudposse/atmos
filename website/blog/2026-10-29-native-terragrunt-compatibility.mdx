@@ -59,8 +59,6 @@ From your project's root, install the plugin and opt into native discovery with 
 ```shell
 atmos plugin install oci://ghcr.io/cloudposse/atmos/plugins/terragrunt \
   --as=terragrunt
-atmos config set components.terraform.base_path \
-  components/terraform
 atmos config set components.terraform.command tofu
 atmos config set components.terraform.terragrunt.enabled true
 atmos config set components.terraform.terragrunt.mode native
@@ -73,7 +71,7 @@ atmos list stacks
 atmos list instances
 ```
 
-Adjust `live/**` to your Terragrunt directory layout. Atmos requires `components.terraform.base_path` even though Terragrunt units do not live there, and the directory does not need to exist. Keep your existing Terraform command setting if you use Terraform instead of OpenTofu. Discovery does not require per-unit Atmos YAML. Use the component and stack names from the inventory when running `atmos terraform plan <component> -s <stack>`.
+Adjust `live/**` to your Terragrunt directory layout. Keep your existing Terraform command setting if you use Terraform instead of OpenTofu. Discovery does not require per-unit Atmos YAML. Use the component and stack names from the inventory when running `atmos terraform plan <component> -s <stack>`.
 
 ## Put units in the stacks you already have
 
@@ -125,7 +123,7 @@ Native mode also handles `terraform_binary`, `errors` retry and ignore policies,
 
 ## Atmos Pro and executable mode
 
-Units are ordinary Terraform components to Atmos Pro: `atmos describe affected --upload` and `atmos list instances --upload` report them, and you can plan and apply one unit at a time. Teams that want to keep Terragrunt itself as the engine can set `mode: executable`, and Atmos still orders the units and supplies authentication, the toolchain, and the environment for each `terragrunt run`.
+Units are ordinary Terraform components to [Atmos Pro](https://atmos-pro.com): `atmos describe affected --upload` and `atmos list instances --upload` report them, and you can plan and apply one unit at a time. Teams that want to keep Terragrunt itself as the engine can set `mode: executable`, and Atmos still orders the units and supplies authentication, the toolchain, and the environment for each `terragrunt run`.
 
 ## Compatibility is explicit
 

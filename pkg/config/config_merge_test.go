@@ -324,15 +324,3 @@ nested:
 		assert.Equal(t, "value", v.GetString("existing"))
 	})
 }
-
-func TestMergeDefaultConfig(t *testing.T) {
-	t.Parallel()
-
-	v := viper.New()
-
-	err := mergeDefaultConfig(v)
-	assert.Error(t, err, "cannot decode configuration: unable to determine config type")
-	v.SetConfigType("yaml")
-	err = mergeDefaultConfig(v)
-	assert.NoError(t, err, "should not return error if config type is yaml")
-}

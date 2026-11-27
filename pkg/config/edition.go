@@ -19,7 +19,7 @@ const editionKey = "edition"
 // config sources (files, atmos.d, profiles, env bindings) have merged and
 // immediately before the final Unmarshal — SetDefault only touches the defaults
 // layer, so a user-set value, env var, or flag always still wins.
-func applyEditionDefaults(v *viper.Viper) error {
+func applyEditionDefaults(v *viper.Viper, noConfigFile bool) error {
 	raw := resolveEditionPin(v)
 	if raw == "" {
 		return nil
@@ -32,6 +32,14 @@ func applyEditionDefaults(v *viper.Viper) error {
 
 	overrides := edition.Overrides(anchor)
 	for key, oldValue := range overrides {
+		// The 2026-10-26 transition only changed projects with a config file.
+		// Templates were already enabled for zero-config projects before that date.
+		if noConfigFile && anchor.Date.Format("2006-01-02") < "2026-10-26" {
+			switch key {
+			case "templates.settings.enabled", "templates.settings.sprig.enabled", "templates.settings.gomplate.enabled":
+				oldValue = true
+			}
+		}
 		v.SetDefault(key, oldValue)
 	}
 	// Record the winning pin so atmosConfig.Edition reflects it even when it

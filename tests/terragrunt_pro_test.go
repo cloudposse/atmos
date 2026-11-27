@@ -175,7 +175,6 @@ settings:
     token: test-token
 components:
   terraform:
-    base_path: components/terraform
     command: `+filepath.ToSlash(tofu)+`
     terragrunt:
       enabled: true

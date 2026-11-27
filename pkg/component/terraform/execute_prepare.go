@@ -72,17 +72,18 @@ func (e *Executor) resolveAndProvisionComponentPath(ctx context.Context, writers
 	}
 
 	if !componentPathExists && !dryRunCreatesComponentPath(atmosConfig, info) {
-		basePath, _ := u.GetComponentBasePath(atmosConfig, cfg.TerraformComponentType)
-		return "", fmt.Errorf(
-			"%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
-			errUtils.ErrInvalidTerraformComponent,
-			info.ComponentFromArg,
-			info.FinalComponent,
-			basePath,
-		)
+		return "", missingTerraformComponent(info, componentPath)
 	}
 
 	return componentPath, nil
+}
+
+func missingTerraformComponent(info *schema.ConfigAndStacksInfo, componentPath string) error {
+	err := fmt.Errorf("%w: '%s' points to the Terraform component '%s', but its directory does not exist at '%s'",
+		errUtils.ErrInvalidTerraformComponent, info.ComponentFromArg, info.FinalComponent, componentPath)
+	return errUtils.Build(err).
+		WithHint("If your Terraform components live elsewhere, set `components.terraform.base_path` in `atmos.yaml` or set `ATMOS_COMPONENTS_TERRAFORM_BASE_PATH`.").
+		Err()
 }
 
 // dryRunCreatesComponentPath reports whether a dry run skipped the step that would have created a

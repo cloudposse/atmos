@@ -302,12 +302,7 @@ func TestLoadConfigEditionInitReconfigureIsNotPinProtected(t *testing.T) {
 		"init.reconfigure is not edition-pin-protected; an old pin still resolves to auto via the legacy init_run_reconfigure fallback")
 }
 
-// TestLoadConfigNoAtmosYamlDefaults exercises the fallback path taken when no
-// atmos.yaml is discoverable at all (mergeDefaultConfig / defaultCliConfig),
-// as opposed to writeEditionTestConfig's tests, which always provide one and
-// so never touch this path. This is the exact path that let --help regress to
-// showing everything by default: defaultCliConfig didn't state Help.Filter, so
-// its zero value (false) silently overrode the true SetDefault ships.
+// Bare help uses the focused view even when zero config files are discoverable.
 func TestLoadConfigNoAtmosYamlDefaults(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Chdir(tmpDir)

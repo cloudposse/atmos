@@ -34,7 +34,7 @@ func EnsureTerraformComponentExists(atmosConfig *schema.AtmosConfiguration, info
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	_, exists, err := component.ProvisionAndResolveComponentPath(
+	resolvedPath, exists, err := component.ProvisionAndResolveComponentPath(
 		ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.TerraformComponentType, componentPath,
 	)
 	if err != nil {
@@ -51,12 +51,7 @@ func EnsureTerraformComponentExists(atmosConfig *schema.AtmosConfiguration, info
 		return nil
 	}
 
-	basePath, err := u.GetComponentBasePath(atmosConfig, cfg.TerraformComponentType)
-	if err != nil {
-		return errors.Join(errUtils.ErrInvalidTerraformComponent, fmt.Errorf("failed to resolve component base path: %w", err))
-	}
-	return fmt.Errorf("%w: '%s' points to '%s', but it does not exist in '%s'",
-		errUtils.ErrInvalidTerraformComponent, info.ComponentFromArg, info.FinalComponent, basePath)
+	return missingTerraformComponent(info, resolvedPath)
 }
 
 // ExecuteGenerateVarfile generates a varfile for a terraform component.

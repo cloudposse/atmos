@@ -46,15 +46,39 @@ func TestLoadConfig(t *testing.T) {
 base_path: /test/path
 components:
   terraform:
-    base_path: components/terraform
+    base_path: infra/modules
 stacks:
   base_path: stacks
 `,
 			expectedError: false,
 			validateConfig: func(t *testing.T, config schema.AtmosConfiguration) {
 				assert.Equal(t, "/test/path", config.BasePath)
-				assert.Equal(t, "components/terraform", config.Components.Terraform.BasePath)
+				assert.Equal(t, "infra/modules", config.Components.Terraform.BasePath)
 				assert.Equal(t, "stacks", config.Stacks.BasePath)
+			},
+		},
+		{
+			name:          "project omits terraform base path",
+			configContent: "components:\n  terraform:\n    command: tofu\n",
+			validateConfig: func(t *testing.T, config schema.AtmosConfiguration) {
+				assert.Equal(t, "components/terraform", config.Components.Terraform.BasePath)
+				assert.Equal(t, "tofu", config.Components.Terraform.Command)
+			},
+		},
+		{
+			name: "explicit values override project defaults",
+			configContent: `
+components:
+  terraform:
+    auto_generate_backend_file: false
+stacks:
+  included_paths: [deploy/**/*]
+  excluded_paths: []
+`,
+			validateConfig: func(t *testing.T, config schema.AtmosConfiguration) {
+				assert.False(t, config.Components.Terraform.AutoGenerateBackendFile)
+				assert.Equal(t, []string{"deploy/**/*"}, config.Stacks.IncludedPaths)
+				assert.Empty(t, config.Stacks.ExcludedPaths)
 			},
 		},
 		{
@@ -1957,4 +1981,65 @@ func TestAutoProvisionWorkdirForOutputsEnvVarBinding(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, cfg.Components.Terraform.AutoProvisionWorkdirForOutputs,
 		"ATMOS_COMPONENTS_TERRAFORM_AUTO_PROVISION_WORKDIR_FOR_OUTPUTS=false should override default true")
+}
+
+func loadProjectDefaults(t *testing.T) schema.AtmosConfiguration {
+	t.Helper()
+	t.Chdir(t.TempDir())
+	cfg, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+	return cfg
+}
+
+func TestProjectDefaultsIndependentOfConfigFile(t *testing.T) {
+	for _, pin := range []string{"", "2026-01"} {
+		t.Run("edition="+pin, func(t *testing.T) {
+			t.Setenv("ATMOS_EDITION", pin)
+			want := loadProjectDefaults(t)
+			require.True(t, want.Default)
+			want.Default = false
+			if pin == "2026-01" {
+				// This edition predates the template transition for file-backed projects.
+				require.True(t, want.Templates.Settings.Enabled)
+				want.Templates.Settings.Enabled = false
+				want.Templates.Settings.Sprig.Enabled = false
+				want.Templates.Settings.Gomplate.Enabled = false
+			}
+			for _, body := range []string{"", "components:\n  terraform:\n    command: tofu\n"} {
+				createTestConfig(t, ".", body)
+				got, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+				require.NoError(t, err)
+				require.NotEmpty(t, got.CliConfigPath)
+				got.CliConfigPath = ""
+				// Reading a file builds a case index and an empty command list.
+				got.CaseMaps = nil
+				require.Empty(t, got.Commands)
+				got.Commands = nil
+				if body != "" {
+					require.Equal(t, "tofu", got.Components.Terraform.Command)
+					got.Components.Terraform.Command = want.Components.Terraform.Command
+				}
+				require.Equal(t, want, got)
+			}
+		})
+	}
+}
+
+func TestDiscoveryStackDefaults(t *testing.T) {
+	const discovery = "components:\n  terraform:\n    terragrunt:\n      enabled: true\n      discovery: {enabled: true}\n"
+	for _, tc := range []struct {
+		name, stacks string
+		wantEmpty    bool
+	}{
+		{"provider inventory only", "", true},
+		{"explicit default directory", "stacks: {base_path: stacks}", false},
+		{"explicit default glob", "stacks: {included_paths: ['orgs/**/*']}", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := createTestConfig(t, t.TempDir(), discovery+tc.stacks)
+			cfg, err := LoadConfig(&schema.ConfigAndStacksInfo{AtmosConfigFilesFromArg: []string{path}})
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantEmpty, cfg.AllowsEmptyStackInventory())
+		})
+	}
 }

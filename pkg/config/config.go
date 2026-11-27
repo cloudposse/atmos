@@ -599,13 +599,7 @@ func resolveComponentAbsolutePaths(atmosConfig *schema.AtmosConfiguration, atmos
 }
 
 func resolvePublishingAbsolutePaths(atmosConfig *schema.AtmosConfiguration, atmosBasePathAbs string) error {
-	// Convert Container dir to an absolute path. Unlike Terraform/Helmfile/etc.,
-	// components.container.base_path is a brand-new field: existing atmos.yaml
-	// files never set it, and defaultCliConfig's own default only applies via
-	// mergeDefaultConfig when no config file is found at all. Default it
-	// defensively here so containerDirAbsolutePath (and any other reader of
-	// Components.Container.BasePath) always sees "components/container"
-	// instead of silently falling back to the bare project root.
+	// Direct callers can supply a config that has not passed through LoadConfig.
 	if atmosConfig.Components.Container.BasePath == "" {
 		atmosConfig.Components.Container.BasePath = "components/container"
 	}
@@ -616,13 +610,6 @@ func resolvePublishingAbsolutePaths(atmosConfig *schema.AtmosConfiguration, atmo
 	}
 	atmosConfig.ContainerDirAbsolutePath = containerDirAbsPath
 
-	// Convert aws/cloudformation dir to an absolute path. Mirrors the Container fix above:
-	// components."aws/cloudformation".base_path is a brand-new field, so existing atmos.yaml
-	// files never set it, and defaultCliConfig's own default only applies via
-	// mergeDefaultConfig when no config file is found at all. Default it defensively here so
-	// CloudFormationDirAbsolutePath (and any other reader of Components.CloudFormation.BasePath)
-	// always sees "components/cloudformation" instead of silently falling back to the bare
-	// project root.
 	if atmosConfig.Components.CloudFormation.BasePath == "" {
 		atmosConfig.Components.CloudFormation.BasePath = "components/cloudformation"
 	}

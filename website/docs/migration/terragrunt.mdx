@@ -896,7 +896,6 @@ The plugin is not yet published. Until it is, build it from the Atmos repository
 ```yaml
 components:
   terraform:
-    base_path: components/terraform
     command: tofu
     terragrunt:
       enabled: true
@@ -1104,7 +1103,7 @@ The Terragrunt provider adds `--terragrunt-feature name=value` (repeatable, also
 
 ### Atmos Pro
 
-Terragrunt units are ordinary Terraform components to Atmos Pro: `atmos describe affected --upload` and `atmos list instances --upload` report them by component and stack, and a unit joins Atmos Pro when the stack that imports it sets `settings.pro.enabled: true`.
+Terragrunt units are ordinary Terraform components to [Atmos Pro](https://atmos-pro.com): `atmos describe affected --upload` and `atmos list instances --upload` report them by component and stack, and a unit joins Atmos Pro when the stack that imports it sets `settings.pro.enabled: true`.
 
 To plan one unit on one runner and apply it on another, run `atmos terraform plan` followed by `atmos terraform planfile upload`, which publishes the plan and its record together. On the next runner, `atmos terraform planfile download` followed by `atmos terraform apply --from-plan` re-provisions the working directory from the checkout, verifies it against the reviewed plan, and applies exactly that plan. With an absolute `base_path`, the checkout must be at the same absolute path on both runners.
 

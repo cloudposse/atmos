@@ -412,62 +412,17 @@ Use forward slashes (`/`) for all paths in `atmos.yaml`. They work correctly on 
 
 ## Default CLI Configuration
 
-If `atmos.yaml` is not found in any of the searched locations, Atmos uses the following default configuration:
+Atmos supplies defaults for omitted settings, whether it discovers an `atmos.yaml` or runs without one. For example, this entire file selects OpenTofu and keeps the default Terraform component directory, `components/terraform`.
 
 <File title="atmos.yaml">
 ```yaml
-base_path: "."
-vendor:
-  base_path: "./vendor.yaml"
 components:
   terraform:
-    base_path: components/terraform
-    apply_auto_approve: false
-    deploy_run_init: true
-    init_run_reconfigure: true
-    auto_generate_backend_file: true
-  helmfile:
-    base_path: components/helmfile
-    use_eks: true
-    kubeconfig_path: /dev/shm
-stacks:
-  base_path: stacks
-  included_paths:
-    - "orgs/**/*"
-  excluded_paths:
-    - "**/_defaults.yaml"
-  name_pattern: "{tenant}-{environment}-{stage}"
-workflows:
-  base_path: stacks/workflows
-logs:
-  file: "/dev/stderr"
-  level: Info
-schemas:
-  jsonschema:
-    base_path: stacks/schemas/jsonschema
-  opa:
-    base_path: stacks/schemas/opa
-templates:
-  settings:
-    enabled: true
-    sprig:
-      enabled: true
-    gomplate:
-      enabled: true
-settings:
-  list_merge_strategy: replace
-  terminal:
-    color: true
-    max_width: 120
-    pager: false
-version:
-  check:
-    enabled: true
-    frequency: daily
+    command: tofu
 ```
 </File>
 
-If Atmos does not find an `atmos.yaml` file and the default CLI config is used, and if you set the ENV variable `ATMOS_LOGS_LEVEL` to `Debug` (e.g. `export ATMOS_LOGS_LEVEL=Debug`) before executing Atmos commands, you'll see a message indicating that the default configuration is being used.
+Run `atmos describe config` to inspect the effective configuration for your project. Profiles, environment variables, flags, and [edition pins](/cli/configuration/edition) participate in configuration resolution.
 
 ## Configuration Sections
 

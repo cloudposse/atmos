@@ -1,194 +1,73 @@
 package config
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-
 	"github.com/pkg/errors"
-	"github.com/samber/lo"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/version"
 )
 
-var (
-	NotFound = errors.New("\n'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
-		"\nYou can download a sample config and adapt it to your requirements from " +
-		"https://raw.githubusercontent.com/cloudposse/atmos/main/examples/quick-start-advanced/atmos.yaml")
+const defaultVersionCheckTimeout = 1000
 
-	defaultCliConfig = schema.AtmosConfiguration{
-		Default:  true,
-		BasePath: ".",
-		Cast: &schema.CastConfig{
-			Recording: &schema.CastRecordingConfig{
-				Width:  120,
-				Height: 36,
-			},
-		},
-		Stacks: schema.Stacks{
-			BasePath:    "stacks",
-			NamePattern: "{tenant}-{environment}-{stage}",
-			IncludedPaths: []string{
-				"orgs/**/*",
-			},
-			ExcludedPaths: []string{
-				"**/_defaults.yaml",
-			},
-		},
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath:                "components/terraform",
-				ApplyAutoApprove:        false,
-				DeployRunInit:           true,
-				InitRunReconfigure:      true,
-				AutoGenerateBackendFile: true,
-				AppendUserAgent:         fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version),
-				PluginCache:             true, // Enabled by default for zero-config performance.
-				PluginCacheDir:          "",   // Empty = use XDG default (~/.cache/atmos/terraform/plugins).
-				Init: schema.TerraformInit{
-					PassVars: false,
-					Mode:     schema.TerraformInitModeAuto,
-					// Reconfigure is deliberately left unset (not "auto"), unlike Mode/Upgrade
-					// above: EffectiveInitReconfigure's legacy fallback (InitRunReconfigure, set
-					// above) needs Init.Reconfigure to be genuinely empty to distinguish "unset"
-					// from an explicit choice -- see EffectiveInitReconfigure's doc comment and
-					// setDefaultConfiguration's matching omission in load.go. Setting it here would
-					// make ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE/--init-run-reconfigure
-					// silently stop working whenever no atmos.yaml is found (mergeDefaultConfig is
-					// the only place this struct is used).
-					//
-					// Auto since 2026-09-12 (journaled in pkg/edition); a project pinned to an
-					// earlier edition gets "never" restored -- see EffectiveInitUpgrade's doc comment.
-					Upgrade: schema.TerraformInitUpgradeAuto,
-				},
-				// Fallback since 2026-10-01 (journaled in pkg/edition); a project pinned to an
-				// earlier edition gets "always" restored.
-				Mocks: schema.TerraformMocks{
-					Mode: schema.TerraformMocksModeFallback,
-				},
-				Plan: schema.TerraformPlan{
-					SkipPlanfile: false,
-				},
-				Workspace: schema.WorkspaceConfig{
-					PrefixSeparator: "-", // Character used in place of '/' in auto-generated backend key prefixes.
-				},
-			},
-			Helmfile: schema.Helmfile{
-				BasePath:              "components/helmfile",
-				KubeconfigPath:        "",
-				HelmAwsProfilePattern: "", // Deprecated: kept for backward compatibility, use --identity flag.
-				ClusterNamePattern:    "", // Deprecated: kept for backward compatibility, use ClusterNameTemplate.
-				ClusterNameTemplate:   "",
-				ClusterName:           "",
-				UseEKS:                false, // Changed from true to false - EKS is now opt-in.
-			},
-			Packer: schema.Packer{
-				BasePath: "components/packer",
-				Command:  "packer",
-			},
-			Kubernetes: schema.Kubernetes{
-				BasePath:          "components/kubernetes",
-				Provider:          "kubectl",
-				AutoGenerateFiles: false,
-			},
-			Container: schema.ContainerComponentsConfig{
-				BasePath: "components/container",
-			},
-		},
-		Settings: schema.AtmosSettings{
-			Experimental:      "warn-daily",
-			ListMergeStrategy: "replace",
-			Terminal: schema.Terminal{
-				// Unlimited by default: 0 means "use the live detected terminal width".
-				// Baking GetTerminalWidth() here froze the width measured at package
-				// init (before TTY setup — typically 78) and clamped all rendering.
-				MaxWidth: 0,
-				Pager:    "false", // Disabled by default since PR #1642 (journaled in pkg/edition); previously "less" here contradicted setDefaultConfiguration.
-				Unicode:  true,
-				Help:     schema.HelpSettings{Filter: true}, // Focused --help by default since PR #2762 (journaled in pkg/edition).
-				SyntaxHighlighting: schema.SyntaxHighlighting{
-					Enabled:     true,
-					Formatter:   "terminal",
-					Theme:       "dracula",
-					LineNumbers: true,
-					Wrap:        false,
-				},
-			},
-		},
-		Workflows: schema.Workflows{
-			BasePath: "stacks/workflows",
-		},
-		Logs: schema.Logs{
-			File:  "/dev/stderr",
-			Level: "Warning",
-		},
-		Schemas: map[string]interface{}{
-			"jsonschema": schema.ResourcePath{
-				BasePath: "stacks/schemas/jsonschema",
-			},
-			"opa": schema.ResourcePath{
-				BasePath: "stacks/schemas/opa",
-			},
-		},
-		Templates: schema.Templates{
-			Settings: schema.TemplatesSettings{
-				Enabled: true,
-				Sprig: schema.TemplatesSettingsSprig{
-					Enabled: true,
-				},
-				Gomplate: schema.TemplatesSettingsGomplate{
-					Enabled:     true,
-					Datasources: make(map[string]schema.TemplatesSettingsGomplateDatasource),
-				},
-			},
-		},
-		Initialized: true,
-		Toolchain: schema.Toolchain{
-			UseLockFile: true, // Changed from false to true since PR toolchain-lockfile-default (journaled in pkg/edition).
-			// Install is intentionally unset: toolchain.install is journaled in pkg/edition and its
-			// default lives in setDefaultConfiguration, so an edition pin can roll it back.
-		},
-		Version: schema.Version{
-			Check: schema.VersionCheck{
-				Enabled:   true,
-				Timeout:   1000,
-				Frequency: "daily",
-			},
-		},
-		Docs: schema.Docs{
-			// Even if these fields are deprecated, initialize them with valid values.
-			Generate: map[string]schema.DocsGenerate{
-				"readme": {
-					BaseDir:  ".",
-					Input:    []any{"./README.yaml"},
-					Template: "https://raw.githubusercontent.com/cloudposse/.github/5a599e3b929f871f333cb9681a721d26b237d8de/README.md.gotmpl",
-					Output:   "./README.md",
-					Terraform: schema.TerraformDocsReadmeSettings{
-						Source:        "src/",
-						Enabled:       false,
-						Format:        "markdown",
-						ShowProviders: lo.ToPtr(false),
-						ShowInputs:    lo.ToPtr(true),
-						ShowOutputs:   lo.ToPtr(true),
-						SortBy:        "name",
-						HideEmpty:     false,
-						IndentLevel:   2,
-					},
-				},
-			},
-		},
-	}
-)
+var NotFound = errors.New("\n'atmos.yaml' CLI config was not found in any of the searched paths: system dir, home dir, current dir, ENV vars." +
+	"\nYou can download a sample config and adapt it to your requirements from " +
+	"https://raw.githubusercontent.com/cloudposse/atmos/main/examples/quick-start-advanced/atmos.yaml")
 
-// mergeDefaultConfig merges the contents of defaultCliConfig into the
-// current Viper instance if no other configuration file was located.
-func mergeDefaultConfig(v *viper.Viper) error {
-	j, err := json.Marshal(defaultCliConfig)
-	if err != nil {
-		return err
+// setProjectDefaults registers project conventions before loading any user configuration.
+func setProjectDefaults(v *viper.Viper) {
+	setYAMLStackDefaults(v)
+	v.SetDefault("stacks.excluded_paths", []string{"**/_defaults.yaml"})
+	v.SetDefault("workflows.base_path", "stacks/workflows")
+	v.SetDefault("components.terraform.base_path", "components/terraform")
+	v.SetDefault("components.terraform.deploy_run_init", true)
+	v.SetDefault("components.terraform.auto_generate_backend_file", true)
+	v.SetDefault("components.terraform.workspace.prefix_separator", "-")
+	v.SetDefault("components.helmfile.base_path", "components/helmfile")
+	v.SetDefault("components.packer.base_path", "components/packer")
+	v.SetDefault("components.packer.command", "packer")
+	v.SetDefault("components.kubernetes.base_path", "components/kubernetes")
+	v.SetDefault("components.kubernetes.provider", "kubectl")
+	v.SetDefault("components.container.base_path", "components/container")
+	v.SetDefault("schemas.jsonschema.base_path", "stacks/schemas/jsonschema")
+	v.SetDefault("schemas.opa.base_path", "stacks/schemas/opa")
+	v.SetDefault("settings.list_merge_strategy", "replace")
+	v.SetDefault("settings.terminal.unicode", true)
+	v.SetDefault("settings.terminal.syntax_highlighting.enabled", true)
+	v.SetDefault("settings.terminal.syntax_highlighting.formatter", "terminal")
+	v.SetDefault("settings.terminal.syntax_highlighting.theme", "dracula")
+	v.SetDefault("settings.terminal.syntax_highlighting.line_numbers", true)
+	v.SetDefault("version.check.enabled", true)
+	v.SetDefault("version.check.timeout", defaultVersionCheckTimeout)
+	v.SetDefault("version.check.frequency", "daily")
+	v.SetDefault("docs.generate.readme.base-dir", ".")
+	v.SetDefault("docs.generate.readme.input", []any{"./README.yaml"})
+	v.SetDefault("docs.generate.readme.template", "https://raw.githubusercontent.com/cloudposse/.github/5a599e3b929f871f333cb9681a721d26b237d8de/README.md.gotmpl")
+	v.SetDefault("docs.generate.readme.terraform.source", "src/")
+	v.SetDefault("docs.generate.readme.terraform.format", "markdown")
+	v.SetDefault("docs.generate.readme.terraform.show_providers", false)
+	v.SetDefault("docs.generate.readme.terraform.show_inputs", true)
+	v.SetDefault("docs.generate.readme.terraform.show_outputs", true)
+	v.SetDefault("docs.generate.readme.terraform.sort_by", "name")
+	v.SetDefault("docs.generate.readme.terraform.indent_level", 2)
+}
+
+func setYAMLStackDefaults(v *viper.Viper) {
+	v.SetDefault("stacks.base_path", "stacks")
+	v.SetDefault("stacks.included_paths", []string{"orgs/**/*"})
+}
+
+// Discovery providers can supply the whole inventory. A default directory or glob
+// must not imply that the project also requested YAML stack manifests.
+func resolveDiscoveryStackDefaults(v *viper.Viper, config *schema.AtmosConfiguration) {
+	if !config.HasComponentDiscovery() {
+		return
 	}
-	reader := bytes.NewReader(j)
-	return v.MergeConfig(reader)
+	v.SetDefault("stacks.base_path", nil)
+	v.SetDefault("stacks.included_paths", nil)
+	if v.IsSet("stacks.base_path") || v.IsSet("stacks.included_paths") {
+		setYAMLStackDefaults(v)
+		return
+	}
+	config.Stacks.BasePath = ""
+	config.Stacks.IncludedPaths = nil
 }

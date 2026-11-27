@@ -88,7 +88,7 @@ func TestInitReconfigurePrecedence_DefaultConfigStillHonorsLegacy(t *testing.T) 
 	t.Setenv(envLegacyReconfigure, "false")
 	t.Setenv(envNewReconfigure, "")
 
-	cfg := defaultCliConfig
+	cfg := loadProjectDefaults(t)
 	require.Empty(t, cfg.Components.Terraform.Init.Reconfigure)
 	require.NoError(t, processEnvVars(&cfg))
 	assert.Equal(t, schema.TerraformInitReconfigureNever, cfg.Components.Terraform.EffectiveInitReconfigure())

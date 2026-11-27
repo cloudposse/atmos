@@ -153,7 +153,8 @@ func TestViperBindEnv_TerraformRegistryCacheLocationExpands(t *testing.T) {
 }
 
 func TestDefaultConfig_PluginCache(t *testing.T) {
+	cfg := loadProjectDefaults(t)
 	// Verify that the default config has plugin cache enabled.
-	assert.True(t, defaultCliConfig.Components.Terraform.PluginCache)
-	assert.Equal(t, "", defaultCliConfig.Components.Terraform.PluginCacheDir)
+	assert.True(t, cfg.Components.Terraform.PluginCache)
+	assert.Equal(t, "", cfg.Components.Terraform.PluginCacheDir)
 }
