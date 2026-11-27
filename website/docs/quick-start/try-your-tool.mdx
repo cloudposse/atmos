@@ -45,28 +45,26 @@ The first and third commands run Terragrunt in `live/dev/vpc`. Your plan shows t
 
 ## Helm
 
-Render a local chart with the values for dev:
+If you already run `helm template web ./charts/web`, register that chart and render it by name. Pass any values files in the same order as your Helm command.
 
 ```shell
-atmos init examples/helm
-cd helm
-atmos helm template demo -s dev
+atmos stack add ./charts/web -s dev --release-name web --namespace preview -f values/dev.yaml
+atmos helm template web -s dev
 ```
 
-Look for the Service named `demo` with port `8080`. Rendering runs locally without a Kubernetes cluster. [Install the release on a local cluster](/examples/helm).
+Here `dev` is the Atmos stack and `preview` is the Kubernetes namespace. To render a second release, repeat the first command with `--release-name web-canary`, then run `atmos helm template web-canary -s dev`. For a chart you can try locally, run `atmos init examples/helm`. [Helm example](/examples/helm)
 
 ## Packer
 
-Build an Alpine image in a local Docker or compatible Podman runtime:
+Register the directory you already pass to Packer. This example loads `images/alpine/inputs/dev.pkrvars.hcl`.
 
 ```shell
-atmos init examples/packer-docker
-cd packer-docker
-atmos packer init alpine -s alpine
-atmos packer build alpine -s alpine
+atmos stack add ./images/alpine -s dev --var-file inputs/dev.pkrvars.hcl
+atmos packer init alpine -s dev
+atmos packer validate alpine -s dev
 ```
 
-The first Packer command downloads the builder plugin. The build pulls Alpine and commits the provisioned image locally. [Explore the Packer template](/examples/packer-docker).
+When validation succeeds, run `atmos packer build alpine -s dev` to build the artifact. To register production, use `-s prod --var-file inputs/prod.pkrvars.hcl`. For a runnable local Docker build, use `atmos init examples/packer-docker`. [Packer example](/examples/packer-docker)
 
 ## Kubernetes and Kustomize
 

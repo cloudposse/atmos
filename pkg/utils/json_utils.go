@@ -103,13 +103,6 @@ func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 func ConvertToJSON(data any) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToJSON")()
 
-	jc := jsoniter.Config{
-		EscapeHTML:                    false,
-		ObjectFieldMustBeSimpleString: false,
-		SortMapKeys:                   true,
-		ValidateJsonRawMessage:        true,
-	}
-
 	// Marshal compact with jsoniter (for its EscapeHTML/SortMapKeys/RawMessage behavior),
 	// then indent with stdlib encoding/json rather than jsoniter's own MarshalIndent: jsoniter
 	// has a long-standing bug where a []interface{} nested more than one level deep (e.g. an
@@ -117,7 +110,7 @@ func ConvertToJSON(data any) (string, error) {
 	// depth, under-indenting that inner array's elements and closing bracket while the
 	// surrounding structure stays correctly indented. encoding/json.Indent re-indents an
 	// already-valid compact document from scratch, so it isn't subject to that bug.
-	compact, err := jc.Froze().Marshal(yamlsource.Display(data))
+	compact, err := MarshalJSONCompact(data)
 	if err != nil {
 		return "", err
 	}
@@ -127,6 +120,19 @@ func ConvertToJSON(data any) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// MarshalJSONCompact encodes displayed YAML values without indentation or rounding.
+func MarshalJSONCompact(data any) ([]byte, error) {
+	defer perf.Track(nil, "utils.MarshalJSONCompact")()
+
+	jc := jsoniter.Config{
+		EscapeHTML:                    false,
+		ObjectFieldMustBeSimpleString: false,
+		SortMapKeys:                   true,
+		ValidateJsonRawMessage:        true,
+	}
+	return jc.Froze().Marshal(yamlsource.Display(data))
 }
 
 // ConvertToJSONFast converts the provided value to a JSON-encoded string using 'ConfigFastest' config and json.Marshal without indents

@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/spf13/viper"
@@ -85,7 +84,7 @@ func unitTool(ctx context.Context, unit, project, savedPin string, config *schem
 	if err != nil {
 		return terragruntTool{}, fmt.Errorf("terragrunt unit %s needs terragrunt %s or newer: %w", unit, terragruntexec.MinimumVersion, err)
 	}
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, nativeVersionTimeout)
 	defer cancel()
 	probe := exec.CommandContext(ctx, path, "--version")
 	probe.Dir = dir

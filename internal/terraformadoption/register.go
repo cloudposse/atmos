@@ -2,6 +2,7 @@ package terraformadoption
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"fmt"
@@ -46,13 +47,17 @@ stacks:
 
 var stackNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 
-// Registration describes one component addition to a standalone Terraform stack.
+// Registration describes one component addition to a standalone Atmos stack.
 type Registration struct {
-	Project, Dir, Stack, Explicit string
-	Config                        *schema.AtmosConfiguration // Nil for an unconfigured project.
-	Defaults                      *schema.AtmosConfiguration // CLI defaults, including plugin policy in a fresh project.
-	Interactive, DryRun           bool
-	Output                        io.Writer
+	AtlantisProject                                    string
+	atlantisSource, atlantisWorkspace, atlantisVersion string
+	Project, Dir, Stack, Explicit                      string
+	Name, ReleaseName, Namespace                       string
+	VarFiles, Values                                   []string
+	Config                                             *schema.AtmosConfiguration // Nil for an unconfigured project.
+	Defaults                                           *schema.AtmosConfiguration // CLI defaults, including plugin policy in a fresh project.
+	Interactive, DryRun                                bool
+	Output                                             io.Writer
 }
 
 // Save previews or atomically updates the selected manifest under a project lock.
@@ -115,14 +120,23 @@ type deployment struct {
 }
 
 func (r *Registration) save(ctx context.Context) error {
-	unit, err := TerragruntUnit(r.Dir)
+	source, err := detectSource(r.Dir)
 	if err != nil {
 		return err
 	}
-	if unit != "" {
-		return r.saveUnit(ctx, unit)
+	if err := r.checkSourceFlags(source.kind); err != nil {
+		return err
 	}
-	return r.saveTerraform(ctx)
+	switch source.kind {
+	case atlantisKind:
+		return r.saveAtlantis(ctx)
+	case tg:
+		return r.saveUnit(ctx, source.path)
+	case helmKind, packerKind:
+		return r.saveLocalTool(source)
+	default:
+		return r.saveTerraform(ctx)
+	}
 }
 
 func (r *Registration) saveTerraform(ctx context.Context) error {
@@ -142,7 +156,7 @@ func (r *Registration) saveTerraform(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	name := filepath.Base(r.Dir)
+	name := cmp.Or(r.Name, filepath.Base(r.Dir))
 	dest := stack.BuildComponentYqPath(terraform, name, "")
 	entry, exists, err := r.manifestEntry(original, file, name)
 	if err != nil {
@@ -156,10 +170,21 @@ func (r *Registration) saveTerraform(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := r.checkAtlantisTarget(ctx, &engine, workspace); err != nil {
+		return err
+	}
 	target := deploymentTarget{relative, workspace, engine}
 	data, err := target.updateEntry(original, dest, entry, exists)
 	if err != nil {
 		return fmt.Errorf("component %s in %s: %w", name, file, err)
+	}
+	data, err = r.addVarFiles(data, varFileTarget{dest, file, r.Dir, terraform}, exists)
+	if err != nil {
+		return err
+	}
+	data, err = r.addAtlantisSource(data, dest, exists)
+	if err != nil {
+		return err
 	}
 	fmt.Fprintf(r.Output, "Atmos stack: %s\nComponent: %s\nEngine: %s (%s)\nWorkspace: %s\nManifest: %s\n", r.Stack, name, engine.Command, engine.Reason, workspace, file)
 	fmt.Fprintf(r.Output, "Next: atmos terraform plan %s -s %s\n", name, r.Stack)

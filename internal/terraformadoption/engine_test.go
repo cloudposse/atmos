@@ -27,6 +27,19 @@ var (
 // Build a tiny stand-in once, then write it into each test's isolated PATH.
 func versionProbe(t *testing.T) []byte {
 	t.Helper()
+	// Real native binary launches can spend seconds in platform signature checks
+	// for each freshly copied executable. A shell script exercises the same
+	// argument/version contract on POSIX without per-copy loader delays.
+	if runtime.GOOS != "windows" {
+		return []byte(`#!/bin/sh
+case "${0##*/}:$1" in
+    terragrunt:--version) echo "terragrunt version v1.2.1" ;;
+    tofu:version) echo "OpenTofu v8.7.6" ;;
+    *:version) echo "Terraform v8.7.6" ;;
+    *) exit 1 ;;
+esac
+`)
+	}
 	buildVersionProbe.Do(func() {
 		path := filepath.Join(t.TempDir(), "probe.exe")
 		cmd := exec.CommandContext(t.Context(), "go", "build", "-o", path, "./testdata/versionprobe/main.go")

@@ -1,6 +1,6 @@
 # Adopt an existing Terraform or OpenTofu root
 
-**Status** — Single-root path planning, engine selection and local-state stack registration implemented on this branch. Ordered variable-file persistence and repository-wide import remain proposed. Uses the [shared adoption contract](README.md).
+**Status** — Single-root path planning, engine selection and local-state stack registration implemented on this branch. Registration saves ordered HCL and JSON variable files. Repository-wide import remains proposed. Uses the [shared adoption contract](README.md).
 
 ## Outcome
 
@@ -25,20 +25,20 @@ atmos stack add ./infra/network -s dev
 atmos terraform plan network -s dev
 ```
 
-A bare project's trial uses the native engine in the selected directory. The save writes a minimal project configuration with Terraform base path `.` and an ordinary component with `metadata.component: infra/network`, `metadata.terraform_workspace` and `command`. A version selected through an exact project pin is also recorded. A named local workspace must already exist. The writer supports a standalone manifest and rejects remote backends or cached local state paths it cannot reproduce. Explicit variable files can be forwarded at plan time. The `stack add --var-file` example above and the ordered `vars` example below describe the next release.
+A bare project's trial uses the native engine in the selected directory. The save writes a minimal project configuration with Terraform base path `.` and an ordinary component with `metadata.component: infra/network`, `metadata.terraform_workspace` and `command`. A version selected through an exact project pin is also recorded. A named local workspace must already exist. The writer supports a standalone manifest and rejects remote backends or cached local state paths it cannot reproduce. Explicit variable files can be forwarded at plan time. Pass repeated `--var-file` flags on registration to save live references.
 
 ## What can ship first
 
-Start with one explicitly selected root, the original working directory, a local backend and an existing workspace. Offer a path-based plan using the selected native binary and its original ordered arguments. A root with only defaults or native auto-loaded files can also be saved as a named component once the writer and state checks below pass. In that case omit `vars` entirely. A user who supplies explicit files can still try the plan while saved-file support is being completed. Enabling that case requires the ordered include work below.
+Start with one explicitly selected root, the original working directory, a local backend and an existing workspace. Offer a path-based plan using the selected native binary and its original ordered arguments. A root with only defaults or native auto-loaded files can also be saved as a named component once the writer and state checks below pass. In that case omit `vars` entirely. Explicit variable files are stored as ordered component-level includes.
 
 | Case | What the importer can establish | Release decision |
 | --- | --- | --- |
 | Explicit directory with `.tf` or `.tf.json` | A configuration directory. A user selection supplies evidence that it is a deployment root. | Offer a plan. Use a tool pin or explicit choice for shared syntax. Include `.tofu` and `.tofu.json` in OpenTofu discovery and respect OpenTofu’s file selection. |
 | Native defaults, environment and auto-files | Leaving these to the binary preserves their ordering. Inherited Atmos vars can still override them through a generated var file. | Enable save only after checking the effective component, including inherited variables, backend generation and workspace selection. |
-| One or more explicit files | Native argument forwarding exists. An existing single HCL include parses values before the generated JSON var file reaches the binary. | Trial can forward the files. Gate saving on exact conversion and ordered normalization. File order comes from the invocation or user. |
+| One or more explicit files | Native argument forwarding exists. An existing single HCL include parses values before the generated JSON var file reaches the binary. | Trial can forward the files. Save ordered include references. File order comes from the invocation or user. |
 | Several environments, partial backend or remote execution | A directory or tfvars basename alone cannot identify the state object, account or remote workspace. | Show the candidates and missing evidence. Enable each backend family separately after reproducing an existing nonempty state from a fresh checkout. |
 
-**Measured failure.** With Terraform 1.9.8, a provider-free root outputting `var.ratio` and `terraform.workspace` produced `1.75` and `default` with native `-var-file=dev.tfvars`. A named Atmos plan using a single `!include` produced `1` and `default`. Forwarding the original file to the named plan restored `1.75`. All three plans succeeded. The HCL reader currently converts every number through an integer conversion. Fix lossless conversion before advertising saved var-file parity. Include fractional and large numbers, nulls, empty collections and nested values in the regression fixture. [HCL reader](../../../pkg/filetype/filetype.go) · [Terraform argument handling](../../../pkg/component/terraform/execute_helpers_args.go)
+**Original regression.** With Terraform 1.9.8, a provider-free root outputting `var.ratio` and `terraform.workspace` produced `1.75` and `default` with native `-var-file=dev.tfvars`. A named Atmos plan using a single `!include` produced `1` and `default`. Forwarding the original file to the named plan restored `1.75`. All three plans succeeded. The regression was fixed in the HCL reader and the stack decoder. Include fractional and large numbers, nulls, empty collections and nested values in the regression fixture. [HCL reader](../../../pkg/filetype/filetype.go) · [Terraform argument handling](../../../pkg/component/terraform/execute_helpers_args.go)
 
 **New engine work.** Normalize a sequence after resolving its local includes and before stack inheritance or map-only consumers see it. Update manifest validation and diagnostic locations together. Set `tags = { owner = "ops", region = "west" }` in the common file and `tags = { region = "east" }` in dev. Verify that the later assignment removes `owner`, then reverse the files and compare again. Test a trailing native `-var` and a saved-plan apply. For mixed, interleaved `-var` and `-var-file` arguments, offer native trial only until the writer can reproduce the full order without persisting secrets. Existing typed flags can express a subset of defaults. They cannot encode this ordered argument stream. [Instance model](../../../pkg/schema/instance.go) · [Variable-file generation](../../../pkg/component/terraform/generate_varfile.go)
 
@@ -85,7 +85,7 @@ The project configuration points Atmos at the existing root modules and preserve
 base_path: ./
 components:
   terraform:
-    base_path: infra
+    base_path: .
     auto_generate_backend_file: false
 stacks:
   base_path: stacks
@@ -93,21 +93,23 @@ stacks:
     - "*.yaml"
 ```
 
-The following **proposed generated manifest** assumes the existing deployment uses Terraform workspace `default`. The filename supplies the Atmos stack name. The component key resolves to `infra/network`.
+The generated manifest below assumes the existing deployment uses Terraform workspace `default`. The filename supplies the Atmos stack name. The component key resolves to `infra/network`.
 
 ```yaml
 # stacks/dev.yaml
 components:
   terraform:
     network:
+      command: terraform
       metadata:
+        component: infra/network
         terraform_workspace: default
       vars:
         - !include ../infra/network/vars/common.tfvars
         - !include ../infra/network/vars/dev.tfvars
 ```
 
-**Proposed extension to `vars`:** accept a sequence of mapping-valued inputs alongside the existing mapping and single-include forms. Resolve each include from the declaring stack file. Walk the sequence from first to last. Within the sequence, each later assignment replaces the complete value of that top-level variable, including objects and lists. Normalize to a single map before ordinary stack inheritance. Validate every entry and report its file and index on failure. Existing mapping-form behavior stays intact.
+Component `vars` accepts a sequence of mapping-valued inputs alongside the existing mapping and single-include forms. Resolve each include from the declaring stack file. Walk the sequence from first to last. Within the sequence, each later assignment replaces the complete value of that top-level variable, including objects and lists. Normalize to a single map before ordinary stack inheritance. Validate every entry and report its file and index on failure. Existing mapping-form behavior stays intact.
 
 Keep native automatic file loading and explicit CLI override precedence. Applying a saved plan uses its recorded inputs. If an included source cannot be read with equivalent native semantics, identify it before offering a reproducible saved plan.
 
@@ -130,7 +132,7 @@ After registration, run `atmos stack instances -s dev` to find `network`, then `
 
 ## Execution flags
 
-Reuse the existing Terraform `flags` defaults for `lock_timeout`, `lock`, `parallelism`, `refresh` and `compact_warnings`. Explicit native CLI flags take precedence. Adopt a default only when its scope matches the source deployment; a flag specific to one CI plan must retain that scope. For trial plans, forward repeated native `-var-file` arguments in order. The declarative `flags` block has no var-file key. For saved inputs use the proposed ordered `vars` syntax above. [Terraform flag defaults](../../../website/docs/cli/configuration/components/terraform.mdx)
+Reuse the existing Terraform `flags` defaults for `lock_timeout`, `lock`, `parallelism`, `refresh` and `compact_warnings`. Explicit native CLI flags take precedence. Adopt a default only when its scope matches the source deployment; a flag specific to one CI plan must retain that scope. For trial plans, forward repeated native `-var-file` arguments in order. The declarative `flags` block has no var-file key. For saved inputs use the ordered `vars` syntax above. [Terraform flag defaults](../../../website/docs/cli/configuration/components/terraform.mdx)
 
 ## Acceptance
 

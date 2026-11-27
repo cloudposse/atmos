@@ -28,14 +28,9 @@ commands:
     - echo "Building Atlantis config..."
     - atmos atlantis generate repo-config --config-template config-1 --project-template project-1
     - echo "Generating varfiles..."
-    - >-
-        atmos terraform generate varfiles \
-          --file-template={component-path}/varfiles/{namespace}-{environment}-{component}.tfvars.json
-    - echo "Generating varfiles..."
-    - >-
-        atmos terraform generate backends \
-          --format=backend-config \
-          --file-template={component-path}/backends/{namespace}-{environment}-{component}.backend
+    - atmos terraform generate varfiles --format=json --file-template={component-path}/varfiles/{stage}-{component}.tfvars.json
+    - echo "Generating backends..."
+    - atmos terraform generate backends --format=backend-config --file-template={component-path}/backends/{stage}-{component}.backend
 
 
 # Integrations
@@ -66,18 +61,20 @@ integrations:
     project_templates:
       project-1:
         # generate a project entry for each component in every stack
-        name: "{tenant}-{environment}-{stage}-{component}"
+        name: "{stage}-{component}"
         workspace: "{workspace}"
         dir: "{component-path}"
-        terraform_version: v1.8
+        workflow: workflow-1
         delete_source_branch_on_merge: true
         autoplan:
           enabled: true
           when_modified:
             - "**/*.tf"
-            - "varfiles/$PROJECT_NAME.tfvars"
-          apply_requirements:
-            - "approved"
+            - "varfiles/{stage}-{component}.tfvars.json"
+            - "backends/{stage}-{component}.backend"
+            - "../../../stacks/deploy/demo.yaml"
+        apply_requirements:
+          - approved
 
     # Workflow templates
     # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
@@ -86,11 +83,9 @@ integrations:
       workflow-1:
         plan:
           steps:
-            - run: atmos terraform init -input=false
-            # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
-            - run: atmos terraform workspace select $WORKSPACE
-            # You must output the plan using `-out $PLANFILE` because Atlantis expects plans to be in a specific location
-            - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars
+            - run: terraform init -input=false -backend-config="backends/$PROJECT_NAME.backend"
+            - run: terraform workspace select "$WORKSPACE"
+            - run: terraform plan -input=false -var-file="varfiles/$PROJECT_NAME.tfvars.json" -out="$PLANFILE"
         apply:
           steps:
-            - run: terraform apply $PLANFILE
+            - run: terraform apply -input=false "$PLANFILE"

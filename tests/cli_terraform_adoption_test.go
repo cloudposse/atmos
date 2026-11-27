@@ -29,7 +29,11 @@ func TestCLITerraformAdoption(t *testing.T) {
 			t.Setenv("ATMOS_COMPONENTS_TERRAFORM_COMMAND", "")
 			t.Setenv("TF_WORKSPACE", "")
 			t.Setenv("TF_DATA_DIR", "")
-			const module = "resource \"terraform_data\" \"marker\" { input = terraform.workspace }\n"
+			const module = `variable "ratio" { type = number }
+variable "options" { type = map(string) }
+resource "terraform_data" "marker" { input = "${terraform.workspace}|${var.ratio}|${join(",", keys(var.options))}" }
+`
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "common.tfvars"), []byte("ratio=1.75\noptions={common=\"old\"}"), 0o600))
 			require.NoError(t, os.WriteFile(filepath.Join(dir, engine.file), []byte(module), 0o600))
 			native := func(args ...string) []byte {
 				t.Helper()
@@ -52,16 +56,18 @@ func TestCLITerraformAdoption(t *testing.T) {
 				if target.workspace != "default" {
 					native("workspace", "new", target.workspace)
 				}
-				native("apply", "-auto-approve", "-input=false")
-				native("plan", "-out=native.plan")
+				override := target.stack + ".tfvars.json"
+				require.NoError(t, os.WriteFile(filepath.Join(dir, override), []byte(`{"options":{"`+target.stack+`":"new"}}`), 0o600))
+				native("apply", "-auto-approve", "-input=false", "-var-file=common.tfvars", "-var-file="+override)
+				native("plan", "-out=native.plan", "-var-file=common.tfvars", "-var-file="+override)
 				want := adoptedPriorResource(t, native("show", "-json", "native.plan"))
-				require.Equal(t, target.workspace, want.Input)
+				require.Equal(t, target.workspace+"|1.75|"+target.stack, want.Input)
 				priorIDs = append(priorIDs, want.ID)
 				if target.stack == "dev" {
-					atmos("terraform", "plan", "./infra/network", "--command="+engine.name, "-out=trial.plan")
+					atmos("terraform", "plan", "./infra/network", "--command="+engine.name, "-out=trial.plan", "-var-file=common.tfvars", "-var-file="+override)
 					require.Equal(t, want, adoptedPriorResource(t, native("show", "-json", "trial.plan")))
 				}
-				atmos("stack", "add", "./infra/network", "-s", target.stack, "--command="+engine.name)
+				atmos("stack", "add", "./infra/network", "-s", target.stack, "--command="+engine.name, "--var-file", "common.tfvars", "--var-file", override)
 				native("workspace", "select", "default")
 				atmos("terraform", "plan", "network", "-s", target.stack, "-out=named.plan")
 				require.Equal(t, want, adoptedPriorResource(t, native("show", "-json", "named.plan")))

@@ -9,7 +9,6 @@ import (
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
 	"helm.sh/helm/v4/pkg/cli/values"
 	"helm.sh/helm/v4/pkg/getter"
-	sigsyaml "sigs.k8s.io/yaml"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/merge"
@@ -143,18 +142,17 @@ func stringArrayFlag(flags map[string]any, name string) []string {
 }
 
 func loadValuesFile(path string) (map[string]any, error) {
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Helm values file %q: %w", path, err)
 	}
-	var out map[string]any
-	if err := sigsyaml.Unmarshal(data, &out); err != nil {
+	defer file.Close()
+
+	values, err := loader.LoadValues(file)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse Helm values file %q: %w", path, err)
 	}
-	if out == nil {
-		out = map[string]any{}
-	}
-	return out, nil
+	return values, nil
 }
 
 // resolveLocalChart resolves a relative chart/value path against the component

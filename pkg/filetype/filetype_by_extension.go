@@ -43,6 +43,10 @@ func ParseFileRaw(readFileFunc func(string) ([]byte, error), filename string) (a
 func ParseByExtension(data []byte, ext string, filename string) (any, error) {
 	switch ext {
 	case ".json":
+		name := strings.ToLower(ExtractFilenameFromPath(filename))
+		if strings.HasSuffix(name, ".tfvars.json") || strings.HasSuffix(name, ".pkrvars.json") {
+			return parseVariableJSON(data)
+		}
 		return parseJSON(data)
 	case ".yaml", ".yml":
 		return parseYAML(data)

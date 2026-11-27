@@ -577,7 +577,7 @@
               "$ref": "#/definitions/component"
             },
             "vars": {
-              "$ref": "#/definitions/vars"
+              "$ref": "#/definitions/component_variable_inputs"
             },
             "test": {
               "type": "object",
@@ -1847,7 +1847,7 @@
               "$ref": "#/definitions/component"
             },
             "vars": {
-              "$ref": "#/definitions/vars"
+              "$ref": "#/definitions/component_variable_inputs"
             },
             "env": {
               "$ref": "#/definitions/env"
@@ -2985,6 +2985,21 @@
             "schema_type",
             "schema_path"
           ]
+        }
+      ]
+    },
+    "component_variable_inputs": {
+      "description": "Variables as a mapping or a sequence of mapping-valued inputs. Later inputs replace earlier assignments to the same variable.",
+      "oneOf": [
+        { "$ref": "#/definitions/vars" },
+        {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "type": "object" },
+              { "type": "string", "pattern": "^!include" }
+            ]
+          }
         }
       ]
     },

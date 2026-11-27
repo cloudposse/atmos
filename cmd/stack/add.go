@@ -14,8 +14,14 @@ import (
 )
 
 func newStackAddCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "add <path>", Short: "Register a Terraform root, OpenTofu root or Terragrunt unit in a stack", Args: cobra.ExactArgs(1)}
-	parser := flags.NewStandardParser(flags.WithStringFlag("stack", "s", "dev", "Destination Atmos stack"), flags.WithDryRunFlag())
+	cmd := &cobra.Command{Use: "add <path>", Short: "Register an existing Terraform, OpenTofu, Terragrunt, Helm, Packer or Atlantis project in a stack", Args: cobra.ExactArgs(1)}
+	parser := flags.NewStandardParser(flags.WithStringFlag("stack", "s", "dev", "Destination Atmos stack"), flags.WithDryRunFlag(),
+		flags.WithStringFlag("project", "", "", "Select a project declared in atlantis.yaml"),
+		flags.WithStringFlag("name", "", "", "Component name in the destination stack"),
+		flags.WithStringArrayFlag("var-file", "", nil, "Terraform or Packer variable file, relative to the selected root (repeat in precedence order)"),
+		flags.WithStringFlag("release-name", "", "", "Helm release name"),
+		flags.WithStringFlag("namespace", "", "", "Helm release namespace"),
+		flags.WithStringArrayFlag("values", "f", nil, "Helm values file, relative to the current directory (repeat in precedence order)"))
 	parser.RegisterFlags(cmd)
 	flags.RegisterComponentCommandFlags(cmd, "terraform")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -42,6 +48,12 @@ func newStackAddCommand() *cobra.Command {
 			Defaults: defaults, Project: project, Dir: dir, Stack: target, Explicit: explicit,
 			DryRun: preview, Interactive: !ci.ModeEnabled(cmd) && flags.IsInteractive(), Output: cmd.OutOrStdout(),
 		}
+		r.AtlantisProject, _ = cmd.Flags().GetString("project")
+		r.Name, _ = cmd.Flags().GetString("name")
+		r.ReleaseName, _ = cmd.Flags().GetString("release-name")
+		r.Namespace, _ = cmd.Flags().GetString("namespace")
+		r.VarFiles, _ = cmd.Flags().GetStringArray("var-file")
+		r.Values, _ = cmd.Flags().GetStringArray("values")
 		if configured {
 			r.Config = defaults
 			r.Project = r.Config.BasePathAbsolute

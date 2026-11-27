@@ -244,18 +244,16 @@ func ExecutePacker(
 	log.Debug("Writing the variables to file", "file", varFilePath)
 
 	if !info.DryRun {
-		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
+		varFilePath, err = writePackerRunVariables(varFilePath, info.ComponentVarsSection)
 		if err != nil {
 			return err
 		}
-
-		// Defer cleanup of the variable file.
-		// Use a closure to capture varFilePath and ensure cleanup runs even on early errors.
 		defer func() {
 			if removeErr := os.Remove(varFilePath); removeErr != nil && !os.IsNotExist(removeErr) {
 				log.Trace("Failed to remove var file during cleanup", "error", removeErr, "file", varFilePath)
 			}
 		}()
+
 	}
 
 	var inheritance string
@@ -357,4 +355,23 @@ func executePackerCommandWithRetry(
 		},
 		WithEnvironment(info.SanitizedEnv),
 	)
+}
+
+// writePackerRunVariables gives each invocation a private file, including two
+// simultaneous plans against the same template and stack.
+func writePackerRunVariables(path string, vars map[string]any) (string, error) {
+	data, err := u.ConvertToJSON(vars)
+	if err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), ".atmos-*.packer.vars.json")
+	if err != nil {
+		return "", err
+	}
+	_, writeErr := f.WriteString(data)
+	closeErr := f.Close()
+	if err := errors.Join(writeErr, closeErr); err != nil {
+		return "", errors.Join(err, os.Remove(f.Name()))
+	}
+	return f.Name(), nil
 }

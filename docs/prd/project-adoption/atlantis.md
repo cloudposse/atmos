@@ -1,6 +1,6 @@
 # Import deployments from Atlantis
 
-**Status** — Proposed inbound import. Atmos already [generates Atlantis configuration](../../../website/docs/cli/commands/atlantis/atlantis-generate-repo-config.mdx). Uses the [shared CLI contract](README.md) and the [Terraform](terraform.md) and [Terragrunt](terragrunt.md) adapters.
+**Status** — Explicit v3 project inventory and single-project local Terraform/OpenTofu registration implemented. Atmos already [generates Atlantis configuration](../../../website/docs/cli/commands/atlantis/atlantis-generate-repo-config.mdx). Uses the [shared CLI contract](README.md) and the [Terraform](terraform.md) and [Terragrunt](terragrunt.md) adapters.
 
 ## Outcome
 
@@ -9,12 +9,18 @@ A team can reproduce one existing project's plan locally while continuing to use
 ```shell
 atmos stack add ./atlantis.yaml --dry-run
 atmos stack add ./atlantis.yaml --project network-dev -s dev
-atmos terraform plan network -s dev
+atmos terraform plan network-dev -s dev
 ```
 
 When path-based plan finds applicable Atlantis projects, use them as candidates. For two projects sharing a root, offer their existing names, workspaces and ordered var-file paths in one picker. A selection supplies all values documented by that project.
 
-## What can ship first
+## Implemented scope
+
+A bare dry run inventories explicit projects and identifies the first unsupported local plan step. A selected project can register its declared Terraform or OpenTofu root against the matching existing local workspace. The supported workflow uses built-in init followed by built-in plan with zero or more literal var-file arguments. The optional `env/<workspace>.tfvars` is appended after explicit plan arguments, matching Atlantis v0.50.0. A custom apply remains in Atlantis. Shell or environment steps in the plan, unresolved named server workflows, or a different selected local workspace block writing a runnable entry.
+
+The component defaults to the Atlantis project name. The source path and selector are stored in `metadata.custom.atlantis_project`; repeat imports verify that binding. Atlantis retains control over PR and server-side execution. The remaining analysis below covers broader workflow translation, discovery and CI integration.
+
+## Workflow feasibility
 
 Ship a read-only inventory of explicit v3 projects before offering conversion. A named project with a literal directory, effective workspace and known plan workflow can then delegate to the corresponding Terraform or Terragrunt adapter. Every required input must pass that adapter’s save criteria. A useful first result for a custom workflow is a precise explanation of the first unresolved step and which other projects can already be planned.
 
@@ -28,27 +34,31 @@ Ship a read-only inventory of explicit v3 projects before offering conversion. A
 
 For the initial workflow translator, allow built-in init and plan with a tested set of literal arguments. Treat shell-form `run` as unresolved. Recognizing a small set of exact commands, tracking environment across steps, translating dependencies, and moving policy or PR automation are separate milestones. A normal Atmos Terraform component exposes other Terraform operations too. Printing “plan available” cannot enforce Atlantis gates. If the product needs a plan-only execution restriction, require a tested enforcement mechanism before publishing those components into a bulk-apply stack. Users can keep working in inventory-only mode in the meantime. [Upstream custom workflows](https://www.runatlantis.io/docs/custom-workflows.html)
 
-**Round-trip evidence.** Generating configuration from the checked-in demo produced `projects: []` and a declared `workflow-1`. Its stack manifest is empty and its project template does not bind that workflow. Adding a sample component produced a project with workspace `default` and no workflow binding. Its generated project also omitted the intended apply approval, which the template places inside `autoplan`. The build helper’s generated var-file filename also differs from the workflow’s input path. The unmodified demo therefore tests discovery of an unreferenced workflow, with zero explicit projects imported. A positive fixture must add an actual project, bind its workflow and supply the exact var file. Keep a separate built-in-step fixture for the first runnable import. [Demo config](../../../examples/demo-atlantis/atmos.yaml) · [Demo manifest](../../../examples/demo-atlantis/stacks/deploy/demo.yaml)
+**Round-trip evidence.** The demo generates one project, `demo-hello`, in workspace `default`. Its `workflow-1` consumes the generated backend and variable files, and its project-level `apply_requirements` includes `approved`. The CLI regression executes the generated shell steps with Terraform, changes the inputs after planning, then verifies the reviewed value in local state. An importer can inventory this shell workflow and report its steps for review. Use a separate built-in-step fixture to test runnable workflow translation. [Demo](../../../examples/demo-atlantis/README.md) · [CLI regression](../../../tests/cli_atlantis_demo_test.go)
 
 ## Working with the saved stack
 
-Suppose the selected Atlantis project `network-dev` declares `dir: infra/network`, uses Terraform workspace `default`, and passes two literal var files to plan. If the user chooses Atmos stack `dev`, show all three names in the preview: Atlantis project `network-dev`, Atmos component `network` in `dev`, and Terraform workspace `default`. In a new repository, configure `components.terraform.base_path: infra` in `atmos.yaml` and preserve the existing backend as specified in the Terraform PRD. The proposed saved entry is:
+Suppose the selected Atlantis project `network-dev` declares `dir: infra/network`, uses Terraform workspace `default`, and passes two literal var files to plan. If the user chooses Atmos stack `dev`, show all three names in the preview: Atlantis project `network-dev`, Atmos component `network-dev` in `dev`, and Terraform workspace `default`. In a new repository, configure `components.terraform.base_path: .` in `atmos.yaml` and preserve the existing backend as specified in the Terraform PRD. The resulting Terraform entry includes the source identity and ordered input files.
 
 ```yaml
 # stacks/dev.yaml
 components:
   terraform:
-    network:
+    network-dev:
+      command: terraform
       metadata:
+        component: infra/network
         terraform_workspace: default
+        custom:
+          atlantis_project: atlantis.yaml#network-dev
       vars:
         - !include ../infra/network/vars/common.tfvars
         - !include ../infra/network/vars/dev.tfvars
 ```
 
-This example uses the [proposed ordered Terraform vars syntax](terraform.md). Run `atmos stack instances -s dev` and `atmos terraform plan network -s dev` from the saved project. Retain the source Atlantis project identity in the import mapping so a retry can distinguish projects even when directory and workspace coincide. Preview the location of any provenance metadata that will be persisted.
+This example uses the [ordered Terraform vars syntax](terraform.md). Run `atmos stack instances -s dev` and `atmos terraform plan network-dev -s dev` from the saved project. Retain the source Atlantis project identity in the import mapping so a retry can distinguish projects even when directory and workspace coincide. Preview the location of any provenance metadata that will be persisted.
 
-Importing `network-prod` into prod creates or extends `stacks/prod.yaml` using that project's own workflow evidence. Adding another project to dev extends its existing manifest. If the chosen project resolves to a Terragrunt unit, save the [Terragrunt unit import](terragrunt.md) and any representable project-specific configuration. An unresolved workflow remains visible in the inventory-only preview and must never produce a runnable placeholder. Verify the imported addresses from a fresh checkout with the original Atlantis pipeline still in place.
+Importing `network-prod` into prod creates or extends `stacks/prod.yaml` using that project's own workflow evidence. Adding another project to dev extends its existing manifest. A Terragrunt project requires separate [Terragrunt unit registration](terragrunt.md). An unresolved workflow remains visible in the inventory-only preview and must never produce a runnable placeholder. Verify the imported addresses from a fresh checkout with the original Atlantis pipeline still in place.
 
 ## Specification audit and mapping decisions
 

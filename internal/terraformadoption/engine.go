@@ -182,8 +182,10 @@ func resolve(ctx context.Context, dir, command, reason, pin string) (Engine, err
 	return Engine{Command: command, Path: path, Reason: reason, Pin: pin}, nil
 }
 
+const nativeVersionTimeout = 15 * time.Second
+
 func versionLine(ctx context.Context, dir, path string) string {
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, nativeVersionTimeout)
 	defer cancel()
 	probe := exec.CommandContext(ctx, path, "version")
 	probe.Dir = dir

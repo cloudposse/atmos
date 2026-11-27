@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 
 	"github.com/hashicorp/hcl"
@@ -12,6 +13,8 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/zclconf/go-cty/cty"
 	"go.yaml.in/yaml/v3"
+
+	"github.com/cloudposse/atmos/pkg/yaml/scalar"
 )
 
 var ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
@@ -160,14 +163,18 @@ func parseHCL(data []byte, filename string) (any, error) {
 
 // ctyToGo converts cty.Value to Go types.
 func ctyToGo(value cty.Value) any {
+	if value.IsNull() {
+		return nil
+	}
 	switch value.Type() {
 	case cty.String:
 		return value.AsString()
 	case cty.Number:
-		if n, _ := value.AsBigFloat().Int64(); true {
+		number := value.AsBigFloat()
+		if n, accuracy := number.Int64(); accuracy == big.Exact {
 			return n
 		}
-		return value.AsBigFloat()
+		return scalar.NativeNumber(json.Number(number.Text('g', -1)))
 	case cty.Bool:
 		return value.True()
 	}
@@ -181,7 +188,7 @@ func ctyToGo(value cty.Value) any {
 	}
 
 	if value.Type().IsListType() || value.Type().IsTupleType() {
-		var list []any
+		list := make([]any, 0, value.LengthInt())
 		for _, v := range value.AsValueSlice() {
 			list = append(list, ctyToGo(v))
 		}
@@ -189,4 +196,35 @@ func ctyToGo(value cty.Value) any {
 	}
 
 	return value
+}
+
+// parseVariableJSON preserves numbers in Terraform and Packer input files. Other
+// JSON includes keep their ordinary encoding/json representation.
+func parseVariableJSON(data []byte) (any, error) {
+	var decoded any
+	if !json.Valid(data) {
+		return parseJSON(data)
+	}
+	parser := json.NewDecoder(bytes.NewReader(data))
+	parser.UseNumber()
+	if err := parser.Decode(&decoded); err != nil {
+		return nil, err
+	}
+	return nativeVariableNumbers(decoded), nil
+}
+
+func nativeVariableNumbers(v any) any {
+	switch x := v.(type) {
+	case json.Number:
+		return scalar.NativeNumber(x)
+	case map[string]any:
+		for k, child := range x {
+			x[k] = nativeVariableNumbers(child)
+		}
+	case []any:
+		for i, child := range x {
+			x[i] = nativeVariableNumbers(child)
+		}
+	}
+	return v
 }
