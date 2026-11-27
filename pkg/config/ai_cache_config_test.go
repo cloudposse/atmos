@@ -47,7 +47,21 @@ ai:
         cache_system_prompt: true
         cache_project_instructions: false
 `,
-			want: &schema.AICacheSettings{Enabled: true, CacheSystemPrompt: true, CacheProjectInstructions: false},
+			want: &schema.AICacheSettings{Enabled: boolPtr(true), CacheSystemPrompt: true, CacheProjectInstructions: false},
+		},
+		{
+			name:     "nested cache block omitting enabled decodes to nil",
+			provider: "anthropic",
+			yaml: `
+ai:
+  enabled: true
+  providers:
+    anthropic:
+      model: claude-sonnet-4-6
+      cache:
+        cache_system_prompt: true
+`,
+			want: &schema.AICacheSettings{CacheSystemPrompt: true},
 		},
 		{
 			name:     "nested cache block disabled",
@@ -61,7 +75,7 @@ ai:
       cache:
         enabled: false
 `,
-			want: &schema.AICacheSettings{Enabled: false},
+			want: &schema.AICacheSettings{Enabled: boolPtr(false)},
 		},
 		{
 			name:     "nested cache block for bedrock caching both blocks",
@@ -77,7 +91,7 @@ ai:
         cache_system_prompt: true
         cache_project_instructions: true
 `,
-			want: &schema.AICacheSettings{Enabled: true, CacheSystemPrompt: true, CacheProjectInstructions: true},
+			want: &schema.AICacheSettings{Enabled: boolPtr(true), CacheSystemPrompt: true, CacheProjectInstructions: true},
 		},
 	}
 
@@ -96,3 +110,6 @@ ai:
 		})
 	}
 }
+
+// boolPtr returns a pointer to b.
+func boolPtr(b bool) *bool { return &b }

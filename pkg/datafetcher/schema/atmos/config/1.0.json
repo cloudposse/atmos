@@ -100,7 +100,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Enable token caching"
+          "description": "Enable token caching (default: true when omitted)"
         },
         "cache_system_prompt": {
           "anyOf": [

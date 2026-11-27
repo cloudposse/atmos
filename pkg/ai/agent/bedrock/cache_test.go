@@ -203,17 +203,27 @@ func TestExtractCacheConfig(t *testing.T) {
 		},
 		{
 			name:     "disabled",
-			settings: &schema.AICacheSettings{Enabled: false},
+			settings: &schema.AICacheSettings{Enabled: boolPtr(false)},
 			want:     cacheConfig{enabled: false},
 		},
 		{
+			name:     "omitted enabled caches both",
+			settings: &schema.AICacheSettings{},
+			want:     cacheConfig{enabled: true, cacheSystemPrompt: true, cacheProjectInstructions: true},
+		},
+		{
+			name:     "omitted enabled with system prompt only",
+			settings: &schema.AICacheSettings{CacheSystemPrompt: true},
+			want:     cacheConfig{enabled: true, cacheSystemPrompt: true, cacheProjectInstructions: false},
+		},
+		{
 			name:     "enabled without fine-grained settings caches both",
-			settings: &schema.AICacheSettings{Enabled: true},
+			settings: &schema.AICacheSettings{Enabled: boolPtr(true)},
 			want:     cacheConfig{enabled: true, cacheSystemPrompt: true, cacheProjectInstructions: true},
 		},
 		{
 			name:     "enabled with system prompt only",
-			settings: &schema.AICacheSettings{Enabled: true, CacheSystemPrompt: true},
+			settings: &schema.AICacheSettings{Enabled: boolPtr(true), CacheSystemPrompt: true},
 			want:     cacheConfig{enabled: true, cacheSystemPrompt: true, cacheProjectInstructions: false},
 		},
 	}
@@ -240,3 +250,6 @@ func TestExtractCacheConfig_NoProviderConfig(t *testing.T) {
 	require.NotNil(t, got)
 	assert.Equal(t, *defaultCacheConfig(), *got)
 }
+
+// boolPtr returns a pointer to b.
+func boolPtr(b bool) *bool { return &b }
