@@ -75,6 +75,15 @@ func GetFloat64(key string) float64 {
 	return viper.GetViper().GetFloat64(key)
 }
 
+// GetInt returns key's value coerced to int. Returns zero if unset.
+func GetInt(key string) int {
+	defer perf.Track(nil, "viperguard.GetInt")()
+
+	mu.RLock()
+	defer mu.RUnlock()
+	return viper.GetViper().GetInt(key)
+}
+
 // GetStringSlice returns a clone of key's value coerced to []string: viper's
 // own GetStringSlice can return its value's existing backing array rather
 // than a copy, and handing that out under the lock would let a caller mutate

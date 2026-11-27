@@ -620,3 +620,58 @@ func BenchmarkIsKnownModuleSourceInterpolationDiagnostic(b *testing.B) {
 		isKnownModuleSourceInterpolationDiagnostic(err)
 	}
 }
+
+// TestRecordProviderIterationSkip tests that the provider iteration skip is recorded only when a provider
+// iteration diagnostic was set aside, and never as module source interpolation.
+func TestRecordProviderIterationSkip(t *testing.T) {
+	componentInfo := map[string]any{}
+	RecordProviderIterationSkip(componentInfo, nil)
+	assert.Empty(t, componentInfo)
+
+	RecordProviderIterationSkip(componentInfo, tfconfig.Diagnostics{{
+		Severity: tfconfig.DiagError,
+		Summary:  "Invalid provider reference",
+		Pos:      &tfconfig.SourcePos{Filename: "main.tf", Line: 3},
+	}})
+	assert.Equal(t, map[string]any{"validation_skipped_provider_iteration": true}, componentInfo)
+}
+
+// TestTerraformSensitiveVarKeysFromRecordedNames tests that terraformSensitiveVarKeys reads the names
+// RecordSensitiveVariableNames stored when terraform_config is nil, including after a deep copy turns
+// them into []any.
+func TestTerraformSensitiveVarKeysFromRecordedNames(t *testing.T) {
+	tests := []struct {
+		name  string
+		names any
+		want  map[string]bool
+	}{
+		{name: "string slice", names: []string{"api_token", "password"}, want: map[string]bool{"api_token": true, "password": true}},
+		{name: "any slice", names: []any{"api_token", "password"}, want: map[string]bool{"api_token": true, "password": true}},
+		{name: "not recorded", names: nil, want: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			componentInfo := map[string]any{terraformConfigKey: nil}
+			if tt.names != nil {
+				componentInfo[SensitiveVariablesKey] = tt.names
+			}
+			info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{componentInfoKey: componentInfo}}
+			assert.Equal(t, tt.want, terraformSensitiveVarKeys(info))
+		})
+	}
+}
+
+// TestRecordSensitiveVariableNames tests that only sensitive variable names are recorded, sorted.
+func TestRecordSensitiveVariableNames(t *testing.T) {
+	componentInfo := map[string]any{}
+	RecordSensitiveVariableNames(componentInfo, &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
+		"region":    {Name: "region"},
+		"password":  {Name: "password", Sensitive: true},
+		"api_token": {Name: "api_token", Sensitive: true},
+	}})
+	assert.Equal(t, []string{"api_token", "password"}, componentInfo[SensitiveVariablesKey])
+
+	empty := map[string]any{}
+	RecordSensitiveVariableNames(empty, nil)
+	assert.NotContains(t, empty, SensitiveVariablesKey)
+}
