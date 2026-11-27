@@ -12,6 +12,8 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import SecondaryCTA from '@site/src/components/SecondaryCTA'
 import AtmosProScreenshot from '@site/src/components/AtmosProScreenshot'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 Atmos CLI handles the execution layer — how you architect your cloud infrastructure, run automation
@@ -98,17 +100,14 @@ environments, and workflow files may upload affected stacks, take locks, and rep
 
 ### 4. Configure Your Workspace ID
 
-Copy your workspace ID from the Atmos Pro workspace settings and store it as a GitHub Actions
-variable. The workspace ID is not a secret.
+Copy your workspace ID from the Atmos Pro workspace settings. It is not a secret. Store it in one
+place: either commit it to `atmos.yaml` or set it as a GitHub Actions variable.
 
-<Terminal title="shell">
-```bash
-gh variable set ATMOS_PRO_WORKSPACE_ID --body "your-workspace-id"
-```
-</Terminal>
+<Tabs groupId="atmos-pro-workspace-id" defaultValue="atmos-yaml">
+<TabItem value="atmos-yaml" label="atmos.yaml">
 
-You can also commit it to `atmos.yaml` with [`atmos config set`](/cli/commands/config/config-set), which keeps
-the file's existing comments and formatting:
+Commit it with [`atmos config set`](/cli/commands/config/config-set), which keeps the file's existing
+comments and formatting:
 
 <Terminal title="shell">
 ```bash
@@ -125,6 +124,25 @@ settings:
     workspace_id: "your-workspace-id"
 ```
 </File>
+
+Every workflow that runs Atmos in this repository picks it up, with no extra workflow configuration.
+
+</TabItem>
+<TabItem value="github-variable" label="GitHub variable">
+
+Set a repository or organization variable:
+
+<Terminal title="shell">
+```bash
+gh variable set ATMOS_PRO_WORKSPACE_ID --body "your-workspace-id"
+```
+</Terminal>
+
+Each workflow then passes it to Atmos as the `ATMOS_PRO_WORKSPACE_ID` environment variable (see step 6).
+Use this option to keep the ID out of the repository.
+
+</TabItem>
+</Tabs>
 
 ### 5. Enable Atmos Pro in Your Stacks
 
@@ -187,6 +205,36 @@ Atmos Pro needs four workflows in each repository:
 Each workflow needs the `id-token: write` permission so Atmos can exchange a GitHub OIDC token
 for a short-lived Atmos Pro token:
 
+<Tabs groupId="atmos-pro-workspace-id" defaultValue="atmos-yaml">
+<TabItem value="atmos-yaml" label="atmos.yaml">
+
+<File title=".github/workflows/atmos-pro-affected-stacks.yaml">
+```yaml
+name: Atmos Pro Affected Stacks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  id-token: write   # Required for OIDC token exchange with Atmos Pro
+  contents: read
+
+jobs:
+  affected:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Upload affected stacks
+        run: atmos describe affected --upload
+```
+</File>
+
+</TabItem>
+<TabItem value="github-variable" label="GitHub variable">
+
 <File title=".github/workflows/atmos-pro-affected-stacks.yaml">
 ```yaml
 name: Atmos Pro Affected Stacks
@@ -212,6 +260,9 @@ jobs:
         run: atmos describe affected --upload
 ```
 </File>
+
+</TabItem>
+</Tabs>
 
 <ActionCard title="Complete Workflow Setup">
     Copy the full Affected Stacks, Upload Instances, Plan, and Apply workflows, including cloud
@@ -354,7 +405,7 @@ If `--upload` fails with an authentication error:
 
 1. Check that the [Atmos Pro GitHub App](https://github.com/apps/atmos-pro) is installed on your repository
 2. Verify your workflow has `id-token: write` permission
-3. Confirm `ATMOS_PRO_WORKSPACE_ID` is set to the correct workspace
+3. Confirm the workspace ID (`settings.pro.workspace_id` or `ATMOS_PRO_WORKSPACE_ID`) names the correct workspace
 
 ### Upload Access Denied (403)
 
