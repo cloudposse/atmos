@@ -357,6 +357,30 @@ components:
   </dd>
 </dl>
 
+## Unknown Settings and Sections {#unknown-sections}
+
+Every key under `components.terraform` must be one of the settings on this page, or a section that
+a configuration provider uses. A provider section is named after a built-in provider such as
+[`terragrunt`](/migration/terragrunt), or after a provider that an enabled plugin package exports, or it
+selects one with `provider:`.
+
+Any other key is an unknown section, for example a misspelled setting such as `base_pth`, or a
+section for a plugin package that is not enabled. Atmos stops with an error that names each unknown
+key and suggests how to fix it:
+
+- Correct the name if it is a misspelled setting.
+- Enable the plugin package that provides it under `plugins.packages`, if it configures a provider.
+- Otherwise remove it.
+
+Atmos reads which sections an enabled plugin package provides from its entry in the plugin lock file,
+or from the manifest of a local build, without installing anything. When it cannot tell, it does not
+report unknown sections: this happens when the package has no lock entry, when its lock entry does not
+match the declared `source` or `version`, or when the lock file or a local build's manifest cannot be read.
+
+Earlier releases ignored unknown sections. Projects pinned to an [edition](/cli/configuration/edition)
+before `2026-11-27` keep ignoring them, and Atmos logs a warning for each one instead. To migrate,
+fix the keys the warnings name, then move the pin forward or remove it.
+
 ## Using OpenTofu
 
 To use OpenTofu instead of Terraform, set the `command` to `tofu`:

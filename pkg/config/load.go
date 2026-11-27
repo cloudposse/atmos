@@ -455,6 +455,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	if err != nil {
 		return atmosConfig, err
 	}
+	recordUnknownTerraformSections(v, &atmosConfig)
 
 	if atmosConfig.Settings.Functions.Exec.Concurrency() < 1 {
 		return atmosConfig, fmt.Errorf("%w: settings.functions.exec.max_concurrency must be at least 1", errUtils.ErrInvalidConfig)

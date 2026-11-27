@@ -1,0 +1,72 @@
+---
+slug: unknown-terraform-sections
+title: "Unknown Sections Under components.terraform Are Now Errors"
+authors: [aknysh]
+tags: [enhancement, dx]
+---
+A typo in a configuration file should not be silent. Until now, a misspelled setting under
+`components.terraform` in `atmos.yaml`, or a provider section for a plugin package you forgot to
+enable, did nothing and reported nothing. Atmos now stops with an error that names the key and tells
+you how to fix it, and projects pinned to an earlier edition keep the old behavior with a warning.
+
+<!--truncate-->
+
+## The Problem
+
+The `components.terraform` section holds two kinds of keys: the
+[Terraform settings](/cli/configuration/components/terraform#configuration-reference) Atmos knows, and
+sections that a configuration provider reads, such as `terragrunt` or a provider exported by a plugin
+package. Atmos had no way to tell a mistake from a section meant for a provider, so it ignored any key it
+did not recognize.
+
+That kept unrelated mappings from breaking stack commands, but it also hid real mistakes:
+
+- A misspelled setting, such as `auto_generate_backend_fle: true`, was ignored, so the backend file was
+  never generated and nothing said why.
+- A section for a plugin package that was not enabled did nothing.
+- A team's own mapping under `components.terraform` looked like configuration but had no effect.
+
+## The Fix
+
+Each key under `components.terraform` must now be one of these:
+
+- a built-in Terraform setting;
+- a section for a built-in configuration provider, such as `terragrunt`;
+- a section for a provider that an enabled plugin package exports.
+
+Any other key is an [unknown section](/cli/configuration/components/terraform#unknown-sections). Atmos
+reports every unknown key in one error and suggests the fix: correct a misspelled name, enable the plugin
+package that provides the section, or remove it.
+
+Atmos reads which sections an enabled plugin package provides from the plugin lock file, or from the
+manifest of a local build, without installing anything. When it cannot tell, for example because the
+package has no lock entry yet or its entry no longer matches the declared version, it does not report
+unknown sections.
+
+## How to Use It
+
+Projects without an [edition pin](/cli/configuration/edition), and projects pinned to `2026-11-27` or later,
+get the new error:
+
+```yaml
+components:
+  terraform:
+    base_path: components/terraform
+    base_pth: components/terraform   # misspelled: Atmos now reports this key
+```
+
+To keep the old behavior while you clean up, pin an earlier edition. Atmos then keeps ignoring unknown
+sections and logs a warning for each one:
+
+```yaml
+edition: "2026-11-26"
+```
+
+Fix the keys the warnings name, then move the pin forward or remove it. Run
+[`atmos describe edition`](/cli/commands/describe/edition) to see what moving a pin forward changes.
+
+## Get Involved
+
+If a section you rely on is now reported as unknown, or you have ideas for other configuration mistakes
+Atmos should catch, open an issue or join the conversation on
+[GitHub](https://github.com/cloudposse/atmos/issues/3750).

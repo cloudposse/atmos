@@ -8,9 +8,9 @@
 # Update this file whenever a release is published (see "Release boundary" in
 # docs/prd/editions.md). From the commit the release was built from, run:
 #
-#   ATMOS_REGENERATE_EDITION_RELEASE=v1.235.0@2026-11-25 go test ./pkg/edition -run TestJournalReleaseBoundary
-version: v1.234.1
-date: "2026-11-10"
+#   ATMOS_REGENERATE_EDITION_RELEASE=v1.235.0@2026-11-26 go test ./pkg/edition -run TestJournalReleaseBoundary
+version: v1.235.0
+date: "2026-11-26"
 entries:
   - date: "2025-02-11"
     key: logs.file
@@ -62,3 +62,9 @@ entries:
     key: templates.settings.gomplate.enabled
   - date: "2026-10-26"
     key: templates.settings.sprig.enabled
+  - date: "2026-11-21"
+    key: components.source.working_directory_precedence
+  - date: "2026-11-21"
+    key: list.instances.engine_columns
+  - date: "2026-11-21"
+    key: plugins.default_alias

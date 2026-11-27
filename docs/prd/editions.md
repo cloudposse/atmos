@@ -177,7 +177,7 @@ to the release date rolls back every unlisted entry.
 built from, then commit it to `main`:
 
 ```bash
-ATMOS_REGENERATE_EDITION_RELEASE=v1.235.0@2026-11-25 go test ./pkg/edition -run TestJournalReleaseBoundary
+ATMOS_REGENERATE_EDITION_RELEASE=v1.235.0@2026-11-26 go test ./pkg/edition -run TestJournalReleaseBoundary
 ```
 
 The value is `<tag>@<publication date>`. Regenerating records every entry in that commit's journal
@@ -231,6 +231,15 @@ workflow, custom-command, and lifecycle-hook step templates use the pair configu
 templating is unaffected: it has always honored the configured pair. The pair is resolved
 once per invocation by `delimiters.ForSteps` (`pkg/template/delimiters`) and passed to every
 site that detects, protects, or parses step templates.
+
+The `components.terraform.unknown_sections` transition (`2026-11-27`,
+[issue #3750](https://github.com/cloudposse/atmos/issues/3750)) rejects keys under
+`components.terraform` that are not a Terraform setting and that no built-in or enabled plugin
+configuration provider uses. The loader records the keys it drops before decoding, and
+`configuration.Attach` reports them together with provider sections that select no known provider,
+once the enabled packages' exports are known. Earlier pins keep ignoring these keys and log one
+warning per key. When an enabled package's exports cannot be read without installing it, nothing is
+reported under either path, because that package might provide the section.
 
 The `hooks.registered_events` transition (`2026-10-19`,
 [PR #3442](https://github.com/cloudposse/atmos/pull/3442)) rejects unregistered

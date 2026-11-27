@@ -42,11 +42,14 @@ func Register(name string, factory Factory) error {
 }
 
 // Attach creates private state only when a configuration provider is enabled. Sections under
-// `components.terraform` that select no known provider are dropped first (see selectProviders).
+// `components.terraform` that select no known provider are dropped first, and reported as a warning
+// or, from the edition that rejects them, as an error (see selectProviders).
 func Attach(ctx context.Context, config *schema.AtmosConfiguration, operation string) error {
 	defer perf.Track(config, "configuration.Attach")()
 
-	selectProviders(ctx, config)
+	if err := selectProviders(ctx, config); err != nil {
+		return err
+	}
 	if !config.HasComponentConfiguration() {
 		return nil
 	}

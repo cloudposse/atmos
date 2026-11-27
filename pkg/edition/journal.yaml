@@ -2,6 +2,13 @@
 # Append changes here; keep old/new in the configuration field's type.
 # Quote dates and string values such as "true" and "false".
 # The CLI embeds this file; the website generates its index from the same file.
+- date: "2026-11-27"
+  key: components.terraform.unknown_sections
+  kind: behavior
+  old: ignore unknown sections under components.terraform (keys that are not an Atmos setting and that no built-in or enabled plugin provider claims)
+  new: reject unknown sections under components.terraform with a configuration error that names each key
+  description: A misspelled setting or a provider section for a plugin that is not enabled fails instead of being ignored; earlier editions keep ignoring such sections and warn about each one.
+  ref: https://github.com/cloudposse/atmos/pull/3772
 - date: "2026-11-21"
   key: plugins.default_alias
   kind: behavior

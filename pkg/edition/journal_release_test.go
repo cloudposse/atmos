@@ -29,7 +29,7 @@ const releaseBoundaryHeader = `# The latest published Atmos release and the edit
 # Update this file whenever a release is published (see "Release boundary" in
 # docs/prd/editions.md). From the commit the release was built from, run:
 #
-#   ATMOS_REGENERATE_EDITION_RELEASE=v1.235.0@2026-11-25 go test ./pkg/edition -run TestJournalReleaseBoundary
+#   ATMOS_REGENERATE_EDITION_RELEASE=v1.235.0@2026-11-26 go test ./pkg/edition -run TestJournalReleaseBoundary
 `
 
 type releaseBoundary struct {

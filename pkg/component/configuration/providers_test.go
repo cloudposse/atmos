@@ -41,7 +41,9 @@ func TestSelectProvidersDropsUnknownSections(t *testing.T) {
 		"tg":            {Enabled: true, Provider: "terragrunt"},
 	}
 	config := sectionsConfig(original)
-	selectProviders(t.Context(), config)
+	config.Edition = legacyPin
+	captureWarnings(t)
+	require.NoError(t, selectProviders(t.Context(), config))
 	require.Equal(t, 1, calls)
 	require.Equal(t, map[string]schema.ComponentConfiguration{
 		"terragrunt": {Enabled: true},
@@ -57,9 +59,10 @@ func TestSelectProvidersSkipsCatalogForBuiltins(t *testing.T) {
 		return nil, false, nil
 	})
 	config := sectionsConfig(map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true}})
-	selectProviders(t.Context(), config)
+	config.Components.Terraform.UnknownSections = []string{"terragrunt"}
+	require.NoError(t, selectProviders(t.Context(), config))
 	require.Contains(t, config.Components.Terraform.ConfigurationProviders, "terragrunt")
-	selectProviders(t.Context(), sectionsConfig(nil))
+	require.NoError(t, selectProviders(t.Context(), sectionsConfig(nil)))
 }
 
 // TestSelectProvidersKeepsSectionsWhenExportsAreUnknown is the conservative path: an unreadable or
@@ -77,12 +80,13 @@ func TestSelectProvidersKeepsSectionsWhenExportsAreUnknown(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			useCatalog(t, catalog)
 			config := sectionsConfig(map[string]schema.ComponentConfiguration{"tool": {Enabled: true}})
-			selectProviders(t.Context(), config)
+			require.NoError(t, selectProviders(t.Context(), config))
 			require.Contains(t, config.Components.Terraform.ConfigurationProviders, "tool")
 		})
 	}
 }
 
+// TestAttachIgnoresUnknownSections covers editions before the unknown-sections transition.
 func TestAttachIgnoresUnknownSections(t *testing.T) {
 	useCatalog(t, func(context.Context, *schema.AtmosConfiguration) (map[string]bool, bool, error) {
 		return map[string]bool{}, true, nil
@@ -96,6 +100,8 @@ func TestAttachIgnoresUnknownSections(t *testing.T) {
 	factories.Unlock()
 	t.Cleanup(func() { factories.Lock(); factories.values = previous; factories.Unlock() })
 	config := sectionsConfig(map[string]schema.ComponentConfiguration{"team_defaults": {Enabled: true}})
+	config.Edition = legacyPin
+	captureWarnings(t)
 	require.NoError(t, Attach(t.Context(), config, "list"))
 	require.Nil(t, config.ComponentConfigurations)
 	require.Empty(t, config.Components.Terraform.ConfigurationProviders)

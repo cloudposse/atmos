@@ -105,3 +105,44 @@ func TestComponentConfigurationIgnoresUnclaimedMappings(t *testing.T) {
 	require.Error(t, v.Unmarshal(&config, atmosDecodeHook()), "claimed invalid provider still fails")
 	require.Error(t, compiled.Validate(v.AllSettings()), "schema rejects the same claimed invalid provider")
 }
+
+// Compile-time guard for the recorded unknown keys.
+var _ = schema.Terraform{UnknownSections: nil}
+
+func TestRecordUnknownTerraformSections(t *testing.T) {
+	v := viper.New()
+	v.SetConfigType("yaml")
+	require.NoError(t, v.ReadConfig(strings.NewReader(`components:
+  terraform:
+    base_path: components/terraform
+    plan_diff: {}
+    flags: {}
+    base_pth: typo
+    team_notes:
+      owner: platform
+    team_defaults:
+      enabled: true
+    terragrunt:
+      mode: native
+    custom:
+      provider: custom-plugin
+`)))
+	config := schema.AtmosConfiguration{}
+	config.Components.Terraform.UnknownSections = []string{"stale"}
+	recordUnknownTerraformSections(v, &config)
+	// Marked mappings are provider candidates (validated later); the rest are recorded, sorted.
+	require.Equal(t, []string{"base_pth", "team_notes", "terragrunt"}, config.Components.Terraform.UnknownSections)
+
+	recordUnknownTerraformSections(viper.New(), &config)
+	require.Nil(t, config.Components.Terraform.UnknownSections, "a project without components.terraform records nothing")
+}
+
+func TestTerraformKnownKeysComeFromTheSchema(t *testing.T) {
+	known := terraformKnownKeys()
+	for _, key := range []string{"base_path", "apply_auto_approve", "init", "plan_diff", "flags", "cache"} {
+		require.True(t, known[key], key)
+	}
+	for _, key := range []string{"", "-", "base_pth"} {
+		require.False(t, known[key], key)
+	}
+}
