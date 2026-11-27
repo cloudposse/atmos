@@ -8,10 +8,15 @@ description: Run your first Terraform plan, render a chart, or build a local ima
 
 ## CloudFormation
 
-In your own project, register an existing template twice and render one instance locally:
+From the directory containing your templates, start the initializer.
 
 ```shell
-atmos aws cfn init templates/queue.yaml --name orders-blue --name orders-green
+atmos aws cfn init
+```
+
+Select your queue template. Enter `orders-blue, orders-green` for the AWS stack names and accept `dev` for the Atmos stack. Render the first instance locally.
+
+```shell
 atmos aws cfn render orders-blue -s dev
 ```
 

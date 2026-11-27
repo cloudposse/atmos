@@ -14,6 +14,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filelock"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -46,40 +47,35 @@ func newInitCommand() *cobra.Command {
 	var names []string
 	var apply bool
 	cmd := &cobra.Command{
-		Use: "init <template>", Short: "Register an existing template under one or more AWS stack names", Args: cobra.ExactArgs(1),
-		Example: "  atmos aws cfn init templates/queue.yaml --name orders-blue --name orders-green",
+		Use: "init [template]", Short: "Choose a CloudFormation template and register one or more AWS stacks", Args: cobra.MaximumNArgs(1),
+		Example: "  atmos aws cfn init\n  atmos aws cfn init templates/queue.yaml -s dev --name orders-blue --name orders-green",
 	}
 	flags.NewStandardParser(flags.WithIdentityFlag()).RegisterFlags(cmd)
 	cmd.Flags().StringArrayVar(&names, "name", nil, "AWS stack and component name (repeatable, defaults to the template filename stem)")
 	cmd.Flags().BoolVar(&apply, "apply", false, "Preview and interactively apply each requested component after initialization")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return initializeTemplate(cmd, args[0], names, apply)
+		info := buildConfigAndStacksInfo(cmd)
+		interactive := flags.IsInteractive() && !ci.ModeEnabled(cmd)
+		path, err := selectInitTemplate(cmd, args, interactive)
+		if err != nil {
+			return err
+		}
+		source, err := initDeployment(cmd, path, names, &info, interactive)
+		if err != nil {
+			return err
+		}
+		return initializeTemplate(cmd, source, &info, apply)
 	}
 	internal.RegisterCommandMetadata(cmd, internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/init"))
 	return cmd
 }
 
-func initializeTemplate(cmd *cobra.Command, template string, names []string, apply bool) error {
-	path, err := templatePath(template)
+func initializeTemplate(cmd *cobra.Command, source templateSource, info *schema.ConfigAndStacksInfo, apply bool) error {
+	config, fresh, err := initTemplateConfig(info)
 	if err != nil {
 		return err
 	}
-	distinct, err := initNames(path, names)
-	if err != nil {
-		return err
-	}
-	info := buildConfigAndStacksInfo(cmd)
-	if info.Stack == "" {
-		info.Stack = "dev"
-	}
-	if !manifestName.MatchString(info.Stack) {
-		return fmt.Errorf("%w: expected a stack name, got %q", errUtils.ErrInvalidFlagValue, info.Stack)
-	}
-	config, fresh, err := initTemplateConfig(&info)
-	if err != nil {
-		return err
-	}
-	register := func() error { return registerTemplate(cmd, config, fresh, &info, templateSource{path, distinct}) }
+	register := func() error { return registerTemplate(cmd, config, fresh, info, source) }
 	if info.DryRun {
 		return register()
 	}
@@ -89,7 +85,7 @@ func initializeTemplate(cmd *cobra.Command, template string, names []string, app
 	if !apply {
 		return nil
 	}
-	return applyInitialized(cmd, info.Stack, distinct)
+	return applyInitialized(cmd, info.Stack, source.names)
 }
 
 func applyInitialized(cmd *cobra.Command, stackName string, names []string) error {

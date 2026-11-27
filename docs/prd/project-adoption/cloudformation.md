@@ -4,7 +4,7 @@
 
 ## Outcome
 
-A Rain or native CloudFormation user with one template can deploy it N times in one AWS account and region. The user supplies the template and the AWS names. Atmos writes the local configuration without asking for a naming convention.
+A Rain or native CloudFormation user with one template can deploy it N times in one AWS account and region. In a terminal, running `atmos aws cfn init` discovers local templates and prompts for the AWS stack names and the destination Atmos stack. Supplied paths and flags skip their corresponding questions. Scripts can pass the template path and use defaults or explicit names. Atmos writes the local configuration without asking for a naming convention.
 
 ```shell
 atmos aws cfn init templates/queue.yaml --name orders-blue --name orders-green
