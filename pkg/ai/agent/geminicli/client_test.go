@@ -3,8 +3,10 @@ package geminicli
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -358,4 +360,39 @@ func TestNewClient_DefaultModel(t *testing.T) {
 	require.NoError(t, err)
 	// Model defaults to provider name when no model is specified.
 	assert.Equal(t, ProviderName, client.model)
+}
+
+func TestSendMessage_MCPConfigPresentOnEveryCall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as the fake CLI")
+	}
+	home := t.TempDir()
+	t.Chdir(home)
+	configPath := filepath.Join(home, ".gemini", "settings.json")
+	seen := filepath.Join(t.TempDir(), "seen")
+	binary := filepath.Join(t.TempDir(), "fake-cli")
+	script := fmt.Sprintf("#!/bin/sh\ncat >/dev/null\nif grep -q aws-docs '%s' 2>/dev/null; then echo present >>'%s'; else echo missing >>'%s'; fi\necho '{\"response\":\"ok\"}'\n", configPath, seen, seen)
+	require.NoError(t, os.WriteFile(binary, []byte(script), 0o700))
+
+	client, err := NewClient(&schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: map[string]*schema.AIProviderConfig{ProviderName: {Binary: binary}},
+		},
+		MCP: schema.MCPSettings{
+			Servers: map[string]schema.MCPServerConfig{"aws-docs": {Command: "uvx"}},
+		},
+	})
+	require.NoError(t, err)
+
+	for range 2 {
+		_, err = client.SendMessage(context.Background(), "hello")
+		require.NoError(t, err)
+		// The file we created must not outlive the call.
+		assert.NoFileExists(t, configPath)
+	}
+
+	got, err := os.ReadFile(seen)
+	require.NoError(t, err)
+	assert.Equal(t, "present\npresent\n", string(got))
 }

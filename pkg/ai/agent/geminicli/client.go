@@ -42,6 +42,7 @@ type Client struct {
 	toolchainPATH    string
 	originalSettings []byte // Original .gemini/settings.json content for restore.
 	settingsBackedUp bool   // True if original settings were backed up.
+	settingsRestored bool   // True once restored; the next call must write them again.
 }
 
 // NewClient creates a new Gemini CLI client from Atmos configuration.
@@ -127,6 +128,13 @@ func (c *Client) buildArgs(message string) []string {
 
 func (c *Client) SendMessage(ctx context.Context, message string) (string, error) {
 	defer perf.Track(nil, "geminicli.Client.SendMessage")()
+
+	// The settings are restored after every call, so a later turn must write them again.
+	if c.settingsRestored && len(c.mcpServers) > 0 {
+		if _, err := c.writeMCPSettingsInCwd(); err != nil {
+			return "", err
+		}
+	}
 
 	args := c.buildArgs(message)
 
@@ -265,6 +273,7 @@ func (c *Client) writeMCPSettingsInCwd() (string, error) {
 	settingsFile := filepath.Join(geminiDir, "settings.json")
 
 	// Back up existing settings file if present.
+	c.originalSettings, c.settingsBackedUp, c.settingsRestored = nil, false, false
 	if existing, readErr := os.ReadFile(settingsFile); readErr == nil {
 		c.originalSettings = existing
 		c.settingsBackedUp = true
@@ -279,6 +288,7 @@ func (c *Client) writeMCPSettingsInCwd() (string, error) {
 
 // restoreSettings restores the original .gemini/settings.json content.
 func (c *Client) restoreSettings() {
+	c.settingsRestored = true
 	settingsFile := filepath.Join(".gemini", "settings.json")
 	if c.settingsBackedUp {
 		if err := os.WriteFile(settingsFile, c.originalSettings, settingsFilePerms); err != nil {

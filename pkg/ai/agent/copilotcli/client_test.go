@@ -3,8 +3,10 @@ package copilotcli
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -281,3 +283,38 @@ func TestRestoreMCPConfig_NoBackupRemovesFile(t *testing.T) {
 }
 
 // formatMessages tests are in pkg/ai/agent/base/messages_tools_test.go (FormatMessagesAsPrompt).
+
+func TestSendMessage_MCPConfigPresentOnEveryCall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as the fake CLI")
+	}
+	home := t.TempDir()
+	t.Setenv(CopilotHomeEnvVar, home)
+	configPath := filepath.Join(home, "mcp-config.json")
+	seen := filepath.Join(t.TempDir(), "seen")
+	binary := filepath.Join(t.TempDir(), "fake-cli")
+	script := fmt.Sprintf("#!/bin/sh\ncat >/dev/null\nif grep -q aws-docs '%s' 2>/dev/null; then echo present >>'%s'; else echo missing >>'%s'; fi\necho 'ok'\n", configPath, seen, seen)
+	require.NoError(t, os.WriteFile(binary, []byte(script), 0o700))
+
+	client, err := NewClient(&schema.AtmosConfiguration{
+		AI: schema.AISettings{
+			Enabled:   true,
+			Providers: map[string]*schema.AIProviderConfig{ProviderName: {Binary: binary}},
+		},
+		MCP: schema.MCPSettings{
+			Servers: map[string]schema.MCPServerConfig{"aws-docs": {Command: "uvx"}},
+		},
+	})
+	require.NoError(t, err)
+
+	for range 2 {
+		_, err = client.SendMessage(context.Background(), "hello")
+		require.NoError(t, err)
+		// The file we created must not outlive the call.
+		assert.NoFileExists(t, configPath)
+	}
+
+	got, err := os.ReadFile(seen)
+	require.NoError(t, err)
+	assert.Equal(t, "present\npresent\n", string(got))
+}
