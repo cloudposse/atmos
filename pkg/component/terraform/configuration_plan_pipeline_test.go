@@ -919,7 +919,12 @@ func TestPlanSnapshotterBindsTheEngineThatRanTerraform(t *testing.T) {
 			require.Equal(t, ran, snapshotter.result.engineDigest, "the engine digest is taken around the subprocess")
 
 			if test.replace {
-				require.NoError(t, os.WriteFile(engine, append(original, []byte("replaced by an after hook")...), 0o700))
+				// Rename a new file over the engine instead of rewriting it in place: the engine
+				// version probe may still be exiting, and on Linux opening a running executable for
+				// writing fails with "text file busy".
+				replacement := engine + ".replacement"
+				require.NoError(t, os.WriteFile(replacement, append(original, []byte("replaced by an after hook")...), 0o700))
+				require.NoError(t, os.Rename(replacement, engine))
 			}
 			err = recordConfigurationPlan(t.Context(), project.config, info, execution, []string{"-out=" + planPath})
 
