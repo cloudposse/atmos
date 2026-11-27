@@ -65,6 +65,30 @@ Paths are component-relative (e.g. `vars.region`, `settings.spacelift.workspace_
 - [`atmos stack schema`](/cli/commands/stack/stack-schema) — print the stack-manifest JSON Schema.
 - [`atmos stack validate`](/cli/commands/stack/stack-validate) — validate stack manifests. Alias of [`atmos validate stacks`](/cli/commands/validate/stacks).
 
+## Adopt a Terraform or OpenTofu root
+
+From the project directory, register a root that uses local state. Preview the engine, native workspace, component name and destination first:
+
+```shell
+atmos stack add ./infra/network -s dev --dry-run
+atmos stack add ./infra/network -s dev
+atmos terraform plan network -s dev
+```
+
+Atmos creates `atmos.yaml` and `stacks/dev.yaml` in a new project. The manifest points the component `network` at the original directory and records its command and workspace. Repeating the same registration leaves the manifest intact. An existing project can use a standalone stack in a flat `*.yaml` layout with backend generation disabled.
+
+To register a second deployment of the same root, select its **existing native workspace** first. For example, if production uses the OpenTofu workspace `blue`:
+
+```shell
+tofu -chdir=infra/network workspace select blue
+atmos stack add ./infra/network -s prod --command=tofu
+atmos terraform plan network -s prod
+```
+
+Here `prod` is the Atmos stack and `blue` is the OpenTofu workspace. The two stack names address separate deployments only when their native state targets differ. For a directory-per-environment project, register each root by its own path.
+
+The native engine loads its usual automatic variable files. Supply additional files to each plan in their original order with `-var-file`. Registration currently saves the root, engine and workspace. [Path-based planning](/cli/commands/terraform/plan#plan-an-existing-root).
+
 ## Examples
 
 ```shell

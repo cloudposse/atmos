@@ -82,6 +82,6 @@ test('the repository index includes all native overviews and preserves Terraform
     assert.match(item.id || item.link?.id, /^components\//);
   }
   assert.deepEqual(items[0].items.map(item => item.label),
-    ['Stack Configuration', 'Root Modules', 'State Backends', 'Workspaces', 'Provider Generation', 'Planfiles', 'Brownfield']);
+    ['Stack Configuration', 'Root Modules', 'State Backends', 'Workspaces', 'Provider Generation', 'Planfiles', 'Brownfield', 'Terragrunt']);
   assert.equal(items.some(item => item.label === 'metadata' || item.label === 'provision'), false);
 });

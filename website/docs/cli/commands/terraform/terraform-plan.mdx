@@ -44,6 +44,18 @@ Run `atmos terraform plan --help=all` to see shared selector and dependency flag
 
 ## Examples
 
+### Plan an existing root
+
+In a project without Atmos configuration, pass the explicit path to an initialized Terraform or OpenTofu root. The native CLI runs in that directory, so existing relative variable-file paths work:
+
+```shell
+atmos terraform plan ./infra/network -var-file=vars/common.tfvars -var-file=vars/dev.tfvars
+```
+
+Atmos checks for a configured command, project tool pins, OpenTofu-only files, and literal plan commands for this directory in GitHub Actions or an engine declaration in Atlantis. Plain `.tf` files work with either engine. If only one eligible executable is available, Atmos can use it. When both fit and the repository gives no answer, select one in the terminal or pass `--command=terraform` or `--command=tofu` in CI.
+
+The path trial uses the native plan’s output conventions, including `-out` when you supply it. Use `atmos stack add ./infra/network -s dev` to save the choice and enable the named-component workflow. [Register an existing root](/cli/commands/stack/usage#adopt-a-terraform-or-opentofu-root).
+
 ### Basic Planning
 
 Generate a plan for the `vpc` component in the `dev` stack:

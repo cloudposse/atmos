@@ -1,0 +1,49 @@
+---
+title: Use an existing CloudFormation template
+sidebar_label: init
+sidebar_class_name: command
+id: init
+description: Configure one or more named deployments from the same template.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Register an existing CloudFormation template under one or more AWS stack names. Atmos writes the configuration for each deployment.
+</Intro>
+
+From your project directory, run:
+
+```shell
+atmos aws cfn init templates/queue.yaml --name orders-blue --name orders-green
+```
+
+In a new project Atmos creates `atmos.yaml` and `stacks/dev.yaml`. The filename gives the Atmos stack its name, `dev`. Each AWS stack gets its own component pointing to your original template. Initialization only writes local configuration.
+
+| Atmos stack | Component | AWS CloudFormation stack |
+| --- | --- | --- |
+| dev | orders-blue | orders-blue |
+| dev | orders-green | orders-green |
+
+Render one template locally:
+
+```shell
+atmos aws cfn render orders-blue -s dev
+```
+
+With your usual AWS credentials and region configured, preview the changes and confirm deployment:
+
+```shell
+atmos aws cfn apply orders-blue -s dev
+```
+
+To deploy all CloudFormation components in this Atmos stack, run `atmos aws cfn apply --all -s dev`. To add another deployment later, repeat `init` with another name. Templates with named resources must allow those resources to coexist in the target account and region.
+
+## Options
+
+- Repeat `--name` for each instance. Omit it to use the template filename without its extension.
+- Use `-s staging` to choose another Atmos stack. The default is `dev`.
+- Add `--apply` to save the configuration and interactively apply just the requested instances.
+- Add `--dry-run` to preview initialization.
+
+For Rain-specific template directives, see [Migrating from Rain](/migration/rain).

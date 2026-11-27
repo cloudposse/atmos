@@ -130,6 +130,7 @@ func init() {
 		panic(err)
 	}
 
+	CloudFormationCmd.AddCommand(newInitCommand())
 	CloudFormationCmd.AddCommand(newOperationCommand(opRender, opRender, "Render the template client-side without deploying or validating it"))
 	CloudFormationCmd.AddCommand(newOperationCommand(opPlan, opDiff, "Preview changes an apply would make"))
 	CloudFormationCmd.AddCommand(newOperationCommand(opDiff, opDiff, "Show changes an apply would make"))

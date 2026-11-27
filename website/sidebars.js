@@ -131,6 +131,7 @@ module.exports = {
             collapsible: true,
             collapsed: true,
             items: [
+                'quick-start/try-your-tool',
                 {
                     type: 'category',
                     label: 'Simple Tutorial',
