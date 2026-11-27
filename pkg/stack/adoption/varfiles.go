@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/perf"
 	y "github.com/cloudposse/atmos/pkg/yaml"
@@ -31,10 +32,24 @@ func (r *Registration) AddVarFiles(data []byte, target VarFileTarget, exists boo
 	}
 	key := target.Dest + ".vars"
 	if exists {
-		if err := verifyVarSources(data, key, vars); err != nil {
+		current, err := varNode(data, key)
+		if err != nil {
 			return nil, err
 		}
-		return data, nil
+		if (current == nil && len(vars.Content) == 0) || (current != nil && sameIncludes(current, vars)) {
+			return data, nil
+		}
+		if current != nil && !managedIncludes(current, target.Extensions) {
+			return nil, fmt.Errorf("%w: existing %s has different variable sources including hand-authored variables; preserve them and select a different --name", errUtils.ErrInvalidStackConfig, key)
+		}
+		if !r.ReplaceVarFiles {
+			replacement := *r
+			replacement.ReplaceVarFiles = true
+			return nil, fmt.Errorf("%w: existing %s has different variable sources; preview replacing the ordered references with: %s --dry-run", errUtils.ErrInvalidStackConfig, key, replacement.SaveCommand())
+		}
+		if len(vars.Content) == 0 {
+			return y.Delete(data, key)
+		}
 	}
 	if len(vars.Content) == 0 {
 		return data, nil
@@ -49,7 +64,7 @@ func (r *Registration) varInclude(target VarFileTarget, ref string) (*yaml.Node,
 	}
 	path, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("variable file %q (relative to %s): %w", ref, target.Dir, err)
 	}
 	if _, err := RelativeDirectory(r.Project, path); err != nil {
 		return nil, err
@@ -75,7 +90,7 @@ func (r *Registration) varInclude(target VarFileTarget, ref string) (*yaml.Node,
 }
 
 func includeReference(manifest, path string) (*yaml.Node, error) {
-	anchor, err := canonicalDestinationDir(filepath.Dir(manifest))
+	anchor, err := filesystem.CanonicalPath(filepath.Dir(manifest))
 	if err != nil {
 		return nil, err
 	}
@@ -96,22 +111,52 @@ func includeReference(manifest, path string) (*yaml.Node, error) {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!include", Value: rel}, nil
 }
 
-func verifyVarSources(data []byte, path string, want *yaml.Node) error {
+func varNode(data []byte, path string) (*yaml.Node, error) {
 	raw, err := y.Get(data, path)
-	if errors.Is(err, y.ErrYAMLPathNotFound) && len(want.Content) == 0 {
-		return nil
+	if errors.Is(err, y.ErrYAMLPathNotFound) {
+		return nil, nil
 	}
-	if err != nil && !errors.Is(err, y.ErrYAMLPathNotFound) {
-		return err
+	if err != nil {
+		return nil, err
 	}
 	var doc yaml.Node
 	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
-		return err
+		return nil, err
 	}
-	if len(doc.Content) > 0 && sameIncludes(doc.Content[0], want) {
-		return nil
+	if len(doc.Content) == 0 {
+		return nil, nil
 	}
-	return fmt.Errorf("%w: existing %s has different variable sources; pass the original --var-file flags in order or choose another component", errUtils.ErrInvalidStackConfig, path)
+	return doc.Content[0], nil
+}
+
+func managedIncludes(current *yaml.Node, extensions []string) bool {
+	if current.Kind != yaml.SequenceNode {
+		return false
+	}
+	for _, n := range current.Content {
+		ref := literalInclude(n)
+		if ref == "" || (!strings.HasPrefix(ref, "../") && !strings.HasPrefix(ref, "./")) || !slices.ContainsFunc(extensions, func(ext string) bool { return strings.HasSuffix(ref, ext) }) {
+			return false
+		}
+	}
+	return true
+}
+
+func literalInclude(n *yaml.Node) string {
+	if n.Kind != yaml.ScalarNode || n.Tag != "!include" || strings.ContainsAny(n.Value, "?#") || strings.Contains(n.Value, "{{") {
+		return ""
+	}
+	const quote = `"`
+	if unquoted, ok := strings.CutPrefix(n.Value, quote); ok {
+		if rest, ok := strings.CutSuffix(unquoted, quote); ok && !strings.Contains(strings.ReplaceAll(rest, `""`, ""), quote) {
+			return strings.ReplaceAll(rest, `""`, quote)
+		}
+		return ""
+	}
+	if strings.ContainsAny(n.Value, `|'"`) || strings.IndexFunc(n.Value, unicode.IsSpace) >= 0 {
+		return ""
+	}
+	return n.Value
 }
 
 func sameIncludes(current, want *yaml.Node) bool {
@@ -126,20 +171,43 @@ func sameIncludes(current, want *yaml.Node) bool {
 	return true
 }
 
-// Stack directories may be created by this registration. Canonicalize their
-// existing ancestors so the same checkout has identical references on retry.
-func canonicalDestinationDir(dir string) (string, error) {
-	resolved, err := filepath.EvalSymlinks(dir)
-	if err == nil || !os.IsNotExist(err) {
-		return resolved, err
+// SavedVarFiles recovers the order of plain include references without opening their targets.
+// A missing include can therefore be corrected from the same component and stack.
+func (r *Registration) SavedVarFiles(kind, component, dir string) ([]string, error) {
+	defer perf.Track(nil, "adoption.Registration.SavedVarFiles")()
+	if r.Config == nil || !StandaloneStacks(&r.Config.Stacks) {
+		return nil, nil
 	}
-	parent := filepath.Dir(dir)
-	if parent == dir {
-		return "", err
-	}
-	resolved, err = canonicalDestinationDir(parent)
+	path, err := StandaloneDestination(r.Config.StacksBaseAbsolutePath, r.Stack)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return filepath.Join(resolved, filepath.Base(dir)), nil
+	b, _, err := ReadRegular(path)
+	if err != nil || len(b) == 0 {
+		return nil, err
+	}
+	current, err := varNode(b, y.ComponentPath(kind, component, "vars"))
+	if err != nil || current == nil {
+		return nil, err
+	}
+	return savedReferences(current, path, dir, kind)
+}
+
+func savedReferences(current *yaml.Node, path, dir, kind string) ([]string, error) {
+	extensions := []string{".tfvars", ".tfvars.json"}
+	if kind == "packer" {
+		extensions = []string{".pkrvars.hcl", ".pkrvars.json"}
+	}
+	if !managedIncludes(current, extensions) {
+		return nil, nil
+	}
+	var files []string
+	for _, n := range current.Content {
+		rel, err := filepath.Rel(dir, filepath.Join(filepath.Dir(path), literalInclude(n)))
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, filepath.ToSlash(rel))
+	}
+	return files, nil
 }

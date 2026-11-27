@@ -51,15 +51,23 @@ Supply the path or any flag to skip that question. This command registers the tw
 atmos aws cfn init templates/queue.yaml --name orders-blue --name orders-green -s dev
 ```
 
-In CI, with piped input, or with `--interactive=false`, supply the template path. Omitted names default to the template filename stem and the Atmos stack defaults to `dev`.
+In CI, with piped input, or with `--ci` or `--interactive=false`, supply the template path. Omitted names default to the template filename stem and the Atmos stack defaults to `dev`.
 
-Discovery checks files up to 1 MiB ending in `.yaml`, `.yml`, `.json`, `.template`, or `.cfn`. It skips hidden directories, `node_modules`, and `vendor`. You can pass a path directly for a template outside the search.
+Discovery checks files up to 1 MiB ending in `.yaml`, `.yml`, `.json`, `.template`, or `.cfn`. It skips hidden directories, `node_modules`, and `vendor`. Pass a path directly to register a template outside the search. Atmos checks that it contains a top-level `Resources` mapping before writing any configuration.
+
+In a terminal, add `--apply` to preview and confirm each requested deployment. In a script, run the registration command above, then approve each deployment explicitly.
+
+```shell
+atmos aws cfn apply orders-blue -s dev --auto-approve
+atmos aws cfn apply orders-green -s dev --auto-approve
+```
+
+If you pass `init --apply` with prompts disabled, Atmos saves the registrations, exits with an error, and prints the standalone apply command for each instance. Declining an interactive apply also leaves the registrations available.
 
 ## Options
 
 - Repeat `--name` for each instance. The suggested name is the template filename without its extension.
 - Use `-s staging` to choose another Atmos stack. The default is `dev`.
-- Add `--apply` to save the configuration and interactively apply just the requested instances.
 - Add `--dry-run` to preview initialization.
 
 For Rain-specific template directives, see [Migrating from Rain](/migration/rain).

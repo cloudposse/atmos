@@ -49,6 +49,15 @@ func guidedInitCommand(t *testing.T) *cobra.Command {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", dir)
 	t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
 	t.Setenv("ATMOS_BASE_PATH", "")
+	enableInitInteractive(t)
+	cmd := newInitCommand()
+	cmd.Flags().StringP("stack", "s", "", "")
+	cmd.Flags().Bool("dry-run", false, "")
+	return cmd
+}
+
+func enableInitInteractive(t *testing.T) {
+	t.Helper()
 	t.Setenv("ATMOS_FORCE_TTY", "true")
 	t.Setenv("ATMOS_CI_WORKER_MODE", "false")
 	env := telemetry.PreserveCIEnvVars()
@@ -56,11 +65,6 @@ func guidedInitCommand(t *testing.T) *cobra.Command {
 	prev := viper.Get("interactive")
 	viper.Set("interactive", true)
 	t.Cleanup(func() { viper.Set("interactive", prev) })
-	cmd := newInitCommand()
-	cmd.Flags().StringP("stack", "s", "", "")
-	cmd.Flags().Bool("dry-run", false, "")
-	cmd.Flags().Bool("ci", false, "")
-	return cmd
 }
 
 func TestGuidedInitCommand(t *testing.T) {
@@ -129,4 +133,24 @@ func TestGuidedInitErrorsWriteNothing(t *testing.T) {
 	require.ErrorIs(t, cmd.ExecuteContext(t.Context()), failure)
 	require.NoFileExists(t, "atmos.yaml")
 	require.NoDirExists(t, "stacks")
+}
+
+func TestExplicitInitTemplateValidation(t *testing.T) {
+	cmd := guidedInitCommand(t)
+	for file, body := range map[string]string{"pod.yaml": "apiVersion: v1", "broken.yaml": "Resources: [", "empty.json": "{}", "wrong.cfn": "Resources: []"} {
+		require.NoError(t, os.WriteFile(file, []byte(body), 0o600))
+		cmd.SetArgs([]string{file, "--ci"})
+		err := cmd.ExecuteContext(t.Context())
+		require.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+		require.ErrorContains(t, err, file)
+		require.ErrorContains(t, err, "top-level Resources mapping")
+		require.NoFileExists(t, "atmos.yaml")
+		require.NoDirExists(t, "stacks")
+	}
+	for file, body := range map[string]string{"large.txt": "Resources: {}\n#" + strings.Repeat("x", maxDiscoveryBytes), "intrinsics.cfn": "Resources: {Queue: {Type: 'AWS::SQS::Queue', Properties: {QueueName: !Sub '${AWS::StackName}-queue'}}}", "queue.json": `{"Resources":{"S":{"Type":"AWS::SQS::Queue"}}}`} {
+		path := filepath.Join(t.TempDir(), file)
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+		cmd.SetArgs([]string{path, "--name", "queue", "--ci", "--dry-run"})
+		require.NoError(t, cmd.ExecuteContext(t.Context()))
+	}
 }

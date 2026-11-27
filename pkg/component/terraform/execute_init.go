@@ -183,7 +183,7 @@ func prepareInitExecution(ctx context.Context, writers provisioner.OutputWriters
 		return componentPath, nil
 	}
 	_, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
-	if !isWorkdir && !info.DryRun {
+	if !isWorkdir && !info.DryRun && !hasScopedWorkspace(info) {
 		cleanTerraformWorkspace(*atmosConfig, componentPath, info.ComponentEnvList)
 	}
 
@@ -490,7 +490,7 @@ func shouldSkipWorkspaceSetup(info *schema.ConfigAndStacksInfo) bool {
 		return true
 	}
 	//nolint:forbidigo // TF_WORKSPACE is a Terraform convention, not an Atmos config var.
-	return os.Getenv("TF_WORKSPACE") != ""
+	return hasScopedWorkspace(info) || os.Getenv("TF_WORKSPACE") != ""
 }
 
 // runWorkspaceSetup selects (or creates) the Terraform workspace before the main command

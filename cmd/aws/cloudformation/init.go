@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"al.essio.dev/pkg/shellescape"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -50,7 +51,10 @@ func newInitCommand() *cobra.Command {
 		Use: "init [template]", Short: "Choose a CloudFormation template and register one or more AWS stacks", Args: cobra.MaximumNArgs(1),
 		Example: "  atmos aws cfn init\n  atmos aws cfn init templates/queue.yaml -s dev --name orders-blue --name orders-green",
 	}
-	flags.NewStandardParser(flags.WithIdentityFlag()).RegisterFlags(cmd)
+	flags.NewStandardParser(
+		flags.WithIdentityFlag(),
+		flags.WithBoolFlag("ci", "", false, "Use noninteractive CI mode."),
+	).RegisterFlags(cmd)
 	cmd.Flags().StringArrayVar(&names, "name", nil, "AWS stack and component name (repeatable, defaults to the template filename stem)")
 	cmd.Flags().BoolVar(&apply, "apply", false, "Preview and interactively apply each requested component after initialization")
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -64,13 +68,13 @@ func newInitCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return initializeTemplate(cmd, source, &info, apply)
+		return initializeTemplate(cmd, source, &info, apply, interactive)
 	}
 	internal.RegisterCommandMetadata(cmd, internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/init"))
 	return cmd
 }
 
-func initializeTemplate(cmd *cobra.Command, source templateSource, info *schema.ConfigAndStacksInfo, apply bool) error {
+func initializeTemplate(cmd *cobra.Command, source templateSource, info *schema.ConfigAndStacksInfo, apply, interactive bool) error {
 	config, fresh, err := initTemplateConfig(info)
 	if err != nil {
 		return err
@@ -85,6 +89,9 @@ func initializeTemplate(cmd *cobra.Command, source templateSource, info *schema.
 	if !apply {
 		return nil
 	}
+	if !interactive {
+		return savedApplyHelp(cmd, info.Stack, source.names)
+	}
 	return applyInitialized(cmd, info.Stack, source.names)
 }
 
@@ -95,20 +102,7 @@ func applyInitialized(cmd *cobra.Command, stackName string, names []string) erro
 	if err != nil {
 		return err
 	}
-	forwarded := []string{}
-	cmd.Flags().Visit(func(f *pflag.Flag) {
-		switch f.Name {
-		case "apply", "name", "stack", "chdir":
-			return
-		}
-		if values, ok := f.Value.(pflag.SliceValue); ok {
-			for _, value := range values.GetSlice() {
-				forwarded = append(forwarded, "--"+f.Name+"="+value)
-			}
-			return
-		}
-		forwarded = append(forwarded, "--"+f.Name+"="+f.Value.String())
-	})
+	forwarded := initApplyFlags(cmd, false)
 	for _, name := range names {
 		args := append([]string{"aws", "cfn", "apply", name, "-s", stackName}, forwarded...)
 		result := process.NewDefaultRunner().Run(cmd.Context(), process.TaskSpec{
@@ -119,6 +113,47 @@ func applyInitialized(cmd *cobra.Command, stackName string, names []string) erro
 		}
 	}
 	return nil
+}
+
+// A printed command runs from the caller's original directory. The child already
+// inherited the changed working directory and can forward other runtime options.
+func initApplyFlags(cmd *cobra.Command, standalone bool) []string {
+	forwarded := []string{}
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		switch f.Name {
+		case "apply", "name", "stack":
+			return
+		case "chdir":
+			if !standalone {
+				return
+			}
+		case "base-path", "config", "config-path", "profile", "identity":
+		// Keep project and identity selection in printed deployment commands.
+		default:
+			if standalone {
+				return
+			}
+		}
+		if values, ok := f.Value.(pflag.SliceValue); ok {
+			for _, value := range values.GetSlice() {
+				forwarded = append(forwarded, "--"+f.Name+"="+value)
+			}
+			return
+		}
+		forwarded = append(forwarded, "--"+f.Name+"="+f.Value.String())
+	})
+	return forwarded
+}
+
+func savedApplyHelp(cmd *cobra.Command, stackName string, names []string) error {
+	reason := errUtils.Build(errUtils.ErrInteractiveModeNotAvailable).
+		WithExplanationf("Saved %s in Atmos stack %s. Deployment requires explicit approval. Run the following commands to deploy.", strings.Join(names, ", "), stackName)
+	options := initApplyFlags(cmd, true)
+	for _, name := range names {
+		args := []string{"atmos", "aws", "cfn", "apply", name, "-s", stackName, "--auto-approve"}
+		reason.WithHint(shellescape.QuoteCommand(append(args, options...)))
+	}
+	return reason.Err()
 }
 
 func initNames(path string, names []string) ([]string, error) {
@@ -149,6 +184,13 @@ func templatePath(template string) (string, error) {
 	}
 	if !stat.Mode().IsRegular() {
 		return "", fmt.Errorf("%w: template must be a regular file: %s", errUtils.ErrInvalidFlagValue, template)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	if err := validateTemplateShape(data); err != nil {
+		return "", fmt.Errorf("%s: %w", template, err)
 	}
 	return path, nil
 }

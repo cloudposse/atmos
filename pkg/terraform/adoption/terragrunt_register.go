@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"al.essio.dev/pkg/shellescape"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
@@ -53,7 +54,12 @@ func (r *request) saveUnit(ctx context.Context, unit string) error {
 	if err := u.finish(ctx, r); err != nil {
 		return err
 	}
-	fmt.Fprintf(r.Output, "Atmos stack: %s\nComponent: %s\nUnit: %s\nTerragrunt mode: %s\nNext: atmos terraform plan %s -s %s\n", r.Stack, u.name, unit, mode, u.name, r.Stack)
+	fmt.Fprintf(r.Output, "Atmos stack: %s\nComponent: %s\nUnit: %s\nTerragrunt mode: %s\n", r.Stack, u.name, unit, mode)
+	if r.DryRun {
+		r.PreviewSave()
+	} else {
+		fmt.Fprintln(r.Output, "Next:", shellescape.QuoteCommand([]string{"atmos", "terraform", "plan", u.name, "-s", r.Stack}))
+	}
 	return nil
 }
 
@@ -70,8 +76,9 @@ func (u *unitRegistration) componentSettings(ctx context.Context, r *request, un
 	}
 	env := viper.New()
 	env.AutomaticEnv()
-	if workspace := env.GetString("TF_WORKSPACE"); workspace != "" {
-		if err := u.componentValue("env.TF_WORKSPACE", workspace); err != nil {
+	r.Workspace = cmp.Or(r.Workspace, env.GetString("TF_WORKSPACE"))
+	if r.Workspace != "" {
+		if err := u.componentValue("env.TF_WORKSPACE", r.Workspace); err != nil {
 			return err
 		}
 	}

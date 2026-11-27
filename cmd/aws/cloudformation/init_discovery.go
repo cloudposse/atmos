@@ -3,11 +3,14 @@ package cloudformation
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // Limit automatic inspection to templates up to 1 MiB. An explicit path bypasses discovery.
@@ -61,9 +64,19 @@ func hasTemplateResources(root fs.FS, path string) bool {
 	if err != nil || info.Size() > maxDiscoveryBytes {
 		return false
 	}
+	data, err := fs.ReadFile(root, path)
+	return err == nil && validateTemplateShape(data) == nil
+}
+
+func validateTemplateShape(data []byte) error {
 	var template struct {
 		Resources yaml.Node `yaml:"Resources"`
 	}
-	data, err := fs.ReadFile(root, path)
-	return err == nil && yaml.Unmarshal(data, &template) == nil && template.Resources.Kind == yaml.MappingNode
+	if err := yaml.Unmarshal(data, &template); err != nil {
+		return fmt.Errorf("%w: expected a YAML or JSON CloudFormation template with a top-level Resources mapping: %w", errUtils.ErrInvalidFlagValue, err)
+	}
+	if template.Resources.Kind != yaml.MappingNode {
+		return fmt.Errorf("%w: expected a CloudFormation template with a top-level Resources mapping", errUtils.ErrInvalidFlagValue)
+	}
+	return nil
 }

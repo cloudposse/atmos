@@ -94,7 +94,7 @@ func TestLocalComponentRetryAndConflict(t *testing.T) {
 
 func TestUnsupportedSourceOptions(t *testing.T) {
 	a := fixtureAdapter{}
-	for _, r := range []Registration{{Explicit: "tofu"}, {AtlantisProject: "p"}, {Values: []string{"values.yaml"}}, {ReleaseName: "canary"}, {Namespace: "n"}, {VarFiles: []string{"x"}}, {Name: "bad/name"}} {
+	for _, r := range []Registration{{Workspace: "blue"}, {ShareState: true}, {ReplaceVarFiles: true}, {Explicit: "tofu"}, {AtlantisProject: "p"}, {Values: []string{"values.yaml"}}, {ReleaseName: "canary"}, {Namespace: "n"}, {VarFiles: []string{"x"}}, {Name: "bad/name"}} {
 		require.Error(t, r.CheckOptions(a))
 	}
 	r := Registration{Name: "valid"}

@@ -5,8 +5,10 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 )
@@ -32,6 +34,11 @@ For complete Terraform/OpenTofu documentation, see:
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if isAdoptionPlan(args) {
 			return nil
+		}
+		if len(args) == 0 && len(cfg.LoadedConfigFiles()) == 0 && !isMultiComponentInvocation(cmd, args) && viper.GetString("stack") == "" {
+			return errUtils.Build(errUtils.ErrComponentRequired).
+				WithExplanation("Pass the path to an existing Terraform root or Terragrunt unit. Use a dot in the root module itself.").
+				WithExample("```shell\natmos terraform plan ./infra/network\n```").Err()
 		}
 		return runBeforeHooks(h.BeforeTerraformPlan, cmd, args)
 	},

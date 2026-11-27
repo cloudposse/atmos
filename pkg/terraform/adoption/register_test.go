@@ -173,15 +173,15 @@ func TestVerifiedWorkspace(t *testing.T) {
 	write(t, filepath.Join(r.Dir, "main.tofu"), "")
 	for _, name := range []string{".", "../green"} {
 		t.Setenv("TF_WORKSPACE", name)
-		_, err = verifiedWorkspace(t.Context(), r.Dir, cmd)
+		_, err = r.registrationWorkspace(t.Context(), cmd, deployment{}, "infra/net")
 		require.ErrorContains(t, err, "invalid workspace")
 	}
 	cmd.Path = filepath.Join(r.Dir, "absent")
-	_, err = verifiedWorkspace(t.Context(), r.Dir, cmd)
+	_, err = r.registrationWorkspace(t.Context(), cmd, deployment{}, "infra/net")
 	require.ErrorContains(t, err, "wrapper")
 	cmd.Command = terraform
 	write(t, filepath.Join(r.Dir, "main.tf"), "terraform {")
-	_, err = verifiedWorkspace(t.Context(), r.Dir, cmd)
+	_, err = r.registrationWorkspace(t.Context(), cmd, deployment{}, "infra/net")
 	require.Error(t, err)
 }
 

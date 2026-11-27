@@ -55,7 +55,8 @@ func TestLocalAdoption(t *testing.T) {
 			r.DryRun = true
 			r.Name = "blue"
 			require.NoError(t, r.Save(t.Context()))
-			require.Contains(t, log.String(), "blue -s dev")
+			require.Contains(t, log.String(), "Save: atmos stack add")
+			require.Contains(t, log.String(), "-s dev --name blue")
 			require.NotContains(t, log.String(), "private-value")
 			require.NoFileExists(t, filepath.Join(r.Project, "atmos.yaml"))
 			r.DryRun = false

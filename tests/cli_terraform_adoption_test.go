@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -67,10 +68,11 @@ resource "terraform_data" "marker" { input = "${terraform.workspace}|${var.ratio
 					atmos("terraform", "plan", "./infra/network", "--command="+engine.name, "-out=trial.plan", "-var-file=common.tfvars", "-var-file="+override)
 					require.Equal(t, want, adoptedPriorResource(t, native("show", "-json", "trial.plan")))
 				}
-				atmos("stack", "add", "./infra/network", "-s", target.stack, "--command="+engine.name, "--var-file", "common.tfvars", "--var-file", override)
 				native("workspace", "select", "default")
+				atmos("stack", "add", "./infra/network", "-s", target.stack, "--command="+engine.name, "--workspace", target.workspace, "--var-file", "common.tfvars", "--var-file", override)
 				atmos("terraform", "plan", "network", "-s", target.stack, "-out=named.plan")
 				require.Equal(t, want, adoptedPriorResource(t, native("show", "-json", "named.plan")))
+				require.Equal(t, "default", strings.TrimSpace(string(native("workspace", "show"))))
 			}
 			require.NotEqual(t, priorIDs[0], priorIDs[1])
 		})

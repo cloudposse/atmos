@@ -16,7 +16,7 @@ import (
 	stackadoption "github.com/cloudposse/atmos/pkg/stack/adoption"
 )
 
-func packerEntry(selected, dir, base string) (map[string]any, error) {
+func packerEntry(selected, dir, base string, variables map[string]bool) (map[string]any, error) {
 	rel, err := stackadoption.RelativeDirectory(base, dir)
 	if err != nil {
 		return nil, err
@@ -27,7 +27,7 @@ func packerEntry(selected, dir, base string) (map[string]any, error) {
 	}
 	count := 0
 	for _, file := range files {
-		n, err := packerBuildSources(file)
+		n, err := packerBuildSources(file, variables)
 		if err != nil {
 			return nil, err
 		}
@@ -65,7 +65,7 @@ func packerTemplates(selected string) ([]string, error) {
 }
 
 // Count source instances without evaluating variables, provisioning or fetching plugins.
-func packerBuildSources(path string) (int, error) {
+func parsePackerFile(path string) (*hcl.File, error) {
 	p := hclparse.NewParser()
 	var file *hcl.File
 	var diags hcl.Diagnostics
@@ -75,14 +75,30 @@ func packerBuildSources(path string) (int, error) {
 		file, diags = p.ParseHCLFile(path)
 	}
 	if diags.HasErrors() {
-		return 0, fmt.Errorf("%w: %s", errUtils.ErrInvalidComponent, diags.Error())
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrInvalidComponent, diags.Error())
 	}
-	body, _, diags := file.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "build"}}})
+	return file, nil
+}
+
+func packerBuildSources(path string, variables map[string]bool) (int, error) {
+	file, err := parsePackerFile(path)
+	if err != nil {
+		return 0, err
+	}
+	body, _, diags := file.Body.PartialContent(&hcl.BodySchema{Blocks: []hcl.BlockHeaderSchema{{Type: "build"}, {Type: "variable", LabelNames: []string{"name"}}}})
 	if diags.HasErrors() {
 		return 0, fmt.Errorf("%w: %s", errUtils.ErrInvalidComponent, diags.Error())
 	}
 	count := 0
 	for _, block := range body.Blocks {
+		if block.Type == "variable" {
+			declaration, _, diags := block.Body.PartialContent(&hcl.BodySchema{Attributes: []hcl.AttributeSchema{{Name: "default"}}})
+			if diags.HasErrors() {
+				return 0, fmt.Errorf("%w: %s", errUtils.ErrInvalidComponent, diags.Error())
+			}
+			variables[block.Labels[0]] = declaration.Attributes["default"] == nil
+			continue
+		}
 		n, err := countPackerSources(block)
 		if err != nil {
 			return 0, err
@@ -124,7 +140,7 @@ func (Adapter) Kind() string {
 
 func (Adapter) Options() []string {
 	defer perf.Track(nil, "packer.Adapter.Options")()
-	return []string{"name", "var-file"}
+	return []string{"name", "var-file", "replace-var-files"}
 }
 
 func (Adapter) Detect(s stackadoption.Source) (stackadoption.Match, error) {
@@ -158,6 +174,13 @@ func (a Adapter) Adopt(_ context.Context, r *stackadoption.Registration, path st
 		ConfiguredBase:    base,
 		NextCommand:       "validate",
 		VarFileExtensions: []string{".pkrvars.hcl", ".pkrvars.json"},
-		Entry:             func(dir, base string) (map[string]any, error) { return packerEntry(path, dir, base) },
+		Entry: func(dir, base string) (map[string]any, error) {
+			variables := make(map[string]bool)
+			entry, err := packerEntry(path, dir, base, variables)
+			if err == nil {
+				err = reportPackerInputs(r, dir, variables)
+			}
+			return entry, err
+		},
 	})
 }

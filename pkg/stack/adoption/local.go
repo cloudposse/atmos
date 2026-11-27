@@ -1,6 +1,7 @@
 package adoption
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/base64"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	y "github.com/cloudposse/atmos/pkg/yaml"
 )
@@ -20,6 +22,13 @@ func (r *Registration) WriteFiles(files ...*File) error {
 	defer perf.Track(nil, "adoption.Registration.WriteFiles")()
 
 	for _, file := range files {
+		if err := r.reviewFile(file.Path, file.Before); err != nil {
+			return err
+		}
+	}
+	unchanged := true
+	for _, file := range files {
+		unchanged = unchanged && bytes.Equal(file.Before, file.After)
 		if r.DryRun {
 			rel, err := filepath.Rel(r.Project, file.Path)
 			if err != nil {
@@ -29,6 +38,9 @@ func (r *Registration) WriteFiles(files ...*File) error {
 		} else if err := file.Write(); err != nil {
 			return err
 		}
+	}
+	if unchanged {
+		fmt.Fprintln(r.Output, "Already configured.")
 	}
 	return nil
 }
@@ -72,7 +84,7 @@ func resolveBase(project, base string) string {
 
 func (r *Registration) configuredLocalBase(kind, base string, project *File) (string, error) {
 	base = resolveBase(r.Project, base)
-	canonical, err := canonicalDestinationDir(base)
+	canonical, err := filesystem.CanonicalPath(base)
 	if base != "" && err != nil {
 		return "", err
 	}
@@ -249,6 +261,12 @@ func (r *Registration) WriteLocalComponent(component *LocalComponent) error {
 	if err := r.WriteFiles(layout.project, manifest); err != nil {
 		return err
 	}
-	fmt.Fprintf(r.Output, "Atmos stack: %s\nComponent: %s\nNext: atmos %s %s %s -s %s\n", r.Stack, name, component.Kind, component.NextCommand, name, r.Stack)
+	r.Name = name
+	fmt.Fprintf(r.Output, "Atmos stack: %s\nComponent: %s\n", r.Stack, name)
+	if r.DryRun {
+		r.PreviewSave()
+	} else {
+		fmt.Fprintf(r.Output, "Next: atmos %s %s %s -s %s\n", component.Kind, component.NextCommand, name, r.Stack)
+	}
 	return nil
 }

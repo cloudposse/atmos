@@ -1,0 +1,25 @@
+version: 3
+projects:
+  - name: network-dev
+    dir: infra/network
+    workspace: default
+    workflow: network
+    apply_requirements: [approved]
+  - name: network-review
+    dir: infra/network
+    workspace: review
+    workflow: review
+
+workflows:
+  network:
+    plan:
+      steps:
+        - init
+        - plan:
+            extra_args: [-var-file=common.tfvars]
+  review:
+    plan:
+      steps:
+        - run: echo "Preparing the review environment"
+        - init
+        - plan

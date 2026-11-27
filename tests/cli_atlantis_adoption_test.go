@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -96,4 +97,63 @@ resource "terraform_data" "marker" { input = "${var.prefix}|${var.suffix}|${terr
 	require.Equal(t, before, after)
 	atmos("terraform", "plan", "network-dev", "-s", "dev", "-out=named.plan")
 	require.Equal(t, want, adoptedPriorResource(t, native("show", "-json", "named.plan")))
+}
+
+// Exercise the downloadable newcomer fixture, including repeating a physical path
+// whose registered name differs from the directory name.
+func TestCLIAtlantisImportExample(t *testing.T) {
+	ensureAtmosRunner(t)
+	tf := RequireTerraformPath(t)
+	root := t.TempDir()
+	require.NoError(t, os.CopyFS(root, os.DirFS("../examples/atlantis-import")))
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_COMMAND", "")
+	t.Setenv("TF_WORKSPACE", "")
+	t.Setenv("TF_DATA_DIR", "")
+	t.Setenv("PATH", filepath.Dir(tf)+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	run := func(wantSuccess bool, args ...string) string {
+		t.Helper()
+		cmd := atmosRunner.CommandContext(t.Context(), args...)
+		cmd.Dir = root
+		output, err := cmd.CombinedOutput()
+		if wantSuccess {
+			require.NoError(t, err, "%s", output)
+		} else {
+			require.Error(t, err, "%s", output)
+		}
+		return string(output)
+	}
+	require.Contains(t, run(false, "terraform", "plan"), "atmos terraform plan ./infra/network")
+	native := exec.CommandContext(t.Context(), tf, "-chdir=infra/network", "init", "-input=false")
+	native.Dir = root
+	out, err := native.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	inventory := run(true, "stack", "add", "./atlantis.yaml", "--dry-run")
+	require.Contains(t, inventory, "network-dev")
+	require.Contains(t, inventory, "network-review")
+	require.Contains(t, inventory, "plan step 1 (run)")
+	require.NoFileExists(t, filepath.Join(root, "atmos.yaml"))
+	run(true, "stack", "add", "./atlantis.yaml", "--project", "network-dev", "-s", "dev")
+	require.Contains(t, run(true, "terraform", "plan", "network-dev", "-s", "dev"), "Hello from dev")
+	require.Contains(t, run(true, "terraform", "plan", "./infra/network"), "Hello from dev")
+	// After a user translates the review workflow, its existing native workspace
+	// gives the same Terraform root a second independent deployment.
+	config, err := os.ReadFile(filepath.Join(root, "atlantis.yaml"))
+	require.NoError(t, err)
+	translated := strings.Replace(string(config), "workflow: review", "workflow: network", 1)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "atlantis.yaml"), []byte(translated), 0o600))
+	native = exec.CommandContext(t.Context(), tf, "-chdir=infra/network", "workspace", "new", "review")
+	native.Dir = root
+	out, err = native.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	run(true, "stack", "add", "./atlantis.yaml", "--project", "network-review", "-s", "alternate")
+	require.Contains(t, run(true, "terraform", "plan", "network-review", "-s", "alternate"), "Hello from common")
+	ambiguous := run(false, "terraform", "plan", "./infra/network", "--interactive=false")
+	require.Contains(t, ambiguous, "atmos terraform plan network-dev -s dev")
+	require.Contains(t, ambiguous, "atmos terraform plan network-review -s alternate")
+	t.Setenv("ATMOS_STACK", "alternate")
+	require.Contains(t, run(true, "terraform", "plan", "./infra/network"), "Hello from common")
 }

@@ -9,9 +9,11 @@ import (
 	"slices"
 	"testing"
 
+	cockroach "github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -57,6 +59,15 @@ func TestInitTemplateCommand(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, "AWS stack: queue")
 	require.NoFileExists(t, "atmos.yaml")
+	out, err = run("queue.yaml", "--apply", "--ci", "--name=blue", "--name=green", "--identity=ci")
+	require.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
+	require.Contains(t, cockroach.GetAllDetails(err), "Saved blue, green in Atmos stack dev. Deployment requires explicit approval. Run the following commands to deploy.")
+	for _, name := range []string{"blue", "green"} {
+		require.Contains(t, cockroach.GetAllHints(err), "atmos aws cfn apply "+name+" -s dev --auto-approve --identity=ci")
+	}
+	require.NotContains(t, out, `["aws","cfn","apply"`)
+	require.FileExists(t, filepath.Join("stacks", "dev.yaml"))
+	enableInitInteractive(t)
 	out, err = run("queue.yaml", "--apply", "--name=blue", "--name=green", "--name=blue", "-s", "dev", "--identity=ci")
 	require.NoError(t, err)
 	for _, name := range []string{"blue", "green"} {
@@ -69,6 +80,10 @@ func TestInitTemplateCommand(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetContext(t.Context())
 	cmd.Flags().StringArray("profile", nil, "")
+	cmd.Flags().String("chdir", "", "")
+	cmd.Flags().Bool("no-color", false, "")
+	require.NoError(t, cmd.Flags().Set("chdir", "dir with spaces"))
+	require.NoError(t, cmd.Flags().Set("no-color", "true"))
 	require.NoError(t, cmd.Flags().Set("profile", "one"))
 	require.NoError(t, cmd.Flags().Set("profile", "two"))
 	var child bytes.Buffer
@@ -76,6 +91,10 @@ func TestInitTemplateCommand(t *testing.T) {
 	require.ErrorContains(t, applyInitialized(cmd, "dev", []string{"blue", "fail", "later"}), "apply fail")
 	require.Contains(t, child.String(), `"--profile=one","--profile=two"`)
 	require.NotContains(t, child.String(), "later")
+	require.NotContains(t, child.String(), "--chdir")
+	require.Contains(t, child.String(), "--no-color=true")
+	hint := cockroach.GetAllHints(savedApplyHelp(cmd, "dev", []string{"blue"}))
+	require.Equal(t, []string{"atmos aws cfn apply blue -s dev --auto-approve '--chdir=dir with spaces' --profile=one --profile=two"}, hint)
 }
 
 func TestInitManifestConflicts(t *testing.T) {

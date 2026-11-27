@@ -1,6 +1,7 @@
 package cloudformation
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -42,22 +43,23 @@ func selectInitTemplate(cmd *cobra.Command, args []string, interactive bool) (st
 func initDeployment(cmd *cobra.Command, path string, names []string, info *schema.ConfigAndStacksInfo, interactive bool) (templateSource, error) {
 	base := filepath.Base(path)
 	suggestedNames := strings.TrimSuffix(base, filepath.Ext(base))
+	var enteredNames string
 	var fields []huh.Field
 	promptNames := interactive && len(names) == 0
 	if promptNames {
-		fields = append(fields, huh.NewInput().Title("AWS stack name(s)").
+		fields = append(fields, huh.NewInput().Title(fmt.Sprintf("AWS stack name(s) (Enter for %s)", suggestedNames)).
 			Description("For multiple deployments, enter names separated by commas.").
-			Value(&suggestedNames).Validate(func(value string) error {
+			Value(&enteredNames).Validate(func(value string) error {
 			_, err := initNames(path, splitInitNames(value))
 			return err
 		}))
 	}
-	if info.Stack == "" {
-		info.Stack = "dev"
-		if interactive {
-			fields = append(fields, huh.NewInput().Title("Atmos stack").
-				Description("The Atmos stack groups these deployments.").Value(&info.Stack).Validate(validateInitStack))
-		}
+	const defaultStack = "dev"
+	if info.Stack == "" && interactive {
+		fields = append(fields, huh.NewInput().Title("Atmos stack (Enter for "+defaultStack+")").
+			Description("The Atmos stack groups these deployments.").Value(&info.Stack).Validate(func(value string) error {
+			return validateInitStack(cmp.Or(value, defaultStack))
+		}))
 	}
 	if len(fields) > 0 {
 		if err := promptInitFields(cmd, fields...); err != nil {
@@ -65,8 +67,9 @@ func initDeployment(cmd *cobra.Command, path string, names []string, info *schem
 		}
 	}
 	if promptNames {
-		names = splitInitNames(suggestedNames)
+		names = splitInitNames(enteredNames)
 	}
+	info.Stack = cmp.Or(info.Stack, defaultStack)
 	distinct, err := initNames(path, names)
 	if err != nil {
 		return templateSource{}, err
@@ -75,6 +78,9 @@ func initDeployment(cmd *cobra.Command, path string, names []string, info *schem
 }
 
 func splitInitNames(value string) []string {
+	if value == "" {
+		return nil // initNames supplies and validates the template filename stem.
+	}
 	names := strings.Split(value, ",")
 	for i := range names {
 		names[i] = strings.TrimSpace(names[i])

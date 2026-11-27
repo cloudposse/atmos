@@ -1,0 +1,2 @@
+greeting = "Hello"
+stage    = "common"

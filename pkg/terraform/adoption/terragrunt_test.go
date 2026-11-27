@@ -128,12 +128,18 @@ func TestTerragruntPreviewAndRetry(t *testing.T) {
 	var out bytes.Buffer
 	r.Output = &out
 	require.NoError(t, r.Save(t.Context()))
-	for _, text := range []string{"+++ b/atmos.yaml", "+++ b/stacks/dev.yaml", "mode: executable", unitPackage, "terragrunt://infra/net/terragrunt.hcl", "TF_WORKSPACE: blue", "terragrunt: 1.2.1", "tofu: 8.7.6", "atmos terraform plan net -s dev"} {
+	for _, text := range []string{"+++ b/atmos.yaml", "+++ b/stacks/dev.yaml", "mode: executable", unitPackage, "terragrunt://infra/net/terragrunt.hcl", "TF_WORKSPACE: blue", "terragrunt: 1.2.1", "tofu: 8.7.6", "Save: atmos stack add", "--workspace blue"} {
 		require.Contains(t, out.String(), text)
 	}
 	require.NoFileExists(t, filepath.Join(r.Project, "atmos.yaml"))
 	require.NoFileExists(t, filepath.Join(r.Project, ".atmos.plugins.lock.yaml"))
 	require.NoDirExists(t, filepath.Join(r.Project, "stacks"))
+	// Replay the printed workspace in a different shell.
+	r.Workspace = "blue"
+	t.Setenv("TF_WORKSPACE", "other")
+	out.Reset()
+	require.NoError(t, r.Save(t.Context()))
+	require.Contains(t, out.String(), "TF_WORKSPACE: blue")
 
 	u, err := r.unitDestination(unit)
 	require.NoError(t, err)

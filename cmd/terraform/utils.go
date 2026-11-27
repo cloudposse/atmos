@@ -187,6 +187,22 @@ func preResolveInteractiveSelection(cmd_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Keep before-hooks, the native plan and after-hooks on the same registered
+	// address when the developer retries a path used for their initial trial.
+	if cmd_.Name() == "plan" && info.NeedsPathResolution && info.Stack == "" {
+		// A stack from ATMOS_STACK also narrows the registered candidates.
+		info.Stack = viper.GetString("stack")
+		name, stack, err := shared.SelectPlanPath(cmd_, &info)
+		if err != nil {
+			return err
+		}
+		if err := cmd_.Flags().Set("stack", stack); err != nil {
+			return err
+		}
+		args[0] = name
+		info.ComponentFromArg, info.Stack, info.NeedsPathResolution = name, stack, false
+	}
+
 	// resolveAndPromptForArgs is a no-op when not interactive or when both values are
 	// already provided; otherwise it shows the component/stack pickers.
 	if err := resolveAndPromptForArgs(&info, cmd_); err != nil {

@@ -2,7 +2,6 @@ package stack
 
 import (
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -18,8 +17,11 @@ import (
 )
 
 func newStackAddCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "add <path>", Short: "Register an existing deployment in an Atmos stack", Args: cobra.ExactArgs(1)}
+	cmd := &cobra.Command{Use: "add [path]", Short: "Register an existing deployment in an Atmos stack", Args: cobra.MaximumNArgs(1), Example: "  atmos stack add\n  atmos stack add ./infra/network -s dev --name network --command terraform --var-file vars/dev.tfvars"}
 	parser := flags.NewStandardParser(flags.WithStringFlag("stack", "s", "dev", "Destination Atmos stack"), flags.WithDryRunFlag(),
+		flags.WithStringFlag("workspace", "", "", "Use an existing native Terraform or OpenTofu workspace"),
+		flags.WithBoolFlag("share-state", "", false, "Register another instance against the same native state"),
+		flags.WithBoolFlag("replace-var-files", "", false, "Replace this instance’s ordered variable file references"),
 		flags.WithStringFlag("project", "", "", "Select a project declared in atlantis.yaml"),
 		flags.WithStringFlag("name", "", "", "Component name in the destination stack"),
 		flags.WithStringArrayFlag("var-file", "", nil, "Terraform or Packer variable file, relative to the selected root (repeat in precedence order)"),
@@ -37,10 +39,6 @@ func newStackAddCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		dir, err := filepath.Abs(args[0])
-		if err != nil {
-			return err
-		}
 		target, _ := cmd.Flags().GetString("stack")
 		preview, _ := cmd.Flags().GetBool("dry-run")
 		configured := len(cfg.LoadedConfigFiles()) != 0
@@ -50,10 +48,13 @@ func newStackAddCommand() *cobra.Command {
 		}
 		r := adoption.Registration{
 			Adapters: stackAdapters(),
-			Defaults: defaults, Project: project, Dir: dir, Stack: target, Explicit: explicit,
+			Defaults: defaults, Project: project, Stack: target, Explicit: explicit,
 			DryRun: preview, Interactive: !ci.ModeEnabled(cmd) && flags.IsInteractive(), Output: cmd.OutOrStdout(),
 		}
 		r.AtlantisProject, _ = cmd.Flags().GetString("project")
+		r.Workspace, _ = cmd.Flags().GetString("workspace")
+		r.ShareState, _ = cmd.Flags().GetBool("share-state")
+		r.ReplaceVarFiles, _ = cmd.Flags().GetBool("replace-var-files")
 		r.Name, _ = cmd.Flags().GetString("name")
 		r.ReleaseName, _ = cmd.Flags().GetString("release-name")
 		r.Namespace, _ = cmd.Flags().GetString("namespace")
@@ -63,9 +64,9 @@ func newStackAddCommand() *cobra.Command {
 			r.Config = defaults
 			r.Project = r.Config.BasePathAbsolute
 		}
-		return r.Save(cmd.Context())
+		return guideStackAdd(cmd, &r, project, args)
 	}
-	internal.RegisterCommandMetadata(cmd, internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/usage#adopt-a-terraform-or-opentofu-root"))
+	internal.RegisterCommandMetadata(cmd, internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/usage#register-an-existing-deployment"))
 	return cmd
 }
 

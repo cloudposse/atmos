@@ -13,6 +13,8 @@ A developer should be able to point Atmos at a deployment they already run, reco
 | Helm | Render an existing chart with its release name and ordered values files | [Helm](helm.md) |
 | Packer | Validate and build an existing template with its original inputs | [Packer](packer.md) |
 
+In a terminal, run `atmos stack add` from an existing repository to choose a deployment, review its inputs and save its stack. CloudFormation templates use `atmos aws cfn init`. The [onboarding implementation plan](implementation-plan.md) records the behavior and acceptance checks for these flows.
+
 ## CLI contract
 
 ```shell

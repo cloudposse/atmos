@@ -49,6 +49,10 @@ type Registration struct {
 	Adapters                      Adapters
 	Project, Dir, Stack, Explicit string
 	Name, ReleaseName, Namespace  string
+	SourcePath, Workspace         string // SourcePath retains the original CLI input when a wrapper delegates.
+	ShareState, ReplaceVarFiles   bool
+	OnPreview                     func(Registration)
+	reviewed                      map[string]reviewedFile
 	VarFiles, Values              []string
 	Config                        *schema.AtmosConfiguration // Nil for an unconfigured project.
 	Defaults                      *schema.AtmosConfiguration // CLI defaults, including plugin policy in a fresh project.
@@ -71,7 +75,10 @@ func (r *Registration) Save(ctx context.Context) error {
 	request := *r
 	request.Project = project
 	if r.DryRun {
-		return request.adopt(ctx)
+		if r.OnPreview != nil {
+			request.reviewed = make(map[string]reviewedFile)
+		}
+		return request.adoptReviewed(ctx)
 	}
 	cache, err := os.UserCacheDir()
 	if err != nil {
@@ -82,7 +89,7 @@ func (r *Registration) Save(ctx context.Context) error {
 		return err
 	}
 	lock := filelock.New(filepath.Join(locks, fmt.Sprintf("stack-add-%x.lock", sha256.Sum256([]byte(project)))))
-	return lock.WithExclusive(ctx, func() error { return request.adopt(ctx) })
+	return lock.WithExclusive(ctx, func() error { return request.adoptReviewed(ctx) })
 }
 
 // StandaloneStacks reports whether a filename identifies one independently writable stack.
@@ -175,6 +182,9 @@ func ReadRegular(path string) ([]byte, os.FileMode, error) {
 func (r *Registration) WriteManifest(file string, original, data []byte, mode os.FileMode) error {
 	defer perf.Track(nil, "adoption.Registration.WriteManifest")()
 
+	if err := r.reviewFile(file, original); err != nil {
+		return err
+	}
 	stacksDir := filepath.Dir(file)
 	if r.DryRun {
 		fmt.Fprintln(r.Output, "Preview only.")
@@ -217,4 +227,39 @@ func manifestName(path, filename string) (string, error) {
 		name = strings.TrimSuffix(filename, ".yaml")
 	}
 	return name, nil
+}
+
+// reviewFile compares the bytes read under lock with the baselines shown in the interactive preview.
+func (r *Registration) reviewFile(path string, before []byte) error {
+	if r.reviewed == nil {
+		return nil
+	}
+	version := reviewedFile{digest: sha256.Sum256(before), exists: before != nil}
+	if r.DryRun {
+		r.reviewed[path] = version
+		return nil
+	}
+	if prior, ok := r.reviewed[path]; !ok || prior != version {
+		return fmt.Errorf("%w: %s changed after preview; review the registration again", errUtils.ErrInvalidStackConfig, path)
+	}
+	return nil
+}
+
+type reviewedFile struct {
+	digest [sha256.Size]byte
+	exists bool
+}
+
+func (r *Registration) adoptReviewed(ctx context.Context) error {
+	if r.reviewed != nil {
+		path := filepath.Join(r.Project, "atmos.yaml")
+		before, _, err := ReadRegular(path)
+		if err != nil {
+			return err
+		}
+		if err := r.reviewFile(path, before); err != nil {
+			return err
+		}
+	}
+	return r.adopt(ctx)
 }

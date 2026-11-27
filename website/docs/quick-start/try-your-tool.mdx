@@ -4,7 +4,13 @@ sidebar_label: Try your tool
 description: Run your first Terraform plan, render a chart, or build a local image with Atmos.
 ---
 
-[Install Atmos](/install), then pick the tool you already use.
+[Install Atmos](/install), open a terminal in your existing repository, and run:
+
+```shell
+atmos stack add
+```
+
+Choose the deployment you already run. Atmos shows the component, stack, and manifest changes before you decide whether to save. For a CloudFormation template, start with `atmos aws cfn init`.
 
 ## CloudFormation
 
@@ -24,15 +30,24 @@ Both components belong to the Atmos stack `dev`. Each has its own AWS stack name
 
 ## Terraform and OpenTofu
 
-From a repository where you already run Terraform or OpenTofu, point Atmos at your initialized root module. For a root in `infra/network`, try the plan, then save it under the Atmos stack `dev`:
+From your repository, point Atmos at the initialized root module you already plan. If your native plan uses extra varfiles, pass them in the same order to both the trial and registration. Here the root reads `vars/common.tfvars` first and `vars/dev.tfvars` second.
 
 ```shell
-atmos terraform plan ./infra/network
-atmos stack add ./infra/network -s dev
+atmos terraform plan ./infra/network -- -var-file=vars/common.tfvars -var-file=vars/dev.tfvars
+atmos stack add ./infra/network -s dev --var-file vars/common.tfvars --var-file vars/dev.tfvars
 atmos terraform plan network -s dev
 ```
 
-The first command runs your native plan in `infra/network`. If both CLIs are installed and the project does not identify an engine, choose one at the prompt or add `--command=tofu` or `--command=terraform`. The saved component remembers the choice. Registration supports local state and keeps the root’s selected workspace. [Register a second deployment](/cli/commands/stack/usage#adopt-a-terraform-or-opentofu-root).
+If your native plan uses only automatically loaded files such as `terraform.tfvars`, omit the varfile arguments. When both Terraform and OpenTofu are installed and the project does not identify the engine, select one at the prompt or supply `--command=terraform` or `--command=tofu`.
+
+To use the same local root twice, give the second deployment its own state. For example, if production already uses the native workspace `blue` and `vars/prod.tfvars`, register it in the Atmos stack `prod`.
+
+```shell
+atmos stack add ./infra/network -s prod --workspace blue --var-file vars/common.tfvars --var-file vars/prod.tfvars
+atmos terraform plan network -s prod
+```
+
+Here `network` is the component in both Atmos stacks. Its `dev` instance uses the workspace selected at first registration. Its `prod` instance uses the existing workspace `blue`. [Register and inspect deployments](/cli/commands/stack/usage#adopt-a-terraform-or-opentofu-root).
 
 For a runnable example, use `atmos init examples/native-terraform`, enter `native-terraform`, and run `atmos terraform plan vpc -s dev`. The plan shows one local `null_resource` to add. [Explore the example](/components/terraform/brownfield).
 
@@ -47,6 +62,18 @@ atmos terraform plan vpc -s dev
 ```
 
 The first and third commands run Terragrunt in `live/dev/vpc`. Your plan shows the resources managed by that unit. The middle command saves `vpc` in the Atmos stack `dev`. If you also have `live/prod/vpc`, run `atmos stack add ./live/prod/vpc -s prod`, then `atmos terraform plan vpc -s prod`. [Preview the generated files](/cli/commands/stack/usage#adopt-a-terragrunt-unit).
+
+## Atlantis
+
+From a repository with a version 3 `atlantis.yaml`, list the projects first. For a project named `network-dev` with a built-in plan, save it and run its local plan.
+
+```shell
+atmos stack add ./atlantis.yaml --dry-run
+atmos stack add ./atlantis.yaml --project network-dev -s dev
+atmos terraform plan network-dev -s dev
+```
+
+The inventory identifies custom steps that need manual translation. Atlantis keeps its pull-request approvals and apply workflow. To try this with local state, run `atmos init examples/atlantis-import`, enter `atlantis-import`, and initialize the root with `terraform -chdir=infra/network init`. [Run the Atlantis import example](/examples/atlantis-import).
 
 ## Helm
 

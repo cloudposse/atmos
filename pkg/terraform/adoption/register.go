@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"al.essio.dev/pkg/shellescape"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -83,8 +84,21 @@ func (r *request) saveTerraform(ctx context.Context) error {
 		return err
 	}
 	fmt.Fprintf(r.Output, "Atmos stack: %s\nComponent: %s\nEngine: %s (%s)\nWorkspace: %s\nManifest: %s\n", r.Stack, name, target.engine.Command, target.engine.Reason, target.workspace, file)
-	fmt.Fprintf(r.Output, "Next: atmos terraform plan %s -s %s\n", name, r.Stack)
-	return r.WriteManifest(file, original, data, mode)
+	if err := r.WriteManifest(file, original, data, mode); err != nil {
+		return err
+	}
+	if r.DryRun {
+		r.Name, r.Explicit = name, target.engine.Command
+		if r.atlantisSource == "" {
+			r.Workspace = target.workspace
+		} else {
+			r.VarFiles = nil // The selected Atlantis project supplies the ordered inputs.
+		}
+		r.PreviewSave()
+	} else {
+		fmt.Fprintln(r.Output, "Next:", shellescape.QuoteCommand([]string{"atmos", "terraform", "plan", name, "-s", r.Stack}))
+	}
+	return nil
 }
 
 func (r *request) resolveTarget(ctx context.Context, entry deployment, relative string) (deploymentTarget, error) {
@@ -92,7 +106,7 @@ func (r *request) resolveTarget(ctx context.Context, entry deployment, relative 
 	if err != nil {
 		return deploymentTarget{}, err
 	}
-	workspace, err := verifiedWorkspace(ctx, r.Dir, engine)
+	workspace, err := r.registrationWorkspace(ctx, engine, entry, relative)
 	if err != nil {
 		return deploymentTarget{}, err
 	}
@@ -132,25 +146,23 @@ func (d *deploymentTarget) updateEntry(original []byte, dest string, entry deplo
 	return data, nil
 }
 
-func verifiedWorkspace(ctx context.Context, dir string, engine Engine) (string, error) {
-	openTofu, err := usesTofu(ctx, dir, engine)
-	if err != nil {
-		return "", err
+func verifiedWorkspace(dir string, layout backend.LocalState, selected string) (string, error) {
+	if selected == "" {
+		var err error
+		selected, err = nativeWorkspace(dir)
+		if err != nil {
+			return "", err
+		}
 	}
-	workspaces, err := backend.LocalWorkspaceDirectory(dir, openTofu)
-	if err != nil {
-		return "", err
-	}
-	selected, err := nativeWorkspace(dir)
-	if err != nil || selected == "default" {
-		return selected, err
+	if selected == "default" {
+		return selected, nil
 	}
 	if !filepath.IsLocal(selected) || selected == "." || filepath.Base(selected) != selected {
 		return "", fmt.Errorf("%w: invalid workspace %q", errUtils.ErrInvalidStackConfig, selected)
 	}
-	info, err := os.Stat(filepath.Join(workspaces, selected))
+	info, err := os.Stat(filepath.Join(layout.Workspaces, selected))
 	if err != nil || !info.IsDir() {
-		return "", fmt.Errorf("%w: workspace %q does not exist in %s", errUtils.ErrInvalidStackConfig, selected, workspaces)
+		return "", fmt.Errorf("%w: workspace %q does not exist in %s", errUtils.ErrInvalidStackConfig, selected, layout.Workspaces)
 	}
 	return selected, nil
 }
@@ -192,15 +204,17 @@ func (r *request) relativeRoot(componentBase string) (string, error) {
 	return filepath.ToSlash(relative), nil
 }
 
-func (r *request) manifestEntry(original []byte, file, name string) (deployment, bool, error) {
-	var manifest struct {
-		Name       string
-		Import     []any
-		Shared     map[string]any `yaml:",inline"`
-		Components struct {
-			Terraform map[string]deployment
-		}
+type adoptionManifest struct {
+	Name       string
+	Import     []any
+	Shared     map[string]any `yaml:",inline"`
+	Components struct {
+		Terraform map[string]deployment
 	}
+}
+
+func (r *request) manifestEntry(original []byte, file, name string) (deployment, bool, error) {
+	var manifest adoptionManifest
 	if err := yaml.Unmarshal(original, &manifest); err != nil {
 		return deployment{}, false, err
 	}

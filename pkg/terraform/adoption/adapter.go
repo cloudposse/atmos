@@ -30,7 +30,7 @@ func (rootAdapter) Kind() string {
 
 func (rootAdapter) Options() []string {
 	defer perf.Track(nil, "adoption.rootAdapter.Options")()
-	return []string{"command", "name", "var-file"}
+	return []string{"command", "name", "var-file", "workspace", "share-state", "replace-var-files"}
 }
 
 func (rootAdapter) Detect(s stackadoption.Source) (stackadoption.Match, error) {
@@ -59,7 +59,7 @@ func (unitAdapter) Kind() string {
 
 func (unitAdapter) Options() []string {
 	defer perf.Track(nil, "adoption.unitAdapter.Options")()
-	return []string{"command"}
+	return []string{"command", "workspace"}
 }
 
 func (unitAdapter) Detect(s stackadoption.Source) (stackadoption.Match, error) {
@@ -89,7 +89,7 @@ func (atlantisAdapter) Kind() string {
 
 func (atlantisAdapter) Options() []string {
 	defer perf.Track(nil, "adoption.atlantisAdapter.Options")()
-	return []string{"command", "name", "project"}
+	return []string{"command", "name", "project", "share-state", "replace-var-files"}
 }
 
 func (atlantisAdapter) Detect(s stackadoption.Source) (stackadoption.Match, error) {
@@ -97,7 +97,7 @@ func (atlantisAdapter) Detect(s stackadoption.Source) (stackadoption.Match, erro
 
 	name := filepath.Base(s.Path)
 	if !s.IsDir && (name == "atlantis.yaml" || name == "atlantis.yml") {
-		return stackadoption.Match{Path: s.Path}, nil
+		return stackadoption.Match{Path: s.Path, Wrapper: true}, nil
 	}
 	return stackadoption.Match{}, nil
 }

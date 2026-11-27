@@ -3,6 +3,7 @@ package helm
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -14,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 func TestCommandProviderMetadata(t *testing.T) {
@@ -599,4 +601,37 @@ func TestGetOperationFlagsMapsCapabilityFlags(t *testing.T) {
 	defaults := getOperationFlags(newOperationCommand("template", "Template"))
 	assert.NotContains(t, defaults, cfg.HelmKubeVersionSectionName)
 	assert.NotContains(t, defaults, cfg.HelmAPIVersionsSectionName)
+}
+
+func TestHelmSelectsOnlyInstance(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
+	t.Setenv("ATMOS_BASE_PATH", root)
+	t.Setenv("ATMOS_FORCE_TTY", "true")
+	t.Setenv("ATMOS_CI_WORKER_MODE", "false")
+	env := telemetry.PreserveCIEnvVars()
+	t.Cleanup(func() { telemetry.RestoreCIEnvVars(env) })
+	prev := viper.Get("interactive")
+	viper.Set("interactive", true)
+	t.Cleanup(func() { viper.Set("interactive", prev) })
+	require.NoError(t, os.WriteFile("atmos.yaml", []byte("base_path: .\nstacks: {base_path: stacks, included_paths: ['*.yaml']}\n"), 0o600))
+	require.NoError(t, os.Mkdir("stacks", 0o700))
+	require.NoError(t, os.WriteFile("stacks/dev.yaml", []byte("components: {helm: {web: {metadata: {component: web}}}}"), 0o600))
+	provider := &capturingHelmProvider{}
+	original, ok := component.GetProvider(cfg.HelmComponentType)
+	require.NoError(t, component.Register(provider))
+	t.Cleanup(func() {
+		if ok {
+			require.NoError(t, component.Register(original))
+		}
+	})
+	cmd := newOperationCommand("template", "render")
+	cmd.SetArgs([]string{})
+	require.NoError(t, cmd.ExecuteContext(t.Context()))
+	require.Equal(t, "dev", provider.ctx.Stack)
+	require.Equal(t, "web", provider.ctx.Component)
+	require.Equal(t, []string{"web"}, provider.ctx.Args)
+	cmd.SetArgs([]string{"absent"})
+	require.ErrorContains(t, cmd.ExecuteContext(t.Context()), "no stack contains a deployable")
 }

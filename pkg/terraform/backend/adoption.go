@@ -16,14 +16,38 @@ import (
 	"github.com/cloudposse/atmos/pkg/terraform/autoinit"
 )
 
+// ErrNonLocalBackend indicates that a root stores its state outside of the local backend.
+var ErrNonLocalBackend = fmt.Errorf("%w: stack add currently supports a local backend", errUtils.ErrInvalidStackConfig)
+
 // LocalWorkspaceDirectory checks that a named run can reproduce the native local
 // backend from the root alone, including any previously cached init overrides.
 func LocalWorkspaceDirectory(directory string, openTofu bool) (string, error) {
 	defer perf.Track(nil, "backend.LocalWorkspaceDirectory")()
 
+	layout, err := ResolveLocalState(directory, openTofu)
+	return layout.Workspaces, err
+}
+
+// LocalState describes the effective native local backend for one root module.
+type LocalState struct {
+	DefaultPath, Workspaces string
+}
+
+// Path returns the state file used by the native local backend.
+func (l LocalState) Path(workspace string) string {
+	defer perf.Track(nil, "backend.LocalState.Path")()
+	if workspace == "default" {
+		return l.DefaultPath
+	}
+	return filepath.Join(l.Workspaces, workspace, "terraform.tfstate")
+}
+
+// ResolveLocalState resolves the declared and initialized native backend.
+func ResolveLocalState(directory string, openTofu bool) (LocalState, error) {
+	defer perf.Track(nil, "backend.ResolveLocalState")()
 	entries, err := os.ReadDir(directory)
 	if err != nil {
-		return "", err
+		return LocalState{}, err
 	}
 	settings := map[string]string{"path": "terraform.tfstate", "workspace_dir": "terraform.tfstate.d"}
 	parser := hclparse.NewParser()
@@ -37,20 +61,22 @@ func LocalWorkspaceDirectory(directory string, openTofu bool) (string, error) {
 			file, diags = parser.ParseHCLFile(path)
 		}
 		if diags.HasErrors() {
-			return "", diags
+			return LocalState{}, diags
 		}
 		if err := localSettings(file, settings); err != nil {
-			return "", fmt.Errorf("%s: %w", name, err)
+			return LocalState{}, fmt.Errorf("%s: %w", name, err)
 		}
 	}
 	if err := checkCachedLocalSettings(directory, settings); err != nil {
-		return "", err
+		return LocalState{}, err
 	}
-	dir := settings["workspace_dir"]
-	if !filepath.IsAbs(dir) {
-		dir = filepath.Join(directory, dir)
+	resolve := func(path string) string {
+		if filepath.IsAbs(path) {
+			return filepath.Clean(path)
+		}
+		return filepath.Join(directory, path)
 	}
-	return dir, nil
+	return LocalState{DefaultPath: resolve(settings["path"]), Workspaces: resolve(settings["workspace_dir"])}, nil
 }
 
 func localSettings(file *hcl.File, settings map[string]string) error {
@@ -93,7 +119,7 @@ func checkCachedLocalSettings(directory string, settings map[string]string) erro
 		return err
 	}
 	if cache.Backend.Type != "" && cache.Backend.Type != "local" {
-		return fmt.Errorf("%w: initialized backend is %s; stack add currently supports a local backend", errUtils.ErrInvalidStackConfig, cache.Backend.Type)
+		return fmt.Errorf("%w: initialized backend is %s", ErrNonLocalBackend, cache.Backend.Type)
 	}
 	return checkCachedPaths(cache.Backend.Config, settings)
 }
@@ -115,7 +141,7 @@ func checkCachedPaths(config map[string]json.RawMessage, settings map[string]str
 
 func readLocalBlock(block *hcl.Block, settings map[string]string) error {
 	if block.Type == "cloud" || block.Labels[0] != "local" {
-		return fmt.Errorf("%w: stack add currently supports a local backend; use a path-based plan for this root", errUtils.ErrInvalidStackConfig)
+		return fmt.Errorf("%w; use a path-based plan for this root", ErrNonLocalBackend)
 	}
 	attrs, diags := block.Body.JustAttributes()
 	if diags.HasErrors() {

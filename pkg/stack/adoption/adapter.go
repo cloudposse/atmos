@@ -166,6 +166,9 @@ func (r *Registration) CheckOptions(adapter Adapter) error {
 	}{
 		{"name", r.Name != ""},
 		{"command", r.Explicit != ""},
+		{"workspace", r.Workspace != ""},
+		{"share-state", r.ShareState},
+		{"replace-var-files", r.ReplaceVarFiles},
 		{"project", r.AtlantisProject != ""},
 		{"var-file", len(r.VarFiles) > 0},
 		{"namespace", r.Namespace != ""},

@@ -325,6 +325,9 @@ func (e *Executor) executeCommandPipeline(
 	opts ...component.ExecutionOption,
 ) error {
 	warnConfigurationDryRun(info)
+	if err := scopeLocalPlanWorkspace(atmosConfig, info, execCtx.workingDir); err != nil {
+		return err
+	}
 
 	componentPath, err := e.runGroupedInitPhase(atmosConfig, info, execCtx, execCtx.componentPath, opts...)
 	if err != nil {

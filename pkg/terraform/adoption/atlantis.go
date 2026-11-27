@@ -71,7 +71,7 @@ func (r *request) saveAtlantis(ctx context.Context) error {
 		names = append(names, name)
 		cfg.describe(r, r.Output, filepath.Dir(r.Dir), p)
 	}
-	if r.DryRun && r.AtlantisProject == "" {
+	if r.DryRun && r.AtlantisProject == "" && r.OnPreview == nil {
 		return nil
 	}
 	selected, err := r.selectAtlantis(names)
@@ -319,6 +319,10 @@ func (r *request) registerAtlantis(ctx context.Context, p *atlantisProject, file
 	dir, err := r.atlantisRoot(filepath.Dir(source), p.Dir)
 	if err != nil {
 		return err
+	}
+	imported.AtlantisProject = p.selector()
+	if imported.SourcePath == "" {
+		imported.SourcePath = r.Dir
 	}
 	imported.Dir = dir
 	imported.Name = cmp.Or(r.Name, p.Name, filepath.Base(dir))

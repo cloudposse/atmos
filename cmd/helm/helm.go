@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/internal/selection"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -136,12 +137,6 @@ func newOperationCommand(name, short string) *cobra.Command {
 	if name == "delete" {
 		cmd.Aliases = append(cmd.Aliases, "destroy")
 	}
-	options = append(options, flags.WithConditionalPositionalArgPrompt(
-		"component",
-		"Choose a Helm component",
-		componentArgCompletion,
-		func(_ *flags.ParsedConfig) bool { return !hasSelectionFlags(cmd) },
-	))
 	parser = flags.NewStandardParser(options...)
 	argsBuilder := flags.NewPositionalArgsBuilder()
 	argsBuilder.AddArg(&flags.PositionalArgSpec{
@@ -288,6 +283,9 @@ func validateOperationArgs(cmd *cobra.Command, args []string) error {
 	if all || affected || hasTagsOrLabels {
 		return validateSelectionFlags(cmd, args)
 	}
+	if len(args) == 0 && selection.Interactive(cmd) {
+		return nil
+	}
 	if len(args) != 1 {
 		return errUtils.ErrHelmComponentArgRequired
 	}
@@ -341,6 +339,14 @@ func validateSelectionFlags(cmd *cobra.Command, args []string) error {
 
 func runOperation(cmd *cobra.Command, subCommand string, args []string) error {
 	info := initConfigAndStacksInfo(cmd, subCommand, args)
+	if !hasSelectionFlags(cmd) {
+		if err := selection.Resolve(cmd, &info); err != nil {
+			return err
+		}
+		if len(args) == 0 && info.ComponentFromArg != "" {
+			args = []string{info.ComponentFromArg}
+		}
+	}
 	provider := component.MustGetProvider(cfg.HelmComponentType)
 
 	return provider.Execute(&component.ExecutionContext{

@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/internal/selection"
 	packersource "github.com/cloudposse/atmos/cmd/packer/source"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -34,6 +35,7 @@ func init() {
 	// FParseErrWhitelist above silently dropped it, so `packer build --dry-run` ran a real build.
 	flags.NewStandardParser(
 		flags.WithBoolFlag("dry-run", "", false, "Preview the Packer invocation without executing Packer"),
+		flags.WithBoolFlag("ci", "", false, "Use noninteractive CI mode."),
 	).RegisterPersistentFlags(packerCmd)
 
 	AddStackCompletion(packerCmd)
@@ -65,6 +67,11 @@ func packerRun(cmd *cobra.Command, commandName string, args []string) error {
 		return err
 	}
 	info.CliArgs = []string{"packer", commandName}
+	if commandName != "version" {
+		if err := selection.Resolve(cmd, &info); err != nil {
+			return err
+		}
+	}
 
 	flags := cmd.Flags()
 
