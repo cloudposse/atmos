@@ -107,7 +107,16 @@ gh variable set ATMOS_PRO_WORKSPACE_ID --body "your-workspace-id"
 ```
 </Terminal>
 
-You can also commit it to `atmos.yaml`:
+You can also commit it to `atmos.yaml` with [`atmos config set`](/cli/commands/config/config-set), which keeps
+the file's existing comments and formatting:
+
+<Terminal title="shell">
+```bash
+atmos config set settings.pro.workspace_id "your-workspace-id"
+```
+</Terminal>
+
+That writes:
 
 <File title="atmos.yaml">
 ```yaml
