@@ -3,10 +3,13 @@
 }
 
 /* Border, radius, and title bar come from the Terminal component's global
-   `.terminal` styles; only override what a link wrapper changes. */
-.figure a.frame {
-  display: block;
+   `.terminal` styles; only override the margin it uses for standalone blocks. */
+.figure .frame {
   margin: 0;
+}
+
+.title,
+.title:hover {
   color: inherit;
   text-decoration: none;
 }
@@ -23,10 +26,10 @@
   }
 }
 
-/* Each capture has its own rounded border baked into the PNG (2px wide with a
-   24px corner radius on a 2560px-wide image). Paint over it in the page
-   background so only the Terminal frame shows. Sizes are fractions of the
-   image width (cqw), so the overlay tracks the image at every viewport. */
+/* Each view draws its own rounded frame (1px wide with a 14px corner radius at
+   its 1280px design width), in both the PNG and the live embed. Paint over it in
+   the page background so only the Terminal frame shows. Sizes are fractions of
+   the view width (cqw), so the overlay tracks the view at every viewport. */
 .shot {
   position: relative;
   overflow: hidden;
@@ -36,10 +39,11 @@
 .shot::after {
   content: "";
   position: absolute;
-  inset: calc(100cqw * 3 / 2560);
-  border-radius: calc(100cqw * 22 / 2560);
+  inset: calc(100cqw * 1.5 / 1280);
+  border-radius: calc(100cqw * 12.5 / 1280);
   box-shadow: 0 0 0 2cqw #01040f;
   pointer-events: none;
+  z-index: 1;
 }
 
 .shot img {
@@ -48,9 +52,25 @@
   height: auto;
 }
 
-.shot img.cropped {
+.shot[style*="aspect-ratio"] img {
+  height: 100%;
   object-fit: cover;
   object-position: top;
+}
+
+/* The live embed sits over the PNG at the view's full aspect ratio; when the
+   frame is cropped, the overflow hides the rest. */
+.live {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 100%;
+  border: 0;
+  /* Match the embed's dark color scheme; a mismatch makes Chrome paint an opaque
+     canvas behind views with a transparent page, such as the PR comment. */
+  color-scheme: dark;
+  transition: opacity 300ms ease;
 }
 
 .caption {
