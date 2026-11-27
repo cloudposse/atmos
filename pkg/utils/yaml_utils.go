@@ -1001,7 +1001,7 @@ func decodeYAMLNode[T any](atmosConfig *schema.AtmosConfiguration, node *yaml.No
 
 	// Decode the yaml.Node into the desired type T.
 	var data T
-	if err := node.Decode(&data); err != nil {
+	if err := decodeVariableNumbers(node, &data); err != nil {
 		return zeroValue, err
 	}
 
@@ -1084,7 +1084,7 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 
 	// Decode the yaml.Node into the desired type T.
 	var data T
-	if err := node.Decode(&data); err != nil {
+	if err := decodeVariableNumbers(node, &data); err != nil {
 		return zeroValue, nil, err
 	}
 

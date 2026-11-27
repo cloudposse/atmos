@@ -11,16 +11,14 @@ import EmbedExample from '@site/src/components/EmbedExample'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-Every stack in Atmos has a logical name used for identification, the `-s` flag, dependencies, and Terraform workspaces.
-You can either set this name explicitly using the `name` field in your stack manifest, or compute it programmatically
-using `name_template` in `atmos.yaml`.
+Save a stack as `stacks/dev.yaml` and select it with `-s dev`. By default Atmos uses the filename without its extension. Set `name` in the manifest to choose a different name, or configure `name_template` when you need a project-wide naming convention.
 </Intro>
 
 <Experimental />
 
 ## Choosing Your Approach
 
-Atmos offers two approaches for stack naming. Choose based on your infrastructure's consistency:
+When you need to override the filename default, choose how to supply the name:
 
 | Approach | Where | When to Use |
 |----------|-------|-------------|

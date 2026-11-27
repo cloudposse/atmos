@@ -1,0 +1,5 @@
+.atmos/
+.terraform/
+*.tfstate*
+*.tfplan
+*.planfile

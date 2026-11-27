@@ -36,9 +36,9 @@ commands:
             interval: 750ms
             command: *repo_cmd
           - type: simulate
-            text: "# inspect the generated repo settings"
+            text: "# inspect the generated Atlantis project"
           - type: simulate
-            text: &show_cmd sed -n '1,22p' atlantis.yaml
+            text: &show_cmd sed -n '/^projects:/,/^workflows:/p' atlantis.yaml
           - type: shell
             name: show-config
             duration: 450ms
@@ -71,13 +71,16 @@ commands:
           assert_no_experimental(text)
           for needle in [
               "atmos atlantis generate repo-config --config-template config-1 --project-template project-1",
-              "version: 3",
-              "automerge: true",
-              "parallel_plan: true",
+              "name: demo-hello",
+              "workflow: workflow-1",
+              "varfiles/demo-hello.tfvars.json",
+              "apply_requirements:",
+              "- approved",
               "workflows:",
               "atmos atlantis build-all",
               "Building Atlantis config...",
               "Generating varfiles...",
+              "Generating backends...",
           ]:
               if needle not in plain:
                   raise SystemExit(f"demo-atlantis cast missing {needle!r}")

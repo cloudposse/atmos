@@ -27,6 +27,7 @@ the **canonical** command set. The flat commands documented below (`get`, `set`,
 and [`atmos stack instances`](/cli/commands/stack/stack-instances) to list component instances.
 
 ```shell
+atmos stack add [path] [--stack <name>] [--dry-run]
 atmos stack list
 atmos stack describe --stack dev
 atmos stack instances --stack dev
@@ -48,6 +49,8 @@ Paths are component-relative (e.g. `vars.region`, `settings.spacelift.workspace_
 
 ## Subcommands
 
+- [`atmos stack add [path]`](#register-an-existing-deployment) — register an existing deployment by path or choose one in a terminal.
+
 - [`atmos stack list`](/cli/commands/stack/stack-list) — alias of `atmos list stacks`.
 - [`atmos stack describe`](/cli/commands/stack/stack-describe) — alias of `atmos describe stacks`.
 - [`atmos stack instances`](/cli/commands/stack/stack-instances) — alias of `atmos list instances`.
@@ -64,6 +67,108 @@ Paths are component-relative (e.g. `vars.region`, `settings.spacelift.workspace_
 - [`atmos stack format`](/cli/commands/stack/stack-format) — deprecated alias of [`atmos stack config format`](/cli/commands/stack/config/format): format the manifest files that define a component.
 - [`atmos stack schema`](/cli/commands/stack/stack-schema) — print the stack-manifest JSON Schema.
 - [`atmos stack validate`](/cli/commands/stack/stack-validate) — validate stack manifests. Alias of [`atmos validate stacks`](/cli/commands/validate/stacks).
+
+## Register an existing deployment
+
+In a terminal, run `atmos stack add` from your repository to choose a source. You can also pass its path and any known values. Use `--dry-run` to preview the manifest changes. After registration, run the command shown for the saved component and stack.
+
+## Adopt a Terraform or OpenTofu root
+
+From the project directory, register a root that uses local state. Preview the engine, native workspace, component name and destination first:
+
+```shell
+atmos stack add ./infra/network -s dev --dry-run
+atmos stack add ./infra/network -s dev
+atmos terraform plan network -s dev
+```
+
+Atmos creates `atmos.yaml` and `stacks/dev.yaml` in a new project. The manifest points the component `network` at the original directory and records its command and workspace. Repeating the same registration leaves the manifest intact. An existing project can use a standalone stack in a flat `*.yaml` layout with backend generation disabled.
+
+To register a second deployment of the same root, pass its **existing native workspace**. For example, if production uses the OpenTofu workspace `blue`:
+
+```shell
+atmos stack add ./infra/network -s prod --command=tofu --workspace blue
+atmos terraform plan network -s prod
+```
+
+Here `prod` is the Atmos stack and `blue` is the OpenTofu workspace. Named plans use the registered workspace for that invocation. If a second registration points at state already used by another instance, Atmos identifies the existing owner. Use `--share-state` only when both addresses intentionally manage that same deployment. For a directory-per-environment project, register each root by its own path.
+
+The native engine loads its usual automatic variable files. To save additional files with the component, pass `--var-file` once per file in native order. Paths resolve from the root module.
+
+```shell
+atmos stack add ./infra/network -s dev --var-file vars/common.tfvars --var-file vars/dev.tfvars
+atmos terraform plan network -s dev
+```
+
+To change previously saved varfiles, repeat the registration with `--replace-var-files` and pass the complete new sequence of `--var-file` flags. Add `--dry-run` to review the change first.
+
+The manifest stores ordered `!include` references under `vars`. Editing a file affects the next plan. When two files assign the same variable, the later file supplies its entire value, including an object or list. [Path-based planning](/cli/commands/terraform/plan#plan-an-existing-root).
+
+## Adopt a Terragrunt unit
+
+Start in the project directory. Preview the files, register your unit, and plan it by name:
+
+```shell
+atmos stack add ./live/dev/vpc -s dev --dry-run
+atmos stack add ./live/dev/vpc -s dev
+atmos terraform plan vpc -s dev
+```
+
+In a fresh project, Atmos enables the Terragrunt plugin in executable mode in `atmos.yaml`. The `stacks/dev.yaml` manifest imports `terragrunt://live/dev/vpc/terragrunt.hcl` and pins the Terragrunt version. On save, the plugin resolves that unit’s HCL. Atmos also pins the wrapped engine when it resolves to the standard `terraform` or `tofu` command. Commit these files and the resulting `.atmos.plugins.lock.yaml` so a teammate gets the same plugin. With an existing project, registration uses its configured Terragrunt mode and package.
+
+Preview reads filenames, tool versions, and manifests without evaluating the unit's HCL. Planning in executable mode runs Terragrunt 1.0 or later in the original unit directory, including its plan hooks. Set `TF_WORKSPACE` during registration if your deployment uses a named workspace. The saved component then supplies it on future plans.
+
+Register each additional deployment by its own path. Here `database` joins the `dev` stack and production gets its own `vpc`:
+
+```shell
+atmos stack add ./live/dev/database -s dev
+atmos stack add ./live/prod/vpc -s prod
+atmos stack instances -s dev
+atmos terraform plan vpc -s prod
+```
+
+Both `vpc` instances keep the backend selected by their own HCL. This command takes one unit at a time and supports standalone stack manifests in a flat `*.yaml` layout. For a live tree or a `terragrunt.stack.hcl` declaration, use [Terragrunt discovery](/components/terraform/terragrunt).
+
+## Adopt a Helm chart
+
+Register a local application chart with its dependencies already present. Values paths on the command line resolve from your current directory. The manifest records them relative to the chart. The release name defaults to the component name, and `--namespace` selects the Kubernetes namespace.
+
+```shell
+atmos stack add ./charts/web -s dev --release-name web --namespace preview -f values/base.yaml -f values/dev.yaml
+atmos helm template web -s dev
+atmos stack add ./charts/web -s dev --release-name web-canary --namespace preview -f values/canary.yaml
+atmos helm template web-canary -s dev
+```
+
+Add `--dry-run` to preview the files. Atmos reads all documents in each values file using its Helm 4 renderer. For a chart with install-only CRDs, registration explains the difference between native and Atmos template output.
+
+## Adopt a Packer template
+
+Pass a directory for a build split across several files, or pass a single `.pkr.hcl` or `.pkr.json` template if you invoke that file directly. Registration supports one build source. It reads the configuration locally. Run `packer init`, `validate`, and `build` through the named component when you are ready.
+
+```shell
+atmos stack add ./images/alpine -s dev --var-file inputs/common.pkrvars.hcl --var-file inputs/dev.pkrvars.json
+atmos packer init alpine -s dev
+atmos packer validate alpine -s dev
+atmos packer build alpine -s dev
+```
+
+A second stack can use the same template with different inputs. Repeat the registration with `-s prod` and the production variable file. To correct the files for an existing instance, pass `--replace-var-files` and supply the complete ordered list with repeated `--var-file` flags. Within one stack, use `--name` to give another instance its own component address. Packer continues to control where the artifact is written.
+
+## Adopt an Atlantis project
+
+From a checkout containing a version 3 `atlantis.yaml`, list the explicit projects, then select one by name:
+
+```shell
+atmos stack add ./atlantis.yaml --dry-run
+atmos stack add ./atlantis.yaml --project network-dev -s dev --dry-run
+atmos stack add ./atlantis.yaml --project network-dev -s dev
+atmos terraform plan network-dev -s dev
+```
+
+Here `network-dev` is the Atlantis project and the saved Atmos component. `dev` is the Atmos stack. Select the project's existing Terraform workspace before registration. The importer checks its local backend and any declared engine version. A built-in Atlantis plan can supply ordered, literal `-var-file` arguments. When `env/<workspace>.tfvars` exists, it follows those files in Atlantis's native order. The manifest keeps these files as live references and records the Atlantis source under `metadata.custom.atlantis_project`.
+
+The inventory identifies custom plan steps that need manual translation, such as a shell command or environment setup. A project that names a server-defined workflow needs its effective definition. With no workflow named, local registration assumes the Atlantis built-in init and plan. Atlantis continues to own server hooks, review gates, locking, and apply. [Run the inbound example with one built-in plan and one custom workflow](/examples/atlantis-import). To generate a configuration for an Atlantis server, see [the export example](/examples/demo-atlantis).
 
 ## Examples
 

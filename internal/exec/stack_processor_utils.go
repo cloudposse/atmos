@@ -22,7 +22,6 @@ import (
 	configurationadapter "github.com/cloudposse/atmos/pkg/component/configuration"
 	"github.com/cloudposse/atmos/pkg/condition"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -1393,6 +1392,9 @@ func processYAMLConfigFileWithContextInternal(
 		}
 	}
 
+	if err := normalizeVariableLayers(stackConfigMap, relativeFilePath); err != nil {
+		return nil, nil, err
+	}
 	// A null mapping key (`null:` or `~:`) would panic JSON Schema validation and merging below.
 	if err := checkStackManifestNullKeys(stackConfigMap, relativeFilePath); err != nil {
 		return nil, nil, err
@@ -1424,14 +1426,7 @@ func processYAMLConfigFileWithContextInternal(
 
 	// If the path to the Atmos manifest JSON Schema is provided, validate the stack manifest against it
 	if atmosManifestJsonSchemaFilePath != "" {
-		// Convert the data to JSON and back to Go map to prevent the error:
-		// jsonschema: invalid jsonType: map[interface {}]interface {}
-		dataJson, err := u.ConvertToJSONFast(yamlsource.Display(stackConfigMap))
-		if err != nil {
-			return nil, nil, err
-		}
-
-		dataFromJson, err := u.ConvertFromJSON(dataJson)
+		dataFromJson, err := jsonSchemaInstance(stackConfigMap)
 		if err != nil {
 			return nil, nil, err
 		}

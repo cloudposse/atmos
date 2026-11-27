@@ -30,20 +30,27 @@ const (
 	errContextFormat = "%w: %s"
 )
 
+// jsonSchemaInstance normalizes YAML map keys and preserves the input's decimal precision
+// for numeric schema bounds, including values outside the float64 range.
+func jsonSchemaInstance(data any) (any, error) {
+	encoded, err := u.MarshalJSONCompact(data)
+	if err != nil {
+		return nil, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	var instance any
+	err = decoder.Decode(&instance)
+	return instance, err
+}
+
 // ValidateWithJsonSchema validates the data structure using the provided JSON Schema document.
 // https://github.com/santhosh-tekuri/jsonschema
 // https://go.dev/play/p/Hhax3MrtD8r
 func ValidateWithJsonSchema(data any, schemaName string, schemaText string) (bool, error) {
 	defer perf.Track(nil, "exec.ValidateWithJsonSchema")()
 
-	// Convert the data to JSON and back to Go map to prevent the error:
-	// jsonschema: invalid jsonType: map[interface {}]interface {}.
-	dataJson, err := u.ConvertToJSONFast(data)
-	if err != nil {
-		return false, err
-	}
-
-	dataFromJson, err := u.ConvertFromJSON(dataJson)
+	dataFromJson, err := jsonSchemaInstance(data)
 	if err != nil {
 		return false, err
 	}
@@ -125,7 +132,8 @@ func ValidateWithOpa(
 	// Construct a Rego object that can be prepared or evaluated.
 	r := rego.New(
 		rego.Query("data.atmos.errors"),
-		rego.Load(append([]string{normalizedSchemaPath}, normalizedModulePaths...),
+		rego.Load(
+			append([]string{normalizedSchemaPath}, normalizedModulePaths...),
 			loader.GlobExcludeName("*_test.rego", 0),
 		),
 	)

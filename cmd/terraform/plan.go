@@ -5,8 +5,10 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 )
@@ -30,6 +32,14 @@ For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/plan
   https://opentofu.org/docs/cli/commands/plan`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if isAdoptionPlan(args) {
+			return nil
+		}
+		if len(args) == 0 && len(cfg.LoadedConfigFiles()) == 0 && !isMultiComponentInvocation(cmd, args) && viper.GetString("stack") == "" {
+			return errUtils.Build(errUtils.ErrComponentRequired).
+				WithExplanation("Pass the path to an existing Terraform root or Terragrunt unit. Use a dot in the root module itself.").
+				WithExample("```shell\natmos terraform plan ./infra/network\n```").Err()
+		}
 		return runBeforeHooks(h.BeforeTerraformPlan, cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
@@ -38,6 +48,9 @@ For complete Terraform/OpenTofu documentation, see:
 		// terraformRunWithOptions exits before reaching its routing block.
 		capturedPlanOutput = ""
 		wasMultiComponentExecution = false
+		if isAdoptionPlan(args) {
+			return runAdoptionPlan(cmd, args)
+		}
 
 		// On failure, run after hooks with error context so CI check runs
 		// are updated to failure status. Cobra skips PostRunE on error.
@@ -111,7 +124,7 @@ For complete Terraform/OpenTofu documentation, see:
 		// on the last component or fire with empty/misattributed output.
 		// User-defined hooks (hooks.RunAll) are not per-component-aware today, so
 		// suppress the entire PostRunE block to avoid confusion until that is fixed.
-		if wasMultiComponentExecution {
+		if isAdoptionPlan(args) || wasMultiComponentExecution {
 			return nil
 		}
 		return runHooksWithOutput(h.AfterTerraformPlan, cmd, args, capturedPlanOutput)

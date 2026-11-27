@@ -423,6 +423,8 @@ def real_terragrunt():
             return
         fail("Real Terragrunt could not be installed (set ATMOS_TERRAGRUNT_TESTS_OFFLINE=true to skip offline): " + str(installed.stdout) + str(installed.stderr))
 
+    adopt_single_unit(work, tools, real)
+
     plan = semantics.terraform(root, "plan", "producer")
     expect(plan, "1 to add", "plan through the real terragrunt")
     # The real executable ran: Terragrunt creates its working copy of the module.
@@ -447,3 +449,92 @@ def real_terragrunt():
     state = json.decode(fs.read_file(lifecycle.state_path(root, "producer")))
     fixtures.check(not state["resources"], "Destroy left resources")
     ui.success("Executable mode with the real Terragrunt " + TERRAGRUNT_VERSION + ": plan, apply, feature flags, outputs, consumers, destroy")
+
+
+def adoption_plan_identity(engine, plan):
+    result = exec.run([engine, "show", "-json", plan], working_directory=plan.rsplit("/", 1)[0], output="capture", check=False)
+    fixtures.check(result.exit_code == 0, "Reading " + plan + ": " + result.stderr)
+    changes = json.decode(result.stdout)["resource_changes"]
+    fixtures.check(len(changes) == 1, "Expected the populated unit in " + plan)
+    change = changes[0]["change"]
+    fixtures.check(changes[0]["address"] == "terraform_data.unit" and change["actions"] == ["no-op"], "Unexpected plan at " + plan)
+    before = change["before"]
+    fixtures.check(before["input"] == "inherited:blue" and before["id"], "Wrong state or inherited inputs in " + plan)
+    return before["id"]
+
+
+def adopt_single_unit(work, tools, engine):
+    native = work + "/native"
+    adopted = work + "/adopted"
+    path = "live/dev/vpc"
+    fs.mkdir(native, parents=True)
+    fixtures.git(native, "init", "-b", "main")
+    fixtures.git(native, "config", "user.email", "fixture@example.invalid")
+    fixtures.git(native, "config", "user.name", "Atmos fixture")
+    fixtures.write(native, ".tool-versions", "terragrunt " + TERRAGRUNT_VERSION + "\n")
+    fixtures.write(native, "modules/unit/main.tf", 'variable "text" { type = string }\nresource "terraform_data" "unit" { input = "${var.text}:${terraform.workspace}" }\n')
+    fixtures.write(native, "root.hcl", '''
+remote_state {
+  backend = "local"
+  config = {
+    path = "${get_env("ADOPTION_STATE")}/${path_relative_to_include()}/terraform.tfstate"
+    workspace_dir = "${get_env("ADOPTION_STATE")}/${path_relative_to_include()}/workspaces"
+  }
+  generate = { path = "backend.tf", if_exists = "overwrite_terragrunt" }
+}
+inputs = { text = "inherited" }
+''')
+    fixtures.write(native, path + "/terragrunt.hcl", '''
+terraform_binary = get_env("ADOPTION_ENGINE")
+include "root" { path = find_in_parent_folders("root.hcl") }
+terraform {
+  source = "../../../modules/unit"
+  before_hook "record_plan" {
+    commands = ["plan"]
+    execute = ["git", "config", "--file", "${get_terragrunt_dir()}/hooks", "--add", "plan.ran", "yes"]
+  }
+}
+''')
+    prod_path = "live/prod/vpc"
+    fixtures.write(native, prod_path + "/terragrunt.hcl", fs.read_file(native + "/" + path + "/terragrunt.hcl"))
+    fixtures.commit(native, "Native units")
+    fixtures.git(work, "clone", native, adopted)
+    suffix = exec.run(["go", "env", "GOEXE"], output="capture").stdout.strip()
+    tool_dir = tools + "/bin/gruntwork-io/terragrunt/" + TERRAGRUNT_VERSION
+    terragrunt = tool_dir + "/terragrunt" + suffix
+    env = {"ADOPTION_ENGINE": engine, "ADOPTION_STATE": work + "/state", "TF_WORKSPACE": "blue", "ATMOS_TOOLCHAIN_INSTALL_PATH": tools, "ATMOS_GIT_ROOT_BASEPATH": "false"}
+    delimiter = ";" if suffix else ":"
+    env["PATH"] = delimiter.join([tool_dir, engine.replace("\\", "/").rsplit("/", 1)[0], os.getenv("PATH")])
+    exec.run([terragrunt, "run", "--", "apply", "-auto-approve"], working_directory=native + "/" + path, env=env, output="capture")
+    exec.run([terragrunt, "run", "--", "plan", "-out=" + work + "/native.plan"], working_directory=native + "/" + path, env=env, output="capture")
+    want = adoption_plan_identity(engine, work + "/native.plan")
+    env["ATMOS_CLI_CONFIG_PATH"] = adopted
+    semantics.run(adopted, ["terraform", "plan", "./" + path, "--", "-out=" + work + "/trial.plan"], env)
+    fixtures.check(adoption_plan_identity(engine, work + "/trial.plan") == want, "Trial selected a different state")
+    hooks = adopted + "/" + path + "/hooks"
+    fixtures.check(fs.read_file(hooks).count("ran = yes") == 1, "Expected one native plan hook")
+
+    # Use the plugin under test without contacting the OCI registry.
+    config = {"base_path": ".", "stacks": {"base_path": "stacks", "included_paths": ["*.yaml"]}, "plugins": {"packages": {"terragrunt": {"path": fs.resolve(".")}}}, "components": {"terraform": {"command": engine}}}
+    fixtures.write(adopted, "atmos.yaml", json.encode(config))
+    add = ["stack", "add", "./" + path, "-s", "dev"]
+    manifest = adopted + "/stacks/dev.yaml"
+    semantics.run(adopted, add + ["--dry-run"], env)
+    fixtures.check(not fs.exists(manifest), "Preview created a manifest")
+    semantics.run(adopted, add, env)
+    saved = fs.read_file(manifest)
+    semantics.run(adopted, add, env)
+    fixtures.check(saved == fs.read_file(manifest), "Retry changed the manifest")
+    fixtures.check(fs.read_file(hooks).count("ran = yes") == 1, "Preview or registration ran a hook")
+    env.pop("TF_WORKSPACE")
+    semantics.run(adopted, ["terraform", "plan", "vpc", "-s", "dev", "--", "-out=" + work + "/named.plan"], env)
+    fixtures.check(adoption_plan_identity(engine, work + "/named.plan") == want, "Named plan selected a different state")
+    fixtures.check(fs.read_file(hooks).count("ran = yes") == 2, "Expected one named plan hook")
+    # The same basename in another environment keeps that unit's backend key.
+    exec.run([terragrunt, "run", "--", "apply", "-auto-approve"], working_directory=native + "/" + prod_path, env=dict(env, TF_WORKSPACE="blue"), output="capture")
+    exec.run([terragrunt, "run", "--", "plan", "-out=" + work + "/native-prod.plan"], working_directory=native + "/" + prod_path, env=dict(env, TF_WORKSPACE="blue"), output="capture")
+    prod = adoption_plan_identity(engine, work + "/native-prod.plan")
+    fixtures.check(prod != want, "The fixture's dev and prod backend keys collide")
+    semantics.run(adopted, ["stack", "add", "./" + prod_path, "-s", "prod"], dict(env, TF_WORKSPACE="blue"))
+    semantics.run(adopted, ["terraform", "plan", "vpc", "-s", "prod", "--", "-out=" + work + "/prod.plan"], env)
+    fixtures.check(adoption_plan_identity(engine, work + "/prod.plan") == prod, "Named prod plan used a different backend")

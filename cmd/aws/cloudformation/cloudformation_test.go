@@ -67,7 +67,7 @@ func TestCloudFormationCmdAttributes(t *testing.T) {
 		subcommands = append(subcommands, c.Name())
 	}
 	assert.ElementsMatch(t, []string{
-		"render", "plan", "diff", "apply", "deploy", "delete", "validate", "output",
+		"init", "render", "plan", "diff", "apply", "deploy", "delete", "validate", "output",
 		"changeset", "drift", "fmt", "get", "list", "source",
 		"backend", "logs", "stackset", "tree", "watch",
 	}, subcommands)

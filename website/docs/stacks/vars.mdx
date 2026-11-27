@@ -73,6 +73,22 @@ components:
           - us-east-1c
 ```
 
+### Reuse variable files
+
+A Terraform, OpenTofu, or Packer component can use an ordered list of variable files. Running `atmos stack add` with repeated `--var-file` flags writes these references for you.
+
+```yaml
+# stacks/dev.yaml
+components:
+  terraform:
+    web:
+      vars:
+        - !include ../infra/web/common.tfvars
+        - !include ../infra/web/dev.tfvars
+```
+
+Atmos reads both files each time you run the component. If both assign the same variable, the later assignment replaces the whole value, including objects and lists. Atmos then applies the usual stack inheritance rules to the resulting map.
+
 ## Merge Behavior
 
 Variables are deep-merged from the most general to the most specific level:

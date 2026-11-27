@@ -1,0 +1,14 @@
+vars:
+  stage: demo
+
+components:
+  terraform:
+    hello:
+      metadata:
+        terraform_workspace: default
+      backend_type: local
+      backend:
+        local:
+          path: demo-hello.tfstate
+      vars:
+        greeting: Hello from Atlantis

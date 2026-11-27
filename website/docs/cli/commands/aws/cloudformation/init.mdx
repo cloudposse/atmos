@@ -1,0 +1,73 @@
+---
+title: Use an existing CloudFormation template
+sidebar_label: init
+sidebar_class_name: command
+id: init
+description: Configure one or more named deployments from the same template.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Register an existing CloudFormation template under one or more AWS stack names. Atmos writes the configuration for each deployment.
+</Intro>
+
+From your project directory, start the guided initializer.
+
+```shell
+atmos aws cfn init
+```
+
+1. Choose a template, such as `templates/queue.yaml`. Atmos searches the current directory and its subdirectories for YAML or JSON files with a top-level `Resources` mapping.
+2. Enter the AWS stack name. Press Enter to use `queue`, or enter `orders-blue, orders-green` to register two deployments of this template.
+3. Choose the Atmos stack that groups the deployments. Press Enter to accept `dev`.
+
+In a new project Atmos creates `atmos.yaml` and `stacks/dev.yaml`. The filename gives the Atmos stack its name, `dev`. Each AWS stack gets its own component pointing to your original template. Initialization only writes local configuration.
+
+| Atmos stack | Component | AWS CloudFormation stack |
+| --- | --- | --- |
+| dev | orders-blue | orders-blue |
+| dev | orders-green | orders-green |
+
+Render one template locally:
+
+```shell
+atmos aws cfn render orders-blue -s dev
+```
+
+With your usual AWS credentials and region configured, preview the changes and confirm deployment:
+
+```shell
+atmos aws cfn apply orders-blue -s dev
+```
+
+To deploy all CloudFormation components in this Atmos stack, run `atmos aws cfn apply --all -s dev`. To add another deployment later, repeat `init` with another name. Templates with named resources must allow those resources to coexist in the target account and region.
+
+## Scripts and explicit inputs
+
+Supply the path or any flag to skip that question. This command registers the two deployments shown above.
+
+```shell
+atmos aws cfn init templates/queue.yaml --name orders-blue --name orders-green -s dev
+```
+
+In CI, with piped input, or with `--ci` or `--interactive=false`, supply the template path. Omitted names default to the template filename stem and the Atmos stack defaults to `dev`.
+
+Discovery checks files up to 1 MiB ending in `.yaml`, `.yml`, `.json`, `.template`, or `.cfn`. It skips hidden directories, `node_modules`, and `vendor`. Pass a path directly to register a template outside the search. Atmos checks that it contains a top-level `Resources` mapping before writing any configuration.
+
+In a terminal, add `--apply` to preview and confirm each requested deployment. In a script, run the registration command above, then approve each deployment explicitly.
+
+```shell
+atmos aws cfn apply orders-blue -s dev --auto-approve
+atmos aws cfn apply orders-green -s dev --auto-approve
+```
+
+If you pass `init --apply` with prompts disabled, Atmos saves the registrations, exits with an error, and prints the standalone apply command for each instance. Declining an interactive apply also leaves the registrations available.
+
+## Options
+
+- Repeat `--name` for each instance. The suggested name is the template filename without its extension.
+- Use `-s staging` to choose another Atmos stack. The default is `dev`.
+- Add `--dry-run` to preview initialization.
+
+For Rain-specific template directives, see [Migrating from Rain](/migration/rain).
