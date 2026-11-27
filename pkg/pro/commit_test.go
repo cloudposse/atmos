@@ -443,6 +443,37 @@ func TestDetectChanges(t *testing.T) {
 			assert.Equal(t, "old.tf", deletions[0])
 		})
 	})
+
+	t.Run("rename", func(t *testing.T) {
+		withTempGitRepo(t, func(dir string) {
+			// Git detects renames by default, other values come from the user config.
+			runGit(t, dir, "config", "diff.renames", "true")
+
+			writeFile(t, dir, "old.tf", "resource {}")
+			runGit(t, dir, "add", "old.tf")
+			runGit(t, dir, "commit", "-m", "initial")
+			runGit(t, dir, "mv", "old.tf", "new.tf")
+
+			additions, deletions, err := detectChanges()
+			require.NoError(t, err)
+			assert.Equal(t, []string{"new.tf"}, additions)
+			assert.Equal(t, []string{"old.tf"}, deletions)
+		})
+	})
+
+	t.Run("non-ASCII name", func(t *testing.T) {
+		withTempGitRepo(t, func(dir string) {
+			runGit(t, dir, "config", "core.quotePath", "true")
+
+			writeFile(t, dir, "café.tf", "resource {}")
+			runGit(t, dir, "add", "-A")
+
+			additions, deletions, err := detectChanges()
+			require.NoError(t, err)
+			assert.Equal(t, []string{"café.tf"}, additions)
+			assert.Empty(t, deletions)
+		})
+	})
 }
 
 func TestStageFiles(t *testing.T) {
