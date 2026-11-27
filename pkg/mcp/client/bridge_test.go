@@ -368,3 +368,36 @@ func TestMapJSONSchemaType(t *testing.T) {
 		})
 	}
 }
+
+func TestBridgedTool_Parameters_ArrayItems(t *testing.T) {
+	array := func(items map[string]any) map[string]any {
+		prop := map[string]any{"type": "array"}
+		if items != nil {
+			prop["items"] = items
+		}
+		return prop
+	}
+	cases := map[string]struct {
+		prop map[string]any
+		want tools.ParamType
+	}{
+		"declared": {array(map[string]any{"type": "object"}), tools.ParamTypeObject},
+		"number":   {array(map[string]any{"type": "number"}), tools.ParamTypeNumber},
+		"missing":  {array(nil), tools.ParamTypeString},
+		"untyped":  {array(map[string]any{}), tools.ParamTypeString},
+		"nested":   {array(map[string]any{"type": "array"}), tools.ParamTypeString},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			bt := NewBridgedTool("test", &mcpsdk.Tool{
+				Name:        "test",
+				InputSchema: map[string]any{"type": "object", "properties": map[string]any{"values": tc.prop}},
+			}, nil)
+
+			params := bt.Parameters()
+			require.Len(t, params, 1)
+			assert.Equal(t, tc.want, params[0].ItemType())
+		})
+	}
+}

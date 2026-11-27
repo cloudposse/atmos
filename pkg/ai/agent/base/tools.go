@@ -24,10 +24,14 @@ func BuildToolParameterSchema(toolParams []tools.Parameter) (properties map[stri
 	required = make([]string, 0)
 
 	for _, param := range toolParams {
-		properties[param.Name] = map[string]interface{}{
+		property := map[string]interface{}{
 			"type":        string(param.Type),
 			"description": param.Description,
 		}
+		if param.Type == tools.ParamTypeArray {
+			property["items"] = map[string]interface{}{"type": string(param.ItemType())}
+		}
+		properties[param.Name] = property
 		if param.Required {
 			required = append(required, param.Name)
 		}

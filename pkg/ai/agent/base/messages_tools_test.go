@@ -513,3 +513,13 @@ func TestToolInfo_Fields(t *testing.T) {
 	assert.Contains(t, info.Properties, "param")
 	assert.Len(t, info.Required, 1)
 }
+
+func TestBuildToolParameterSchema_ArrayItems(t *testing.T) {
+	properties, _ := BuildToolParameterSchema([]tools.Parameter{
+		{Name: "tags", Type: tools.ParamTypeArray},
+		{Name: "name", Type: tools.ParamTypeString},
+	})
+
+	assert.Equal(t, map[string]interface{}{"type": "string"}, properties["tags"].(map[string]interface{})["items"])
+	assert.NotContains(t, properties["name"], "items")
+}
