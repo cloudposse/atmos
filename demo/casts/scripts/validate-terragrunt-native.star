@@ -11,8 +11,9 @@ def validate():
     assert_colored(text, "Plan:")
     # Commands alone are not proof: require the inventory and real engine plan.
     for needle in [
-        "installed automatically",
+        "▶ Plugin terragrunt was installed automatically",
         "oci://ghcr.io/cloudposse/atmos/plugins/terragrunt",
+        "signature verified",
         "atmos list instances",
         "Component", "Stack", "Type", "Engine", "opentofu",
         "atmos terraform plan demo -s live",
@@ -22,7 +23,7 @@ def validate():
     ]:
         if needle not in plain:
             fail("native Terragrunt cast missing {!r}".format(needle))
-    for marker in ["atmos config set", "Error:", "unknown flag", "rpc error", "exit status 1"]:
+    for marker in ["unverified", "atmos config set", "Error:", "unknown flag", "rpc error", "exit status 1"]:
         if marker in plain:
             fail("native Terragrunt cast contains {!r}".format(marker))
     ui.success("Native Terragrunt discovery and plan cast validated")

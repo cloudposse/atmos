@@ -79,7 +79,8 @@ func TestReferencedKindInstallsUnlockedPackageAndAnnouncesIt(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(plain, "installed automatically"), "exactly one notice per package: %s", plain)
 	assert.Contains(t, plain, atmos.Plugins.Packages["fixture"].Source)
 	assert.Contains(t, plain, entry.IndexDigest)
-	assert.Contains(t, plain, "unverified")
+	assert.Regexp(t, `(?m)^▶ .*installed automatically`, plain)
+	assert.Regexp(t, `(?m)^⚠ .*signature.*unverified`, plain)
 	assert.NotContains(t, plain, "🔌")
 }
 

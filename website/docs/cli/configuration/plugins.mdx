@@ -121,6 +121,8 @@ The order Atmos uses to pick credentials is in [credential precedence](/cli/comm
 
 ## plugins.policy
 
+Atmos verifies official Cloud Posse releases from `oci://ghcr.io/cloudposse/atmos/plugins/` automatically. On install and cached use, the release digest must have a valid signature from the Atmos plugin release workflow on `main`, issued by GitHub Actions. Project publisher restrictions also apply. Other registries retain their configured signature policy.
+
 <dl>
   <dt><code>require_signature</code></dt>
   <dd>Admit only releases signed by a trusted publisher. It governs released packages; a package that sets <code>path</code> has no signature and is governed by <a href="/policies/plugins">plugin policy</a> rules over <code>origin: development</code> and <code>input.path</code>. Needs at least one entry in <code>trusted_publishers</code> in some loaded configuration file. Later files cannot turn it off.</dd>

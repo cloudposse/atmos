@@ -129,3 +129,43 @@ func TestRequiredSignatureFailsClosedWithoutPublisherTrustOrDiscovery(t *testing
 		})
 	}
 }
+
+func TestOfficialReleaseTrust(t *testing.T) {
+	for _, namespace := range []string{"cloudposse", "acme"} {
+		t.Run(namespace, func(t *testing.T) {
+			service, release, directory := namedInstallFixture(t, namespace+"/fixture")
+			layout := filepath.Join(t.TempDir(), "layout")
+			require.NoError(t, pluginoci.Pack(directory, layout, service.Descriptors))
+			request := &Request{Source: "oci://ghcr.io/cloudposse/atmos/plugins/fixture", Constraint: "1.0.0", Layout: layout}
+			authority := signaturetest.New(t)
+			service.Verifier.LoadRoot = func(context.Context, bool) (root.TrustedMaterial, error) { return authority, nil }
+			raw, err := release.Index.RawManifest()
+			require.NoError(t, err)
+			_, err = service.Prepare(t.Context(), request)
+			require.ErrorIs(t, err, errUtils.ErrPluginSignatureInvalid)
+			for _, signer := range []signature.Identity{
+				{Identity: officialSigner + "-other", Issuer: officialIssuer},
+				{Identity: officialSigner, Issuer: "https://other.example.org"},
+			} {
+				require.NoError(t, signature.Save(layout, [][]byte{authority.Sign(t, signer.Identity, signer.Issuer, raw)}))
+				_, err = service.Prepare(t.Context(), request)
+				require.ErrorIs(t, err, errUtils.ErrPluginSignatureInvalid)
+			}
+			require.NoError(t, signature.Save(layout, [][]byte{authority.Sign(t, officialSigner, officialIssuer, raw)}))
+			entry, err := service.Prepare(t.Context(), request)
+			require.NoError(t, err)
+			require.Equal(t, "verified", entry.Verification.Signature)
+			require.Equal(t, officialSigner, entry.Verification.Identity)
+			service.Config.Plugins.Policy.Offline = true
+			_, err = service.VerifyInstalled(t.Context(), entry)
+			require.NoError(t, err)
+			service.Config.Plugins.Policy.TrustedPublishers = []schema.PluginPublisher{{Publisher: namespace, Identity: "other@example.com", Issuer: officialIssuer}}
+			_, err = service.VerifyInstalled(t.Context(), entry)
+			require.ErrorIs(t, err, errUtils.ErrPluginSignatureInvalid)
+		})
+	}
+	require.True(t, ReleaseSignatureRequired(&schema.PluginPolicy{}, "GHCR.IO:443/cloudposse/atmos/plugins/fixture"))
+	require.True(t, ReleaseSignatureRequired(&schema.PluginPolicy{}, "oci://ghcr.io:0443/cloudposse/atmos/plugins/fixture"))
+	require.False(t, ReleaseSignatureRequired(&schema.PluginPolicy{}, "oci://ghcr.io:8443/cloudposse/atmos/plugins/fixture"))
+	require.False(t, ReleaseSignatureRequired(&schema.PluginPolicy{}, "oci://ghcr.io/cloudposse/atmos/plugins-other/fixture"))
+}

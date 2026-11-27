@@ -55,6 +55,11 @@ func TestVersionSelectionAndPinnedReferences(t *testing.T) {
 
 func installFixture(t *testing.T) (*Service, *pluginoci.Release, string) {
 	t.Helper()
+	return namedInstallFixture(t, "acme/fixture")
+}
+
+func namedInstallFixture(t *testing.T, plugin string) (*Service, *pluginoci.Release, string) {
+	t.Helper()
 	directory := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(directory, "bin"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "bin", "plugin"), []byte("compiled executable"), 0o755))
@@ -70,7 +75,7 @@ spec:
     fixtures:
       acme/fixture: {}
 `
-	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(strings.ReplaceAll(manifest, "PLATFORM", CurrentPlatform())), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(strings.NewReplacer("PLATFORM", CurrentPlatform(), "acme/fixture", plugin).Replace(manifest)), 0o644))
 	descriptors := extension.New()
 	require.NoError(t, descriptors.Register(extension.Descriptor{Capability: "fixture", Path: []string{"fixtures"}, Version: 1, Validate: func(extension.Binding) error { return nil }}))
 	index, err := pluginoci.BuildIndex(directory, descriptors)

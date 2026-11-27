@@ -78,10 +78,11 @@ func announceRestored(atmos *schema.AtmosConfiguration, aliases []string) error 
 		if !found {
 			continue
 		}
-		summary := fmt.Sprintf("Plugin `%s` was not installed, so it was installed automatically from `%s` (version %s, digest `%s`)", alias, entry.Source, entry.Version, entry.IndexDigest)
+		summary := fmt.Sprintf("Plugin `%s` was installed automatically from `%s` (version %s, digest `%s`)", alias, entry.Source, entry.Version, entry.IndexDigest)
 		switch signature := entry.Verification; {
 		case signature.Signature == "" || signature.Signature == "unverified":
-			ui.Warningf("%s; its signature is unverified. Review `.atmos.plugins.lock.yaml` and commit it.", summary)
+			ui.Info(summary)
+			ui.Warningf("The signature for plugin `%s` is unverified. Review `.atmos.plugins.lock.yaml` before committing it.", alias)
 		case signature.Identity != "":
 			ui.Infof("%s; signature %s by %s.", summary, signature.Signature, signature.Identity)
 		default:

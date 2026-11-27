@@ -23,11 +23,31 @@ func SignatureRequired(policy *schema.PluginPolicy) bool {
 	return policy.RequireSignature || len(policy.TrustedPublishers) != 0 || len(policy.PublisherConstraints) != 0
 }
 
+const (
+	officialSigner = "https://github.com/cloudposse/atmos/.github/workflows/plugin-packages.yaml@refs/heads/main"
+	officialIssuer = "https://token.actions.githubusercontent.com"
+)
+
+// ReleaseSignatureRequired applies the official release rule in addition to configured policy.
+func ReleaseSignatureRequired(policy *schema.PluginPolicy, source string) bool {
+	defer perf.Track(nil, "plugininstall.ReleaseSignatureRequired")()
+	return isOfficialSource(source) || SignatureRequired(policy)
+}
+
+func isOfficialSource(source string) bool {
+	host, repository, _ := strings.Cut(strings.TrimPrefix(source, "oci://"), "/")
+	if hostname, port, found := strings.Cut(host, ":"); found && strings.TrimLeft(port, "0") == "443" {
+		host = hostname
+	}
+	host = strings.TrimSuffix(host, ".")
+	return strings.EqualFold(host, "ghcr.io") && strings.HasPrefix(repository, "cloudposse/atmos/plugins/")
+}
+
 // VerifyInstalled checks current publisher policy against cryptographic evidence.
 // Lockfile verification labels are informational and can never authorize execution.
 func (s *Service) VerifyInstalled(ctx context.Context, entry *pluginlock.Entry) (pluginlock.Verification, error) {
 	defer perf.Track(s.Config, "plugininstall.Service.VerifyInstalled")()
-	if !SignatureRequired(&s.Config.Plugins.Policy) {
+	if !ReleaseSignatureRequired(&s.Config.Plugins.Policy, entry.Source) {
 		return pluginlock.Verification{Signature: "unverified"}, nil
 	}
 	if _, err := s.Cache.Installed(entry, s.Platform); err != nil {
@@ -66,7 +86,7 @@ type verifiedEvidence struct {
 }
 
 func (s *Service) loadEvidence(ctx context.Context, entry *pluginlock.Entry, directory string, layout bool) (*verifiedEvidence, error) {
-	identities, err := requiredIdentities(&s.Config.Plugins.Policy, entry.Plugin)
+	identities, err := requiredIdentities(&s.Config.Plugins.Policy, entry)
 	if err != nil {
 		return nil, err
 	}
@@ -112,21 +132,25 @@ func (s *Service) fetchEvidence(ctx context.Context, entry *pluginlock.Entry) ([
 	return bundles, nil
 }
 
-func requiredIdentities(policy *schema.PluginPolicy, plugin string) ([][]signature.Identity, error) {
+func requiredIdentities(policy *schema.PluginPolicy, entry *pluginlock.Entry) ([][]signature.Identity, error) {
 	groups := append([][]schema.PluginPublisher(nil), policy.PublisherConstraints...)
 	if len(policy.TrustedPublishers) != 0 {
 		groups = append(groups, policy.TrustedPublishers)
 	}
-	if len(groups) == 0 {
-		return nil, errUtils.ErrPluginSignatureInvalid
-	}
-	identities := make([][]signature.Identity, 0, len(groups))
+	var identities [][]signature.Identity
 	for _, group := range groups {
-		matches := publisherIdentities(plugin, group)
+		matches := publisherIdentities(entry.Plugin, group)
 		if len(matches) == 0 {
 			return nil, errUtils.ErrPluginSignatureInvalid
 		}
 		identities = append(identities, matches)
+	}
+	// The release workflow signs every plugin published under the official registry path.
+	if isOfficialSource(entry.Source) {
+		identities = append(identities, []signature.Identity{{Identity: officialSigner, Issuer: officialIssuer}})
+	}
+	if len(identities) == 0 {
+		return nil, errUtils.ErrPluginSignatureInvalid
 	}
 	return identities, nil
 }
