@@ -6,11 +6,13 @@ import (
 	stderrors "errors"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
@@ -38,7 +40,14 @@ type sdkClient struct {
 	recovery      *recovery.Runner
 	dynamicClient dynamic.Interface
 	mapper        meta.RESTMapper
+	discovery     groupVersionDiscovery
 	namespace     string
+}
+
+// groupVersionDiscovery is the uncached discovery lookup used to confirm that a kind is no longer served.
+type groupVersionDiscovery interface {
+	ServerGroups() (*metav1.APIGroupList, error)
+	ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error)
 }
 
 type objectResult struct {
@@ -80,6 +89,7 @@ func newSDKClient() (*sdkClient, error) {
 	return &sdkClient{
 		dynamicClient: dynamicClient,
 		mapper:        restmapper.NewDeferredDiscoveryRESTMapper(memory.NewMemCacheClient(discoveryClient)),
+		discovery:     discoveryClient,
 		namespace:     namespace,
 	}, nil
 }
@@ -127,6 +137,16 @@ func (c *sdkClient) Delete(ctx context.Context, objects []*unstructured.Unstruct
 	for _, obj := range objects {
 		resource, namespace, err := c.resourceFor(ctx, obj)
 		if err != nil {
+			// A kind the cluster no longer serves (e.g. its CRD was removed) has no objects left to delete.
+			if meta.IsNoMatchError(err) && c.kindUnserved(ctx, obj.GroupVersionKind()) {
+				results = append(results, objectResult{
+					Action:    "not-found",
+					Resource:  resourceID(obj),
+					Namespace: obj.GetNamespace(),
+					Name:      obj.GetName(),
+				})
+				continue
+			}
 			return nil, err
 		}
 
@@ -256,6 +276,58 @@ func (c *sdkClient) Validate(ctx context.Context, objects []*unstructured.Unstru
 	}
 
 	return results, stderrors.Join(errs...)
+}
+
+// kindUnserved confirms a RESTMapper "no match" against discovery for every served version of the group,
+// because objects of a removed version may still exist through another one.
+// The mapper also reports no match for groups whose discovery failed (such as an
+// unavailable aggregated API), where objects may still exist.
+func (c *sdkClient) kindUnserved(ctx context.Context, gvk schema.GroupVersionKind) bool {
+	if c.discovery == nil {
+		return false
+	}
+
+	groups, err := recovery.Call(ctx, c.recovery, "discovery", c.discovery.ServerGroups)
+	if err != nil {
+		return false
+	}
+
+	versions := []string{gvk.Version}
+	for i := range groups.Groups {
+		if groups.Groups[i].Name != gvk.Group {
+			continue
+		}
+		for _, served := range groups.Groups[i].Versions {
+			if served.Version != gvk.Version {
+				versions = append(versions, served.Version)
+			}
+		}
+	}
+
+	for _, version := range versions {
+		groupVersion := schema.GroupVersion{Group: gvk.Group, Version: version}.String()
+		if !c.versionLacksKind(ctx, groupVersion, gvk.Kind) {
+			return false
+		}
+	}
+	return true
+}
+
+// versionLacksKind reports whether discovery positively confirms that the group version does not serve the kind.
+func (c *sdkClient) versionLacksKind(ctx context.Context, groupVersion, kind string) bool {
+	list, err := recovery.Call(ctx, c.recovery, "discovery", func() (*metav1.APIResourceList, error) {
+		return c.discovery.ServerResourcesForGroupVersion(groupVersion)
+	})
+	if err != nil {
+		return errors.IsNotFound(err)
+	}
+
+	for i := range list.APIResources {
+		if strings.EqualFold(list.APIResources[i].Kind, kind) {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *sdkClient) resourceFor(ctx context.Context, obj *unstructured.Unstructured) (dynamic.ResourceInterface, string, error) {
