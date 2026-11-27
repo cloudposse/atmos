@@ -1,4 +1,4 @@
-package terraformadoption
+package adoption
 
 import (
 	"bytes"
@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -16,9 +15,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component/configuration"
-	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/stack"
+	stackadoption "github.com/cloudposse/atmos/pkg/stack/adoption"
 	y "github.com/cloudposse/atmos/pkg/yaml"
 )
 
@@ -31,42 +29,13 @@ const (
 	unitSettings       = "components.terraform.terragrunt."
 )
 
-type adoptionFile struct {
-	path          string
-	before, after []byte
-	mode          os.FileMode
-}
-
-func openAdoptionFile(path string) (*adoptionFile, error) {
-	b, mode, err := readRegular(path)
-	return &adoptionFile{path: path, before: b, after: b, mode: mode}, err
-}
-
-func (f *adoptionFile) set(key, value, kind string) error {
-	b, err := y.SetWithType(f.after, key, value, kind)
-	if err == nil {
-		f.after = b
-	}
-	return err
-}
-
-func (f *adoptionFile) write() error {
-	if bytes.Equal(f.after, f.before) {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(f.path), configDirMode); err != nil {
-		return err
-	}
-	return filesystem.NewOSFileSystem().WriteFileAtomic(f.path, f.after, f.mode)
-}
-
 type unitRegistration struct {
 	uri, name         string
 	config            *schema.AtmosConfiguration
-	project, manifest *adoptionFile
+	project, manifest *stackadoption.File
 }
 
-func (r *Registration) saveUnit(ctx context.Context, unit string) error {
+func (r *request) saveUnit(ctx context.Context, unit string) error {
 	u, err := r.unitDestination(unit)
 	if err != nil {
 		return err
@@ -88,9 +57,9 @@ func (r *Registration) saveUnit(ctx context.Context, unit string) error {
 	return nil
 }
 
-func (u *unitRegistration) componentSettings(ctx context.Context, r *Registration, unit, mode string) error {
+func (u *unitRegistration) componentSettings(ctx context.Context, r *request, unit, mode string) error {
 	if mode == executableMode {
-		saved, _ := y.Get(u.manifest.before, stack.BuildComponentYqPath(terraform, u.name, "dependencies.tools.terragrunt"))
+		saved, _ := y.Get(u.manifest.Before, y.ComponentPath(terraform, u.name, "dependencies.tools.terragrunt"))
 		tool, err := unitTool(ctx, unit, r.Project, saved, u.config)
 		if err != nil {
 			return err
@@ -123,7 +92,7 @@ func (u *unitRegistration) pinEngine(ctx context.Context, dir, project, command 
 	if command != terraform && command != tofu {
 		return nil
 	}
-	if _, err := y.Get(u.manifest.before, stack.BuildComponentYqPath(terraform, u.name, "dependencies.tools."+command)); err == nil {
+	if _, err := y.Get(u.manifest.Before, y.ComponentPath(terraform, u.name, "dependencies.tools."+command)); err == nil {
 		return nil
 	}
 	pins, err := projectPins(evidenceDirectories(dir, project))
@@ -146,14 +115,10 @@ func (u *unitRegistration) pinEngine(ctx context.Context, dir, project, command 
 	return u.componentValue("dependencies.tools."+command, version)
 }
 
-func (u *unitRegistration) finish(ctx context.Context, r *Registration) error {
+func (u *unitRegistration) finish(ctx context.Context, r *request) error {
 	if r.DryRun {
-		for _, f := range []*adoptionFile{u.project, u.manifest} {
-			rel, err := filepath.Rel(r.Project, f.path)
-			if err != nil {
-				return err
-			}
-			printChange(r.Output, filepath.ToSlash(rel), f.before, f.after)
+		if err := r.WriteFiles(u.project, u.manifest); err != nil {
+			return err
 		}
 		if u.inferEngine(r) {
 			fmt.Fprintln(r.Output, "On save, Atmos reads the unit's terraform_binary and pins a standard Terraform or OpenTofu executable.")
@@ -169,18 +134,15 @@ func (u *unitRegistration) finish(ctx context.Context, r *Registration) error {
 			return err
 		}
 	}
-	if err := u.project.write(); err != nil {
-		return err
-	}
-	return u.manifest.write()
+	return r.WriteFiles(u.project, u.manifest)
 }
 
-func (u *unitRegistration) inferEngine(r *Registration) bool {
+func (u *unitRegistration) inferEngine(r *request) bool {
 	return u.config.Components.Terraform.ConfigurationProviders[tg].Mode == executableMode && unitOverride(r.Explicit) == ""
 }
 
-func (u *unitRegistration) saveResolvedEngine(ctx context.Context, r *Registration, declared string) error {
-	saved, _ := y.Get(u.manifest.after, stack.BuildComponentYqPath(terraform, u.name, unitCommand))
+func (u *unitRegistration) saveResolvedEngine(ctx context.Context, r *request, declared string) error {
+	saved, _ := y.Get(u.manifest.After, y.ComponentPath(terraform, u.name, unitCommand))
 	command := cmp.Or(saved, declared, defaultWrappedCommand())
 	if declared == "" {
 		if err := u.componentValue(unitCommand, command); err != nil {
@@ -191,7 +153,7 @@ func (u *unitRegistration) saveResolvedEngine(ctx context.Context, r *Registrati
 	return u.pinEngine(ctx, filepath.Dir(unit), r.Project, command)
 }
 
-func (r *Registration) unitDestination(unit string) (*unitRegistration, error) {
+func (r *request) unitDestination(unit string) (*unitRegistration, error) {
 	rel, err := r.unitPath(unit)
 	if err != nil {
 		return nil, err
@@ -206,27 +168,27 @@ func (r *Registration) unitDestination(unit string) (*unitRegistration, error) {
 	if r.Config != nil {
 		c := *r.Config
 		config = &c
-		if !standaloneStacks(&config.Stacks) {
+		if !stackadoption.StandaloneStacks(&config.Stacks) {
 			return nil, fmt.Errorf("%w: stack add requires standalone filename-named stacks with included_paths [\"*.yaml\"]", errUtils.ErrInvalidStackConfig)
 		}
 		stacksDir = config.StacksBaseAbsolutePath
 	}
-	path, err := standaloneDestination(stacksDir, r.Stack)
+	path, err := stackadoption.StandaloneDestination(stacksDir, r.Stack)
 	if err != nil {
 		return nil, err
 	}
-	project, err := openAdoptionFile(filepath.Join(r.Project, "atmos.yaml"))
+	project, err := stackadoption.OpenFile(filepath.Join(r.Project, "atmos.yaml"))
 	if err != nil {
 		return nil, err
 	}
-	manifest, err := openAdoptionFile(path)
+	manifest, err := stackadoption.OpenFile(path)
 	if err != nil {
 		return nil, err
 	}
 	return &unitRegistration{uri: unitScheme + filepath.ToSlash(rel), name: unitName(rel), project: project, manifest: manifest, config: config}, nil
 }
 
-func (r *Registration) unitPath(unit string) (string, error) {
+func (r *request) unitPath(unit string) (string, error) {
 	dir, err := filepath.EvalSymlinks(filepath.Dir(unit))
 	if err != nil {
 		return "", err
@@ -253,14 +215,14 @@ func defaultWrappedCommand() string {
 	return terraform
 }
 
-func (u *unitRegistration) configureProject(r *Registration) error {
+func (u *unitRegistration) configureProject(r *request) error {
 	if r.Config == nil {
-		if u.project.before != nil {
-			return fmt.Errorf("%w: configuration appeared at %s; reload and retry", errUtils.ErrInvalidStackConfig, u.project.path)
+		if u.project.Before != nil {
+			return fmt.Errorf("%w: configuration appeared at %s; reload and retry", errUtils.ErrInvalidStackConfig, u.project.Path)
 		}
-		u.project.after = []byte(starter)
+		u.project.After = []byte(stackadoption.StarterConfig)
 		cmd := defaultWrappedCommand()
-		if err := u.project.set("components.terraform.command", cmd, y.TypeString); err != nil {
+		if err := u.project.Set("components.terraform.command", cmd, y.TypeString); err != nil {
 			return err
 		}
 		u.config.Components.Terraform.Command = cmd
@@ -269,7 +231,7 @@ func (u *unitRegistration) configureProject(r *Registration) error {
 		return err
 	}
 	// Avoid guessing which layer owns a merged existing configuration.
-	if r.Config != nil && !bytes.Equal(u.project.before, u.project.after) && u.project.before == nil {
+	if r.Config != nil && !bytes.Equal(u.project.Before, u.project.After) && u.project.Before == nil {
 		return fmt.Errorf("%w: enable the Terragrunt provider in the project's Atmos configuration first", errUtils.ErrInvalidStackConfig)
 	}
 	return nil
@@ -290,10 +252,10 @@ func (u *unitRegistration) enableProvider() error {
 	}
 	providers[tg] = schema.ComponentConfiguration{Enabled: true, Mode: executableMode}
 	c.Components.Terraform.ConfigurationProviders = providers
-	if err := u.project.set(unitSettings+"enabled", "true", y.TypeBool); err != nil {
+	if err := u.project.Set(unitSettings+"enabled", "true", y.TypeBool); err != nil {
 		return err
 	}
-	if err := u.project.set(unitSettings+"mode", executableMode, y.TypeString); err != nil {
+	if err := u.project.Set(unitSettings+"mode", executableMode, y.TypeString); err != nil {
 		return err
 	}
 	return u.enablePackage()
@@ -319,10 +281,10 @@ func (u *unitRegistration) enablePackage() error {
 		c.Plugins.Packages = make(map[string]schema.PluginPackage)
 	}
 	c.Plugins.Packages[tg] = schema.PluginPackage{Source: unitPackage, Version: unitPackageVersion}
-	if err := u.project.set("plugins.packages.terragrunt.source", unitPackage, y.TypeString); err != nil {
+	if err := u.project.Set("plugins.packages.terragrunt.source", unitPackage, y.TypeString); err != nil {
 		return err
 	}
-	return u.project.set("plugins.packages.terragrunt.version", unitPackageVersion, y.TypeString)
+	return u.project.Set("plugins.packages.terragrunt.version", unitPackageVersion, y.TypeString)
 }
 
 func (u *unitRegistration) addImport(stackName string) error {
@@ -332,14 +294,14 @@ func (u *unitRegistration) addImport(stackName string) error {
 		Components struct{ Terraform map[string]any }
 		Shared     map[string]any `yaml:",inline"`
 	}
-	if err := yaml.Unmarshal(u.manifest.before, &manifest); err != nil {
+	if err := yaml.Unmarshal(u.manifest.Before, &manifest); err != nil {
 		return err
 	}
 	if manifest.Name != "" && manifest.Name != stackName {
-		return fmt.Errorf("%w: %s declares %s", errUtils.ErrInvalidStackConfig, u.manifest.path, manifest.Name)
+		return fmt.Errorf("%w: %s declares %s", errUtils.ErrInvalidStackConfig, u.manifest.Path, manifest.Name)
 	}
 	if len(manifest.Shared) > 0 {
-		return fmt.Errorf("%w: %s contains shared stack settings", errUtils.ErrInvalidStackConfig, u.manifest.path)
+		return fmt.Errorf("%w: %s contains shared stack settings", errUtils.ErrInvalidStackConfig, u.manifest.Path)
 	}
 	exists, err := u.hasImport(manifest.Import)
 	if err != nil {
@@ -349,9 +311,9 @@ func (u *unitRegistration) addImport(stackName string) error {
 		return nil
 	}
 	if _, ok := manifest.Components.Terraform[u.name]; ok {
-		return fmt.Errorf("%w: component %s already exists in %s", errUtils.ErrInvalidComponent, u.name, u.manifest.path)
+		return fmt.Errorf("%w: component %s already exists in %s", errUtils.ErrInvalidComponent, u.name, u.manifest.Path)
 	}
-	return u.manifest.set(fmt.Sprintf("import[%d]", len(manifest.Import)), u.uri, y.TypeString)
+	return u.manifest.Set(fmt.Sprintf("import[%d]", len(manifest.Import)), u.uri, y.TypeString)
 }
 
 func (u *unitRegistration) hasImport(imports []string) (bool, error) {
@@ -359,7 +321,7 @@ func (u *unitRegistration) hasImport(imports []string) (bool, error) {
 	for _, uri := range imports {
 		path, ok := strings.CutPrefix(uri, unitScheme)
 		if !ok || filepath.Base(path) != unitFile {
-			return false, fmt.Errorf("%w: cannot establish the components inherited from %s in %s", errUtils.ErrInvalidStackConfig, uri, u.manifest.path)
+			return false, fmt.Errorf("%w: cannot establish the components inherited from %s in %s", errUtils.ErrInvalidStackConfig, uri, u.manifest.Path)
 		}
 		if uri == u.uri {
 			exists = true
@@ -373,17 +335,17 @@ func (u *unitRegistration) hasImport(imports []string) (bool, error) {
 }
 
 func (u *unitRegistration) componentValue(field, value string) error {
-	path := stack.BuildComponentYqPath(terraform, u.name, field)
-	if current, ok := y.GetType(u.manifest.after, path); ok {
+	path := y.ComponentPath(terraform, u.name, field)
+	if current, ok := y.GetType(u.manifest.After, path); ok {
 		if current == y.TypeString {
-			existing, err := y.Get(u.manifest.after, path)
+			existing, err := y.Get(u.manifest.After, path)
 			if err == nil && existing == value {
 				return nil
 			}
 		}
 		return fmt.Errorf("%w: existing %s differs from %s", errUtils.ErrInvalidStackConfig, path, value)
 	}
-	return u.manifest.set(path, value, y.TypeString)
+	return u.manifest.Set(path, value, y.TypeString)
 }
 
 func (u *unitRegistration) validate(ctx context.Context) (string, error) {

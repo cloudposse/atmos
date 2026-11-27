@@ -1,4 +1,4 @@
-package terraformadoption
+package adoption
 
 import (
 	"bytes"
@@ -189,12 +189,12 @@ func TestAtlantisProjectInputs(t *testing.T) {
 	_, err = readAtlantis(r.Dir)
 	require.Error(t, err)
 	write(t, filepath.Join(dir, "terragrunt.hcl"), "")
-	_, err = atlantisRoot(r.Project, "infra/net")
+	_, err = r.atlantisRoot(r.Project, "infra/net")
 	require.ErrorContains(t, err, "Terragrunt unit")
 	require.NoError(t, os.Remove(filepath.Join(dir, "terragrunt.hcl")))
 	write(t, filepath.Join(dir, "Chart.yaml"), "")
 	require.NoError(t, os.Remove(filepath.Join(dir, "main.tf")))
-	_, err = atlantisRoot(r.Project, "infra/net")
+	_, err = r.atlantisRoot(r.Project, "infra/net")
 	require.ErrorContains(t, err, "expected a Terraform or OpenTofu")
 	write(t, filepath.Join(dir, "env"), "occupied")
 	_, err = atlantisWorkspaceFiles(dir, "blue", nil)

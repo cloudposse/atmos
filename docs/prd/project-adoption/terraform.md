@@ -63,7 +63,7 @@ Start with one explicitly selected root, the original working directory, a local
 
 On save, reuse the existing `command` setting and any project version pin. Store the portable command name when the choice came from availability or the picker. A teammate with both installed then gets the same engine without a second prompt. Restrict a mixed project's new selection to the selected component. [OpenTofu file selection](https://opentofu.org/docs/language/files/)
 
-**Regression fixture.** With both real binaries on PATH and the OpenTofu directory first, a named Atmos plan with no command setting used Terraform 1.9.8 and loaded `main.tf`. Adding `--command=tofu` used OpenTofu 1.10.6 and loaded its same-basename `main.tofu` alternative. The importer was exercised with both binaries installed, an ambiguous path trial, an explicit OpenTofu trial with a var file, and a saved OpenTofu run after reversing PATH. The selector tests cover interactive choice, conflicting declarations and a missing pinned engine. [Engine selection tests](../../../internal/terraformadoption/engine_test.go)
+**Regression fixture.** With both real binaries on PATH and the OpenTofu directory first, a named Atmos plan with no command setting used Terraform 1.9.8 and loaded `main.tf`. Adding `--command=tofu` used OpenTofu 1.10.6 and loaded its same-basename `main.tofu` alternative. The importer was exercised with both binaries installed, an ambiguous path trial, an explicit OpenTofu trial with a var file, and a saved OpenTofu run after reversing PATH. The selector tests cover interactive choice, conflicting declarations and a missing pinned engine. [Engine selection tests](../../../pkg/terraform/adoption/engine_test.go)
 
 ## Stack files created by adoption
 

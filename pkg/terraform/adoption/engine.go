@@ -1,5 +1,5 @@
-// Package terraformadoption identifies the native CLI used by an existing Terraform-family root.
-package terraformadoption
+// Package adoption identifies the native CLI used by an existing Terraform-family root.
+package adoption
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
+	stackadoption "github.com/cloudposse/atmos/pkg/stack/adoption"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
@@ -203,11 +204,7 @@ func sourceFiles(dir string) (bool, bool, error) {
 		return false, false, err
 	}
 	var tf, ot bool
-	for _, entry := range entries {
-		name := entry.Name()
-		if ignoredSource(entry) {
-			continue
-		}
+	for _, name := range stackadoption.FileNames(entries) {
 		switch {
 		case name == "terragrunt.hcl" || name == "terragrunt.stack.hcl":
 			return false, false, fmt.Errorf("%w: %s is a Terragrunt deployment; use the Terragrunt integration", errUtils.ErrInvalidToolSpec, dir)
@@ -258,8 +255,4 @@ func pinnedBinary(command, pin, name string) (string, error) {
 
 func configSuffix(name, ext string) bool {
 	return strings.HasSuffix(name, ext) || strings.HasSuffix(name, ext+".json")
-}
-
-func ignoredSource(entry os.DirEntry) bool {
-	return entry.IsDir() || strings.HasPrefix(entry.Name(), ".") || strings.HasPrefix(entry.Name(), "~")
 }

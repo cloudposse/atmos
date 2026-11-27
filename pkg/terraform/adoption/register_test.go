@@ -1,19 +1,22 @@
-package terraformadoption
+package adoption
 
 import (
 	"bytes"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+	stackadoption "github.com/cloudposse/atmos/pkg/stack/adoption"
 )
 
-func registration(t *testing.T) Registration {
+func registration(t *testing.T) request {
 	t.Helper()
 	project := t.TempDir()
 	root := filepath.Join(project, "infra", "net")
@@ -22,7 +25,7 @@ func registration(t *testing.T) Registration {
 	t.Setenv("TF_WORKSPACE", "")
 	t.Setenv("TF_DATA_DIR", "")
 	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_COMMAND", "")
-	return Registration{Project: project, Dir: root, Stack: "dev", Output: io.Discard}
+	return request{Registration: stackadoption.Registration{Project: project, Dir: root, Stack: "dev", Output: io.Discard, Adapters: Adapters()}}
 }
 
 func TestRegistration(t *testing.T) {
@@ -127,7 +130,7 @@ func TestConcurrentRegistration(t *testing.T) {
 	ctx := t.Context()
 	errs := make(chan error, 2)
 	var wg sync.WaitGroup
-	for _, req := range []Registration{r, other} {
+	for _, req := range []request{r, other} {
 		wg.Go(func() { errs <- req.Save(ctx) })
 	}
 	wg.Wait()
@@ -148,17 +151,17 @@ func TestStandaloneDestination(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "west.yaml")
 	write(t, file, "name: dev")
-	path, err := standaloneDestination(dir, "dev")
+	path, err := stackadoption.StandaloneDestination(dir, "dev")
 	require.NoError(t, err)
 	require.Equal(t, file, path)
 	write(t, filepath.Join(dir, "ignored.txt"), "{")
-	path, err = standaloneDestination(dir, "new")
+	path, err = stackadoption.StandaloneDestination(dir, "new")
 	require.NoError(t, err)
 	require.Equal(t, filepath.Join(dir, "new.yaml"), path)
 	write(t, filepath.Join(dir, "dev.yaml"), "{}")
-	_, err = standaloneDestination(dir, "dev")
+	_, err = stackadoption.StandaloneDestination(dir, "dev")
 	require.ErrorContains(t, err, "both")
-	_, err = standaloneDestination(file, "dev")
+	_, err = stackadoption.StandaloneDestination(file, "dev")
 	require.Error(t, err)
 }
 
@@ -180,4 +183,32 @@ func TestVerifiedWorkspace(t *testing.T) {
 	write(t, filepath.Join(r.Dir, "main.tf"), "terraform {")
 	_, err = verifiedWorkspace(t.Context(), r.Dir, cmd)
 	require.Error(t, err)
+}
+
+func TestTerraformVariableFileRegistration(t *testing.T) {
+	r := registration(t)
+	r.Explicit = tofu
+	r.Name = "blue"
+	write(t, filepath.Join(r.Dir, "common.tfvars"), "message=\"secret\"\n")
+	write(t, filepath.Join(r.Dir, "dev.tfvars.json"), "{\"ratio\":1.75}")
+	r.VarFiles = []string{"common.tfvars", "dev.tfvars.json"}
+	require.NoError(t, r.Save(t.Context()))
+	file := filepath.Join(r.Project, "stacks", "dev.yaml")
+	b, err := os.ReadFile(file)
+	require.NoError(t, err)
+	require.Contains(t, string(b), "blue:")
+	require.NotContains(t, string(b), "secret")
+	require.Less(t, strings.Index(string(b), "common.tfvars"), strings.Index(string(b), "dev.tfvars.json"))
+	r.Config = &schema.AtmosConfiguration{}
+	r.Config.Stacks.IncludedPaths = []string{"*.yaml"}
+	r.Config.StacksBaseAbsolutePath = filepath.Join(r.Project, "stacks")
+	r.Config.TerraformDirAbsolutePath = r.Project
+	require.NoError(t, r.Save(t.Context()))
+	r.VarFiles = []string{"dev.tfvars.json", "common.tfvars"}
+	require.ErrorContains(t, r.Save(t.Context()), "different variable sources")
+	b, err = os.ReadFile(file)
+	require.NoError(t, err)
+	write(t, file, strings.ReplaceAll(string(b), "!include ", ""))
+	r.VarFiles = []string{"common.tfvars", "dev.tfvars.json"}
+	require.ErrorContains(t, r.Save(t.Context()), "different variable sources")
 }

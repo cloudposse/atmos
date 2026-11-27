@@ -1,4 +1,4 @@
-package terraformadoption
+package adoption
 
 import (
 	"bytes"
@@ -12,10 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	stackadoption "github.com/cloudposse/atmos/pkg/stack/adoption"
 	y "github.com/cloudposse/atmos/pkg/yaml"
 )
 
-func selectedUnit(t *testing.T) (Registration, string) {
+func selectedUnit(t *testing.T) (request, string) {
 	t.Helper()
 	r := registration(t)
 	r.Project, _ = filepath.EvalSymlinks(r.Project)
@@ -139,11 +140,11 @@ func TestTerragruntPreviewAndRetry(t *testing.T) {
 	require.NoError(t, u.configureProject(&r))
 	require.NoError(t, u.addImport(r.Stack))
 	require.NoError(t, u.componentSettings(t.Context(), &r, unit, executableMode))
-	require.NoError(t, u.project.write())
-	require.NoError(t, u.manifest.write())
+	require.NoError(t, u.project.Write())
+	require.NoError(t, u.manifest.Write())
 	c := u.config
 	c.Stacks.IncludedPaths = []string{"*.yaml"}
-	c.StacksBaseAbsolutePath = filepath.Dir(u.manifest.path)
+	c.StacksBaseAbsolutePath = filepath.Dir(u.manifest.Path)
 	r.Config = c
 	out.Reset()
 	require.NoError(t, r.Save(t.Context()))
@@ -181,7 +182,7 @@ func TestTerragruntDestinationConflicts(t *testing.T) {
 	u, err := r.unitDestination(unit)
 	require.NoError(t, err)
 	require.NoError(t, u.addImport(r.Stack))
-	require.Contains(t, string(u.manifest.after), "# retain me")
+	require.Contains(t, string(u.manifest.After), "# retain me")
 	_, err = r.unitDestination(filepath.Join(t.TempDir(), unitFile))
 	require.ErrorContains(t, err, "inside")
 	_, err = r.unitDestination(filepath.Join(t.TempDir(), "missing", unitFile))
@@ -215,7 +216,7 @@ func TestTerragruntExistingProviderAndSettings(t *testing.T) {
 	enabled := true
 	u.config.Plugins.Packages = map[string]schema.PluginPackage{tg: {Path: "../package", Enabled: &enabled}}
 	require.NoError(t, u.enableProvider())
-	require.Empty(t, u.project.after)
+	require.Empty(t, u.project.After)
 	require.Equal(t, "native", u.config.Components.Terraform.ConfigurationProviders[tg].Mode)
 	enabled = false
 	require.ErrorContains(t, u.enableProvider(), "package is disabled")
@@ -226,7 +227,7 @@ func TestTerragruntExistingProviderAndSettings(t *testing.T) {
 	require.NoError(t, u.componentValue("command", "./wrapper"))
 	require.NoError(t, u.setEngine(t.Context(), r.Dir, r.Project, "./wrapper"))
 	require.ErrorContains(t, u.setEngine(t.Context(), r.Dir, r.Project, tofu), "differs")
-	u.manifest.after = nil
+	u.manifest.After = nil
 	require.NoError(t, u.componentValue("env.TF_WORKSPACE", "original"))
 	t.Setenv("TF_WORKSPACE", "changed")
 	require.ErrorContains(t, u.componentSettings(t.Context(), &r, unit, "native"), "differs")
@@ -236,10 +237,10 @@ func TestTerragruntExistingProviderAndSettings(t *testing.T) {
 	require.ErrorContains(t, u.setEngine(t.Context(), r.Dir, r.Project, tofu), "unavailable")
 	write(t, filepath.Join(r.Dir, ".tool-versions"), "tofu")
 	require.ErrorContains(t, u.setEngine(t.Context(), r.Dir, r.Project, tofu), "missing version")
-	require.Error(t, u.project.set("[", "", y.TypeString))
-	u.project.path = filepath.Join(unit, "sub", "atmos.yaml")
-	u.project.after = []byte("change")
-	require.Error(t, u.project.write())
+	require.Error(t, u.project.Set("[", "", y.TypeString))
+	u.project.Path = filepath.Join(unit, "sub", "atmos.yaml")
+	u.project.After = []byte("change")
+	require.Error(t, u.project.Write())
 }
 
 type fixtureUnitImport struct {
@@ -262,14 +263,14 @@ func TestTerragruntImportValidation(t *testing.T) {
 	for _, f := range []fixtureUnitImport{{}, {handled: true, units: map[string]any{"other": nil}}, {handled: true, units: map[string]any{"net": nil, "other": nil}}, {err: errors.New("unresolved HCL")}} {
 		u.config.ComponentConfigurations = f
 		require.Error(t, u.finish(t.Context(), &r))
-		require.NoFileExists(t, u.manifest.path)
+		require.NoFileExists(t, u.manifest.Path)
 	}
 	u.config.ComponentConfigurations = fixtureUnitImport{handled: true, units: map[string]any{"net": struct{}{}}}
-	u.project.after = []byte(starter)
+	u.project.After = []byte(stackadoption.StarterConfig)
 	require.NoError(t, u.addImport("dev"))
 	require.NoError(t, u.finish(t.Context(), &r))
-	require.FileExists(t, u.manifest.path)
-	u.project.path = filepath.Join(unit, "child", "atmos.yaml")
+	require.FileExists(t, u.manifest.Path)
+	u.project.Path = filepath.Join(unit, "child", "atmos.yaml")
 	require.Error(t, u.finish(t.Context(), &r))
 }
 
@@ -285,13 +286,13 @@ func TestTerragruntResolvedEngine(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, u.saveResolvedEngine(t.Context(), &r, tc.declared))
 			entry := "components.terraform.net."
-			cmd, _ := y.Get(u.manifest.after, entry+"command")
+			cmd, _ := y.Get(u.manifest.After, entry+"command")
 			require.Equal(t, tc.command, cmd)
-			pin, _ := y.Get(u.manifest.after, entry+"dependencies.tools.tofu")
+			pin, _ := y.Get(u.manifest.After, entry+"dependencies.tools.tofu")
 			require.Equal(t, tc.pin, pin)
-			u.manifest.before = u.manifest.after
+			u.manifest.Before = u.manifest.After
 			require.NoError(t, u.saveResolvedEngine(t.Context(), &r, tc.declared))
-			require.Equal(t, u.manifest.before, u.manifest.after)
+			require.Equal(t, u.manifest.Before, u.manifest.After)
 		})
 	}
 	mismatch, err := r.unitDestination(unit)

@@ -1,4 +1,4 @@
-package terraformadoption
+package adoption
 
 import (
 	"bytes"
@@ -12,10 +12,11 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/huh"
-	"github.com/cloudposse/atmos/pkg/flags"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 var (

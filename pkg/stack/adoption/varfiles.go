@@ -1,10 +1,11 @@
-package terraformadoption
+package adoption
 
 import (
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -12,10 +13,14 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/perf"
 	y "github.com/cloudposse/atmos/pkg/yaml"
 )
 
-func (r *Registration) addVarFiles(data []byte, target varFileTarget, exists bool) ([]byte, error) {
+// AddVarFiles writes ordered include references, or verifies them on a repeated registration.
+func (r *Registration) AddVarFiles(data []byte, target VarFileTarget, exists bool) ([]byte, error) {
+	defer perf.Track(nil, "adoption.Registration.AddVarFiles")()
+
 	vars := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 	for _, ref := range r.VarFiles {
 		node, err := r.varInclude(target, ref)
@@ -24,7 +29,7 @@ func (r *Registration) addVarFiles(data []byte, target varFileTarget, exists boo
 		}
 		vars.Content = append(vars.Content, node)
 	}
-	key := target.dest + ".vars"
+	key := target.Dest + ".vars"
 	if exists {
 		if err := verifyVarSources(data, key, vars); err != nil {
 			return nil, err
@@ -37,20 +42,20 @@ func (r *Registration) addVarFiles(data []byte, target varFileTarget, exists boo
 	return setYAMLData(data, key, vars)
 }
 
-func (r *Registration) varInclude(target varFileTarget, ref string) (*yaml.Node, error) {
+func (r *Registration) varInclude(target VarFileTarget, ref string) (*yaml.Node, error) {
 	path := ref
 	if !filepath.IsAbs(path) {
-		path = filepath.Join(target.dir, path)
+		path = filepath.Join(target.Dir, path)
 	}
 	path, err := filepath.EvalSymlinks(path)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := relativeDirectory(r.Project, path); err != nil {
+	if _, err := RelativeDirectory(r.Project, path); err != nil {
 		return nil, err
 	}
-	if !supportedVarFile(target.kind, path) {
-		return nil, fmt.Errorf("%w: unsupported %s variable file %q", errUtils.ErrInvalidComponent, target.kind, ref)
+	if !slices.ContainsFunc(target.Extensions, func(ext string) bool { return strings.HasSuffix(path, ext) }) {
+		return nil, fmt.Errorf("%w: unsupported variable file %q", errUtils.ErrInvalidComponent, ref)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -66,7 +71,7 @@ func (r *Registration) varInclude(target varFileTarget, ref string) (*yaml.Node,
 	if _, ok := values.(map[string]any); !ok {
 		return nil, fmt.Errorf("%w: %s must contain a variable assignment map", errUtils.ErrInvalidComponent, ref)
 	}
-	return includeReference(target.file, path)
+	return includeReference(target.File, path)
 }
 
 func includeReference(manifest, path string) (*yaml.Node, error) {
@@ -89,13 +94,6 @@ func includeReference(manifest, path string) (*yaml.Node, error) {
 		rel = `"` + strings.ReplaceAll(rel, `"`, `""`) + `"`
 	}
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!include", Value: rel}, nil
-}
-
-func supportedVarFile(kind, path string) bool {
-	if kind == packerKind {
-		return strings.HasSuffix(path, ".pkrvars.json") || strings.HasSuffix(path, ".pkrvars.hcl")
-	}
-	return strings.HasSuffix(path, ".tfvars") || strings.HasSuffix(path, ".tfvars.json")
 }
 
 func verifyVarSources(data []byte, path string, want *yaml.Node) error {

@@ -1,4 +1,4 @@
-package terraformadoption
+package adoption
 
 import (
 	"cmp"

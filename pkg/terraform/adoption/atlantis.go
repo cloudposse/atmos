@@ -1,4 +1,4 @@
-package terraformadoption
+package adoption
 
 import (
 	"bytes"
@@ -18,6 +18,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
+	stackadoption "github.com/cloudposse/atmos/pkg/stack/adoption"
 	y "github.com/cloudposse/atmos/pkg/yaml"
 )
 
@@ -51,7 +52,7 @@ type atlantisWorkflow struct {
 	Other map[string]yaml.Node `yaml:",inline"`
 }
 
-func (r *Registration) saveAtlantis(ctx context.Context) error {
+func (r *request) saveAtlantis(ctx context.Context) error {
 	cfg, err := readAtlantis(r.Dir)
 	if err != nil {
 		return err
@@ -68,7 +69,7 @@ func (r *Registration) saveAtlantis(ctx context.Context) error {
 			return fmt.Errorf("%w: duplicate Atlantis project selector %q", errUtils.ErrInvalidComponent, name)
 		}
 		names = append(names, name)
-		cfg.describe(r.Output, filepath.Dir(r.Dir), p)
+		cfg.describe(r, r.Output, filepath.Dir(r.Dir), p)
 	}
 	if r.DryRun && r.AtlantisProject == "" {
 		return nil
@@ -87,7 +88,7 @@ func (r *Registration) saveAtlantis(ctx context.Context) error {
 
 func readAtlantis(path string) (atlantisConfig, error) {
 	var config atlantisConfig
-	data, _, err := readRegular(path)
+	data, _, err := stackadoption.ReadRegular(path)
 	if err != nil {
 		return config, err
 	}
@@ -119,7 +120,7 @@ func (p *atlantisProject) selector() string {
 	return cmp.Or(p.Name, p.Dir+"@"+cmp.Or(p.Workspace, atlantisDefault))
 }
 
-func (c *atlantisConfig) describe(out io.Writer, repo string, p *atlantisProject) {
+func (c *atlantisConfig) describe(r *request, out io.Writer, repo string, p *atlantisProject) {
 	fmt.Fprintf(out, "Project %s (dir %q, workspace %q, workflow %q)\n", p.selector(), p.Dir, cmp.Or(p.Workspace, atlantisDefault), cmp.Or(p.Workflow, "built-in default assumed"))
 	for _, k := range []string{"plan_requirements", "apply_requirements", "import_requirements"} {
 		if n, ok := p.Other[k]; ok {
@@ -131,14 +132,14 @@ func (c *atlantisConfig) describe(out io.Writer, repo string, p *atlantisProject
 	}
 	_, err := c.planFiles(p)
 	if err == nil {
-		_, err = atlantisRoot(repo, p.Dir)
+		_, err = r.atlantisRoot(repo, p.Dir)
 	}
 	if err != nil {
 		fmt.Fprintf(out, "  Inventory only: %v\n", err)
 	}
 }
 
-func (r *Registration) selectAtlantis(names []string) (int, error) {
+func (r *request) selectAtlantis(names []string) (int, error) {
 	switch {
 	case len(names) == 0:
 		return 0, fmt.Errorf("%w: no explicit Atlantis projects; automatic discovery requires Atlantis", errUtils.ErrInvalidComponent)
@@ -305,23 +306,23 @@ func atlantisVarFiles(args []string) ([]string, error) {
 	return files, nil
 }
 
-func (r *Registration) registerAtlantis(ctx context.Context, p *atlantisProject, files []string) error {
+func (r *request) registerAtlantis(ctx context.Context, p *atlantisProject, files []string) error {
 	imported := *r
 	source, err := filepath.EvalSymlinks(r.Dir)
 	if err != nil {
 		return err
 	}
-	rel, err := relativeDirectory(r.Project, source)
+	rel, err := stackadoption.RelativeDirectory(r.Project, source)
 	if err != nil {
 		return err
 	}
-	dir, err := atlantisRoot(filepath.Dir(source), p.Dir)
+	dir, err := r.atlantisRoot(filepath.Dir(source), p.Dir)
 	if err != nil {
 		return err
 	}
 	imported.Dir = dir
 	imported.Name = cmp.Or(r.Name, p.Name, filepath.Base(dir))
-	if !stackNamePattern.MatchString(imported.Name) {
+	if !stackadoption.ValidName(imported.Name) {
 		return fmt.Errorf("%w: choose a component name with --name", errUtils.ErrInvalidComponent)
 	}
 	imported.Explicit, err = p.engine(r.Explicit)
@@ -339,22 +340,25 @@ func (r *Registration) registerAtlantis(ctx context.Context, p *atlantisProject,
 }
 
 // Resolve the selected root without evaluating configuration or invoking its CLI.
-func atlantisRoot(repo, projectDir string) (string, error) {
+func (r *request) atlantisRoot(repo, projectDir string) (string, error) {
 	dir, err := filepath.EvalSymlinks(filepath.Join(repo, projectDir))
 	if err != nil {
 		return "", err
 	}
-	if _, err := relativeDirectory(repo, dir); err != nil {
+	if _, err := stackadoption.RelativeDirectory(repo, dir); err != nil {
 		return "", err
 	}
-	source, err := detectSource(dir)
+	adapter, _, err := r.Adapters.Detect(dir)
+	if errors.Is(err, stackadoption.ErrNoMatch) {
+		return "", fmt.Errorf("%w: expected a Terraform or OpenTofu root in %s", errUtils.ErrInvalidComponent, dir)
+	}
 	if err != nil {
 		return "", err
 	}
-	if source.kind == tg {
+	if adapter.Kind() == tg {
 		return "", fmt.Errorf("%w: this Atlantis project selects a Terragrunt unit; register its unit path directly after reviewing the Atlantis workflow", errUtils.ErrInvalidComponent)
 	}
-	if source.kind != terraform {
+	if adapter.Kind() != terraform {
 		return "", fmt.Errorf("%w: expected a Terraform or OpenTofu root in %s", errUtils.ErrInvalidComponent, dir)
 	}
 	return dir, nil
@@ -388,7 +392,7 @@ func atlantisWorkspaceFiles(dir, workspace string, files []string) ([]string, er
 	return append(slices.Clone(files), name), nil
 }
 
-func (r *Registration) checkAtlantisTarget(ctx context.Context, e *Engine, workspace string) error {
+func (r *request) checkAtlantisTarget(ctx context.Context, e *Engine, workspace string) error {
 	if r.atlantisWorkspace != "" && workspace != r.atlantisWorkspace {
 		return fmt.Errorf("%w: Atlantis selects workspace %q; select that existing workspace in %s (current %q) and retry", errUtils.ErrInvalidStackConfig, r.atlantisWorkspace, r.Dir, workspace)
 	}
@@ -406,7 +410,7 @@ func (r *Registration) checkAtlantisTarget(ctx context.Context, e *Engine, works
 	return nil
 }
 
-func (r *Registration) addAtlantisSource(data []byte, dest string, exists bool) ([]byte, error) {
+func (r *request) addAtlantisSource(data []byte, dest string, exists bool) ([]byte, error) {
 	key := dest + ".metadata.custom.atlantis_project"
 	if r.atlantisSource == "" {
 		return data, nil

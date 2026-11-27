@@ -44,16 +44,7 @@ func BuildComponentInFilePath(componentType, componentName, relPath string) stri
 func BuildComponentYqPath(componentType, componentName, relPath string) string {
 	defer perf.Track(nil, "stack.BuildComponentYqPath")()
 
-	parts := []string{
-		ComponentsSectionName,
-		atmosyaml.QuotePathSegment(componentType),
-		atmosyaml.QuotePathSegment(componentName),
-	}
-	joined := strings.Join(parts, ".")
-	if relPath != "" {
-		joined += "." + relPath
-	}
-	return joined
+	return atmosyaml.ComponentPath(componentType, componentName, relPath)
 }
 
 // PickProvenanceFile returns the source file (and line) of the winning provenance

@@ -1,19 +1,23 @@
-package terraformadoption
+package packer
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
+	stackadoption "github.com/cloudposse/atmos/pkg/stack/adoption"
 )
 
 func packerEntry(selected, dir, base string) (map[string]any, error) {
-	rel, err := relativeDirectory(base, dir)
+	rel, err := stackadoption.RelativeDirectory(base, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -52,9 +56,9 @@ func packerTemplates(selected string) ([]string, error) {
 		return nil, err
 	}
 	var result []string
-	for _, f := range files {
-		if !ignoredSource(f) && isPackerTemplate(f.Name()) {
-			result = append(result, filepath.Join(selected, f.Name()))
+	for _, name := range stackadoption.FileNames(files) {
+		if isPackerTemplate(name) {
+			result = append(result, filepath.Join(selected, name))
 		}
 	}
 	return result, nil
@@ -102,4 +106,58 @@ func countPackerSources(build *hcl.Block) (int, error) {
 		count += len(list)
 	}
 	return count, nil
+}
+
+func isPackerTemplate(name string) bool {
+	return strings.HasSuffix(name, ".pkr.hcl") || strings.HasSuffix(name, ".pkr.json")
+}
+
+// Adapter registers local HCL2 Packer configurations with a single build source.
+type Adapter struct{}
+
+const packerKind = "packer"
+
+func (Adapter) Kind() string {
+	defer perf.Track(nil, "packer.Adapter.Kind")()
+	return packerKind
+}
+
+func (Adapter) Options() []string {
+	defer perf.Track(nil, "packer.Adapter.Options")()
+	return []string{"name", "var-file"}
+}
+
+func (Adapter) Detect(s stackadoption.Source) (stackadoption.Match, error) {
+	defer perf.Track(nil, "packer.Adapter.Detect")()
+
+	if s.IsDir && slices.ContainsFunc(s.Files, isPackerTemplate) || !s.IsDir && isPackerTemplate(filepath.Base(s.Path)) {
+		return stackadoption.Match{Path: s.Path}, nil
+	}
+	return stackadoption.Match{}, nil
+}
+
+func (a Adapter) Adopt(_ context.Context, r *stackadoption.Registration, path string) error {
+	defer perf.Track(nil, "packer.Adapter.Adopt")()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	dir := path
+	if !info.IsDir() {
+		dir = filepath.Dir(path)
+	}
+	base := ""
+	if r.Config != nil {
+		base = r.Config.PackerDirAbsolutePath
+	}
+	return r.WriteLocalComponent(&stackadoption.LocalComponent{
+		Kind:              a.Kind(),
+		Name:              r.Name,
+		Dir:               dir,
+		ConfiguredBase:    base,
+		NextCommand:       "validate",
+		VarFileExtensions: []string{".pkrvars.hcl", ".pkrvars.json"},
+		Entry:             func(dir, base string) (map[string]any, error) { return packerEntry(path, dir, base) },
+	})
 }

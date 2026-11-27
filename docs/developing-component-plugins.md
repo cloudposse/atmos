@@ -288,7 +288,20 @@ func parseConfig(raw any) (Config, error) {
 }
 ```
 
-### 4. Write Comprehensive Tests
+### Adopt an existing deployment with `atmos stack add`
+
+A Go component provider can opt in by implementing `adoption.Provider` from `pkg/stack/adoption`. Its `AdoptionAdapters()` method returns one adapter per supported source format. The CLI discovers these through the existing component registry. Providers that only support execution can keep implementing `ComponentProvider` alone.
+
+Each adapter supplies four methods.
+
+- `Kind` identifies the source format. Several formats can produce the same component type.
+- `Detect` inspects the selected file or directory. Return an empty match to decline, or a path to pass to `Adopt`. Set `Wrapper` when a source controls the native files inside it, as a Terragrunt unit does. Two matches at the same priority produce an ambiguity error.
+- `Options` lists supported source flags such as `name` and `var-file`. Stack selection, dry run, and project locking are shared.
+- `Adopt` receives the context, registration, and selected path. For a local component, call `Registration.WriteLocalComponent` with the component type, resolved base directory, and a function that builds its manifest entry. The writer handles paths, previews, repeated registrations, conflicts, and file permissions. Adapters that edit several files can prepare them with `OpenFile` and submit them together to `Registration.WriteFiles`.
+
+The [Helm adapter](../pkg/component/helm/adoption_entry.go) shows a local chart, and the [Terraform adapters](../pkg/terraform/adoption/adapter.go) show how one provider handles multiple source formats.
+
+## 4. Write Comprehensive Tests
 
 Create tests with >90% coverage:
 

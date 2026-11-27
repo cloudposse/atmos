@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/terraformadoption"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -18,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/policy/admission"
 	"github.com/cloudposse/atmos/pkg/process"
+	terraformadoption "github.com/cloudposse/atmos/pkg/terraform/adoption"
 )
 
 // Only a bare project's explicit path enters adoption. Configured components,

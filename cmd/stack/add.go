@@ -3,18 +3,22 @@ package stack
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
-	"github.com/cloudposse/atmos/internal/terraformadoption"
 	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/packer"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/stack/adoption"
 )
 
 func newStackAddCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "add <path>", Short: "Register an existing Terraform, OpenTofu, Terragrunt, Helm, Packer or Atlantis project in a stack", Args: cobra.ExactArgs(1)}
+	cmd := &cobra.Command{Use: "add <path>", Short: "Register an existing deployment in an Atmos stack", Args: cobra.ExactArgs(1)}
 	parser := flags.NewStandardParser(flags.WithStringFlag("stack", "s", "dev", "Destination Atmos stack"), flags.WithDryRunFlag(),
 		flags.WithStringFlag("project", "", "", "Select a project declared in atlantis.yaml"),
 		flags.WithStringFlag("name", "", "", "Component name in the destination stack"),
@@ -44,7 +48,8 @@ func newStackAddCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		r := terraformadoption.Registration{
+		r := adoption.Registration{
+			Adapters: stackAdapters(),
 			Defaults: defaults, Project: project, Dir: dir, Stack: target, Explicit: explicit,
 			DryRun: preview, Interactive: !ci.ModeEnabled(cmd) && flags.IsInteractive(), Output: cmd.OutOrStdout(),
 		}
@@ -65,3 +70,24 @@ func newStackAddCommand() *cobra.Command {
 }
 
 func init() { stackCmd.AddCommand(newStackAddCommand()) }
+
+// Packer uses a legacy executor and has no registered ComponentProvider.
+func stackAdapters() adoption.Adapters {
+	var adapters adoption.Adapters
+	legacyPacker := true
+	for _, providers := range component.ListProviders() {
+		for _, provider := range providers {
+			if provider.GetType() == "packer" {
+				legacyPacker = false
+			}
+			if source, ok := provider.(adoption.Provider); ok {
+				adapters = append(adapters, source.AdoptionAdapters()...)
+			}
+		}
+	}
+	if legacyPacker {
+		adapters = append(adapters, packer.Adapter{})
+	}
+	slices.SortStableFunc(adapters, func(a, b adoption.Adapter) int { return strings.Compare(a.Kind(), b.Kind()) })
+	return adapters
+}
