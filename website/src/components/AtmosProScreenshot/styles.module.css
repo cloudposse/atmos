@@ -2,8 +2,8 @@
   margin: 3em 0;
 }
 
-/* Border, radius, background, and title bar come from the Terminal component's
-   global `.terminal` styles; only override what a link wrapper changes. */
+/* Border, radius, and title bar come from the Terminal component's global
+   `.terminal` styles; only override what a link wrapper changes. */
 .figure a.frame {
   display: block;
   margin: 0;
@@ -11,18 +11,44 @@
   text-decoration: none;
 }
 
+/* The app's page background, so the padding reads as part of the screenshot. */
 .viewport {
-  padding: 1.25rem;
+  padding: 1.5rem;
+  background: #01040f;
 }
 
-.viewport img {
+@media (max-width: 600px) {
+  .viewport {
+    padding: 0.75rem;
+  }
+}
+
+/* Each capture has its own rounded border baked into the PNG (2px wide with a
+   24px corner radius on a 2560px-wide image). Paint over it in the page
+   background so only the Terminal frame shows. Sizes are fractions of the
+   image width (cqw), so the overlay tracks the image at every viewport. */
+.shot {
+  position: relative;
+  overflow: hidden;
+  container-type: inline-size;
+}
+
+.shot::after {
+  content: "";
+  position: absolute;
+  inset: calc(100cqw * 3 / 2560);
+  border-radius: calc(100cqw * 22 / 2560);
+  box-shadow: 0 0 0 2cqw #01040f;
+  pointer-events: none;
+}
+
+.shot img {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 4px;
 }
 
-.viewport img.cropped {
+.shot img.cropped {
   object-fit: cover;
   object-position: top;
 }

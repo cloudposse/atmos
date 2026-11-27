@@ -52,16 +52,18 @@ export default function AtmosProScreenshot({
           <div className="window-title">atmos-pro.com</div>
         </div>
         <div className={styles.viewport}>
-          <img
-            src={src}
-            alt={alt}
-            width={width}
-            height={height}
-            loading="lazy"
-            decoding="async"
-            className={cropAspectRatio ? styles.cropped : undefined}
-            style={cropAspectRatio ? { aspectRatio: String(cropAspectRatio) } : undefined}
-          />
+          <div className={styles.shot}>
+            <img
+              src={src}
+              alt={alt}
+              width={width}
+              height={height}
+              loading="lazy"
+              decoding="async"
+              className={cropAspectRatio ? styles.cropped : undefined}
+              style={cropAspectRatio ? { aspectRatio: String(cropAspectRatio) } : undefined}
+            />
+          </div>
         </div>
       </a>
       {caption && <figcaption className={styles.caption}>{caption}</figcaption>}
