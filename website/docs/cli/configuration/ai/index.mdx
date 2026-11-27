@@ -328,6 +328,9 @@ The `web_search` section enables the AI to search the web for documentation and 
 
   <dt>`web_search.google_cse_id`</dt>
   <dd>Google Custom Search Engine ID (for Google Custom Search)</dd>
+
+  <dt>`web_search.google_base_url`</dt>
+  <dd>Custom Search JSON API URL (default: `https://www.googleapis.com/customsearch/v1`). Set it to send Google searches to a service that serves the same API. It must use `https://`, except for a loopback host such as `localhost`, because the API key is sent in the query string.</dd>
 </dl>
 
 ## Security Best Practices
