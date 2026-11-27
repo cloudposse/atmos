@@ -5,6 +5,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // TableStyle represents the different table design styles used for rendering tables in the terminal.
@@ -273,6 +275,8 @@ func CreateThemedTable(headers []string, rows [][]string) string {
 
 // CreateDetailTable renders a headerless list of labeled values, as used by auth login.
 func CreateDetailTable(rows [][]string) string {
+	defer perf.Track(nil, "theme.CreateDetailTable")()
+
 	label := lipgloss.NewStyle().Foreground(lipgloss.Color(GetCurrentColorScheme().Link)).Padding(0, 1, 0, 2)
 	value := lipgloss.NewStyle().Padding(0, 1)
 	return table.New().Rows(rows...).
