@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -919,12 +921,16 @@ func TestPlanSnapshotterBindsTheEngineThatRanTerraform(t *testing.T) {
 			require.Equal(t, ran, snapshotter.result.engineDigest, "the engine digest is taken around the subprocess")
 
 			if test.replace {
-				// Rename a new file over the engine instead of rewriting it in place: the engine
-				// version probe may still be exiting, and on Linux opening a running executable for
-				// writing fails with "text file busy".
-				replacement := engine + ".replacement"
-				require.NoError(t, os.WriteFile(replacement, append(original, []byte("replaced by an after hook")...), 0o700))
-				require.NoError(t, os.Rename(replacement, engine))
+				// The engine version probe may still be exiting, so the engine can briefly refuse
+				// writes: Linux reports "text file busy" and Windows a sharing violation. Retry
+				// until the probe releases it.
+				replaced := append(slices.Clone(original), []byte("replaced by an after hook")...)
+				writeErr := os.WriteFile(engine, replaced, 0o700)
+				for deadline := time.Now().Add(10 * time.Second); writeErr != nil && time.Now().Before(deadline); {
+					time.Sleep(50 * time.Millisecond)
+					writeErr = os.WriteFile(engine, replaced, 0o700)
+				}
+				require.NoError(t, writeErr, "replace the engine")
 			}
 			err = recordConfigurationPlan(t.Context(), project.config, info, execution, []string{"-out=" + planPath})
 
