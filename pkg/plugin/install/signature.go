@@ -36,7 +36,10 @@ func ReleaseSignatureRequired(policy *schema.PluginPolicy, source string) bool {
 
 func isOfficialSource(source string) bool {
 	host, repository, _ := strings.Cut(strings.TrimPrefix(source, "oci://"), "/")
-	host = strings.TrimSuffix(strings.TrimSuffix(host, ":443"), ".")
+	if hostname, port, found := strings.Cut(host, ":"); found && strings.TrimLeft(port, "0") == "443" {
+		host = hostname
+	}
+	host = strings.TrimSuffix(host, ".")
 	return strings.EqualFold(host, "ghcr.io") && strings.HasPrefix(repository, "cloudposse/atmos/plugins/")
 }
 

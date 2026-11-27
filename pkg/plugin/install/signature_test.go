@@ -161,5 +161,7 @@ func TestOfficialReleaseTrust(t *testing.T) {
 	_, err = service.VerifyInstalled(t.Context(), entry)
 	require.ErrorIs(t, err, errUtils.ErrPluginSignatureInvalid)
 	require.True(t, ReleaseSignatureRequired(&schema.PluginPolicy{}, "GHCR.IO:443/cloudposse/atmos/plugins/fixture"))
+	require.True(t, ReleaseSignatureRequired(&schema.PluginPolicy{}, "oci://ghcr.io:0443/cloudposse/atmos/plugins/fixture"))
+	require.False(t, ReleaseSignatureRequired(&schema.PluginPolicy{}, "oci://ghcr.io:8443/cloudposse/atmos/plugins/fixture"))
 	require.False(t, ReleaseSignatureRequired(&schema.PluginPolicy{}, "oci://ghcr.io/cloudposse/atmos/plugins-other/fixture"))
 }
