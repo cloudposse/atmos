@@ -47,7 +47,7 @@ Your workflows run on your own GitHub Actions runners and authenticate to your c
 OIDC roles. Atmos Pro receives only what the CLI uploads — affected stacks, component inventories,
 plan results — and coordinates on top of it:
 
-- **Ordered deployments** — Dispatch plan and apply workflows in dependency order, on every PR and merge
+- **Ordered deployments** — Dispatch plan and apply workflows in dependency order for pull requests, merge queues, and releases
 - **Visibility** — See what's affected on every PR, across every repo and organization
 - **Drift detection** — Know which stacks have drifted and trigger remediation automatically
 - **Approvals** — Require independent human approval before changes are applied, with full audit trails
@@ -150,6 +150,9 @@ settings:
         workflows: *apply-wf-config
 ```
 </File>
+
+This mixin plans every pull request update and applies when you publish a release. To apply each pull request as it
+merges, map [`pull_request.merged`](/cli/configuration/settings/pro) to the apply workflow instead.
 
 See [Configure Atmos Stacks](https://atmos-pro.com/docs/configure/stacks) for merge queues, labels,
 drift detection, and component dependencies.
