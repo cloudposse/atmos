@@ -203,8 +203,8 @@ func validateReleaseMode(values *viper.Viper, args []string) error {
 	if incompatibleCheckMode(values) {
 		return fmt.Errorf("%w: --check cannot sign, verify public access, or reconcile a catalog", errUtils.ErrPluginFlagConflict)
 	}
-	if !inventory && (values.GetString("catalog") != "" || values.GetString("base") != "" || values.GetString("head") != "HEAD") {
-		return fmt.Errorf("%w: --catalog, --base, and --head require --inventory", errUtils.ErrPluginFlagConflict)
+	if !inventory && (values.GetString("catalog") != "" || values.GetString("base") != "" || values.GetString("head") != "HEAD" || values.GetBool(releaseFailFastFlag)) {
+		return fmt.Errorf("%w: --catalog, --base, --head, and --fail-fast require --inventory", errUtils.ErrPluginFlagConflict)
 	}
 	return nil
 }

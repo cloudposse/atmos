@@ -55,9 +55,9 @@ func TestInventoryUsesRecordedSourceAndCleansEachPackage(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, entries, factoryEntries)
 			if check {
-				require.Equal(t, []*pluginoci.Release{nil, nil}, actual)
+				require.Equal(t, []InventoryRelease{{Entry: entries[0]}, {Entry: entries[1]}}, actual)
 			} else {
-				require.Equal(t, expected, actual)
+				require.Equal(t, []InventoryRelease{{Entry: entries[0], Release: expected[0]}, {Entry: entries[1], Release: expected[1]}}, actual)
 			}
 			remaining, err := os.ReadDir(parent)
 			require.NoError(t, err)
@@ -66,7 +66,8 @@ func TestInventoryUsesRecordedSourceAndCleansEachPackage(t *testing.T) {
 	}
 }
 
-func TestInventoryFailuresAlwaysCleanUpAndStop(t *testing.T) {
+// With fail-fast, the first failure stops the run, so the second entry never starts.
+func TestInventoryFailFastFailuresAlwaysCleanUpAndStop(t *testing.T) {
 	for _, phase := range []string{"resolve", "empty revision", "add", "validate", "cancel", "cleanup"} {
 		t.Run(phase, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
@@ -113,8 +114,15 @@ func TestInventoryFailuresAlwaysCleanUpAndStop(t *testing.T) {
 					backend.EXPECT().Pack(gomock.Any(), gomock.Any(), gomock.Any())
 				}
 			}
-			results, err := RunInventory(ctx, []releaseplan.Entry{entry, {Name: "must-not-run"}}, func(releaseplan.Entry, string) Backend { return backend }, WithInventoryRunner(runner), WithInventoryTemporaryDirectory(parent), WithInventoryCheck(true))
-			require.Nil(t, results)
+			results, err := RunInventory(ctx, []releaseplan.Entry{entry, {Name: "must-not-run"}}, func(releaseplan.Entry, string) Backend { return backend }, WithInventoryRunner(runner), WithInventoryTemporaryDirectory(parent), WithInventoryCheck(true), WithInventoryFailFast(true))
+			if phase == "cleanup" {
+				// The check completed before cleanup failed, so the package is still recorded.
+				require.Equal(t, []InventoryRelease{{Entry: entry}}, results)
+			} else {
+				require.Empty(t, results)
+			}
+			require.ErrorIs(t, err, errUtils.ErrPluginInventoryRelease)
+			require.NotContains(t, err.Error(), "must-not-run")
 			if phase == "cancel" {
 				require.ErrorIs(t, err, context.Canceled)
 			} else {

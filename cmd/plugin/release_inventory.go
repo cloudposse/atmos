@@ -1,7 +1,10 @@
 package plugin
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -12,7 +15,6 @@ import (
 	pkgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/plugin/catalog"
 	"github.com/cloudposse/atmos/pkg/plugin/manage"
-	pluginoci "github.com/cloudposse/atmos/pkg/plugin/oci"
 	pluginoutput "github.com/cloudposse/atmos/pkg/plugin/output"
 	pluginrelease "github.com/cloudposse/atmos/pkg/plugin/release"
 	"github.com/cloudposse/atmos/pkg/plugin/releaseplan"
@@ -22,6 +24,7 @@ import (
 const (
 	releaseCheckFlag     = "check"
 	releaseInventoryFlag = "inventory"
+	releaseFailFastFlag  = "fail-fast"
 )
 
 func inventoryReleaseFlags() []flags.Option {
@@ -31,7 +34,9 @@ func inventoryReleaseFlags() []flags.Option {
 		flags.WithStringFlag("base", "", "", "Base revision for independent version checks (defaults to the enabled CI provider)"),
 		flags.WithBoolFlag(releaseCheckFlag, "", false, "Build, test, and pack without publishing"),
 		flags.WithStringFlag("catalog", "", "", "Reconcile a catalog from the current origin default-branch inventory after publication"),
+		flags.WithBoolFlag(releaseFailFastFlag, "", false, "Stop at the first failing package instead of releasing the remaining packages"),
 		flags.WithEnvVars(releaseInventoryFlag, "ATMOS_PLUGIN_RELEASE_INVENTORY"),
+		flags.WithEnvVars(releaseFailFastFlag, "ATMOS_PLUGIN_RELEASE_FAIL_FAST"),
 		flags.WithEnvVars("head", "ATMOS_PLUGIN_RELEASE_HEAD"),
 		flags.WithEnvVars("base", "ATMOS_PLUGIN_RELEASE_BASE"),
 	}
@@ -84,39 +89,76 @@ func runInventoryRelease(cmd *cobra.Command, values *viper.Viper) error {
 		packageValues.Set(publishDestinationFlag, entry.Repository)
 		return &releaseBackend{manager: manager, values: packageValues, project: project}
 	}
-	results, err := pluginrelease.RunInventory(cmd.Context(), plan.Packages.Include, factory, pluginrelease.WithInventoryCheck(values.GetBool(releaseCheckFlag)))
-	if err != nil {
-		return err
-	}
-	if target := values.GetString("catalog"); target != "" {
-		if err := reconcileReleasedCatalog(cmd, manager, values, target); err != nil {
-			return err
-		}
-	}
-	return presentInventoryReleases(plan, results, values)
+	failFast := values.GetBool(releaseFailFastFlag)
+	results, runErr := pluginrelease.RunInventory(cmd.Context(), plan.Packages.Include, factory, pluginrelease.WithInventoryCheck(values.GetBool(releaseCheckFlag)), pluginrelease.WithInventoryFailFast(failFast))
+	target := values.GetString("catalog")
+	return completeInventoryRelease(cmd.Context(), runErr, &inventoryCompletion{
+		failFast:  failFast,
+		succeeded: len(results),
+		catalog:   target != "",
+		released:  releasedPackages(results),
+		reconcile: func(released []string) error { return reconcileReleasedCatalog(cmd, manager, values, target, released) },
+		present:   func() error { return presentInventoryReleases(plan, results, values) },
+	})
 }
 
-func presentInventoryReleases(plan *releaseplan.Plan, results []*pluginoci.Release, values *viper.Viper) error {
+// inventoryCompletion holds what remains to do after the packages ran.
+type inventoryCompletion struct {
+	failFast  bool
+	succeeded int
+	catalog   bool
+	// Released lists the packages released in this run; only they are reconciled into the catalog.
+	released  []string
+	reconcile func(released []string) error
+	present   func() error
+}
+
+// completeInventoryRelease reconciles the catalog and reports the packages that were released.
+// After a partial failure the successful packages are still added to the catalog and reported,
+// and the package errors are returned so the command exits non-zero. Fail-fast mode, a run in
+// which no package succeeded, and cancellation return the package errors without either step.
+func completeInventoryRelease(ctx context.Context, runErr error, c *inventoryCompletion) error {
+	if runErr != nil && (c.failFast || c.succeeded == 0 || ctx.Err() != nil) {
+		return runErr
+	}
+	if c.catalog {
+		if err := c.reconcile(c.released); err != nil {
+			return errors.Join(runErr, err)
+		}
+	}
+	return errors.Join(runErr, c.present())
+}
+
+// releasedPackages returns the names of the packages released in this run, in plan order.
+func releasedPackages(results []pluginrelease.InventoryRelease) []string {
+	released := make([]string, 0, len(results))
+	for index := range results {
+		released = append(released, results[index].Entry.Name)
+	}
+	return released
+}
+
+func presentInventoryReleases(plan *releaseplan.Plan, results []pluginrelease.InventoryRelease, values *viper.Viper) error {
 	// Report success only after all required signing, verification, and catalog work.
 	if err := writeReleasePlanOutputs(plan); err != nil {
 		return err
 	}
 	if values.GetBool(releaseCheckFlag) {
-		ui.Successf("Checked %d plugin releases.", len(plan.Packages.Include))
+		ui.Successf("Checked %d plugin releases.", len(results))
 		return nil
 	}
 	published := make([]pluginoutput.PublishedRelease, 0, len(results))
-	for index, result := range results {
-		files, err := result.Files()
+	for _, result := range results {
+		files, err := result.Release.Files()
 		if err != nil {
 			return err
 		}
-		published = append(published, pluginoutput.PublishedRelease{Release: result, Repository: plan.Packages.Include[index].Repository, Signed: values.GetBool(signFlag), Files: files})
+		published = append(published, pluginoutput.PublishedRelease{Release: result.Release, Repository: result.Entry.Repository, Signed: values.GetBool(signFlag), Files: files})
 	}
 	return pluginoutput.PublishedBatch(published, values.GetString(outputFormatFlag))
 }
 
-func reconcileReleasedCatalog(cmd *cobra.Command, manager *manage.Manager, values *viper.Viper, alias string) error {
+func reconcileReleasedCatalog(cmd *cobra.Command, manager *manage.Manager, values *viper.Viper, alias string, released []string) error {
 	target, err := catalogReference(alias)
 	if err != nil {
 		return err
@@ -129,9 +171,29 @@ func reconcileReleasedCatalog(cmd *cobra.Command, manager *manage.Manager, value
 	if err != nil {
 		return err
 	}
+	selections = onlyPackages(selections, released)
+	if len(selections) == 0 {
+		return nil
+	}
 	options := []catalog.SyncOption{catalog.WithSkipMissing()}
 	if values.GetBool(verifyPublicFlag) {
 		options = append(options, catalog.WithPublicVerification(newPublicVerifier()))
 	}
 	return catalog.NewSyncer(manager.Installer.Registry, manager.Installer.Descriptors).Sync(cmd.Context(), target, selections, options...)
+}
+
+// onlyPackages keeps the catalog selections of packages released in this run. Packages that
+// failed, never started, or were not part of this run's plan (for example one added to the
+// default branch after planning) keep their existing catalog entry instead of a version that
+// may be missing, unsigned, or only partially verified.
+//
+// Selections are matched by package name only, not by the version this run released. The
+// catalog intentionally follows the accepted inventory on the current default branch: when an
+// older queued release runs after a newer one, reconciling the current head's version keeps the
+// newer accepted version in the catalog instead of skipping the package. Sync still requires that
+// version to be published (and, with --verify-public, publicly readable).
+func onlyPackages(selections []catalog.ReleaseSelection, released []string) []catalog.ReleaseSelection {
+	return slices.DeleteFunc(selections, func(selection catalog.ReleaseSelection) bool {
+		return !slices.Contains(released, selection.Name)
+	})
 }
