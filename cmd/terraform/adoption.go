@@ -45,22 +45,39 @@ func runAdoptionPlan(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	// The native trial has no stack subject to bind component and plan policies to.
-	engine, err := terraformadoption.Select(cmd.Context(), dir, project, terraformadoption.Selection{Explicit: explicit, Interactive: !ci.ModeEnabled(cmd) && flags.IsInteractive()})
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(cmd.ErrOrStderr(), "Engine: %s (%s)\n", engine.Command, engine.Reason)
 	dry, _ := cmd.Flags().GetBool("dry-run")
-	nativeArgs := append([]string{"plan"}, compat.GetSeparated()...)
+	nativeArgs := append([]string{}, compat.GetSeparated()...)
 	if plain, _ := cmd.Flags().GetBool("no-color"); plain {
 		nativeArgs = append(nativeArgs, "-no-color")
 	}
-	result := process.NewDefaultRunner().Run(cmd.Context(), process.TaskSpec{
-		Command: engine.Command, Path: engine.Path, Dir: dir, Args: nativeArgs, DryRun: dry,
-		Streams: process.Streams{Stdin: cmd.InOrStdin(), Stdout: cmd.OutOrStdout(), Stderr: cmd.ErrOrStderr()},
-	})
-	return result.Err
+	task, err := adoptionPlanTask(cmd, dir, project, explicit, nativeArgs)
+	if err != nil {
+		return err
+	}
+	task.DryRun = dry
+	task.Streams = process.Streams{Stdin: cmd.InOrStdin(), Stdout: cmd.OutOrStdout(), Stderr: cmd.ErrOrStderr()}
+	return process.NewDefaultRunner().Run(cmd.Context(), task).Err
+}
+
+func adoptionPlanTask(cmd *cobra.Command, dir, project, explicit string, args []string) (process.TaskSpec, error) {
+	unit, err := terraformadoption.TerragruntUnit(dir)
+	if err != nil {
+		return process.TaskSpec{}, err
+	}
+	if unit != "" {
+		native, err := terraformadoption.TerragruntPlan(cmd.Context(), unit, project, explicit, args)
+		if err != nil {
+			return process.TaskSpec{}, err
+		}
+		fmt.Fprintf(cmd.ErrOrStderr(), "Terragrunt unit: %s\n", unit)
+		return process.TaskSpec{Command: native.Binary, Dir: native.WorkingDir, Args: native.Args, Env: native.Env}, nil
+	}
+	engine, err := terraformadoption.Select(cmd.Context(), dir, project, terraformadoption.Selection{Explicit: explicit, Interactive: !ci.ModeEnabled(cmd) && flags.IsInteractive()})
+	if err != nil {
+		return process.TaskSpec{}, err
+	}
+	fmt.Fprintf(cmd.ErrOrStderr(), "Engine: %s (%s)\n", engine.Command, engine.Reason)
+	return process.TaskSpec{Command: engine.Command, Path: engine.Path, Dir: dir, Args: append([]string{"plan"}, args...)}, nil
 }
 
 func validateAdoptionPlan(cmd *cobra.Command) error {

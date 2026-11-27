@@ -87,3 +87,28 @@ func TestAdoptionPlanDispatch(t *testing.T) {
 	require.NoError(t, planCmd.PostRunE(cmd, args))
 	require.NoFileExists(t, "atmos.yaml")
 }
+
+func TestTerragruntPathPlan(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX argument recorder")
+	}
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("PATH", dir)
+	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_COMMAND", "")
+	require.NoError(t, os.WriteFile("terragrunt.hcl", nil, 0o600))
+	cmd := &cobra.Command{Use: "plan"}
+	cmd.SetContext(t.Context())
+	flags.RegisterComponentCommandFlags(cmd, "terraform")
+	cmd.Flags().Bool("dry-run", false, "")
+	var result bytes.Buffer
+	cmd.SetOut(&result)
+	cmd.SetErr(&result)
+	require.ErrorContains(t, runAdoptionPlan(cmd, []string{"."}), "needs terragrunt")
+	require.NoError(t, os.WriteFile("terragrunt", []byte("#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'terragrunt version v1.2.1'; else printf '%s\\n' \"$@\"; fi\n"), 0o700))
+	require.NoError(t, runAdoptionPlan(cmd, []string{"."}))
+	require.Contains(t, result.String(), "Terragrunt unit:")
+	require.Contains(t, result.String(), "run\n--\nplan")
+	require.NoError(t, os.WriteFile("terragrunt.stack.hcl", nil, 0o600))
+	require.ErrorContains(t, runAdoptionPlan(cmd, []string{"."}), "select a single unit")
+}

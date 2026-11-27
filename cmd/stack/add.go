@@ -14,7 +14,7 @@ import (
 )
 
 func newStackAddCommand() *cobra.Command {
-	cmd := &cobra.Command{Use: "add <directory>", Short: "Register an existing Terraform or OpenTofu root in a stack", Args: cobra.ExactArgs(1)}
+	cmd := &cobra.Command{Use: "add <path>", Short: "Register a Terraform root, OpenTofu root or Terragrunt unit in a stack", Args: cobra.ExactArgs(1)}
 	parser := flags.NewStandardParser(flags.WithStringFlag("stack", "s", "dev", "Destination Atmos stack"), flags.WithDryRunFlag())
 	parser.RegisterFlags(cmd)
 	flags.RegisterComponentCommandFlags(cmd, "terraform")
@@ -33,15 +33,17 @@ func newStackAddCommand() *cobra.Command {
 		}
 		target, _ := cmd.Flags().GetString("stack")
 		preview, _ := cmd.Flags().GetBool("dry-run")
+		configured := len(cfg.LoadedConfigFiles()) != 0
+		defaults, err := stackCreationConfig()
+		if err != nil {
+			return err
+		}
 		r := terraformadoption.Registration{
-			Project: project, Dir: dir, Stack: target, Explicit: explicit,
+			Defaults: defaults, Project: project, Dir: dir, Stack: target, Explicit: explicit,
 			DryRun: preview, Interactive: !ci.ModeEnabled(cmd) && flags.IsInteractive(), Output: cmd.OutOrStdout(),
 		}
-		if len(cfg.LoadedConfigFiles()) != 0 {
-			r.Config, err = stackCreationConfig()
-			if err != nil {
-				return err
-			}
+		if configured {
+			r.Config = defaults
 			r.Project = r.Config.BasePathAbsolute
 		}
 		return r.Save(cmd.Context())

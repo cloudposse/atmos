@@ -31,6 +31,18 @@ The first command runs your native plan in `infra/network`. If both CLIs are ins
 
 For a runnable example, use `atmos init examples/native-terraform`, enter `native-terraform`, and run `atmos terraform plan vpc -s dev`. The plan shows one local `null_resource` to add. [Explore the example](/components/terraform/brownfield).
 
+## Terragrunt
+
+From your live repository, point Atmos at a unit you already plan with Terragrunt 1.0 or later:
+
+```shell
+atmos terraform plan ./live/dev/vpc
+atmos stack add ./live/dev/vpc -s dev
+atmos terraform plan vpc -s dev
+```
+
+The first and third commands run Terragrunt in `live/dev/vpc`. Your plan shows the resources managed by that unit. The middle command saves `vpc` in the Atmos stack `dev`. If you also have `live/prod/vpc`, run `atmos stack add ./live/prod/vpc -s prod`, then `atmos terraform plan vpc -s prod`. [Preview the generated files](/cli/commands/stack/usage#adopt-a-terragrunt-unit).
+
 ## Helm
 
 Render a local chart with the values for dev:
@@ -75,4 +87,3 @@ The output includes the `atmos-demo` Namespace and a Deployment. For an overlay,
 | Ansible | [Local playbook](/examples/demo-ansible) | With Ansible installed, run `atmos ansible playbook hello-world -s dev` against localhost. |
 | Helmfile | [Helmfile release](/examples/demo-helmfile) | Start the example's Kubernetes emulator, then apply its demo release. |
 | Containers | [Container components](/examples/container-component) | Start the example's nginx service with `atmos container up api -s dev` using your local container runtime. |
-| Terragrunt | [Terragrunt project](/examples/terragrunt) | Plan a local `terraform_data` resource with OpenTofu. |

@@ -3,11 +3,12 @@ package terraformadoption
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/charmbracelet/huh"
@@ -17,17 +18,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The current test executable doubles as a portable, version-reporting native CLI.
-func TestMain(m *testing.M) {
-	if len(os.Args) == 2 && os.Args[1] == "version" {
-		if strings.HasPrefix(filepath.Base(os.Args[0]), "tofu") {
-			fmt.Println("OpenTofu v8.7.6")
-		} else {
-			fmt.Println("Terraform v8.7.6")
+var (
+	buildVersionProbe sync.Once
+	probeBytes        []byte
+	probeBuildErr     error
+)
+
+// Build a tiny stand-in once, then write it into each test's isolated PATH.
+func versionProbe(t *testing.T) []byte {
+	t.Helper()
+	buildVersionProbe.Do(func() {
+		path := filepath.Join(t.TempDir(), "probe.exe")
+		cmd := exec.CommandContext(t.Context(), "go", "build", "-o", path, "./testdata/versionprobe/main.go")
+		cmd.Stderr = os.Stderr
+		if probeBuildErr = cmd.Run(); probeBuildErr == nil {
+			probeBytes, probeBuildErr = os.ReadFile(path)
 		}
-		os.Exit(0)
-	}
-	os.Exit(m.Run())
+	})
+	require.NoError(t, probeBuildErr)
+	return probeBytes
 }
 
 func write(t *testing.T, path, text string) {
@@ -39,13 +48,11 @@ func write(t *testing.T, path, text string) {
 func binaries(t *testing.T, commands ...string) string {
 	t.Helper()
 	bin := t.TempDir()
-	exe, err := os.Executable()
-	require.NoError(t, err)
 	for _, name := range commands {
 		if runtime.GOOS == "windows" {
 			name += ".exe"
 		}
-		require.NoError(t, os.Link(exe, filepath.Join(bin, name)))
+		require.NoError(t, os.WriteFile(filepath.Join(bin, name), versionProbe(t), 0o700))
 	}
 	t.Setenv("PATH", bin)
 	t.Setenv("ATMOS_COMPONENTS_TERRAFORM_COMMAND", "")

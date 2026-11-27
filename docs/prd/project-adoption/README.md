@@ -1,6 +1,6 @@
 # Adopting existing infrastructure projects
 
-**Status** — Proposed shared CLI contract. Each source has its own release criteria. The CloudFormation initializer and the single-root Terraform/OpenTofu trial and stack registration are implemented on this branch.
+**Status** — Proposed shared CLI contract. Each source has its own release criteria. The CloudFormation initializer, Terraform/OpenTofu single-root adoption, and Terragrunt single-unit adoption are implemented on this branch.
 
 A developer should be able to point Atmos at a deployment they already run, recognize its output, and save the configuration for a teammate. At the November 18 Office Hours, one Rain user wanted to run the same template under several names. Another had tried Terraform and built something smaller than the minimal tutorial to understand what Atmos added. The first-run guide for each source should start with files the developer owns and end with a command they can repeat. [Office Hours recording](https://www.youtube.com/watch?v=UfLGcAM4N5g)
 

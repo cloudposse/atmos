@@ -89,6 +89,31 @@ Here `prod` is the Atmos stack and `blue` is the OpenTofu workspace. The two sta
 
 The native engine loads its usual automatic variable files. Supply additional files to each plan in their original order with `-var-file`. Registration currently saves the root, engine and workspace. [Path-based planning](/cli/commands/terraform/plan#plan-an-existing-root).
 
+## Adopt a Terragrunt unit
+
+Start in the project directory. Preview the files, register your unit, and plan it by name:
+
+```shell
+atmos stack add ./live/dev/vpc -s dev --dry-run
+atmos stack add ./live/dev/vpc -s dev
+atmos terraform plan vpc -s dev
+```
+
+In a fresh project, Atmos enables the Terragrunt plugin in executable mode in `atmos.yaml`. The `stacks/dev.yaml` manifest imports `terragrunt://live/dev/vpc/terragrunt.hcl` and pins the Terragrunt version. On save, the plugin resolves that unit’s HCL. Atmos also pins the wrapped engine when it resolves to the standard `terraform` or `tofu` command. Commit these files and the resulting `.atmos.plugins.lock.yaml` so a teammate gets the same plugin. With an existing project, registration uses its configured Terragrunt mode and package.
+
+Preview reads filenames, tool versions, and manifests without evaluating the unit's HCL. Planning in executable mode runs Terragrunt 1.0 or later in the original unit directory, including its plan hooks. Set `TF_WORKSPACE` during registration if your deployment uses a named workspace. The saved component then supplies it on future plans.
+
+Register each additional deployment by its own path. Here `database` joins the `dev` stack and production gets its own `vpc`:
+
+```shell
+atmos stack add ./live/dev/database -s dev
+atmos stack add ./live/prod/vpc -s prod
+atmos stack instances -s dev
+atmos terraform plan vpc -s prod
+```
+
+Both `vpc` instances keep the backend selected by their own HCL. This command takes one unit at a time and supports standalone stack manifests in a flat `*.yaml` layout. For a live tree or a `terragrunt.stack.hcl` declaration, use [Terragrunt discovery](/components/terraform/terragrunt).
+
 ## Examples
 
 ```shell

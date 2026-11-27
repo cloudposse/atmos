@@ -11,6 +11,10 @@ description: Discover existing Terragrunt units as Atmos Terraform components an
 import CastEmbed from '@site/src/components/CastEmbed'
 import EmbedExample from '@site/src/components/EmbedExample'
 
+## Try an existing unit
+
+From a repository where you already use Terragrunt, run `atmos terraform plan ./live/dev/vpc`. To share that unit under the Atmos stack name `dev`, run `atmos stack add ./live/dev/vpc -s dev`. A teammate can then run `atmos terraform plan vpc -s dev`. Registration sets up the plugin and its executable mode in a new project. [Register units across environments](/cli/commands/stack/usage#adopt-a-terragrunt-unit).
+
 ## How native support works
 
 The Atmos Terragrunt plugin uses **Terragrunt's own Go modules** to read HCL, evaluate includes and stack values, and expand explicit stacks. Through the Atmos component plugin API, it returns each unit's component address, module source, and dependencies. Atmos can therefore list a Terragrunt unit alongside components defined in YAML and use its dependency edges to order a bulk plan or apply.

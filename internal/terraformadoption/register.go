@@ -50,6 +50,7 @@ var stackNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
 type Registration struct {
 	Project, Dir, Stack, Explicit string
 	Config                        *schema.AtmosConfiguration // Nil for an unconfigured project.
+	Defaults                      *schema.AtmosConfiguration // CLI defaults, including plugin policy in a fresh project.
 	Interactive, DryRun           bool
 	Output                        io.Writer
 }
@@ -88,7 +89,7 @@ func (r *Registration) layout() (string, string, error) {
 	stacksDir := filepath.Join(r.Project, "stacks")
 
 	if c := r.Config; c != nil {
-		if c.Stacks.NameTemplate != "" || c.Stacks.NamePattern != "" || !slices.Equal(c.Stacks.IncludedPaths, []string{"*.yaml"}) || len(c.Stacks.ExcludedPaths) > 0 {
+		if !standaloneStacks(&c.Stacks) {
 			return "", "", fmt.Errorf("%w: stack add requires filename-named stacks with included_paths [\"*.yaml\"]", errUtils.ErrInvalidStackConfig)
 		}
 		if c.Components.Terraform.AutoGenerateBackendFile {
@@ -98,6 +99,10 @@ func (r *Registration) layout() (string, string, error) {
 		stacksDir = c.StacksBaseAbsolutePath
 	}
 	return componentBase, stacksDir, nil
+}
+
+func standaloneStacks(stacks *schema.Stacks) bool {
+	return stacks.NameTemplate == "" && stacks.NamePattern == "" && slices.Equal(stacks.IncludedPaths, []string{"*.yaml"}) && len(stacks.ExcludedPaths) == 0
 }
 
 type deployment struct {
@@ -110,6 +115,17 @@ type deployment struct {
 }
 
 func (r *Registration) save(ctx context.Context) error {
+	unit, err := TerragruntUnit(r.Dir)
+	if err != nil {
+		return err
+	}
+	if unit != "" {
+		return r.saveUnit(ctx, unit)
+	}
+	return r.saveTerraform(ctx)
+}
+
+func (r *Registration) saveTerraform(ctx context.Context) error {
 	componentBase, stacksDir, err := r.layout()
 	if err != nil {
 		return err

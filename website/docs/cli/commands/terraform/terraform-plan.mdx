@@ -56,6 +56,8 @@ Atmos checks for a configured command, project tool pins, OpenTofu-only files, a
 
 The path trial uses the native plan’s output conventions, including `-out` when you supply it. Use `atmos stack add ./infra/network -s dev` to save the choice and enable the named-component workflow. [Register an existing root](/cli/commands/stack/usage#adopt-a-terraform-or-opentofu-root).
 
+A directory containing `terragrunt.hcl` selects Terragrunt even when Terraform files are present. In a project without Atmos configuration, `atmos terraform plan ./live/dev/vpc` runs the native Terragrunt plan in that unit and forwards engine flags after `--`. [Save it as a named component](/cli/commands/stack/usage#adopt-a-terragrunt-unit).
+
 ### Basic Planning
 
 Generate a plan for the `vpc` component in the `dev` stack:

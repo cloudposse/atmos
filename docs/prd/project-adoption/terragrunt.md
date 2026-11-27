@@ -1,6 +1,6 @@
 # Adopt Terragrunt units and stacks
 
-**Status** — Proposed onboarding for the [Terragrunt component plugin](../terragrunt-support.md). Follows the [shared adoption contract](README.md).
+**Status** — Single-unit trial and stack registration implemented for the [Terragrunt component plugin](../terragrunt-support.md). Follows the [shared adoption contract](README.md).
 
 ## Outcome
 
@@ -13,7 +13,7 @@ atmos stack add ./live/dev/vpc -s dev
 atmos terraform plan vpc -s dev
 ```
 
-## What can ship first
+## Single-unit release
 
 Register one explicitly selected `terragrunt.hcl` with a `terragrunt://` import. For a team that already invokes Terragrunt, propose the plugin’s executable mode, pin the established binaries and preview the project configuration change. Executable mode is project-wide. If an existing Atmos project uses native mode, changing that setting could switch every unit. Keep the current mode and report the conflict when the requested unit needs another. Record the plugin package and resulting lockfile for a fresh checkout. [Plugin setup](../../../website/docs/components/terraform/terragrunt.mdx) · [Execution mode and limitations](../../../website/docs/migration/terragrunt.mdx#executable-mode)
 
@@ -26,21 +26,21 @@ Register one explicitly selected `terragrunt.hcl` with a `terragrunt://` import.
 
 Three focused plugin tests passed in this audit. They cover discovery reading the Terraform binary without invoking it, skipping materialized nested stacks, and rejecting unsupported hook semantics. They exercise the engine below the new CLI. The existing executable-mode integration scenarios include an invocation probe and a real pinned binary. Reuse the real-binary setup for the importer test. [Executable-mode scenarios](../../../plugins/terragrunt/scripts/modes.star)
 
-The release test still needs a side-by-side single-unit plan with the pinned Terragrunt executable from two clean checkouts. Verify hook invocation count on explicit plan and zero during preview. Use Gruntwork’s prod/non-prod stack declarations as the later expansion test. [Execution tests](../../../plugins/terragrunt/internal/engine/execution_test.go) · [Discovery tests](../../../plugins/terragrunt/internal/engine/discovery_paths_test.go) · [Pinned stack layout](https://github.com/gruntwork-io/terragrunt-infrastructure-live-stacks-example/tree/753aa3b43fd36a874c33ea67cb042a9fe51ca2e5)
+The real-binary acceptance scenario compares populated state IDs, workspace and inherited inputs across native and adopted checkouts. It counts plan hooks across trial, preview, registration, retry and named plan. Use Gruntwork’s prod/non-prod stack declarations as the later expansion test. [Execution tests](../../../plugins/terragrunt/internal/engine/execution_test.go) · [Discovery tests](../../../plugins/terragrunt/internal/engine/discovery_paths_test.go) · [Pinned stack layout](https://github.com/gruntwork-io/terragrunt-infrastructure-live-stacks-example/tree/753aa3b43fd36a874c33ea67cb042a9fe51ca2e5)
 
 ## Working with the saved stack
 
-**One chosen unit in an Atmos stack.** For the proposed `stack add ./live/dev/vpc -s dev`, enable the Terragrunt plugin in `atmos.yaml`, preserve the established engine and toolchain, and include the named stack manifest. Use the existing unit import syntax:
+**One chosen unit in an Atmos stack.** For `stack add ./live/dev/vpc -s dev`, enable the Terragrunt plugin in `atmos.yaml`, preserve the established engine and toolchain, and include the named stack manifest. Use the existing unit import syntax:
 
 ```yaml
 # stacks/dev.yaml
 import:
-  - terragrunt://live/dev/vpc
+  - terragrunt://live/dev/vpc/terragrunt.hcl
 ```
 
 The file names the Atmos stack `dev`; the imported unit supplies component `vpc`. Check it with `atmos stack instances -s dev`, then run `atmos terraform plan vpc -s dev`. Adding `./live/dev/database` to dev appends a second import. Selecting `./live/prod/vpc -s prod` creates or extends `stacks/prod.yaml` with the prod unit. A shared basename across environments is expected. Resolve a collision within the same destination stack before writing.
 
-**Whole live tree.** When the user chooses plugin discovery for `live/**`, save its scope in `atmos.yaml` and list the plugin-derived addresses. In the documented layout the unit above is `vpc` in stack `live/dev`, so the named command is `atmos terraform plan vpc -s live/dev`. This mode needs no per-unit stack files. Show which mode and addresses will be saved. Verify that subsequent imports or discovery do not create a second runnable address for the same deployment without an explicit user choice.
+**Future tree registration.** When the user chooses plugin discovery for `live/**`, save its scope in `atmos.yaml` and list the plugin-derived addresses. In the documented layout the unit above is `vpc` in stack `live/dev`, so the named command is `atmos terraform plan vpc -s live/dev`. This mode needs no per-unit stack files. Show which mode and addresses will be saved. Verify that subsequent imports or discovery do not create a second runnable address for the same deployment without an explicit user choice.
 
 ## Source rules
 
