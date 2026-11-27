@@ -338,7 +338,7 @@ settings:
   pro:
     enabled: true
     release:
-      published:
+      released:
         workflows:
           atmos-terraform-apply.yaml:
             inputs:
@@ -348,8 +348,8 @@ settings:
 </File>
 
 <dl>
-  <dt>`settings.pro.release.published`</dt>
-  <dd>Activity fired when a GitHub release is published. Typically wired to an apply workflow scoped to a production stack.</dd>
+  <dt>`settings.pro.release.released`</dt>
+  <dd>Activity fired when a GitHub release is published, or a pre-release is promoted to a full release (the GitHub `release` event's `released` action). Atmos Pro dispatches only this release activity. Typically wired to an apply workflow scoped to a production stack.</dd>
 </dl>
 
 ### `settings.pro.drift_detection`

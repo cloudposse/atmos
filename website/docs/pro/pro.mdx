@@ -172,9 +172,21 @@ settings:
         workflows: *plan-wf-config
       synchronize:
         workflows: *plan-wf-config
+      reopened:
+        workflows: *plan-wf-config
     release:
       released:
         workflows: *apply-wf-config
+```
+</File>
+
+Import the mixin into each stack that Atmos Pro should manage. A stack that does not import it has no
+`settings.pro`, so Atmos Pro dispatches nothing for it:
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+import:
+  - mixins/atmos-pro
 ```
 </File>
 
