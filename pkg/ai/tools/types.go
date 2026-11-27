@@ -32,6 +32,17 @@ type Parameter struct {
 	Type        ParamType   `json:"type"`
 	Required    bool        `json:"required"`
 	Default     interface{} `json:"default,omitempty"`
+	// Items is the element type of an array parameter. Empty means string.
+	Items ParamType `json:"items,omitempty"`
+}
+
+// ItemType returns the element type of an array parameter.
+// LLM providers such as Gemini and OpenAI reject array schemas without one.
+func (p *Parameter) ItemType() ParamType {
+	if p.Items == "" {
+		return ParamTypeString
+	}
+	return p.Items
 }
 
 // ParamType represents the type of a parameter.
@@ -43,6 +54,8 @@ const (
 	// ParamTypeInt is an integer parameter.
 	// Note: JSON Schema uses "integer", not "int".
 	ParamTypeInt ParamType = "integer"
+	// ParamTypeNumber is a floating point parameter.
+	ParamTypeNumber ParamType = "number"
 	// ParamTypeBool is a boolean parameter.
 	// Note: JSON Schema uses "boolean", not "bool".
 	ParamTypeBool ParamType = "boolean"

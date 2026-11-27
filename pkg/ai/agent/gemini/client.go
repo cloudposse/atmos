@@ -330,10 +330,14 @@ func convertToolParametersToGeminiSchema(params []tools.Parameter) (map[string]*
 	required := make([]string, 0)
 
 	for _, param := range params {
-		properties[param.Name] = &genai.Schema{
+		property := &genai.Schema{
 			Type:        mapGeminiType(param.Type),
 			Description: param.Description,
 		}
+		if param.Type == tools.ParamTypeArray {
+			property.Items = &genai.Schema{Type: mapGeminiType(param.ItemType())}
+		}
+		properties[param.Name] = property
 
 		if param.Required {
 			required = append(required, param.Name)

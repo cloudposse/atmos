@@ -632,3 +632,12 @@ func TestServer_Run_TerminatesOnContextCancel(t *testing.T) {
 		t.Fatal("Server.Run did not return after context cancellation")
 	}
 }
+
+func TestServer_GenerateInputSchema_ArrayItems(t *testing.T) {
+	schema := (&Server{}).generateInputSchema(&mockTool{
+		params: []tools.Parameter{{Name: "tags", Type: tools.ParamTypeArray}},
+	})
+
+	properties := schema["properties"].(map[string]interface{})
+	assert.Equal(t, map[string]interface{}{"type": "string"}, properties["tags"].(map[string]interface{})["items"])
+}

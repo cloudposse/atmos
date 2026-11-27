@@ -168,6 +168,10 @@ func (s *Server) generateInputSchema(tool tools.Tool) map[string]interface{} {
 			"type":        mapParamTypeToJSONSchema(param.Type),
 		}
 
+		if param.Type == tools.ParamTypeArray {
+			propSchema["items"] = map[string]interface{}{"type": mapParamTypeToJSONSchema(param.ItemType())}
+		}
+
 		if param.Default != nil {
 			propSchema["default"] = param.Default
 		}
@@ -193,6 +197,8 @@ func mapParamTypeToJSONSchema(paramType tools.ParamType) string {
 		return "string"
 	case tools.ParamTypeInt:
 		return "integer"
+	case tools.ParamTypeNumber:
+		return "number"
 	case tools.ParamTypeBool:
 		return "boolean"
 	case tools.ParamTypeArray:

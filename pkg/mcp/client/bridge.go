@@ -113,10 +113,33 @@ func (t *BridgedTool) Parameters() []tools.Parameter {
 			p.Type = tools.ParamTypeString
 		}
 
+		if p.Type == tools.ParamTypeArray {
+			p.Items = arrayItemType(prop)
+		}
+
 		params = append(params, p)
 	}
 
 	return params
+}
+
+// arrayItemType returns the element type declared by an array property.
+// It returns an empty type (treated as string) when none is declared, and for
+// nested arrays, which tools.Parameter cannot describe.
+func arrayItemType(prop map[string]any) tools.ParamType {
+	items, ok := prop["items"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	typeName, ok := items["type"].(string)
+	if !ok || typeName == "array" {
+		return ""
+	}
+	if typeName == "number" {
+		// mapJSONSchemaType folds numbers into integers, which would narrow the items.
+		return tools.ParamTypeNumber
+	}
+	return mapJSONSchemaType(typeName)
 }
 
 // Execute calls the tool on the external MCP server and returns a tools.Result.

@@ -828,3 +828,23 @@ func TestParseGeminiResponse_CountsThoughtsTokensAsOutput(t *testing.T) {
 	assert.Equal(t, int64(25), result.Usage.OutputTokens)
 	assert.Equal(t, int64(35), result.Usage.TotalTokens)
 }
+
+func TestConvertToolsToGeminiFormat_ArrayItems(t *testing.T) {
+	result := convertToolsToGeminiFormat([]tools.Tool{
+		&mockTool{
+			name: "array_tool",
+			parameters: []tools.Parameter{
+				{Name: "tags", Type: tools.ParamTypeArray},
+				{Name: "name", Type: tools.ParamTypeString},
+			},
+		},
+	})
+
+	require.Len(t, result, 1)
+	require.Len(t, result[0].FunctionDeclarations, 1)
+	properties := result[0].FunctionDeclarations[0].Parameters.Properties
+
+	require.NotNil(t, properties["tags"].Items)
+	assert.Equal(t, genai.TypeString, properties["tags"].Items.Type)
+	assert.Nil(t, properties["name"].Items)
+}
