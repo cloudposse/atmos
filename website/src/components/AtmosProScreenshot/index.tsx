@@ -26,8 +26,9 @@ export interface AtmosProScreenshotProps {
 }
 
 /**
- * Renders a live product screenshot from atmos-pro.com, framed like a browser
- * window so it reads as UI rather than decoration.
+ * Renders a live product screenshot from atmos-pro.com inside the same window
+ * chrome as the Terminal component, so screenshots and terminals on a page share
+ * one border, radius, and title-bar style.
  */
 export default function AtmosProScreenshot({
   view,
@@ -41,22 +42,27 @@ export default function AtmosProScreenshot({
 
   return (
     <figure className={styles.figure}>
-      <a href={href} className={styles.frame} target="_blank" rel="noopener noreferrer">
-        <span className={styles.chrome} aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </span>
-        <img
-          src={src}
-          alt={alt}
-          width={width}
-          height={height}
-          loading="lazy"
-          decoding="async"
-          className={cropAspectRatio ? styles.cropped : undefined}
-          style={cropAspectRatio ? { aspectRatio: String(cropAspectRatio) } : undefined}
-        />
+      <a href={href} className={`terminal ${styles.frame}`} target="_blank" rel="noopener noreferrer">
+        <div className="window-bar">
+          <div className="window-controls" aria-hidden="true">
+            <div className="control-dot close-dot"></div>
+            <div className="control-dot minimize-dot"></div>
+            <div className="control-dot maximize-dot"></div>
+          </div>
+          <div className="window-title">atmos-pro.com</div>
+        </div>
+        <div className={styles.viewport}>
+          <img
+            src={src}
+            alt={alt}
+            width={width}
+            height={height}
+            loading="lazy"
+            decoding="async"
+            className={cropAspectRatio ? styles.cropped : undefined}
+            style={cropAspectRatio ? { aspectRatio: String(cropAspectRatio) } : undefined}
+          />
+        </div>
       </a>
       {caption && <figcaption className={styles.caption}>{caption}</figcaption>}
     </figure>
