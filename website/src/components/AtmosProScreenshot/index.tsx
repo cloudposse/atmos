@@ -16,11 +16,23 @@ const VIEW_DIMENSIONS: Record<AtmosProScreenshotView, { width: number; height: n
 
 const EMBED_BASE_URL = 'https://atmos-pro.com/embed/screenshots';
 
-// The live HTML embed only allows these parent hosts (its Content-Security-Policy
-// `frame-ancestors`). Elsewhere, such as localhost and docs preview deployments,
-// the iframe would render blank, so the static PNG is shown instead.
-function canEmbedLive(hostname: string): boolean {
-  return hostname === 'atmos.tools' || hostname.endsWith('.atmos.tools');
+// The live HTML embed only allows these parent pages (its Content-Security-Policy
+// `frame-ancestors`): the docs site, its PR preview deployments, and local
+// development. Elsewhere the iframe would render blank, so the static PNG stays.
+const DOCS_PREVIEW_DOMAIN = '.atmos-docs.ue2.dev.plat.cloudposse.org';
+
+function canEmbedLive({ protocol, hostname }: Location): boolean {
+  if (protocol === 'http:') {
+    return hostname === 'localhost';
+  }
+  if (protocol !== 'https:') {
+    return false;
+  }
+  if (hostname === 'atmos.tools' || hostname.endsWith('.atmos.tools')) {
+    return true;
+  }
+  // A CSP wildcard covers exactly one subdomain label, such as pr-123.
+  return hostname.endsWith(DOCS_PREVIEW_DOMAIN) && !hostname.slice(0, -DOCS_PREVIEW_DOMAIN.length).includes('.');
 }
 
 export interface AtmosProScreenshotProps {
@@ -50,7 +62,7 @@ export default function AtmosProScreenshot({
   const [liveLoaded, setLiveLoaded] = useState(false);
 
   useEffect(() => {
-    setLive(canEmbedLive(window.location.hostname));
+    setLive(canEmbedLive(window.location));
   }, []);
 
   return (
