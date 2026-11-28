@@ -98,11 +98,12 @@ func TestMSALCacheLock_DoesNotHoldARemovedLockfile(t *testing.T) {
 	}()
 	time.Sleep(300 * time.Millisecond)
 
-	// The old holder deletes the path while still locked, a new holder creates and locks a new
-	// lock file at the same path, and only then does the old holder unlock its (unlinked) file.
-	require.NoError(t, os.Remove(lockPath))
-	replacement, err := acquireTestMSALLock(lockPath)
+	// Publish an already-locked replacement atomically. Removing the old path first
+	// would let the waiter legitimately acquire the new file before the replacement holder.
+	replacement, err := acquireTestMSALLock(lockPath + ".replacement")
 	require.NoError(t, err)
+	require.NoError(t, os.Rename(replacement.path, lockPath))
+	replacement.path = lockPath
 	require.NoError(t, old.lock.Unlock())
 
 	select {

@@ -81,23 +81,28 @@ func (s *Service) showDocument(ctx context.Context, op *operation, request *arti
 	if err := s.gatePinned(ctx, op, &target{alias: request.Repository, repo: repo, info: &info}, &pinned); err != nil {
 		return err
 	}
-	stream, err := repo.OpenDocument(ctx, pinned, request.Role)
+	document, content, err := readPinnedDocument(ctx, repo, &pinned, inspection.Record, request.Role)
 	if err != nil {
-		return fmt.Errorf("open %s of %s in repository %q: %w", request.Role, request.Ref, request.Repository, err)
+		return fmt.Errorf("read %s of %s in repository %q: %w", request.Role, request.Ref, request.Repository, err)
 	}
-	defer stream.Reader.Close()
-	if !documentMatchesRecord(inspection.Record, request.Role, stream.Document) {
-		return fmt.Errorf("%w: document does not match the pinned record", errUtils.ErrArtifactIntegrityFailed)
-	}
-	content, err := readDocument(stream)
-	if err != nil {
-		return err
-	}
-	result.Document, result.Content = stream.Document, content
+	result.Document, result.Content = document, content
 	op.result.Outcome = artifact.OutcomeRead
 	op.result.Size = int64(len(content))
 	op.result.SizeMeasured = true
 	return nil
+}
+
+func readPinnedDocument(ctx context.Context, repo artifact.Repository, pinned *artifact.PinnedReference, record *artifact.Record, role artifact.DocumentRole) (artifact.Document, []byte, error) {
+	stream, err := repo.OpenDocument(ctx, *pinned, role)
+	if err != nil {
+		return artifact.Document{}, nil, err
+	}
+	defer stream.Reader.Close()
+	if !documentMatchesRecord(record, role, stream.Document) {
+		return artifact.Document{}, nil, fmt.Errorf("%w: document does not match the pinned record", errUtils.ErrArtifactIntegrityFailed)
+	}
+	content, err := readDocument(stream)
+	return stream.Document, content, err
 }
 
 func documentMatchesRecord(record *artifact.Record, role artifact.DocumentRole, document artifact.Document) bool {

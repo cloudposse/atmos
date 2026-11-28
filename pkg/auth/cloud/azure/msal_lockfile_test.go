@@ -2,6 +2,7 @@ package azure
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -157,8 +158,12 @@ func acquireTestMSALLock(lockPath string) (*testMSALLock, error) {
 		return nil, err
 	}
 	lock := flock.New(lockPath)
-	if _, err := lock.TryLock(); err != nil {
+	locked, err := lock.TryLock()
+	if err != nil {
 		return nil, err
+	}
+	if !locked {
+		return nil, errors.New("test MSAL lock already held")
 	}
 	return &testMSALLock{path: lockPath, lock: lock}, nil
 }

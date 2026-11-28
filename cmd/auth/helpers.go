@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -103,30 +102,7 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 		rows = append(rows, []string{"Expires", expiresStr})
 	}
 
-	// Create minimal charmbracelet table.
-	// Note: Padding variation across platforms was causing snapshot test failures.
-	// The table auto-sizes columns but the final width varied (Linux: 40 chars, macOS: 45 chars).
-	// Removed `.Width()` constraint as it was causing word-wrapping issues.
-	t := table.New().
-		Rows(rows...).
-		BorderTop(false).
-		BorderBottom(false).
-		BorderLeft(false).
-		BorderRight(false).
-		BorderRow(false).
-		BorderColumn(false).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			if col == 0 {
-				// Key column - use cyan color.
-				return lipgloss.NewStyle().
-					Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
-					Padding(0, 1, 0, 2)
-			}
-			// Value column - default color with padding.
-			return lipgloss.NewStyle().Padding(0, 1)
-		})
-
-	ui.Writef("%s\n\n", t)
+	ui.Writef("%s\n\n", theme.CreateDetailTable(rows))
 }
 
 // handleHelpRequest handles help request for auth commands.

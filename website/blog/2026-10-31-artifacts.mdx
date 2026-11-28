@@ -3,8 +3,8 @@ slug: artifacts
 title: "Publish, Discover, and Restore Versioned Artifacts from One Repository Config"
 authors: [osterman]
 tags: [feature, experimental]
-cast: "/casts/screengrabs/atmos-artifacts--help.cast"
-castTitle: "atmos artifacts command help"
+cast: "/casts/examples/artifacts/publish-and-restore.cast"
+castTitle: "Publish and restore a local artifact"
 ---
 
 Every team ends up with the same pile of shared assets: component source trees, scaffolds, backups, configuration, container images. Each one tends to grow its own way to publish and fetch it. One lives in an OCI registry, another in an S3 bucket, a third in a directory somebody copies around, and none of them tell you in the CI log what was actually published. Moving a workflow from one storage backend to another means rewriting the workflow.
@@ -15,7 +15,7 @@ Atmos now has a single artifact model for all of it. You configure the destinati
 
 import CastEmbed from '@site/src/components/CastEmbed'
 
-<CastEmbed src="/casts/screengrabs/atmos-artifacts--help.cast" title="atmos artifacts command help" chrome controls scrubber />
+<CastEmbed src="/casts/examples/artifacts/publish-and-restore.cast" title="Publish and restore a local artifact" chrome controls scrubber />
 
 ## The Problem
 
@@ -70,4 +70,4 @@ This feature is experimental. Command names, flags, and the configuration shape 
 
 ## Get Involved
 
-Try it against a local repository first, then point the same commands at S3 or a registry. Tell us what is missing in the [Atmos discussions](https://github.com/orgs/cloudposse/discussions) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).
+Try the [artifacts example](/examples/artifacts) against a local repository first, then point the same commands at S3 or a registry. Tell us what is missing in the [Atmos discussions](https://github.com/orgs/cloudposse/discussions) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

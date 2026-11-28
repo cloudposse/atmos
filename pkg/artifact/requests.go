@@ -47,6 +47,9 @@ type PullRequest struct {
 	// Ref selects the artifact.
 	Ref Ref
 
+	// IncludeReadme requests the optional verified package README for terminal display.
+	IncludeReadme bool
+
 	// Destination is the output directory.
 	Destination string
 

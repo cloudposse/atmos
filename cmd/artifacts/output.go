@@ -3,6 +3,8 @@ package artifacts
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -12,7 +14,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // result is the structured result of one operation. The type is shared with the artifact step and
@@ -63,9 +67,21 @@ type keyValue struct {
 	value string
 }
 
-// writeText writes aligned `key: value` lines to the data channel, skipping empty values so a
-// missing optional value is omitted, never filled with a misleading empty string.
+// writeText renders terminal details as a table and keeps redirected text in key: value format.
 func writeText(pairs []keyValue) error {
+	if terminal.New().IsTTY(terminal.Stdout) {
+		rows := make([][]string, 0, len(pairs))
+		for _, pair := range pairs {
+			if pair.value != "" {
+				rows = append(rows, []string{detailLabel(pair.key), pair.value})
+			}
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		return data.Writeln("\n" + theme.CreateDetailTable(rows))
+	}
+
 	width := 0
 	for _, pair := range pairs {
 		if pair.value != "" && len(pair.key) > width {
@@ -82,16 +98,50 @@ func writeText(pairs []keyValue) error {
 	return data.Write(builder.String())
 }
 
+// detailLabel converts internal field names into labels for the terminal table.
+func detailLabel(key string) string {
+	switch key {
+	case invoke.OutputRef:
+		return "Reference"
+	case invoke.OutputSize:
+		return "Size (bytes)"
+	case "readme":
+		return "README"
+	case "changelog":
+		return "CHANGELOG"
+	default:
+		label := strings.ReplaceAll(key, "_", " ")
+		return strings.ToUpper(label[:1]) + label[1:]
+	}
+}
+
 // operationPairs are the named outputs shared by every operation, in a stable order, followed by
-// the lock scope. The names and values come from the shared invoke package, so the text rendering,
-// the structured output, and the step outputs cannot drift apart.
+// the lock scope. Human-readable locations inside the working directory use relative paths.
 func operationPairs(op *artifact.OperationResult) []keyValue {
 	named := invoke.OutputPairs(op)
 	pairs := make([]keyValue, 0, len(named)+1)
 	for _, pair := range named {
+		if pair.Name == invoke.OutputLocation {
+			pair.Value = displayLocation(pair.Value)
+		}
 		pairs = append(pairs, keyValue{pair.Name, pair.Value})
 	}
 	return append(pairs, keyValue{"lock_scope", string(op.LockScope)})
+}
+
+func displayLocation(location string) string {
+	if !filepath.IsAbs(location) {
+		return location
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return location
+	}
+	rel, err := filepath.Rel(cwd, location)
+	if err != nil || !filepath.IsLocal(rel) {
+		return location
+	}
+	return rel
 }
 
 // reportDiagnostics sends the non-fatal messages of an operation to the UI channel (stderr).

@@ -7,6 +7,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 func newShowCommand() *cobra.Command {
@@ -49,10 +50,13 @@ func paramsShow(in *input, role artifact.DocumentRole) (*invoke.Params, error) {
 	return &invoke.Params{Action: artifact.ActionShow, Repository: repository, Ref: in.args[0], Document: string(role)}, nil
 }
 
-// textDocument prints the document itself, so it can be piped or redirected as-is.
+// textDocument renders Markdown for terminal readers and preserves the source for pipes.
 func textDocument(res *result) error {
 	if res.Content == nil {
 		return nil
+	}
+	if terminal.New().IsTTY(terminal.Stdout) {
+		return data.Markdown(*res.Content)
 	}
 	return data.Write(*res.Content)
 }

@@ -78,6 +78,9 @@ type Diagnostic struct {
 // outputs and structured CLI output; optional values are omitted rather than filled with
 // misleading empty strings.
 type OperationResult struct {
+	// PullReadme holds verified package Markdown requested for display after a pull.
+	PullReadme string `json:"-" yaml:"-"`
+
 	// OperationID is the logical operation identifier.
 	OperationID string `json:"operation_id"`
 

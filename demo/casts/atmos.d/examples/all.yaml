@@ -4,6 +4,9 @@ commands:
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
+        name: artifacts-publish-and-restore
+        command: atmos casts generate examples artifacts publish-and-restore
+      - type: shell
         name: starlark-focused-examples
         command: atmos casts generate examples starlark
       - type: shell
