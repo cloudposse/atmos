@@ -272,6 +272,21 @@ func (mr *MockOperationServicesMockRecorder) ProcessCustomYamlTags(atmosConfig, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessCustomYamlTags", reflect.TypeOf((*MockOperationServices)(nil).ProcessCustomYamlTags), atmosConfig, input, currentStack, skip, stackInfo)
 }
 
+// SetupTerraformAuth mocks base method.
+func (m *MockOperationServices) SetupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetupTerraformAuth", atmosConfig, info)
+	ret0, _ := ret[0].(auth.AuthManager)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetupTerraformAuth indicates an expected call of SetupTerraformAuth.
+func (mr *MockOperationServicesMockRecorder) SetupTerraformAuth(atmosConfig, info any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetupTerraformAuth", reflect.TypeOf((*MockOperationServices)(nil).SetupTerraformAuth), atmosConfig, info)
+}
+
 // ProcessStacks mocks base method.
 func (m *MockOperationServices) ProcessStacks(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo, checkStack, processTemplates, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 	m.ctrl.T.Helper()

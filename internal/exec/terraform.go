@@ -133,6 +133,13 @@ func (terraformOperationServices) ProcessStacks(atmosConfig *schema.AtmosConfigu
 	return ProcessStacks(atmosConfig, configAndStacksInfo, checkStack, processTemplates, processYamlFunctions, skip, authManager)
 }
 
+// SetupTerraformAuth authenticates the component's identity and wires it into the configuration's stores and secrets.
+func (terraformOperationServices) SetupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+	defer perf.Track(atmosConfig, "exec.terraformOperationServices.SetupTerraformAuth")()
+
+	return terraformExecutor.SetupComponentAuthForCLI(atmosConfig, info)
+}
+
 // FindStacksMap returns processed stacks, raw manifests, and their deferred evaluation contexts.
 //
 //nolint:revive // Preserve raw stacks and deferred contexts in the shared contract.

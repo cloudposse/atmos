@@ -84,8 +84,16 @@ func (s *Operations) resolveVerificationContext(info *schema.ConfigAndStacksInfo
 	}
 	vc.atmosConfig = atmosConfig
 
+	// Authenticate before processing stacks, as terraform execution does, so that YAML functions
+	// such as `!secret` and `!terraform.state` run with the selected identity's credentials.
+	authInfo := *info
+	authManager, err := s.host.SetupTerraformAuth(&atmosConfig, &authInfo)
+	if err != nil {
+		return vc, fmt.Errorf("failed to authenticate for plan verification: %w", err)
+	}
+
 	// Process stacks to resolve component metadata (metadata.component, component_folder_prefix).
-	processedInfo, err := s.host.ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
+	processedInfo, err := s.host.ProcessStacks(&atmosConfig, authInfo, true, true, true, nil, authManager)
 	if err != nil {
 		return vc, fmt.Errorf("error processing stacks for plan verification: %w", err)
 	}
