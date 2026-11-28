@@ -324,6 +324,7 @@ type OperationServices interface {
 	ContainsStarlark(value any) bool
 	BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error)
 	ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...component.ExecutionOption) error
+	SetupTerraformAuth(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error)
 }
 
 // Operations owns Terraform generation, plan comparison, and verification.
